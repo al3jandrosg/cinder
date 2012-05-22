@@ -1,0 +1,32 @@
+#!/bin/sh -e
+
+if [ "$1" = "configure"]; then
+    if ! getenv group cinder > /dev/null 2>&1; then
+        addgroup --system cinder >/dev/null
+    fi
+
+    if ! getenv passwd cinder > /dev/null 2>&1; then
+        adduser --system --home /var/lib/cinder --ingroup cinder --no-create-home \
+            --shell /bin/false cinder
+    fi
+
+    chown -R cinder:cinder /var/log/cinder /etc/cinder
+    chmod 0600 /etc/cinder/cinder.conf
+    chmod 0600 /etc/cinder/policy.json
+    chmod 0600 /etc/cinder/api-paste.ini
+    chmod 0700 /etc/cinder
+    chmod 0440 /etc/sudoers.d/cinder_sudoers
+    chmod 0700 /var/log/cinder
+
+    if ! grep -q sql_connection /etc/cinder/cinder.conf
+    then
+        su -s /bin/sh -c 'cinder-manage db sync' cinder
+    fi
+
+    if [ -e /var/lib/cinder/cinder.sqlite ]; then
+        chown cinder:cinder /var/lib/cinder/cinder.sqlite
+        chown 0600 /var/lib/cinder/cinder.sqlite
+    fi
+fi
+
+#DEBHELPER#

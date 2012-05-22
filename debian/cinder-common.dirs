@@ -1,0 +1,3 @@
+etc/nova
+var/lib/cinder
+var/log/cinder
