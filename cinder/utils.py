@@ -25,8 +25,6 @@ import errno
 import functools
 import hashlib
 import inspect
-import itertools
-import json
 import os
 import pyclbr
 import random
@@ -37,27 +35,26 @@ import socket
 import struct
 import sys
 import tempfile
-import threading
 import time
 import types
 import uuid
 import warnings
 from xml.sax import saxutils
 
-from eventlet import corolocal
 from eventlet import event
 from eventlet import greenthread
 from eventlet import semaphore
 from eventlet.green import subprocess
 import iso8601
-import lockfile
 import netaddr
 
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import cfg
+from cinder.openstack.common import excutils
 from cinder.openstack.common import importutils
+from cinder.openstack.common import timeutils
 
 
 LOG = logging.getLogger(__name__)
@@ -65,9 +62,11 @@ ISO_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 PERFECT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 FLAGS = flags.FLAGS
 
-FLAGS.register_opt(
-    cfg.BoolOpt('disable_process_locking', default=False,
-                help='Whether to disable inter-process locks'))
+if FLAGS.rootwrap_config is None or FLAGS.root_helper != 'sudo':
+    LOG.warn(_('The root_helper option (which lets you specify a root '
+               'wrapper different from cinder-rootwrap, and defaults to '
+               'using sudo) is now deprecated. You should use the '
+               'rootwrap_config option instead.'))
 
 
 def find_config(config_path):
@@ -150,7 +149,7 @@ def execute(*cmd, **kwargs):
     """Helper method to execute command with optional retry.
 
     If you add a run_as_root=True command, don't forget to add the
-    corresponding filter to cinder.rootwrap !
+    corresponding filter to etc/cinder/rootwrap.d !
 
     :param cmd:                Passed to subprocess.Popen.
     :param process_input:      Send to opened process.
@@ -191,7 +190,11 @@ def execute(*cmd, **kwargs):
                                 'to utils.execute: %r') % kwargs)
 
     if run_as_root:
-        cmd = shlex.split(FLAGS.root_helper) + list(cmd)
+        if (FLAGS.rootwrap_config is not None):
+            cmd = ['sudo', 'cinder-rootwrap',
+                   FLAGS.rootwrap_config] + list(cmd)
+        else:
+            cmd = shlex.split(FLAGS.root_helper) + list(cmd)
     cmd = map(str, cmd)
 
     while attempts > 0:
@@ -307,27 +310,6 @@ def cinderdir():
     return os.path.abspath(cinder.__file__).split('cinder/__init__.py')[0]
 
 
-def default_flagfile(filename='cinder.conf', args=None):
-    if args is None:
-        args = sys.argv
-    for arg in args:
-        if arg.find('flagfile') != -1:
-            return arg[arg.index('flagfile') + len('flagfile') + 1:]
-    else:
-        if not os.path.isabs(filename):
-            # turn relative filename into an absolute path
-            script_dir = os.path.dirname(inspect.stack()[-1][1])
-            filename = os.path.abspath(os.path.join(script_dir, filename))
-        if not os.path.exists(filename):
-            filename = "./cinder.conf"
-            if not os.path.exists(filename):
-                filename = '/etc/cinder/cinder.conf'
-        if os.path.exists(filename):
-            flagfile = '--flagfile=%s' % filename
-            args.insert(1, flagfile)
-            return filename
-
-
 def debug(arg):
     LOG.debug(_('debug in callback: %s'), arg)
     return arg
@@ -376,7 +358,7 @@ def last_completed_audit_period(unit=None):
         unit, offset = unit.split("@", 1)
         offset = int(offset)
 
-    rightnow = utcnow()
+    rightnow = timeutils.utcnow()
     if unit not in ('month', 'day', 'year', 'hour'):
         raise ValueError('Time period must be hour, day, month or year')
     if unit == 'month':
@@ -488,83 +470,6 @@ def get_my_linklocal(interface):
     except Exception as ex:
         raise exception.Error(_("Couldn't get Link Local IP of %(interface)s"
                                 " :%(ex)s") % locals())
-
-
-def utcnow():
-    """Overridable version of utils.utcnow."""
-    if utcnow.override_time:
-        return utcnow.override_time
-    return datetime.datetime.utcnow()
-
-
-utcnow.override_time = None
-
-
-def is_older_than(before, seconds):
-    """Return True if before is older than seconds."""
-    return utcnow() - before > datetime.timedelta(seconds=seconds)
-
-
-def utcnow_ts():
-    """Timestamp version of our utcnow function."""
-    return time.mktime(utcnow().timetuple())
-
-
-def set_time_override(override_time=datetime.datetime.utcnow()):
-    """Override utils.utcnow to return a constant time."""
-    utcnow.override_time = override_time
-
-
-def advance_time_delta(timedelta):
-    """Advance overriden time using a datetime.timedelta."""
-    assert(not utcnow.override_time is None)
-    utcnow.override_time += timedelta
-
-
-def advance_time_seconds(seconds):
-    """Advance overriden time by seconds."""
-    advance_time_delta(datetime.timedelta(0, seconds))
-
-
-def clear_time_override():
-    """Remove the overridden time."""
-    utcnow.override_time = None
-
-
-def strtime(at=None, fmt=PERFECT_TIME_FORMAT):
-    """Returns formatted utcnow."""
-    if not at:
-        at = utcnow()
-    return at.strftime(fmt)
-
-
-def parse_strtime(timestr, fmt=PERFECT_TIME_FORMAT):
-    """Turn a formatted time back into a datetime."""
-    return datetime.datetime.strptime(timestr, fmt)
-
-
-def isotime(at=None):
-    """Stringify time in ISO 8601 format"""
-    if not at:
-        at = datetime.datetime.utcnow()
-    str = at.strftime(ISO_TIME_FORMAT)
-    tz = at.tzinfo.tzname(None) if at.tzinfo else 'UTC'
-    str += ('Z' if tz == 'UTC' else tz)
-    return str
-
-
-def parse_isotime(timestr):
-    """Turn an iso formatted time back into a datetime."""
-    try:
-        return iso8601.parse_date(timestr)
-    except (iso8601.ParseError, TypeError) as e:
-        raise ValueError(e.message)
-
-
-def normalize_time(timestamp):
-    """Normalize time in arbitrary timezone to UTC"""
-    offset = timestamp.utcoffset()
-    return timestamp.replace(tzinfo=None) - offset if offset else timestamp
 
 
 def parse_mailmap(mailmap='.mailmap'):
@@ -694,290 +599,6 @@ def utf8(value):
         return value.encode('utf-8')
     assert isinstance(value, str)
     return value
-
-
-def to_primitive(value, convert_instances=False, level=0):
-    """Convert a complex object into primitives.
-
-    Handy for JSON serialization. We can optionally handle instances,
-    but since this is a recursive function, we could have cyclical
-    data structures.
-
-    To handle cyclical data structures we could track the actual objects
-    visited in a set, but not all objects are hashable. Instead we just
-    track the depth of the object inspections and don't go too deep.
-
-    Therefore, convert_instances=True is lossy ... be aware.
-
-    """
-    nasty = [inspect.ismodule, inspect.isclass, inspect.ismethod,
-             inspect.isfunction, inspect.isgeneratorfunction,
-             inspect.isgenerator, inspect.istraceback, inspect.isframe,
-             inspect.iscode, inspect.isbuiltin, inspect.isroutine,
-             inspect.isabstract]
-    for test in nasty:
-        if test(value):
-            return unicode(value)
-
-    # value of itertools.count doesn't get caught by inspects
-    # above and results in infinite loop when list(value) is called.
-    if type(value) == itertools.count:
-        return unicode(value)
-
-    # FIXME(vish): Workaround for LP bug 852095. Without this workaround,
-    #              tests that raise an exception in a mocked method that
-    #              has a @wrap_exception with a notifier will fail. If
-    #              we up the dependency to 0.5.4 (when it is released) we
-    #              can remove this workaround.
-    if getattr(value, '__module__', None) == 'mox':
-        return 'mock'
-
-    if level > 3:
-        return '?'
-
-    # The try block may not be necessary after the class check above,
-    # but just in case ...
-    try:
-        if isinstance(value, (list, tuple)):
-            o = []
-            for v in value:
-                o.append(to_primitive(v, convert_instances=convert_instances,
-                                      level=level))
-            return o
-        elif isinstance(value, dict):
-            o = {}
-            for k, v in value.iteritems():
-                o[k] = to_primitive(v, convert_instances=convert_instances,
-                                    level=level)
-            return o
-        elif isinstance(value, datetime.datetime):
-            return str(value)
-        elif hasattr(value, 'iteritems'):
-            return to_primitive(dict(value.iteritems()),
-                                convert_instances=convert_instances,
-                                level=level)
-        elif hasattr(value, '__iter__'):
-            return to_primitive(list(value), level)
-        elif convert_instances and hasattr(value, '__dict__'):
-            # Likely an instance of something. Watch for cycles.
-            # Ignore class member vars.
-            return to_primitive(value.__dict__,
-                                convert_instances=convert_instances,
-                                level=level + 1)
-        else:
-            return value
-    except TypeError, e:
-        # Class objects are tricky since they may define something like
-        # __iter__ defined but it isn't callable as list().
-        return unicode(value)
-
-
-def dumps(value):
-    try:
-        return json.dumps(value)
-    except TypeError:
-        pass
-    return json.dumps(to_primitive(value))
-
-
-def loads(s):
-    return json.loads(s)
-
-
-try:
-    import anyjson
-except ImportError:
-    pass
-else:
-    anyjson._modules.append(("cinder.utils", "dumps", TypeError,
-                                           "loads", ValueError))
-    anyjson.force_implementation("cinder.utils")
-
-
-class GreenLockFile(lockfile.FileLock):
-    """Implementation of lockfile that allows for a lock per greenthread.
-
-    Simply implements lockfile:LockBase init with an addiontall suffix
-    on the unique name of the greenthread identifier
-    """
-    def __init__(self, path, threaded=True):
-        self.path = path
-        self.lock_file = os.path.abspath(path) + ".lock"
-        self.hostname = socket.gethostname()
-        self.pid = os.getpid()
-        if threaded:
-            t = threading.current_thread()
-            # Thread objects in Python 2.4 and earlier do not have ident
-            # attrs.  Worm around that.
-            ident = getattr(t, "ident", hash(t)) or hash(t)
-            gident = corolocal.get_ident()
-            self.tname = "-%x-%x" % (ident & 0xffffffff, gident & 0xffffffff)
-        else:
-            self.tname = ""
-        dirname = os.path.dirname(self.lock_file)
-        self.unique_name = os.path.join(dirname,
-                                        "%s%s.%s" % (self.hostname,
-                                                     self.tname,
-                                                     self.pid))
-
-
-_semaphores = {}
-
-
-def synchronized(name, external=False):
-    """Synchronization decorator.
-
-    Decorating a method like so::
-
-        @synchronized('mylock')
-        def foo(self, *args):
-           ...
-
-    ensures that only one thread will execute the bar method at a time.
-
-    Different methods can share the same lock::
-
-        @synchronized('mylock')
-        def foo(self, *args):
-           ...
-
-        @synchronized('mylock')
-        def bar(self, *args):
-           ...
-
-    This way only one of either foo or bar can be executing at a time.
-
-    The external keyword argument denotes whether this lock should work across
-    multiple processes. This means that if two different workers both run a
-    a method decorated with @synchronized('mylock', external=True), only one
-    of them will execute at a time.
-
-    Important limitation: you can only have one external lock running per
-    thread at a time. For example the following will fail:
-
-        @utils.synchronized('testlock1', external=True)
-        def outer_lock():
-
-            @utils.synchronized('testlock2', external=True)
-            def inner_lock():
-                pass
-            inner_lock()
-
-        outer_lock()
-
-    """
-
-    def wrap(f):
-        @functools.wraps(f)
-        def inner(*args, **kwargs):
-            # NOTE(soren): If we ever go natively threaded, this will be racy.
-            #              See http://stackoverflow.com/questions/5390569/dyn
-            #              amically-allocating-and-destroying-mutexes
-            if name not in _semaphores:
-                _semaphores[name] = semaphore.Semaphore()
-            sem = _semaphores[name]
-            LOG.debug(_('Attempting to grab semaphore "%(lock)s" for method '
-                        '"%(method)s"...'), {'lock': name,
-                                             'method': f.__name__})
-            with sem:
-                LOG.debug(_('Got semaphore "%(lock)s" for method '
-                            '"%(method)s"...'), {'lock': name,
-                                                 'method': f.__name__})
-                if external and not FLAGS.disable_process_locking:
-                    LOG.debug(_('Attempting to grab file lock "%(lock)s" for '
-                                'method "%(method)s"...'),
-                              {'lock': name, 'method': f.__name__})
-                    lock_file_path = os.path.join(FLAGS.lock_path,
-                                                  'cinder-%s' % name)
-                    lock = GreenLockFile(lock_file_path)
-                    with lock:
-                        LOG.debug(_('Got file lock "%(lock)s" for '
-                                    'method "%(method)s"...'),
-                                  {'lock': name, 'method': f.__name__})
-                        retval = f(*args, **kwargs)
-                else:
-                    retval = f(*args, **kwargs)
-
-            # If no-one else is waiting for it, delete it.
-            # See note about possible raciness above.
-            if not sem.balance < 1:
-                del _semaphores[name]
-
-            return retval
-        return inner
-    return wrap
-
-
-def cleanup_file_locks():
-    """clean up stale locks left behind by process failures
-
-    The lockfile module, used by @synchronized, can leave stale lockfiles
-    behind after process failure. These locks can cause process hangs
-    at startup, when a process deadlocks on a lock which will never
-    be unlocked.
-
-    Intended to be called at service startup.
-
-    """
-
-    # NOTE(mikeyp) this routine incorporates some internal knowledge
-    #              from the lockfile module, and this logic really
-    #              should be part of that module.
-    #
-    # cleanup logic:
-    # 1) look for the lockfile modules's 'sentinel' files, of the form
-    #    hostname.[thread-.*]-pid, extract the pid.
-    #    if pid doesn't match a running process, delete the file since
-    #    it's from a dead process.
-    # 2) check for the actual lockfiles. if lockfile exists with linkcount
-    #    of 1, it's bogus, so delete it. A link count >= 2 indicates that
-    #    there are probably sentinels still linked to it from active
-    #    processes.  This check isn't perfect, but there is no way to
-    #    reliably tell which sentinels refer to which lock in the
-    #    lockfile implementation.
-
-    if FLAGS.disable_process_locking:
-        return
-
-    hostname = socket.gethostname()
-    sentinel_re = hostname + r'\..*-(\d+$)'
-    lockfile_re = r'cinder-.*\.lock'
-    files = os.listdir(FLAGS.lock_path)
-
-    # cleanup sentinels
-    for filename in files:
-        match = re.match(sentinel_re, filename)
-        if match is None:
-            continue
-        pid = match.group(1)
-        LOG.debug(_('Found sentinel %(filename)s for pid %(pid)s'),
-                  {'filename': filename, 'pid': pid})
-        try:
-            os.kill(int(pid), 0)
-        except OSError, e:
-            # PID wasn't found
-            delete_if_exists(os.path.join(FLAGS.lock_path, filename))
-            LOG.debug(_('Cleaned sentinel %(filename)s for pid %(pid)s'),
-                      {'filename': filename, 'pid': pid})
-
-    # cleanup lock files
-    for filename in files:
-        match = re.match(lockfile_re, filename)
-        if match is None:
-            continue
-        try:
-            stat_info = os.stat(os.path.join(FLAGS.lock_path, filename))
-        except OSError as e:
-            if e.errno == errno.ENOENT:
-                continue
-            else:
-                raise
-        LOG.debug(_('Found lockfile %(file)s with link count %(count)d'),
-                  {'file': filename, 'count': stat_info.st_nlink})
-        if stat_info.st_nlink == 1:
-            delete_if_exists(os.path.join(FLAGS.lock_path, filename))
-            LOG.debug(_('Cleaned lockfile %(file)s with link count %(count)d'),
-                      {'file': filename, 'count': stat_info.st_nlink})
 
 
 def delete_if_exists(pathname):
@@ -1258,32 +879,6 @@ def generate_glance_url():
 
 
 @contextlib.contextmanager
-def save_and_reraise_exception():
-    """Save current exception, run some code and then re-raise.
-
-    In some cases the exception context can be cleared, resulting in None
-    being attempted to be reraised after an exception handler is run. This
-    can happen when eventlet switches greenthreads or when running an
-    exception handler, code raises and catches an exception. In both
-    cases the exception context will be cleared.
-
-    To work around this, we save the exception state, run handler code, and
-    then re-raise the original exception. If another exception occurs, the
-    saved exception is logged and the new exception is reraised.
-    """
-    type_, value, traceback = sys.exc_info()
-    try:
-        yield
-    except Exception:
-        # NOTE(jkoelker): Using LOG.error here since it accepts exc_info
-        #                 as a kwargs.
-        LOG.error(_('Original exception being dropped'),
-                  exc_info=(type_, value, traceback))
-        raise
-    raise type_, value, traceback
-
-
-@contextlib.contextmanager
 def logging_error(message):
     """Catches exception, write message to the log, re-raise.
     This is a common refinement of save_and_reraise that writes a specific
@@ -1292,7 +887,7 @@ def logging_error(message):
     try:
         yield
     except Exception as error:
-        with save_and_reraise_exception():
+        with excutils.save_and_reraise_exception():
             LOG.exception(message)
 
 
@@ -1304,7 +899,7 @@ def remove_path_on_error(path):
     try:
         yield
     except Exception:
-        with save_and_reraise_exception():
+        with excutils.save_and_reraise_exception():
             delete_if_exists(path)
 
 
@@ -1571,7 +1166,7 @@ def service_is_up(service):
     """Check whether a service is up based on last heartbeat."""
     last_heartbeat = service['updated_at'] or service['created_at']
     # Timestamps in DB are UTC.
-    elapsed = total_seconds(utcnow() - last_heartbeat)
+    elapsed = total_seconds(timeutils.utcnow() - last_heartbeat)
     return abs(elapsed) <= FLAGS.service_down_time
 
 
@@ -1671,7 +1266,7 @@ class UndoManager(object):
         .. note:: (sirp) This should only be called within an
                   exception handler.
         """
-        with save_and_reraise_exception():
+        with excutils.save_and_reraise_exception():
             if msg:
                 LOG.exception(msg, **kwargs)
 

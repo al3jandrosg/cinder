@@ -30,22 +30,17 @@ import os
 import socket
 import sys
 
-from cinder.compat import flagfile
 from cinder.openstack.common import cfg
 
 
-class CinderConfigOpts(cfg.CommonConfigOpts):
-
-    def __init__(self, *args, **kwargs):
-        super(CinderConfigOpts, self).__init__(*args, **kwargs)
-        self.disable_interspersed_args()
-
-    def __call__(self, argv):
-        with flagfile.handle_flagfiles_managed(argv[1:]) as args:
-            return argv[:1] + super(CinderConfigOpts, self).__call__(args)
+FLAGS = cfg.CONF
 
 
-FLAGS = CinderConfigOpts()
+def parse_args(argv, default_config_files=None):
+    FLAGS.disable_interspersed_args()
+    return argv[:1] + FLAGS(argv[1:],
+                            project='cinder',
+                            default_config_files=default_config_files)
 
 
 class UnrecognizedFlag(Exception):
@@ -78,18 +73,6 @@ def _get_my_ip():
         return "127.0.0.1"
 
 
-log_opts = [
-    cfg.StrOpt('logdir',
-               default=None,
-               help='Log output to a per-service log file in named directory'),
-    cfg.StrOpt('logfile',
-               default=None,
-               help='Log output to a named file'),
-    cfg.BoolOpt('use_stderr',
-                default=True,
-                help='Log output to standard error'),
-    ]
-
 core_opts = [
     cfg.StrOpt('connection_type',
                default=None,
@@ -116,18 +99,11 @@ core_opts = [
     cfg.StrOpt('state_path',
                default='$pybasedir',
                help="Top-level directory for maintaining cinder's state"),
-    cfg.StrOpt('lock_path',
-               default='$pybasedir',
-               help='Directory to use for lock files'),
     ]
 
 debug_opts = [
-    cfg.BoolOpt('fake_rabbit',
-                default=False,
-                help='If passed, use a fake RabbitMQ provider'),
 ]
 
-FLAGS.register_cli_opts(log_opts)
 FLAGS.register_cli_opts(core_opts)
 FLAGS.register_cli_opts(debug_opts)
 
@@ -155,52 +131,14 @@ global_opts = [
                 help='A list of the glance api servers available to cinder '
                      '([hostname|ip]:port)'),
     cfg.StrOpt('scheduler_topic',
-               default='scheduler',
+               default='cinder-scheduler',
                help='the topic scheduler nodes listen on'),
     cfg.StrOpt('volume_topic',
-               default='volume',
+               default='cinder-volume',
                help='the topic volume nodes listen on'),
-    cfg.StrOpt('rabbit_host',
-               default='localhost',
-               help='the RabbitMQ host'),
-    cfg.IntOpt('rabbit_port',
-               default=5672,
-               help='the RabbitMQ port'),
-    cfg.BoolOpt('rabbit_use_ssl',
-                default=False,
-                help='connect over SSL for RabbitMQ'),
-    cfg.StrOpt('rabbit_userid',
-               default='guest',
-               help='the RabbitMQ userid'),
-    cfg.StrOpt('rabbit_password',
-               default='guest',
-               help='the RabbitMQ password'),
-    cfg.StrOpt('rabbit_virtual_host',
-               default='/',
-               help='the RabbitMQ virtual host'),
-    cfg.IntOpt('rabbit_retry_interval',
-               default=1,
-               help='how frequently to retry connecting with RabbitMQ'),
-    cfg.IntOpt('rabbit_retry_backoff',
-               default=2,
-               help='how long to backoff for between retries when connecting '
-                    'to RabbitMQ'),
-    cfg.IntOpt('rabbit_max_retries',
-               default=0,
-               help='maximum retries with trying to connect to RabbitMQ '
-                    '(the default of 0 implies an infinite retry count)'),
-    cfg.StrOpt('control_exchange',
-               default='cinder',
-               help='the main RabbitMQ exchange to connect to'),
-    cfg.BoolOpt('rabbit_durable_queues',
-                default=False,
-                help='use durable queues in RabbitMQ'),
     cfg.BoolOpt('api_rate_limit',
                 default=True,
                 help='whether to rate limit the api'),
-    cfg.ListOpt('enabled_apis',
-                default=['osapi_volume'],
-                help='a list of APIs to enable by default'),
     cfg.ListOpt('osapi_volume_ext_list',
                 default=[],
                 help='Specify list of extensions to load when using osapi_'
@@ -254,9 +192,6 @@ global_opts = [
     cfg.IntOpt('auth_token_ttl',
                default=3600,
                help='Seconds for auth tokens to linger'),
-    cfg.StrOpt('logfile_mode',
-               default='0644',
-               help='Default file mode used when creating log files'),
     cfg.StrOpt('sqlite_db',
                default='cinder.sqlite',
                help='the filename to use with sqlite'),
@@ -283,7 +218,7 @@ global_opts = [
                default=socket.gethostname(),
                help='Name of this node.  This can be an opaque identifier.  '
                     'It is not necessarily a hostname, FQDN, or IP address.'),
-    cfg.StrOpt('node_availability_zone',
+    cfg.StrOpt('storage_availability_zone',
                default='cinder',
                help='availability zone of this node'),
     cfg.StrOpt('notification_driver',
@@ -312,7 +247,11 @@ global_opts = [
                     'formatted with on creation.'),
     cfg.StrOpt('root_helper',
                default='sudo',
-               help='Command prefix to use for running commands as root'),
+               help='Deprecated: command to use for running commands as root'),
+    cfg.StrOpt('rootwrap_config',
+               default=None,
+               help='Path to the rootwrap configuration file to use for '
+                    'running commands as root'),
     cfg.BoolOpt('use_ipv6',
                 default=False,
                 help='use ipv6'),

@@ -7,6 +7,7 @@ Build-Depends: debhelper (>= 8.0.0),
  python-all-dev (>= 2.6.6-3~)
 Build-Depends-Indep:
  python-sqlalchemy,
+ python-setuptools,
  python-cheetah,
  python-amqplib,
  python-anyjson,
@@ -25,17 +26,19 @@ Build-Depends-Indep:
  python-glance,
  python-suds,
  python-paramiko,
- python-babel,
  python-iso8601,
  python-coverage,
+ python-mox,
  python-nose,
- python-nosexcover,
  python-sphinx,
- python-mysqldb
+ python-mysqldb,
+ python-setuptools-git,
+ pep8,
 Standards-Version: 3.9.3
 Homepage: http://launchpad.net/cinder
 
 Package: python-cinder
+Section: python
 Architecture: all
 Depends: ${python:Depends}, python-sqlalchemy,
  python-cheetah,

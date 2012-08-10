@@ -17,9 +17,11 @@ import uuid
 
 from cinder import flags
 from cinder import utils
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import cfg
 from cinder.openstack.common import importutils
+from cinder.openstack.common import jsonutils
+from cinder.openstack.common import timeutils
 
 
 LOG = logging.getLogger(__name__)
@@ -105,7 +107,7 @@ def notify(publisher_id, event_type, priority, payload):
 
         {'message_id': str(uuid.uuid4()),
          'publisher_id': 'compute.host1',
-         'timestamp': utils.utcnow(),
+         'timestamp': timeutils.utcnow(),
          'priority': 'WARN',
          'event_type': 'compute.create_instance',
          'payload': {'instance_id': 12, ... }}
@@ -116,7 +118,7 @@ def notify(publisher_id, event_type, priority, payload):
                  _('%s not in valid priorities') % priority)
 
     # Ensure everything is JSON serializable.
-    payload = utils.to_primitive(payload, convert_instances=True)
+    payload = jsonutils.to_primitive(payload, convert_instances=True)
 
     driver = importutils.import_module(FLAGS.notification_driver)
     msg = dict(message_id=str(uuid.uuid4()),
@@ -124,7 +126,7 @@ def notify(publisher_id, event_type, priority, payload):
                    event_type=event_type,
                    priority=priority,
                    payload=payload,
-                   timestamp=str(utils.utcnow()))
+                   timestamp=str(timeutils.utcnow()))
     try:
         driver.notify(msg)
     except Exception, e:

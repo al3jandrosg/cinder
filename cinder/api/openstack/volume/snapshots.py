@@ -23,7 +23,7 @@ from cinder.api.openstack import wsgi
 from cinder.api.openstack import xmlutil
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder import volume
 
 
@@ -33,28 +33,27 @@ LOG = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 
 
-def _translate_snapshot_detail_view(context, vol):
+def _translate_snapshot_detail_view(context, snapshot):
     """Maps keys for snapshots details view."""
 
-    d = _translate_snapshot_summary_view(context, vol)
+    d = _translate_snapshot_summary_view(context, snapshot)
 
     # NOTE(gagupta): No additional data / lookups at the moment
     return d
 
 
-def _translate_snapshot_summary_view(context, vol):
+def _translate_snapshot_summary_view(context, snapshot):
     """Maps keys for snapshots summary view."""
     d = {}
 
-    # TODO(bcwaldon): remove str cast once we use uuids
-    d['id'] = str(vol['id'])
-    d['volume_id'] = str(vol['volume_id'])
-    d['status'] = vol['status']
-    # NOTE(gagupta): We map volume_size as the snapshot size
-    d['size'] = vol['volume_size']
-    d['created_at'] = vol['created_at']
-    d['display_name'] = vol['display_name']
-    d['display_description'] = vol['display_description']
+    d['id'] = snapshot['id']
+    d['created_at'] = snapshot['created_at']
+    d['display_name'] = snapshot['display_name']
+    d['display_description'] = snapshot['display_description']
+    d['volume_id'] = snapshot['volume_id']
+    d['status'] = snapshot['status']
+    d['size'] = snapshot['volume_size']
+
     return d
 
 
@@ -130,7 +129,11 @@ class SnapshotsController(object):
         """Returns a list of snapshots, transformed through entity_maker."""
         context = req.environ['cinder.context']
 
-        snapshots = self.volume_api.get_all_snapshots(context)
+        search_opts = {}
+        search_opts.update(req.GET)
+
+        snapshots = self.volume_api.get_all_snapshots(context,
+                                                      search_opts=search_opts)
         limited_list = common.limited(snapshots, req)
         res = [entity_maker(context, snapshot) for snapshot in limited_list]
         return {'snapshots': res}

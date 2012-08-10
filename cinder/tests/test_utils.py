@@ -33,6 +33,7 @@ import mox
 import cinder
 from cinder import exception
 from cinder import flags
+from cinder.openstack.common import timeutils
 from cinder import test
 from cinder import utils
 
@@ -443,93 +444,6 @@ class IsUUIDLikeTestCase(test.TestCase):
         self.assertUUIDLike(str(utils.gen_uuid()), True)
 
 
-class ToPrimitiveTestCase(test.TestCase):
-    def test_list(self):
-        self.assertEquals(utils.to_primitive([1, 2, 3]), [1, 2, 3])
-
-    def test_empty_list(self):
-        self.assertEquals(utils.to_primitive([]), [])
-
-    def test_tuple(self):
-        self.assertEquals(utils.to_primitive((1, 2, 3)), [1, 2, 3])
-
-    def test_dict(self):
-        self.assertEquals(utils.to_primitive(dict(a=1, b=2, c=3)),
-                          dict(a=1, b=2, c=3))
-
-    def test_empty_dict(self):
-        self.assertEquals(utils.to_primitive({}), {})
-
-    def test_datetime(self):
-        x = datetime.datetime(1, 2, 3, 4, 5, 6, 7)
-        self.assertEquals(utils.to_primitive(x), "0001-02-03 04:05:06.000007")
-
-    def test_iter(self):
-        class IterClass(object):
-            def __init__(self):
-                self.data = [1, 2, 3, 4, 5]
-                self.index = 0
-
-            def __iter__(self):
-                return self
-
-            def next(self):
-                if self.index == len(self.data):
-                    raise StopIteration
-                self.index = self.index + 1
-                return self.data[self.index - 1]
-
-        x = IterClass()
-        self.assertEquals(utils.to_primitive(x), [1, 2, 3, 4, 5])
-
-    def test_iteritems(self):
-        class IterItemsClass(object):
-            def __init__(self):
-                self.data = dict(a=1, b=2, c=3).items()
-                self.index = 0
-
-            def __iter__(self):
-                return self
-
-            def next(self):
-                if self.index == len(self.data):
-                    raise StopIteration
-                self.index = self.index + 1
-                return self.data[self.index - 1]
-
-        x = IterItemsClass()
-        ordered = utils.to_primitive(x)
-        ordered.sort()
-        self.assertEquals(ordered, [['a', 1], ['b', 2], ['c', 3]])
-
-    def test_instance(self):
-        class MysteryClass(object):
-            a = 10
-
-            def __init__(self):
-                self.b = 1
-
-        x = MysteryClass()
-        self.assertEquals(utils.to_primitive(x, convert_instances=True),
-                          dict(b=1))
-
-        self.assertEquals(utils.to_primitive(x), x)
-
-    def test_typeerror(self):
-        x = bytearray  # Class, not instance
-        self.assertEquals(utils.to_primitive(x), u"<type 'bytearray'>")
-
-    def test_nasties(self):
-        def foo():
-            pass
-        x = [datetime, foo, dir]
-        ret = utils.to_primitive(x)
-        self.assertEquals(len(ret), 3)
-        self.assertTrue(ret[0].startswith(u"<module 'datetime' from "))
-        self.assertTrue(ret[1].startswith('<function foo at 0x'))
-        self.assertEquals(ret[2], '<built-in function dir>')
-
-
 class MonkeyPatchTestCase(test.TestCase):
     """Unit test for utils.monkey_patch()."""
     def setUp(self):
@@ -690,10 +604,10 @@ class DeprecationTest(test.TestCase):
         down_time = 5
 
         self.flags(service_down_time=down_time)
-        self.mox.StubOutWithMock(utils, 'utcnow')
+        self.mox.StubOutWithMock(timeutils, 'utcnow')
 
         # Up (equal)
-        utils.utcnow().AndReturn(fts_func(fake_now))
+        timeutils.utcnow().AndReturn(fts_func(fake_now))
         service = {'updated_at': fts_func(fake_now - down_time),
                    'created_at': fts_func(fake_now - down_time)}
         self.mox.ReplayAll()
@@ -702,7 +616,7 @@ class DeprecationTest(test.TestCase):
 
         self.mox.ResetAll()
         # Up
-        utils.utcnow().AndReturn(fts_func(fake_now))
+        timeutils.utcnow().AndReturn(fts_func(fake_now))
         service = {'updated_at': fts_func(fake_now - down_time + 1),
                    'created_at': fts_func(fake_now - down_time + 1)}
         self.mox.ReplayAll()
@@ -711,7 +625,7 @@ class DeprecationTest(test.TestCase):
 
         self.mox.ResetAll()
         # Down
-        utils.utcnow().AndReturn(fts_func(fake_now))
+        timeutils.utcnow().AndReturn(fts_func(fake_now))
         service = {'updated_at': fts_func(fake_now - down_time - 1),
                    'created_at': fts_func(fake_now - down_time - 1)}
         self.mox.ReplayAll()
@@ -730,300 +644,6 @@ class DeprecationTest(test.TestCase):
         self.assertEquals(h1, h2)
 
 
-class Iso8601TimeTest(test.TestCase):
-
-    def _instaneous(self, timestamp, yr, mon, day, hr, min, sec, micro):
-        self.assertEquals(timestamp.year, yr)
-        self.assertEquals(timestamp.month, mon)
-        self.assertEquals(timestamp.day, day)
-        self.assertEquals(timestamp.hour, hr)
-        self.assertEquals(timestamp.minute, min)
-        self.assertEquals(timestamp.second, sec)
-        self.assertEquals(timestamp.microsecond, micro)
-
-    def _do_test(self, str, yr, mon, day, hr, min, sec, micro, shift):
-        DAY_SECONDS = 24 * 60 * 60
-        timestamp = utils.parse_isotime(str)
-        self._instaneous(timestamp, yr, mon, day, hr, min, sec, micro)
-        offset = timestamp.tzinfo.utcoffset(None)
-        self.assertEqual(offset.seconds + offset.days * DAY_SECONDS, shift)
-
-    def test_zulu(self):
-        str = '2012-02-14T20:53:07Z'
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 0, 0)
-
-    def test_zulu_micros(self):
-        str = '2012-02-14T20:53:07.123Z'
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 123000, 0)
-
-    def test_offset_east(self):
-        str = '2012-02-14T20:53:07+04:30'
-        offset = 4.5 * 60 * 60
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 0, offset)
-
-    def test_offset_east_micros(self):
-        str = '2012-02-14T20:53:07.42+04:30'
-        offset = 4.5 * 60 * 60
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 420000, offset)
-
-    def test_offset_west(self):
-        str = '2012-02-14T20:53:07-05:30'
-        offset = -5.5 * 60 * 60
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 0, offset)
-
-    def test_offset_west_micros(self):
-        str = '2012-02-14T20:53:07.654321-05:30'
-        offset = -5.5 * 60 * 60
-        self._do_test(str, 2012, 02, 14, 20, 53, 7, 654321, offset)
-
-    def test_compare(self):
-        zulu = utils.parse_isotime('2012-02-14T20:53:07')
-        east = utils.parse_isotime('2012-02-14T20:53:07-01:00')
-        west = utils.parse_isotime('2012-02-14T20:53:07+01:00')
-        self.assertTrue(east > west)
-        self.assertTrue(east > zulu)
-        self.assertTrue(zulu > west)
-
-    def test_compare_micros(self):
-        zulu = utils.parse_isotime('2012-02-14T20:53:07.6544')
-        east = utils.parse_isotime('2012-02-14T19:53:07.654321-01:00')
-        west = utils.parse_isotime('2012-02-14T21:53:07.655+01:00')
-        self.assertTrue(east < west)
-        self.assertTrue(east < zulu)
-        self.assertTrue(zulu < west)
-
-    def test_zulu_roundtrip(self):
-        str = '2012-02-14T20:53:07Z'
-        zulu = utils.parse_isotime(str)
-        self.assertEquals(zulu.tzinfo, iso8601.iso8601.UTC)
-        self.assertEquals(utils.isotime(zulu), str)
-
-    def test_east_roundtrip(self):
-        str = '2012-02-14T20:53:07-07:00'
-        east = utils.parse_isotime(str)
-        self.assertEquals(east.tzinfo.tzname(None), '-07:00')
-        self.assertEquals(utils.isotime(east), str)
-
-    def test_west_roundtrip(self):
-        str = '2012-02-14T20:53:07+11:30'
-        west = utils.parse_isotime(str)
-        self.assertEquals(west.tzinfo.tzname(None), '+11:30')
-        self.assertEquals(utils.isotime(west), str)
-
-    def test_now_roundtrip(self):
-        str = utils.isotime()
-        now = utils.parse_isotime(str)
-        self.assertEquals(now.tzinfo, iso8601.iso8601.UTC)
-        self.assertEquals(utils.isotime(now), str)
-
-    def test_zulu_normalize(self):
-        str = '2012-02-14T20:53:07Z'
-        zulu = utils.parse_isotime(str)
-        normed = utils.normalize_time(zulu)
-        self._instaneous(normed, 2012, 2, 14, 20, 53, 07, 0)
-
-    def test_east_normalize(self):
-        str = '2012-02-14T20:53:07-07:00'
-        east = utils.parse_isotime(str)
-        normed = utils.normalize_time(east)
-        self._instaneous(normed, 2012, 2, 15, 03, 53, 07, 0)
-
-    def test_west_normalize(self):
-        str = '2012-02-14T20:53:07+21:00'
-        west = utils.parse_isotime(str)
-        normed = utils.normalize_time(west)
-        self._instaneous(normed, 2012, 2, 13, 23, 53, 07, 0)
-
-
-class TestGreenLocks(test.TestCase):
-    def test_concurrent_green_lock_succeeds(self):
-        """Verify spawn_n greenthreads with two locks run concurrently.
-
-        This succeeds with spawn but fails with spawn_n because lockfile
-        gets the same thread id for both spawn_n threads. Our workaround
-        of using the GreenLockFile will work even if the issue is fixed.
-        """
-        self.completed = False
-        with utils.tempdir() as tmpdir:
-
-            def locka(wait):
-                a = utils.GreenLockFile(os.path.join(tmpdir, 'a'))
-                a.acquire()
-                wait.wait()
-                a.release()
-                self.completed = True
-
-            def lockb(wait):
-                b = utils.GreenLockFile(os.path.join(tmpdir, 'b'))
-                b.acquire()
-                wait.wait()
-                b.release()
-
-            wait1 = eventlet.event.Event()
-            wait2 = eventlet.event.Event()
-            pool = greenpool.GreenPool()
-            pool.spawn_n(locka, wait1)
-            pool.spawn_n(lockb, wait2)
-            wait2.send()
-            eventlet.sleep(0)
-            wait1.send()
-            pool.waitall()
-        self.assertTrue(self.completed)
-
-
-class TestLockCleanup(test.TestCase):
-    """unit tests for utils.cleanup_file_locks()"""
-
-    def setUp(self):
-        super(TestLockCleanup, self).setUp()
-
-        self.pid = os.getpid()
-        self.dead_pid = self._get_dead_pid()
-        self.tempdir = tempfile.mkdtemp()
-        self.flags(lock_path=self.tempdir)
-        self.lock_name = 'cinder-testlock'
-        self.lock_file = os.path.join(FLAGS.lock_path,
-                                      self.lock_name + '.lock')
-        self.hostname = socket.gethostname()
-        print self.pid, self.dead_pid
-        try:
-            os.unlink(self.lock_file)
-        except OSError as (errno, strerror):
-            if errno == 2:
-                pass
-
-    def tearDown(self):
-        shutil.rmtree(self.tempdir)
-        super(TestLockCleanup, self).tearDown()
-
-    def _get_dead_pid(self):
-        """get a pid for a process that does not exist"""
-
-        candidate_pid = self.pid - 1
-        while os.path.exists(os.path.join('/proc', str(candidate_pid))):
-            candidate_pid -= 1
-            if candidate_pid == 1:
-                return 0
-        return candidate_pid
-
-    def _get_sentinel_name(self, hostname, pid, thread='MainThread'):
-        return os.path.join(FLAGS.lock_path,
-                            '%s.%s-%d' % (hostname, thread, pid))
-
-    def _create_sentinel(self, hostname, pid, thread='MainThread'):
-        name = self._get_sentinel_name(hostname, pid, thread)
-        open(name, 'wb').close()
-        return name
-
-    def test_clean_stale_locks(self):
-        """verify locks for dead processes are cleaned up"""
-
-        # create sentinels for two processes, us and a 'dead' one
-        # no active lock
-        sentinel1 = self._create_sentinel(self.hostname, self.pid)
-        sentinel2 = self._create_sentinel(self.hostname, self.dead_pid)
-
-        utils.cleanup_file_locks()
-
-        self.assertTrue(os.path.exists(sentinel1))
-        self.assertFalse(os.path.exists(self.lock_file))
-        self.assertFalse(os.path.exists(sentinel2))
-
-        os.unlink(sentinel1)
-
-    def test_clean_stale_locks_active(self):
-        """verify locks for dead processes are cleaned with an active lock """
-
-        # create sentinels for two processes, us and a 'dead' one
-        # create an active lock for us
-        sentinel1 = self._create_sentinel(self.hostname, self.pid)
-        sentinel2 = self._create_sentinel(self.hostname, self.dead_pid)
-        os.link(sentinel1, self.lock_file)
-
-        utils.cleanup_file_locks()
-
-        self.assertTrue(os.path.exists(sentinel1))
-        self.assertTrue(os.path.exists(self.lock_file))
-        self.assertFalse(os.path.exists(sentinel2))
-
-        os.unlink(sentinel1)
-        os.unlink(self.lock_file)
-
-    def test_clean_stale_with_threads(self):
-        """verify locks for multiple threads are cleaned up """
-
-        # create sentinels for four threads in our process, and a 'dead'
-        # process.  no lock.
-        sentinel1 = self._create_sentinel(self.hostname, self.pid, 'Default-1')
-        sentinel2 = self._create_sentinel(self.hostname, self.pid, 'Default-2')
-        sentinel3 = self._create_sentinel(self.hostname, self.pid, 'Default-3')
-        sentinel4 = self._create_sentinel(self.hostname, self.pid, 'Default-4')
-        sentinel5 = self._create_sentinel(self.hostname, self.dead_pid,
-                                          'Default-1')
-
-        utils.cleanup_file_locks()
-
-        self.assertTrue(os.path.exists(sentinel1))
-        self.assertTrue(os.path.exists(sentinel2))
-        self.assertTrue(os.path.exists(sentinel3))
-        self.assertTrue(os.path.exists(sentinel4))
-        self.assertFalse(os.path.exists(self.lock_file))
-        self.assertFalse(os.path.exists(sentinel5))
-
-        os.unlink(sentinel1)
-        os.unlink(sentinel2)
-        os.unlink(sentinel3)
-        os.unlink(sentinel4)
-
-    def test_clean_stale_with_threads_active(self):
-        """verify locks for multiple threads are cleaned up """
-
-        # create sentinels for four threads in our process, and a 'dead'
-        # process
-        sentinel1 = self._create_sentinel(self.hostname, self.pid, 'Default-1')
-        sentinel2 = self._create_sentinel(self.hostname, self.pid, 'Default-2')
-        sentinel3 = self._create_sentinel(self.hostname, self.pid, 'Default-3')
-        sentinel4 = self._create_sentinel(self.hostname, self.pid, 'Default-4')
-        sentinel5 = self._create_sentinel(self.hostname, self.dead_pid,
-                                          'Default-1')
-
-        os.link(sentinel1, self.lock_file)
-
-        utils.cleanup_file_locks()
-
-        self.assertTrue(os.path.exists(sentinel1))
-        self.assertTrue(os.path.exists(sentinel2))
-        self.assertTrue(os.path.exists(sentinel3))
-        self.assertTrue(os.path.exists(sentinel4))
-        self.assertTrue(os.path.exists(self.lock_file))
-        self.assertFalse(os.path.exists(sentinel5))
-
-        os.unlink(sentinel1)
-        os.unlink(sentinel2)
-        os.unlink(sentinel3)
-        os.unlink(sentinel4)
-        os.unlink(self.lock_file)
-
-    def test_clean_bogus_lockfiles(self):
-        """verify lockfiles are cleaned """
-
-        lock1 = os.path.join(FLAGS.lock_path, 'cinder-testlock1.lock')
-        lock2 = os.path.join(FLAGS.lock_path, 'cinder-testlock2.lock')
-        lock3 = os.path.join(FLAGS.lock_path, 'testlock3.lock')
-
-        open(lock1, 'wb').close()
-        open(lock2, 'wb').close()
-        open(lock3, 'wb').close()
-
-        utils.cleanup_file_locks()
-
-        self.assertFalse(os.path.exists(lock1))
-        self.assertFalse(os.path.exists(lock2))
-        self.assertTrue(os.path.exists(lock3))
-
-        os.unlink(lock3)
-
-
 class AuditPeriodTest(test.TestCase):
 
     def setUp(self):
@@ -1035,10 +655,10 @@ class AuditPeriodTest(test.TestCase):
                                            day=5,
                                            month=3,
                                            year=2012)
-        utils.set_time_override(override_time=self.test_time)
+        timeutils.set_time_override(override_time=self.test_time)
 
     def tearDown(self):
-        utils.clear_time_override()
+        timeutils.clear_time_override()
         super(AuditPeriodTest, self).tearDown()
 
     def test_hour(self):

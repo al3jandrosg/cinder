@@ -23,11 +23,11 @@ Scheduler base class that all Schedulers should inherit from
 
 from cinder import db
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import cfg
 from cinder.openstack.common import importutils
-from cinder import rpc
-from cinder.rpc import common as rpc_common
+from cinder.openstack.common import rpc
+from cinder.openstack.common import timeutils
 from cinder import utils
 
 
@@ -49,13 +49,13 @@ def cast_to_volume_host(context, host, method, update_db=True, **kwargs):
     if update_db:
         volume_id = kwargs.get('volume_id', None)
         if volume_id is not None:
-            now = utils.utcnow()
+            now = timeutils.utcnow()
             db.volume_update(context, volume_id,
                     {'host': host, 'scheduled_at': now})
     rpc.cast(context,
-            db.queue_get_for(context, 'volume', host),
-            {"method": method, "args": kwargs})
-    LOG.debug(_("Casted '%(method)s' to volume '%(host)s'") % locals())
+             rpc.queue_get_for(context, FLAGS.volume_topic, host),
+             {"method": method, "args": kwargs})
+    LOG.debug(_("Casted '%(method)s' to host '%(host)s'") % locals())
 
 
 def cast_to_host(context, topic, host, method, update_db=True, **kwargs):
@@ -69,28 +69,10 @@ def cast_to_host(context, topic, host, method, update_db=True, **kwargs):
         func(context, host, method, update_db=update_db, **kwargs)
     else:
         rpc.cast(context,
-            db.queue_get_for(context, topic, host),
-                {"method": method, "args": kwargs})
+                 rpc.queue_get_for(context, topic, host),
+                 {"method": method, "args": kwargs})
         LOG.debug(_("Casted '%(method)s' to %(topic)s '%(host)s'")
                 % locals())
-
-
-def encode_instance(instance, local=True):
-    """Encode locally created instance for return via RPC"""
-    # TODO(comstud): I would love to be able to return the full
-    # instance information here, but we'll need some modifications
-    # to the RPC code to handle datetime conversions with the
-    # json encoding/decoding.  We should be able to set a default
-    # json handler somehow to do it.
-    #
-    # For now, I'll just return the instance ID and let the caller
-    # do a DB lookup :-/
-    if local:
-        return dict(id=instance['id'], _is_precooked=False)
-    else:
-        inst = dict(instance)
-        inst['_is_precooked'] = True
-        return inst
 
 
 class Scheduler(object):
@@ -125,40 +107,3 @@ class Scheduler(object):
     def schedule(self, context, topic, method, *_args, **_kwargs):
         """Must override schedule method for scheduler to work."""
         raise NotImplementedError(_("Must implement a fallback schedule"))
-
-    def schedule_prep_resize(self, context, request_spec, *_args, **_kwargs):
-        """Must override schedule_prep_resize method for scheduler to work."""
-        msg = _("Driver must implement schedule_prep_resize")
-        raise NotImplementedError(msg)
-
-    def mounted_on_same_shared_storage(self, context, instance_ref, dest):
-        """Check if the src and dest host mount same shared storage.
-
-        At first, dest host creates temp file, and src host can see
-        it if they mounts same shared storage. Then src host erase it.
-
-        :param context: security context
-        :param instance_ref: cinder.db.sqlalchemy.models.Instance object
-        :param dest: destination host
-
-        """
-
-        src = instance_ref['host']
-        dst_t = db.queue_get_for(context, FLAGS.compute_topic, dest)
-        src_t = db.queue_get_for(context, FLAGS.compute_topic, src)
-
-        filename = rpc.call(context, dst_t,
-                            {"method": 'create_shared_storage_test_file'})
-
-        try:
-            # make sure existence at src host.
-            ret = rpc.call(context, src_t,
-                        {"method": 'check_shared_storage_test_file',
-                        "args": {'filename': filename}})
-
-        finally:
-            rpc.cast(context, dst_t,
-                    {"method": 'cleanup_shared_storage_test_file',
-                    "args": {'filename': filename}})
-
-        return ret

@@ -21,6 +21,7 @@ Tests for Volume Code.
 """
 
 import cStringIO
+import logging
 
 import mox
 
@@ -28,15 +29,15 @@ from cinder import context
 from cinder import exception
 from cinder import db
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as os_logging
 from cinder.openstack.common import importutils
+from cinder.openstack.common import rpc
 import cinder.policy
-from cinder import rpc
 from cinder import test
 import cinder.volume.api
 
 FLAGS = flags.FLAGS
-LOG = logging.getLogger(__name__)
+LOG = os_logging.getLogger(__name__)
 
 
 class VolumeTestCase(test.TestCase):
@@ -52,7 +53,7 @@ class VolumeTestCase(test.TestCase):
         super(VolumeTestCase, self).tearDown()
 
     @staticmethod
-    def _create_volume(size='0', snapshot_id=None):
+    def _create_volume(size='0', snapshot_id=None, metadata=None):
         """Create a volume object."""
         vol = {}
         vol['size'] = size
@@ -62,6 +63,8 @@ class VolumeTestCase(test.TestCase):
         vol['availability_zone'] = FLAGS.storage_availability_zone
         vol['status'] = "creating"
         vol['attach_status'] = "detached"
+        if metadata is not None:
+            vol['metadata'] = metadata
         return db.volume_create(context.get_admin_context(), vol)
 
     def test_create_delete_volume(self):
@@ -71,6 +74,22 @@ class VolumeTestCase(test.TestCase):
         self.volume.create_volume(self.context, volume_id)
         self.assertEqual(volume_id, db.volume_get(context.get_admin_context(),
                          volume_id).id)
+
+        self.volume.delete_volume(self.context, volume_id)
+        self.assertRaises(exception.NotFound,
+                          db.volume_get,
+                          self.context,
+                          volume_id)
+
+    def test_create_delete_volume_with_metadata(self):
+        """Test volume can be created and deleted."""
+        test_meta = {'fake_key': 'fake_value'}
+        volume = self._create_volume('0', None, test_meta)
+        volume_id = volume['id']
+        self.volume.create_volume(self.context, volume_id)
+        result_meta = {
+            volume.volume_metadata[0].key: volume.volume_metadata[0].value}
+        self.assertEqual(result_meta, test_meta)
 
         self.volume.delete_volume(self.context, volume_id)
         self.assertRaises(exception.NotFound,
@@ -149,26 +168,26 @@ class VolumeTestCase(test.TestCase):
 
     def test_run_attach_detach_volume(self):
         """Make sure volume can be attached and detached from instance."""
-        instance_id = 'fake-inst'
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
         mountpoint = "/dev/sdf"
         volume = self._create_volume()
         volume_id = volume['id']
         self.volume.create_volume(self.context, volume_id)
         if FLAGS.fake_tests:
-            db.volume_attached(self.context, volume_id, instance_id,
+            db.volume_attached(self.context, volume_id, instance_uuid,
                                 mountpoint)
         else:
             self.compute.attach_volume(self.context,
-                                       instance_id,
+                                       instance_uuid,
                                        volume_id,
                                        mountpoint)
         vol = db.volume_get(context.get_admin_context(), volume_id)
         self.assertEqual(vol['status'], "in-use")
         self.assertEqual(vol['attach_status'], "attached")
         self.assertEqual(vol['mountpoint'], mountpoint)
-        self.assertEqual(vol['instance_id'], instance_id)
+        self.assertEqual(vol['instance_uuid'], instance_uuid)
 
-        self.assertRaises(exception.Error,
+        self.assertRaises(exception.VolumeAttached,
                           self.volume.delete_volume,
                           self.context,
                           volume_id)
@@ -177,7 +196,7 @@ class VolumeTestCase(test.TestCase):
         else:
             pass
             self.compute.detach_volume(self.context,
-                                       instance_id,
+                                       instance_uuid,
                                        volume_id)
         vol = db.volume_get(self.context, volume_id)
         self.assertEqual(vol['status'], "available")
@@ -293,11 +312,11 @@ class VolumeTestCase(test.TestCase):
         def fake_cast(ctxt, topic, msg):
             pass
         self.stubs.Set(rpc, 'cast', fake_cast)
-        instance_id = 'fake-inst'
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
 
         volume = self._create_volume()
         self.volume.create_volume(self.context, volume['id'])
-        db.volume_attached(self.context, volume['id'], instance_id,
+        db.volume_attached(self.context, volume['id'], instance_uuid,
                            '/dev/sda1')
 
         volume_api = cinder.volume.api.API()
@@ -354,7 +373,7 @@ class DriverTestCase(test.TestCase):
 
         log = logging.getLogger()
         self.stream = cStringIO.StringIO()
-        log.logger.addHandler(logging.logging.StreamHandler(self.stream))
+        log.addHandler(logging.StreamHandler(self.stream))
 
     def _attach_volume(self):
         """Attach volumes to an instance. This function also sets
@@ -407,8 +426,8 @@ class ISCSITestCase(DriverTestCase):
 
             # each volume has a different mountpoint
             mountpoint = "/dev/sd" + chr((ord('b') + index))
-            instance_id = 'fake-inst'
-            db.volume_attached(self.context, vol_ref['id'], instance_id,
+            instance_uuid = '12345678-1234-5678-1234-567812345678'
+            db.volume_attached(self.context, vol_ref['id'], instance_uuid,
                                mountpoint)
             volume_id_list.append(vol_ref['id'])
 
@@ -417,8 +436,8 @@ class ISCSITestCase(DriverTestCase):
     def test_check_for_export_with_no_volume(self):
         """No log message when no volume is attached to an instance."""
         self.stream.truncate(0)
-        instance_id = 'fake-inst'
-        self.volume.check_for_export(self.context, instance_id)
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
+        self.volume.check_for_export(self.context, instance_uuid)
         self.assertEqual(self.stream.getvalue(), '')
 
     def test_check_for_export_with_all_volume_exported(self):
@@ -432,8 +451,8 @@ class ISCSITestCase(DriverTestCase):
 
         self.stream.truncate(0)
         self.mox.ReplayAll()
-        instance_id = 'fake-inst'
-        self.volume.check_for_export(self.context, instance_id)
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
+        self.volume.check_for_export(self.context, instance_uuid)
         self.assertEqual(self.stream.getvalue(), '')
         self.mox.UnsetStubs()
 
@@ -443,7 +462,7 @@ class ISCSITestCase(DriverTestCase):
         """Output a warning message when some volumes are not recognied
            by ietd."""
         volume_id_list = self._attach_volume()
-        instance_id = 'fake-inst'
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
 
         tid = db.volume_get_iscsi_target_num(self.context, volume_id_list[0])
         self.mox.StubOutWithMock(self.volume.driver.tgtadm, 'show_target')
@@ -454,7 +473,7 @@ class ISCSITestCase(DriverTestCase):
         self.assertRaises(exception.ProcessExecutionError,
                           self.volume.check_for_export,
                           self.context,
-                          instance_id)
+                          instance_uuid)
         msg = _("Cannot confirm exported volume id:%s.") % volume_id_list[0]
         self.assertTrue(0 <= self.stream.getvalue().find(msg))
         self.mox.UnsetStubs()

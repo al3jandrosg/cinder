@@ -23,7 +23,6 @@ controller on the SAN hardware.  We expect to access it over SSH or some API.
 
 import base64
 import httplib
-import json
 import os
 import paramiko
 import random
@@ -35,8 +34,9 @@ from lxml import etree
 
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import cfg
+from cinder.openstack.common import jsonutils
 from cinder import utils
 import cinder.volume.driver
 
@@ -45,7 +45,7 @@ LOG = logging.getLogger(__name__)
 
 san_opts = [
     cfg.BoolOpt('san_thin_provision',
-                default='true',
+                default=True,
                 help='Use thin provisioning for SAN volumes?'),
     cfg.StrOpt('san_ip',
                default='',
@@ -66,7 +66,7 @@ san_opts = [
                default=22,
                help='SSH port to use with SAN'),
     cfg.BoolOpt('san_is_local',
-                default='false',
+                default=False,
                 help='Execute commands locally instead of over SSH; '
                      'use if the volume service is running on the SAN device'),
     cfg.StrOpt('san_zfs_volume_base',
@@ -111,7 +111,8 @@ class SanISCSIDriver(cinder.volume.driver.ISCSIDriver):
                         username=FLAGS.san_login,
                         pkey=privatekey)
         else:
-            raise exception.Error(_("Specify san_password or san_private_key"))
+            msg = _("Specify san_password or san_private_key")
+            raise exception.InvalidInput(reason=msg)
         return ssh
 
     def _execute(self, *cmd, **kwargs):
@@ -149,12 +150,12 @@ class SanISCSIDriver(cinder.volume.driver.ISCSIDriver):
         """Returns an error if prerequisites aren't met."""
         if not self.run_local:
             if not (FLAGS.san_password or FLAGS.san_private_key):
-                raise exception.Error(_('Specify san_password or '
-                                        'san_private_key'))
+                raise exception.InvalidInput(
+                    reason=_('Specify san_password or san_private_key'))
 
         # The san_ip must always be set, because we use it for the target
         if not (FLAGS.san_ip):
-            raise exception.Error(_("san_ip must be set"))
+            raise exception.InvalidInput(reason=_("san_ip must be set"))
 
 
 def _collect_lines(data):
@@ -224,8 +225,8 @@ class SolarisISCSIDriver(SanISCSIDriver):
 
         if "View Entry:" in out:
             return True
-
-        raise exception.Error("Cannot parse list-view output: %s" % (out))
+        msg = _("Cannot parse list-view output: %s") % out
+        raise exception.VolumeBackendAPIException(data=msg)
 
     def _get_target_groups(self):
         """Gets list of target groups from host."""
@@ -318,8 +319,9 @@ class SolarisISCSIDriver(SanISCSIDriver):
                 luid = items[0].strip()
                 return luid
 
-        raise Exception(_('LUID not found for %(zfs_poolname)s. '
-                          'Output=%(out)s') % locals())
+        msg = _('LUID not found for %(zfs_poolname)s. '
+                'Output=%(out)s') % locals()
+        raise exception.VolumeBackendAPIException(data=msg)
 
     def _is_lu_created(self, volume):
         luid = self._get_luid(volume)
@@ -459,7 +461,7 @@ class HpSanISCSIDriver(SanISCSIDriver):
                 msg = (_("Malformed response to CLIQ command "
                          "%(verb)s %(cliq_args)s. Result=%(out)s") %
                        locals())
-                raise exception.Error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
 
             result_code = response_node.attrib.get("result")
 
@@ -467,7 +469,7 @@ class HpSanISCSIDriver(SanISCSIDriver):
                 msg = (_("Error running CLIQ command %(verb)s %(cliq_args)s. "
                          " Result=%(out)s") %
                        locals())
-                raise exception.Error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
 
         return result_xml
 
@@ -497,7 +499,7 @@ class HpSanISCSIDriver(SanISCSIDriver):
         msg = (_("Unexpected number of virtual ips for cluster "
                  " %(cluster_name)s. Result=%(_xml)s") %
                locals())
-        raise exception.Error(msg)
+        raise exception.VolumeBackendAPIException(data=msg)
 
     def _cliq_get_volume_info(self, volume_name):
         """Gets the volume info, including IQN"""
@@ -582,6 +584,14 @@ class HpSanISCSIDriver(SanISCSIDriver):
 
         return model_update
 
+    def create_volume_from_snapshot(self, volume, snapshot):
+        """Creates a volume from a snapshot."""
+        raise NotImplementedError()
+
+    def create_snapshot(self, snapshot):
+        """Creates a snapshot."""
+        raise NotImplementedError()
+
     def delete_volume(self, volume):
         """Deletes a volume."""
         cliq_args = {}
@@ -592,66 +602,48 @@ class HpSanISCSIDriver(SanISCSIDriver):
 
     def local_path(self, volume):
         # TODO(justinsb): Is this needed here?
-        raise exception.Error(_("local_path not supported"))
+        msg = _("local_path not supported")
+        raise exception.VolumeBackendAPIException(data=msg)
 
-    def ensure_export(self, context, volume):
-        """Synchronously recreates an export for a logical volume."""
-        return self._do_export(context, volume, force_create=False)
+    def initialize_connection(self, volume, connector):
+        """Assigns the volume to a server.
 
-    def create_export(self, context, volume):
-        return self._do_export(context, volume, force_create=True)
+        Assign any created volume to a compute node/host so that it can be
+        used from that host. HP VSA requires a volume to be assigned
+        to a server.
 
-    def _do_export(self, context, volume, force_create):
-        """Supports ensure_export and create_export"""
-        volume_info = self._cliq_get_volume_info(volume['name'])
+        This driver returns a driver_volume_type of 'iscsi'.
+        The format of the driver data is defined in _get_iscsi_properties.
+        Example return value:
 
-        is_shared = 'permission.authGroup' in volume_info
+            {
+                'driver_volume_type': 'iscsi'
+                'data': {
+                    'target_discovered': True,
+                    'target_iqn': 'iqn.2010-10.org.openstack:volume-00000001',
+                    'target_protal': '127.0.0.1:3260',
+                    'volume_id': 1,
+                }
+            }
 
-        model_update = {}
-
-        should_export = False
-
-        if force_create or not is_shared:
-            should_export = True
-            # Check that we have a project_id
-            project_id = volume['project_id']
-            if not project_id:
-                project_id = context.project_id
-
-            if project_id:
-                #TODO(justinsb): Use a real per-project password here
-                chap_username = 'proj_' + project_id
-                # HP/Lefthand requires that the password be >= 12 characters
-                chap_password = 'project_secret_' + project_id
-            else:
-                msg = (_("Could not determine project for volume %s, "
-                         "can't export") %
-                         (volume['name']))
-                if force_create:
-                    raise exception.Error(msg)
-                else:
-                    LOG.warn(msg)
-                    should_export = False
-
-        if should_export:
-            cliq_args = {}
-            cliq_args['volumeName'] = volume['name']
-            cliq_args['chapName'] = chap_username
-            cliq_args['targetSecret'] = chap_password
-
-            self._cliq_run_xml("assignVolumeChap", cliq_args)
-
-            model_update['provider_auth'] = ("CHAP %s %s" %
-                                             (chap_username, chap_password))
-
-        return model_update
-
-    def remove_export(self, context, volume):
-        """Removes an export for a logical volume."""
+        """
         cliq_args = {}
         cliq_args['volumeName'] = volume['name']
+        cliq_args['serverName'] = connector['host']
+        self._cliq_run_xml("assignVolumeToServer", cliq_args)
 
-        self._cliq_run_xml("unassignVolume", cliq_args)
+        iscsi_properties = self._get_iscsi_properties(volume)
+        return {
+            'driver_volume_type': 'iscsi',
+            'data': iscsi_properties
+        }
+
+    def terminate_connection(self, volume, connector):
+        """Unassign the volume from the host."""
+        cliq_args = {}
+        cliq_args['volumeName'] = volume['name']
+        cliq_args['serverName'] = connector['host']
+        self._cliq_run_xml("unassignVolumeToServer", cliq_args)
 
 
 class SolidFireSanISCSIDriver(SanISCSIDriver):
@@ -682,7 +674,7 @@ class SolidFireSanISCSIDriver(SanISCSIDriver):
         if params is not None:
             command['params'] = params
 
-        payload = json.dumps(command, ensure_ascii=False)
+        payload = jsonutils.dumps(command, ensure_ascii=False)
         payload.encode('utf-8')
         # we use json-rpc, webserver needs to see json-rpc in header
         header = {'Content-Type': 'application/json-rpc; charset=utf-8'}
@@ -707,7 +699,7 @@ class SolidFireSanISCSIDriver(SanISCSIDriver):
         else:
             data = response.read()
             try:
-                data = json.loads(data)
+                data = jsonutils.loads(data)
 
             except (TypeError, ValueError), exc:
                 connection.close()

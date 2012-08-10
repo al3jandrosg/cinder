@@ -19,6 +19,8 @@ from lxml import etree
 import webob
 
 from cinder.api.openstack.volume import volumes
+from cinder import db
+from cinder import exception
 from cinder import flags
 from cinder import test
 from cinder.tests.api.openstack import fakes
@@ -34,14 +36,16 @@ class VolumeApiTest(test.TestCase):
         super(VolumeApiTest, self).setUp()
         self.controller = volumes.VolumeController()
 
-        self.stubs.Set(volume_api.API, 'get_all', fakes.stub_volume_get_all)
+        self.stubs.Set(db, 'volume_get_all', fakes.stub_volume_get_all)
+        self.stubs.Set(db, 'volume_get_all_by_project',
+                       fakes.stub_volume_get_all_by_project)
         self.stubs.Set(volume_api.API, 'get', fakes.stub_volume_get)
         self.stubs.Set(volume_api.API, 'delete', fakes.stub_volume_delete)
 
-    def test_volume_create(self):
+    def _do_test_volume_create(self, size):
         self.stubs.Set(volume_api.API, "create", fakes.stub_volume_create)
 
-        vol = {"size": 100,
+        vol = {"size": size,
                "display_name": "Volume Test Name",
                "display_description": "Volume Test Desc",
                "availability_zone": "zone1:host1"}
@@ -65,6 +69,24 @@ class VolumeApiTest(test.TestCase):
                                'size': 100}}
         self.assertEqual(res_dict, expected)
 
+    def test_volume_create_int_size(self):
+        self._do_test_volume_create(100)
+
+    def test_volume_create_str_size(self):
+        self._do_test_volume_create('100')
+
+    def test_volume_creation_fails_with_bad_size(self):
+        vol = {"size": '',
+               "display_name": "Volume Test Name",
+               "display_description": "Volume Test Desc",
+               "availability_zone": "zone1:host1"}
+        body = {"volume": vol}
+        req = fakes.HTTPRequest.blank('/v1/volumes')
+        self.assertRaises(exception.InvalidInput,
+                          self.controller.create,
+                          req,
+                          body)
+
     def test_volume_create_no_body(self):
         body = {}
         req = fakes.HTTPRequest.blank('/v1/volumes')
@@ -74,6 +96,9 @@ class VolumeApiTest(test.TestCase):
                           body)
 
     def test_volume_list(self):
+        self.stubs.Set(volume_api.API, 'get_all',
+                       fakes.stub_volume_get_all_by_project)
+
         req = fakes.HTTPRequest.blank('/v1/volumes')
         res_dict = self.controller.index(req)
         expected = {'volumes': [{'status': 'fakestatus',
@@ -94,6 +119,8 @@ class VolumeApiTest(test.TestCase):
         self.assertEqual(res_dict, expected)
 
     def test_volume_list_detail(self):
+        self.stubs.Set(volume_api.API, 'get_all',
+                       fakes.stub_volume_get_all_by_project)
         req = fakes.HTTPRequest.blank('/v1/volumes/detail')
         res_dict = self.controller.index(req)
         expected = {'volumes': [{'status': 'fakestatus',
@@ -115,7 +142,7 @@ class VolumeApiTest(test.TestCase):
 
     def test_volume_show(self):
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
-        res_dict = self.controller.show(req, 1)
+        res_dict = self.controller.show(req, '1')
         expected = {'volume': {'status': 'fakestatus',
                                'display_description': 'displaydesc',
                                'availability_zone': 'fakeaz',
@@ -140,7 +167,7 @@ class VolumeApiTest(test.TestCase):
         self.stubs.Set(volume_api.API, 'get', stub_volume_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
-        res_dict = self.controller.show(req, 1)
+        res_dict = self.controller.show(req, '1')
         expected = {'volume': {'status': 'fakestatus',
                                'display_description': 'displaydesc',
                                'availability_zone': 'fakeaz',
@@ -177,6 +204,33 @@ class VolumeApiTest(test.TestCase):
                           self.controller.delete,
                           req,
                           1)
+
+    def test_admin_list_volumes_limited_to_project(self):
+        req = fakes.HTTPRequest.blank('/v2/fake/volumes',
+                                      use_admin_context=True)
+        res = self.controller.index(req)
+
+        self.assertTrue('volumes' in res)
+        self.assertEqual(1, len(res['volumes']))
+
+    def test_admin_list_volumes_all_tenants(self):
+        req = fakes.HTTPRequest.blank('/v2/fake/volumes?all_tenants=1',
+                                      use_admin_context=True)
+        res = self.controller.index(req)
+        self.assertTrue('volumes' in res)
+        self.assertEqual(3, len(res['volumes']))
+
+    def test_all_tenants_non_admin_gets_all_tenants(self):
+        req = fakes.HTTPRequest.blank('/v2/fake/volumes?all_tenants=1')
+        res = self.controller.index(req)
+        self.assertTrue('volumes' in res)
+        self.assertEqual(1, len(res['volumes']))
+
+    def test_non_admin_get_by_project(self):
+        req = fakes.HTTPRequest.blank('/v2/fake/volumes')
+        res = self.controller.index(req)
+        self.assertTrue('volumes' in res)
+        self.assertEqual(1, len(res['volumes']))
 
 
 class VolumeSerializerTest(test.TestCase):

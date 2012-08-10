@@ -26,7 +26,7 @@ from cinder.api.openstack.volume import snapshots
 from cinder.api.openstack.volume import types
 from cinder.api.openstack.volume import volumes
 from cinder.api.openstack.volume import versions
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 
 
 LOG = logging.getLogger(__name__)
@@ -50,7 +50,8 @@ class APIRouter(cinder.api.openstack.APIRouter):
         self.resources['volumes'] = volumes.create_resource()
         mapper.resource("volume", "volumes",
                         controller=self.resources['volumes'],
-                        collection={'detail': 'GET'})
+                        collection={'detail': 'GET'},
+                        member={'action': 'POST'})
 
         self.resources['types'] = types.create_resource()
         mapper.resource("type", "types",

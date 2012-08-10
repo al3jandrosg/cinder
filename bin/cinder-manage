@@ -76,16 +76,16 @@ if os.path.exists(os.path.join(POSSIBLE_TOPDIR, 'cinder', '__init__.py')):
 
 gettext.install('cinder', unicode=1)
 
-from cinder.compat import flagfile
 from cinder import context
 from cinder import db
 from cinder.db import migration
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
+from cinder.openstack.common import cfg
 from cinder.openstack.common import importutils
+from cinder.openstack.common import rpc
 from cinder import quota
-from cinder import rpc
 from cinder import utils
 from cinder import version
 from cinder.volume import volume_types
@@ -192,7 +192,6 @@ class HostCommands(object):
         print "%-25s\t%-15s" % (_('host'),
                                 _('zone'))
         ctxt = context.get_admin_context()
-        now = utils.utcnow()
         services = db.service_get_all(ctxt)
         if zone:
             services = [s for s in services if s['availability_zone'] == zone]
@@ -261,7 +260,7 @@ class VolumeCommands(object):
             return
 
         rpc.cast(ctxt,
-                 db.queue_get_for(ctxt, FLAGS.volume_topic, host),
+                 rpc.queue_get_for(ctxt, FLAGS.volume_topic, host),
                  {"method": "delete_volume",
                   "args": {"volume_id": volume['id']}})
 
@@ -279,7 +278,7 @@ class VolumeCommands(object):
         instance = db.instance_get(ctxt, volume['instance_id'])
         host = instance['host']
         rpc.cast(ctxt,
-                 db.queue_get_for(ctxt, FLAGS.compute_topic, host),
+                 rpc.queue_get_for(ctxt, FLAGS.compute_topic, host),
                  {"method": "attach_volume",
                   "args": {"instance_id": instance['id'],
                            "volume_id": volume['id'],
@@ -434,23 +433,6 @@ class ConfigCommands(object):
             if value is not None:
                 print '%s = %s' % (key, value)
 
-    @args('--infile', dest='infile', metavar='<path>',
-          help='old-style flagfile to convert to config')
-    @args('--outfile', dest='outfile', metavar='<path>',
-          help='path for output file. Writes config'
-               'to stdout if not specified.')
-    def convert(self, infile, outfile=None):
-        """Converts a flagfile and prints results to stdout."""
-        arg = '--flagfile=%s' % infile
-        with flagfile.handle_flagfiles_managed([arg]) as newargs:
-            with open(newargs[0].split('=')[1]) as configfile:
-                config = configfile.read()
-            if outfile:
-                with open(outfile, 'w') as configfile:
-                    configfile.write(config)
-            else:
-                print config,
-
 
 class GetLogCommands(object):
     """Get logging information"""
@@ -546,26 +528,23 @@ def methods_of(obj):
 
 def main():
     """Parse options and call the appropriate class/method."""
-    flagfile = utils.default_flagfile()
-
-    if flagfile and not os.access(flagfile, os.R_OK):
-        st = os.stat(flagfile)
-        print "Could not read %s. Re-running with sudo" % flagfile
-        try:
-            os.execvp('sudo', ['sudo', '-u', '#%s' % st.st_uid] + sys.argv)
-        except Exception:
-            print 'sudo failed, continuing as if nothing happened'
-
-    rpc.register_opts(FLAGS)
 
     try:
-        argv = FLAGS(sys.argv)
-        logging.setup()
-    except IOError, e:
-        if e.errno == errno.EACCES:
-            print _('Please re-run cinder-manage as root.')
-            sys.exit(2)
-        raise
+        argv = flags.parse_args(sys.argv)
+        logging.setup("cinder")
+    except cfg.ConfigFilesNotFoundError:
+        cfgfile = FLAGS.config_file[-1] if FLAGS.config_file else None
+        if cfgfile and not os.access(cfgfile, os.R_OK):
+            st = os.stat(cfgfile)
+            print _("Could not read %s. Re-running with sudo") % cfgfile
+            try:
+                os.execvp('sudo', ['sudo', '-u', '#%s' % st.st_uid] + sys.argv)
+            except Exception:
+                print _('sudo failed, continuing as if nothing happened')
+
+        print _('Please re-run nova-manage as root.')
+        sys.exit(2)
+
     script_name = argv.pop(0)
     if len(argv) < 1:
         print _("\nOpenStack Cinder version: %(version)s (%(vcs)s)\n") % \

@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-if [ "$1" = "configure"]; then
+if [ "$1" = "configure" ]; then
     if ! getenv group cinder > /dev/null 2>&1; then
         addgroup --system cinder >/dev/null
     fi
@@ -10,13 +10,11 @@ if [ "$1" = "configure"]; then
             --shell /bin/false cinder
     fi
 
-    chown -R cinder:cinder /var/log/cinder /etc/cinder
-    chmod 0600 /etc/cinder/cinder.conf
-    chmod 0600 /etc/cinder/policy.json
-    chmod 0600 /etc/cinder/api-paste.ini
-    chmod 0700 /etc/cinder
+    chown -R cinder:adm /var/log/cinder
+    chown 0750 /var/log/cinder
+    chown -R cinder:cinder /var/lib/cinder /etc/cinder
+    chmod 0750 /etc/cinder
     chmod 0440 /etc/sudoers.d/cinder_sudoers
-    chmod 0700 /var/log/cinder
 
     if ! grep -q sql_connection /etc/cinder/cinder.conf
     then

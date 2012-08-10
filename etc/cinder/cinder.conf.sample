@@ -63,8 +63,6 @@
 # ec2_scheme="http"
 ###### (BoolOpt) Allows use of instance password during server creation
 # enable_instance_password=true
-###### (ListOpt) a list of APIs to enable by default
-# enabled_apis="ec2,osapi_compute,osapi_volume,metadata"
 ###### (BoolOpt) If passed, use fake network devices and addresses
 # fake_network=false
 ###### (BoolOpt) If passed, use a fake RabbitMQ provider
@@ -95,8 +93,6 @@
 # isolated_hosts=""
 ###### (ListOpt) Images to run on isolated host
 # isolated_images=""
-###### (StrOpt) Directory to use for lock files
-# lock_path="$pybasedir"
 ###### (StrOpt) If this option is specified, the logging configuration file specified is used and overrides any other logging options specified. Please see the Python logging module documentation for details on logging configuration files.
 # log-config=<None>
 ###### (StrOpt) Format string for %(asctime)s in log records. Default: %default
@@ -126,7 +122,7 @@
 ###### (StrOpt) ip address of this host
 # my_ip="10.0.0.1"
 ###### (StrOpt) availability zone of this node
-# node_availability_zone="cinder"
+# storage_availability_zone="cinder"
 ###### (StrOpt) Default driver for sending notifications
 # notification_driver="cinder.notifier.no_op_notifier"
 ###### (StrOpt) kernel image that indicates not to use a kernel, but to use a raw disk image instead
@@ -255,11 +251,6 @@
 ###### (BoolOpt) publish error events
 # publish_errors=false
 
-######### defined in cinder.utils #########
-
-###### (BoolOpt) Whether to disable inter-process locks
-# disable_process_locking=false
-
 ######### defined in cinder.service #########
 
 ###### (StrOpt) The backend to use for db
@@ -270,8 +261,6 @@
 # ec2_listen_port=8773
 ###### (BoolOpt) Services to be added to the available pool on create
 # enable_new_services=true
-###### (StrOpt) Template string to be used to generate instance names
-# instance_name_template="instance-%08x"
 ###### (StrOpt) IP address for metadata api to listen
 # metadata_listen="0.0.0.0"
 ###### (IntOpt) port for metadata api to listen
@@ -295,7 +284,7 @@
 ###### (StrOpt) Template string to be used to generate snapshot names
 # snapshot_name_template="snapshot-%08x"
 ###### (StrOpt) Template string to be used to generate instance names
-# volume_name_template="volume-%08x"
+# volume_name_template="volume-%s"
 
 ######### defined in cinder.crypto #########
 
@@ -364,8 +353,6 @@
 # rpc_thread_pool_size=1024
 ###### (StrOpt) File name of clean sqlite db
 # sqlite_clean_db="clean.sqlite"
-###### (StrOpt) availability zone of this service
-# storage_availability_zone="cinder"
 ###### (BoolOpt) if True, will not discover local volumes
 # use_local_volumes=true
 ###### (StrOpt) Driver to use for volume creation
@@ -448,11 +435,6 @@
 # lockout_minutes=15
 ###### (IntOpt) Number of minutes for lockout window.
 # lockout_window=15
-
-######### defined in cinder.api.openstack.compute #########
-
-###### (BoolOpt) Permit instance snapshot operations.
-# allow_instance_snapshots=true
 
 ######### defined in cinder.ipv6.api #########
 
@@ -577,14 +559,13 @@
 
 ######### defined in cinder.scheduler.simple #########
 
-###### (IntOpt) maximum number of instance cores to allow per host
-# max_cores=16
 ###### (IntOpt) maximum number of volume gigabytes to allow per host
 # max_gigabytes=10000
-###### (IntOpt) maximum number of networks to allow per host
-# max_networks=1000
-###### (BoolOpt) Allow overcommitting vcpus on isolated hosts
-# skip_isolated_core_check=true
+
+######## defined in cinder.volume.api ########
+
+# snapshot_same_host=true
+#### (BoolOpt) Create volume form snapshot at the host where snapshot resides.
 
 ######### defined in cinder.volume.driver #########
 
@@ -670,4 +651,21 @@
 ###### (StrOpt) The ZFS path under which to create zvols for volumes.
 # san_zfs_volume_base="rpool/"
 
-# Total option count: 467
+######### defined in cinder.volume.storwize_svc #########
+
+##### (StrOpt) Storage system storage pool for volumes
+# storwize_svc_volpool_name=volpool
+##### (StrOpt) Storage system volume type for volumes
+# storwize_svc_vol_vtype=striped
+##### (StrOpt) Storage system space-efficiency parameter for volumes
+# storwize_svc_vol_rsize=2%
+##### (StrOpt) Storage system threshold for volume capacity warnings
+# storwize_svc_vol_warning=0
+##### (BoolOpt) Storage system autoexpand parameter for volumes (True/False)
+# storwize_svc_vol_autoexpand=True
+##### (StrOpt) Storage system grain size parameter for volumes (32/64/128/256)
+# storwize_svc_vol_grainsize=256
+##### (StrOpt) Maximum number of seconds to wait for FlashCopy to be prepared. Maximum value is 600 seconds (10 minutes).
+# storwize_svc_flashcopy_timeout=120
+
+# Total option count: 474

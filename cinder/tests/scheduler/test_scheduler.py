@@ -27,8 +27,9 @@ from cinder import db
 from cinder import exception
 from cinder import flags
 from cinder.notifier import api as notifier
-from cinder import rpc
-from cinder.rpc import common as rpc_common
+from cinder.openstack.common import rpc
+from cinder.openstack.common.rpc import common as rpc_common
+from cinder.openstack.common import timeutils
 from cinder.scheduler import driver
 from cinder.scheduler import manager
 from cinder import test
@@ -236,15 +237,16 @@ class SchedulerDriverModuleTestCase(test.TestCase):
                        'extra_arg': 'meow'}
         queue = 'fake_queue'
 
-        self.mox.StubOutWithMock(utils, 'utcnow')
+        self.mox.StubOutWithMock(timeutils, 'utcnow')
         self.mox.StubOutWithMock(db, 'volume_update')
-        self.mox.StubOutWithMock(db, 'queue_get_for')
+        self.mox.StubOutWithMock(rpc, 'queue_get_for')
         self.mox.StubOutWithMock(rpc, 'cast')
 
-        utils.utcnow().AndReturn('fake-now')
+        timeutils.utcnow().AndReturn('fake-now')
         db.volume_update(self.context, 31337,
                 {'host': host, 'scheduled_at': 'fake-now'})
-        db.queue_get_for(self.context, 'volume', host).AndReturn(queue)
+        rpc.queue_get_for(self.context,
+                         FLAGS.volume_topic, host).AndReturn(queue)
         rpc.cast(self.context, queue,
                 {'method': method,
                  'args': fake_kwargs})
@@ -259,10 +261,11 @@ class SchedulerDriverModuleTestCase(test.TestCase):
         fake_kwargs = {'extra_arg': 'meow'}
         queue = 'fake_queue'
 
-        self.mox.StubOutWithMock(db, 'queue_get_for')
+        self.mox.StubOutWithMock(rpc, 'queue_get_for')
         self.mox.StubOutWithMock(rpc, 'cast')
 
-        db.queue_get_for(self.context, 'volume', host).AndReturn(queue)
+        rpc.queue_get_for(self.context,
+                         FLAGS.volume_topic, host).AndReturn(queue)
         rpc.cast(self.context, queue,
                 {'method': method,
                  'args': fake_kwargs})
@@ -277,10 +280,11 @@ class SchedulerDriverModuleTestCase(test.TestCase):
         fake_kwargs = {'extra_arg': 'meow'}
         queue = 'fake_queue'
 
-        self.mox.StubOutWithMock(db, 'queue_get_for')
+        self.mox.StubOutWithMock(rpc, 'queue_get_for')
         self.mox.StubOutWithMock(rpc, 'cast')
 
-        db.queue_get_for(self.context, 'volume', host).AndReturn(queue)
+        rpc.queue_get_for(self.context,
+                         FLAGS.volume_topic, host).AndReturn(queue)
         rpc.cast(self.context, queue,
                 {'method': method,
                  'args': fake_kwargs})
@@ -309,10 +313,10 @@ class SchedulerDriverModuleTestCase(test.TestCase):
         topic = 'unknown'
         queue = 'fake_queue'
 
-        self.mox.StubOutWithMock(db, 'queue_get_for')
+        self.mox.StubOutWithMock(rpc, 'queue_get_for')
         self.mox.StubOutWithMock(rpc, 'cast')
 
-        db.queue_get_for(self.context, topic, host).AndReturn(queue)
+        rpc.queue_get_for(self.context, topic, host).AndReturn(queue)
         rpc.cast(self.context, queue,
                 {'method': method,
                  'args': fake_kwargs})

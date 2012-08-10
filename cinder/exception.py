@@ -29,7 +29,7 @@ import sys
 
 import webob.exc
 
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
@@ -222,6 +222,10 @@ class VolumeUnattached(Invalid):
     message = _("Volume %(volume_id)s is not attached to anything")
 
 
+class VolumeAttached(Invalid):
+    message = _("Volume %(volume_id)s is still attached, detach volume first.")
+
+
 class InvalidKeypair(Invalid):
     message = _("Keypair data is invalid")
 
@@ -268,10 +272,6 @@ class InvalidContentType(Invalid):
 
 class InvalidCidr(Invalid):
     message = _("Invalid cidr %(cidr)s.")
-
-
-class InvalidRPCConnectionReuse(Invalid):
-    message = _("Invalid reuse of an RPC connection.")
 
 
 class InvalidUnicodeParameter(Invalid):
@@ -401,6 +401,10 @@ class ImageUnacceptable(Invalid):
 
 class InstanceUnacceptable(Invalid):
     message = _("Instance %(instance_id)s is unacceptable: %(reason)s")
+
+
+class InvalidUUID(Invalid):
+    message = _("Expected a uuid but received %(uuid).")
 
 
 class NotFound(CinderException):
@@ -936,3 +940,8 @@ class InvalidInstanceIDMalformed(Invalid):
 
 class CouldNotFetchImage(CinderException):
     message = _("Could not fetch image %(image)s")
+
+
+class VolumeBackendAPIException(CinderException):
+    message = _("Bad or unexpected response from the storage volume "
+                "backend API: %(data)s")

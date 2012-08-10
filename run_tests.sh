@@ -39,6 +39,7 @@ function process_option {
     -p|--pep8) just_pep8=1;;
     -P|--no-pep8) no_pep8=1;;
     -c|--coverage) coverage=1;;
+    -x|--coverage-xml) coverage_xml=1;;
     -*) noseopts="$noseopts $1";;
     *) noseargs="$noseargs $1"
   esac
@@ -57,6 +58,7 @@ wrapper=""
 just_pep8=0
 no_pep8=0
 coverage=0
+coverage_xml=0
 recreate_db=1
 patch_migrate=1
 
@@ -67,6 +69,9 @@ done
 # If enabled, tell nose to collect coverage data
 if [ $coverage -eq 1 ]; then
     noseopts="$noseopts --with-coverage --cover-package=cinder"
+fi
+if [ $coverage_xml -eq 1 ]; then
+    noseopts="$noseopts --with-xcoverage --cover-package=cinder --xcoverage-file=`pwd`/coverage.xml"
 fi
 
 if [ $no_site_packages -eq 1 ]; then
@@ -99,7 +104,7 @@ function run_tests {
 # NOTE(dprince): Exclude xenapi plugins. They are Python 2.4 code and as such
 #                cannot be expected to work with tools/hacking checks.
 xen_net_path="plugins/xenserver/networking/etc/xensource/scripts"
-srcfiles=`find cinder -type f -name "*.py"`
+srcfiles=`find cinder -type f -name "*.py" ! -path "cinder/openstack/common/*"`
 srcfiles+=" `find bin -type f ! -name "cinder.conf*" ! -name "*api-paste.ini*"`"
 srcfiles+=" `find tools -type f -name "*.py"`"
 srcfiles+=" setup.py"

@@ -31,10 +31,10 @@ from cinder import context
 from cinder import db
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import cfg
 from cinder.openstack.common import importutils
-from cinder import rpc
+from cinder.openstack.common import rpc
 from cinder import utils
 from cinder import version
 from cinder import wsgi
@@ -156,8 +156,6 @@ class Service(object):
         vcs_string = version.version_string_with_vcs()
         LOG.audit(_('Starting %(topic)s node (version %(vcs_string)s)'),
                   {'topic': self.topic, 'vcs_string': vcs_string})
-        utils.cleanup_file_locks()
-        rpc.register_opts(FLAGS)
         self.manager.init_host()
         self.model_disconnected = False
         ctxt = context.get_admin_context()
@@ -169,20 +167,19 @@ class Service(object):
         except exception.NotFound:
             self._create_service_ref(ctxt)
 
-        if 'cinder-compute' == self.binary:
-            self.manager.update_available_resource(ctxt)
-
         self.conn = rpc.create_connection(new=True)
         LOG.debug(_("Creating Consumer connection for Service %s") %
                   self.topic)
 
+        rpc_dispatcher = self.manager.create_rpc_dispatcher()
+
         # Share this same connection for these Consumers
-        self.conn.create_consumer(self.topic, self, fanout=False)
+        self.conn.create_consumer(self.topic, rpc_dispatcher, fanout=False)
 
         node_topic = '%s.%s' % (self.topic, self.host)
-        self.conn.create_consumer(node_topic, self, fanout=False)
+        self.conn.create_consumer(node_topic, rpc_dispatcher, fanout=False)
 
-        self.conn.create_consumer(self.topic, self, fanout=True)
+        self.conn.create_consumer(self.topic, rpc_dispatcher, fanout=True)
 
         # Consume from all consumers in a thread
         self.conn.consume_in_thread()
@@ -205,7 +202,7 @@ class Service(object):
             self.timers.append(periodic)
 
     def _create_service_ref(self, context):
-        zone = FLAGS.node_availability_zone
+        zone = FLAGS.storage_availability_zone
         service_ref = db.service_create(context,
                                         {'host': self.host,
                                          'binary': self.binary,
@@ -238,9 +235,10 @@ class Service(object):
         if not binary:
             binary = os.path.basename(inspect.stack()[-1][1])
         if not topic:
-            topic = binary.rpartition('cinder-')[2]
+            topic = binary
         if not manager:
-            manager = FLAGS.get('%s_manager' % topic, None)
+            subtopic = topic.rpartition('cinder-')[2]
+            manager = FLAGS.get('%s_manager' % subtopic, None)
         if report_interval is None:
             report_interval = FLAGS.report_interval
         if periodic_interval is None:
@@ -291,7 +289,7 @@ class Service(object):
     def report_state(self):
         """Update the state of this service in the datastore."""
         ctxt = context.get_admin_context()
-        zone = FLAGS.node_availability_zone
+        zone = FLAGS.storage_availability_zone
         state_catalog = {}
         try:
             try:
@@ -373,8 +371,6 @@ class WSGIService(object):
         :returns: None
 
         """
-        utils.cleanup_file_locks()
-        rpc.register_opts(FLAGS)
         if self.manager:
             self.manager.init_host()
         self.server.start()

@@ -41,7 +41,7 @@ if os.path.exists(os.path.join(possible_topdir, "cinder", "__init__.py")):
 
 
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder import service
 from cinder import utils
 
@@ -49,17 +49,15 @@ from cinder import utils
 LOG = logging.getLogger('cinder.all')
 
 if __name__ == '__main__':
-    utils.default_flagfile()
-    flags.FLAGS(sys.argv)
-    logging.setup()
+    flags.parse_args(sys.argv)
+    logging.setup("cinder")
     utils.monkey_patch()
     servers = []
     # cinder-api
-    for api in flags.FLAGS.enabled_apis:
-        try:
-            servers.append(service.WSGIService(api))
-        except (Exception, SystemExit):
-            logging.exception(_('Failed to load %s') % '%s-api' % api)
+    try:
+        servers.append(service.WSGIService('osapi_volume'))
+    except (Exception, SystemExit):
+        logging.exception(_('Failed to load %s') % '%s-api' % api)
 
     for binary in ['cinder-volume', 'cinder-scheduler']:
         try:

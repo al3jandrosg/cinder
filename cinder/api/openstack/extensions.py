@@ -26,7 +26,7 @@ from cinder.api.openstack import wsgi
 from cinder.api.openstack import xmlutil
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder.openstack.common import exception as common_exception
 from cinder.openstack.common import importutils
 import cinder.policy
@@ -295,18 +295,6 @@ class ResourceExtension(object):
         self.collection_actions = collection_actions
         self.member_actions = member_actions
         self.custom_routes_fn = custom_routes_fn
-
-
-def wrap_errors(fn):
-    """Ensure errors are not passed along."""
-    def wrapped(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except webob.exc.HTTPException:
-            raise
-        except Exception:
-            raise webob.exc.HTTPInternalServerError()
-    return wrapped
 
 
 def load_standard_extensions(ext_mgr, logger, path, package, ext_list=None):

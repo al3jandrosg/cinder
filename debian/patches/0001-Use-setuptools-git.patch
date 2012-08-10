@@ -1,0 +1,83 @@
+From a2c2448e0cc83a173f6d997eecfc36ce41d45a4b Mon Sep 17 00:00:00 2001
+From: Monty Taylor <mordred@inaugust.com>
+Date: Fri, 10 Aug 2012 11:55:48 -0400
+Subject: [PATCH] Use setuptools-git.
+
+Change-Id: I6861a29d65b809362949f2c54197940fd0988785
+---
+ MANIFEST.in         |   40 ++++------------------------------------
+ setup.py            |    1 +
+ tools/test-requires |    1 +
+ 3 files changed, 6 insertions(+), 36 deletions(-)
+
+diff --git a/MANIFEST.in b/MANIFEST.in
+index a093231..c978a52 100644
+--- a/MANIFEST.in
++++ b/MANIFEST.in
+@@ -1,38 +1,6 @@
+ include AUTHORS
+-include HACKING.rst
+-include LICENSE run_tests.sh
+-include README.rst
+-include MANIFEST.in pylintrc Authors
+-include openstack-common.conf
+-include babel.cfg tox.ini
+-graft cinder/CA
+-graft doc
+-graft smoketests
+-graft tools
+-graft etc
+-graft contrib
+-graft plugins
+-graft cinder/api/openstack/*/schemas
+-include cinder/auth/*.schema
+-include cinder/auth/cinderrc.template
+-include cinder/auth/opendj.sh
+-include cinder/auth/slap.sh
+-include cinder/db/sqlalchemy/migrate_repo/migrate.cfg
+-include cinder/db/sqlalchemy/migrate_repo/README
+-include cinder/db/sqlalchemy/migrate_repo/versions/*.sql
+-include cinder/openstack/common/README
+-include cinder/virt/interfaces.template
+-include cinder/virt/libvirt*.xml.template
+-include cinder/virt/cpuinfo.xml.template
+-include cinder/testing/README.rst
+-include cinder/tests/db/cinder.austin.sqlite
+-include cinder/tests/image/*.tar.gz
+-include cinder/tests/policy.json
+-include cinder/tests/test_migrations.conf
+-include cinder/tests/xenapi/vm_rrd.xml
+-include plugins/xenapi/README
+-include plugins/xenapi/etc/xapi.d/plugins/objectstore
+-include plugins/xenapi/etc/xapi.d/plugins/pluginlib_cinder.py
+-global-exclude *.pyc
++include ChangeLog
++exclude .gitignore
++exclude .gitreview
+ 
+-recursive-include cinder/locale *
++global-exclude *.pyc
+diff --git a/setup.py b/setup.py
+index 79c800c..70adb59 100644
+--- a/setup.py
++++ b/setup.py
+@@ -31,6 +31,7 @@ setuptools.setup(name='cinder',
+       packages=setuptools.find_packages(exclude=['bin', 'smoketests']),
+       include_package_data=True,
+       test_suite='nose.collector',
++      setup_requires=['setuptools-git>=0.4'],
+       scripts=['bin/clear_rabbit_queues',
+                'bin/cinder-all',
+                'bin/cinder-api',
+diff --git a/tools/test-requires b/tools/test-requires
+index 51ef2ff..4b8630e 100644
+--- a/tools/test-requires
++++ b/tools/test-requires
+@@ -9,3 +9,4 @@ openstack.nose_plugin
+ pep8==1.1
+ sphinx>=1.1.2
+ MySQL-python
++setuptools-git>=0.4
+-- 
+1.7.10.4
+

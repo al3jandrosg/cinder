@@ -25,11 +25,10 @@ intact.
 
 **Related Flags**
 
-:volume_topic:  What :mod:`rpc` topic to listen to (default: `volume`).
+:volume_topic:  What :mod:`rpc` topic to listen to (default: `cinder-volume`).
 :volume_manager:  The module name of a class derived from
                   :class:`manager.Manager` (default:
                   :class:`cinder.volume.manager.Manager`).
-:storage_availability_zone:  Defaults to `cinder`.
 :volume_driver:  Used by :class:`Manager`.  Defaults to
                  :class:`cinder.volume.driver.ISCSIDriver`.
 :volume_group:  Name of the group that will contain exported volumes (default:
@@ -41,11 +40,13 @@ intact.
 from cinder import context
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import log as logging
 from cinder import manager
 from cinder.openstack.common import cfg
+from cinder.openstack.common import excutils
 from cinder.openstack.common import importutils
-from cinder import rpc
+from cinder.openstack.common import rpc
+from cinder.openstack.common import timeutils
 from cinder import utils
 from cinder.volume import volume_types
 
@@ -53,9 +54,6 @@ from cinder.volume import volume_types
 LOG = logging.getLogger(__name__)
 
 volume_manager_opts = [
-    cfg.StrOpt('storage_availability_zone',
-               default='cinder',
-               help='availability zone of this service'),
     cfg.StrOpt('volume_driver',
                default='cinder.volume.driver.ISCSIDriver',
                help='Driver to use for volume creation'),
@@ -134,11 +132,11 @@ class VolumeManager(manager.SchedulerDependentManager):
             if model_update:
                 self.db.volume_update(context, volume_ref['id'], model_update)
         except Exception:
-            with utils.save_and_reraise_exception():
+            with excutils.save_and_reraise_exception():
                 self.db.volume_update(context,
                                       volume_ref['id'], {'status': 'error'})
 
-        now = utils.utcnow()
+        now = timeutils.utcnow()
         self.db.volume_update(context,
                               volume_ref['id'], {'status': 'available',
                                                  'launched_at': now})
@@ -151,9 +149,11 @@ class VolumeManager(manager.SchedulerDependentManager):
         context = context.elevated()
         volume_ref = self.db.volume_get(context, volume_id)
         if volume_ref['attach_status'] == "attached":
-            raise exception.Error(_("Volume is still attached"))
+            # Volume is still attached, need to detach first
+            raise exception.VolumeAttached(volume_id=volume_id)
         if volume_ref['host'] != self.host:
-            raise exception.Error(_("Volume is not local to this node"))
+            raise exception.InvalidVolume(
+                reason=_("Volume is not local to this node"))
 
         self._reset_stats()
         try:
@@ -168,7 +168,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                                   {'status': 'available'})
             return True
         except Exception:
-            with utils.save_and_reraise_exception():
+            with excutils.save_and_reraise_exception():
                 self.db.volume_update(context,
                                       volume_ref['id'],
                                       {'status': 'error_deleting'})
@@ -192,7 +192,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                                         model_update)
 
         except Exception:
-            with utils.save_and_reraise_exception():
+            with excutils.save_and_reraise_exception():
                 self.db.snapshot_update(context,
                                         snapshot_ref['id'],
                                         {'status': 'error'})
@@ -218,7 +218,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                                     {'status': 'available'})
             return True
         except Exception:
-            with utils.save_and_reraise_exception():
+            with excutils.save_and_reraise_exception():
                 self.db.snapshot_update(context,
                                         snapshot_ref['id'],
                                         {'status': 'error_deleting'})
@@ -227,18 +227,23 @@ class VolumeManager(manager.SchedulerDependentManager):
         LOG.debug(_("snapshot %s: deleted successfully"), snapshot_ref['name'])
         return True
 
-    def attach_volume(self, context, volume_id, instance_id, mountpoint):
+    def attach_volume(self, context, volume_id, instance_uuid, mountpoint):
         """Updates db to show volume is attached"""
         # TODO(vish): refactor this into a more general "reserve"
-        self.db.volume_attached(context,
+        # TODO(sleepsonthefloor): Is this 'elevated' appropriate?
+        if not utils.is_uuid_like(instance_uuid):
+            raise exception.InvalidUUID(instance_uuid)
+
+        self.db.volume_attached(context.elevated(),
                                 volume_id,
-                                instance_id,
+                                instance_uuid,
                                 mountpoint)
 
     def detach_volume(self, context, volume_id):
         """Updates db to show volume is detached"""
         # TODO(vish): refactor this into a more general "unreserve"
-        self.db.volume_detached(context, volume_id)
+        # TODO(sleepsonthefloor): Is this 'elevated' appropriate?
+        self.db.volume_detached(context.elevated(), volume_id)
 
     def initialize_connection(self, context, volume_id, connector):
         """Prepare volume for connection from host represented by connector.
@@ -288,9 +293,10 @@ class VolumeManager(manager.SchedulerDependentManager):
         volume_ref = self.db.volume_get(context, volume_id)
         self.driver.terminate_connection(volume_ref, connector)
 
-    def check_for_export(self, context, instance_id):
+    def check_for_export(self, context, instance_uuid):
         """Make sure whether volume is exported."""
-        volumes = self.db.volume_get_all_by_instance(context, instance_id)
+        volumes = self.db.volume_get_all_by_instance_uuid(context,
+                                                          instance_uuid)
         for volume in volumes:
             self.driver.check_for_export(context, volume['id'])
 

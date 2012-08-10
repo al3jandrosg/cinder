@@ -26,15 +26,21 @@ from eventlet import greenthread
 
 from cinder import exception
 from cinder import flags
-from cinder import log as logging
+from cinder.openstack.common import cfg
+from cinder.openstack.common import log as logging
+from cinder.openstack.common import rpc
 import cinder.policy
+from cinder.openstack.common import timeutils
 from cinder import quota
-from cinder import rpc
 from cinder import utils
 from cinder.db import base
 
+volume_host_opt = cfg.BoolOpt('snapshot_same_host',
+        default=True,
+        help='Create volume from snapshot at the host where snapshot resides')
+
 FLAGS = flags.FLAGS
-flags.DECLARE('storage_availability_zone', 'cinder.volume.manager')
+FLAGS.register_opt(volume_host_opt)
 
 LOG = logging.getLogger(__name__)
 
@@ -80,6 +86,9 @@ class API(base.Base):
         else:
             snapshot_id = None
 
+        if not isinstance(size, int) or size <= 0:
+            msg = _('Volume size must be an integer and greater than 0')
+            raise exception.InvalidInput(reason=msg)
         if quota.allowed_volumes(context, 1, size) < 1:
             pid = context.project_id
             LOG.warn(_("Quota exceeded for %(pid)s, tried to create"
@@ -109,13 +118,35 @@ class API(base.Base):
             }
 
         volume = self.db.volume_create(context, options)
-        rpc.cast(context,
-                 FLAGS.scheduler_topic,
-                 {"method": "create_volume",
-                  "args": {"topic": FLAGS.volume_topic,
-                           "volume_id": volume['id'],
-                           "snapshot_id": snapshot_id}})
+        self._cast_create_volume(context, volume['id'], snapshot_id)
         return volume
+
+    def _cast_create_volume(self, context, volume_id, snapshot_id):
+
+        # NOTE(Rongze Zhu): It is a simple solution for bug 1008866
+        # If snapshot_id is set, make the call create volume directly to
+        # the volume host where the snapshot resides instead of passing it
+        # through the scheduer. So snapshot can be copy to new volume.
+
+        if snapshot_id and FLAGS.snapshot_same_host:
+            snapshot_ref = self.db.snapshot_get(context, snapshot_id)
+            src_volume_ref = self.db.volume_get(context,
+                                                snapshot_ref['volume_id'])
+            topic = rpc.queue_get_for(context,
+                                      FLAGS.volume_topic,
+                                      src_volume_ref['host'])
+            rpc.cast(context,
+                     topic,
+                     {"method": "create_volume",
+                      "args": {"volume_id": volume_id,
+                               "snapshot_id": snapshot_id}})
+        else:
+            rpc.cast(context,
+                     FLAGS.scheduler_topic,
+                     {"method": "create_volume",
+                      "args": {"topic": FLAGS.volume_topic,
+                               "volume_id": volume_id,
+                               "snapshot_id": snapshot_id}})
 
     # TODO(yamahata): eliminate dumb polling
     def wait_creation(self, context, volume):
@@ -142,12 +173,12 @@ class API(base.Base):
             msg = _("Volume still has %d dependent snapshots") % len(snapshots)
             raise exception.InvalidVolume(reason=msg)
 
-        now = utils.utcnow()
+        now = timeutils.utcnow()
         self.db.volume_update(context, volume_id, {'status': 'deleting',
                                                    'terminated_at': now})
         host = volume['host']
         rpc.cast(context,
-                 self.db.queue_get_for(context, FLAGS.volume_topic, host),
+                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
                  {"method": "delete_volume",
                   "args": {"volume_id": volume_id}})
 
@@ -161,14 +192,19 @@ class API(base.Base):
         check_policy(context, 'get', volume)
         return volume
 
-    def get_all(self, context, search_opts={}):
+    def get_all(self, context, search_opts=None):
         check_policy(context, 'get_all')
-        if context.is_admin:
+
+        if search_opts is None:
+            search_opts = {}
+
+        if (context.is_admin and 'all_tenants' in search_opts):
+            # Need to remove all_tenants to pass the filtering below.
+            del search_opts['all_tenants']
             volumes = self.db.volume_get_all(context)
         else:
             volumes = self.db.volume_get_all_by_project(context,
-                                    context.project_id)
-
+                                                        context.project_id)
         if search_opts:
             LOG.debug(_("Searching by: %s") % str(search_opts))
 
@@ -207,11 +243,18 @@ class API(base.Base):
         rv = self.db.snapshot_get(context, snapshot_id)
         return dict(rv.iteritems())
 
-    def get_all_snapshots(self, context):
+    def get_all_snapshots(self, context, search_opts=None):
         check_policy(context, 'get_all_snapshots')
-        if context.is_admin:
+
+        search_opts = search_opts or {}
+
+        if (context.is_admin and 'all_tenants' in search_opts):
+            # Need to remove all_tenants to pass the filtering below.
+            del search_opts['all_tenants']
             return self.db.snapshot_get_all(context)
-        return self.db.snapshot_get_all_by_project(context, context.project_id)
+        else:
+            return self.db.snapshot_get_all_by_project(context,
+                                                       context.project_id)
 
     @wrap_check_policy
     def check_attach(self, context, volume):
@@ -233,7 +276,7 @@ class API(base.Base):
     def remove_from_compute(self, context, volume, instance_id, host):
         """Remove volume from specified compute host."""
         rpc.call(context,
-                 self.db.queue_get_for(context, FLAGS.compute_topic, host),
+                 rpc.queue_get_for(context, FLAGS.compute_topic, host),
                  {"method": "remove_volume_connection",
                   "args": {'instance_id': instance_id,
                            'volume_id': volume['id']}})
@@ -248,19 +291,19 @@ class API(base.Base):
             self.update(context, volume, {"status": "available"})
 
     @wrap_check_policy
-    def attach(self, context, volume, instance_id, mountpoint):
+    def attach(self, context, volume, instance_uuid, mountpoint):
         host = volume['host']
-        queue = self.db.queue_get_for(context, FLAGS.volume_topic, host)
+        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
         return rpc.call(context, queue,
                         {"method": "attach_volume",
                          "args": {"volume_id": volume['id'],
-                                  "instance_id": instance_id,
+                                  "instance_uuid": instance_uuid,
                                   "mountpoint": mountpoint}})
 
     @wrap_check_policy
     def detach(self, context, volume):
         host = volume['host']
-        queue = self.db.queue_get_for(context, FLAGS.volume_topic, host)
+        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
         return rpc.call(context, queue,
                  {"method": "detach_volume",
                   "args": {"volume_id": volume['id']}})
@@ -268,7 +311,7 @@ class API(base.Base):
     @wrap_check_policy
     def initialize_connection(self, context, volume, connector):
         host = volume['host']
-        queue = self.db.queue_get_for(context, FLAGS.volume_topic, host)
+        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
         return rpc.call(context, queue,
                         {"method": "initialize_connection",
                          "args": {"volume_id": volume['id'],
@@ -278,7 +321,7 @@ class API(base.Base):
     def terminate_connection(self, context, volume, connector):
         self.unreserve_volume(context, volume)
         host = volume['host']
-        queue = self.db.queue_get_for(context, FLAGS.volume_topic, host)
+        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
         return rpc.call(context, queue,
                         {"method": "terminate_connection",
                          "args": {"volume_id": volume['id'],
@@ -305,7 +348,7 @@ class API(base.Base):
         snapshot = self.db.snapshot_create(context, options)
         host = volume['host']
         rpc.cast(context,
-                 self.db.queue_get_for(context, FLAGS.volume_topic, host),
+                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
                  {"method": "create_snapshot",
                   "args": {"volume_id": volume['id'],
                            "snapshot_id": snapshot['id']}})
@@ -329,7 +372,7 @@ class API(base.Base):
         volume = self.db.volume_get(context, snapshot['volume_id'])
         host = volume['host']
         rpc.cast(context,
-                 self.db.queue_get_for(context, FLAGS.volume_topic, host),
+                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
                  {"method": "delete_snapshot",
                   "args": {"snapshot_id": snapshot['id']}})
 
