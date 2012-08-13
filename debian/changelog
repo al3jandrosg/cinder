@@ -1,3 +1,10 @@
+cinder (2012.2~f3~20120809.102-0ubuntu2) quantal; urgency=low
+
+  * debian/cinder.conf, cinder-common.install: Use rootwrap.conf. (LP: #1036240) 
+  * debian/control: Drop python-babel.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Mon, 13 Aug 2012 14:14:31 -0500
+
 cinder (2012.2~f3~20120809.102-0ubuntu1) quantal; urgency=low
 
   [ Adam Gandelman ]

@@ -59,7 +59,6 @@ Depends: ${python:Depends}, python-sqlalchemy,
  python-glance,
  python-suds,
  python-paramiko,
- python-babel,
  python-iso8601,
  ${misc:Depends}
 Description: Cinder python libraries
