@@ -19,6 +19,7 @@ Build-Depends-Indep:
  python-routes,
  python-webob,
  python-greenlet,
+ python-glanceclient,
  python-pastedeploy,
  python-paste,
  python-migrate,

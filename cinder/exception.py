@@ -85,53 +85,6 @@ def wrap_db_error(f):
     return _wrap
 
 
-def wrap_exception(notifier=None, publisher_id=None, event_type=None,
-                   level=None):
-    """This decorator wraps a method to catch any exceptions that may
-    get thrown. It logs the exception as well as optionally sending
-    it to the notification system.
-    """
-    # TODO(sandy): Find a way to import cinder.notifier.api so we don't have
-    # to pass it in as a parameter. Otherwise we get a cyclic import of
-    # cinder.notifier.api -> cinder.utils -> cinder.exception :(
-    # TODO(johannes): Also, it would be nice to use
-    # utils.save_and_reraise_exception() without an import loop
-    def inner(f):
-        def wrapped(*args, **kw):
-            try:
-                return f(*args, **kw)
-            except Exception, e:
-                # Save exception since it can be clobbered during processing
-                # below before we can re-raise
-                exc_info = sys.exc_info()
-
-                if notifier:
-                    payload = dict(args=args, exception=e)
-                    payload.update(kw)
-
-                    # Use a temp vars so we don't shadow
-                    # our outer definitions.
-                    temp_level = level
-                    if not temp_level:
-                        temp_level = notifier.ERROR
-
-                    temp_type = event_type
-                    if not temp_type:
-                        # If f has multiple decorators, they must use
-                        # functools.wraps to ensure the name is
-                        # propagated.
-                        temp_type = f.__name__
-
-                    notifier.notify(publisher_id, temp_type, temp_level,
-                                    payload)
-
-                # re-raise original exception since it may have been clobbered
-                raise exc_info[0], exc_info[1], exc_info[2]
-
-        return functools.wraps(f)(wrapped)
-    return inner
-
-
 class CinderException(Exception):
     """Base Cinder Exception
 
@@ -141,6 +94,9 @@ class CinderException(Exception):
 
     """
     message = _("An unknown exception occurred.")
+    code = 500
+    headers = {}
+    safe = False
 
     def __init__(self, message=None, **kwargs):
         self.kwargs = kwargs
@@ -165,6 +121,10 @@ class CinderException(Exception):
                 message = self.message
 
         super(CinderException, self).__init__(message)
+
+
+class DeprecatedConfig(CinderException):
+    message = _("Fatal call to deprecated config") + " %(msg)s"
 
 
 class DecryptionFailure(CinderException):
@@ -236,6 +196,10 @@ class SfJsonEncodeFailure(CinderException):
 
 class InvalidRequest(Invalid):
     message = _("The request is invalid.")
+
+
+class InvalidResults(Invalid):
+    message = _("The results are invalid.")
 
 
 class InvalidSignature(Invalid):
@@ -410,6 +374,7 @@ class InvalidUUID(Invalid):
 class NotFound(CinderException):
     message = _("Resource could not be found.")
     code = 404
+    safe = True
 
 
 class FlagNotSet(NotFound):
@@ -869,6 +834,9 @@ class WillNotSchedule(CinderException):
 
 class QuotaError(CinderException):
     message = _("Quota exceeded") + ": code=%(code)s"
+    code = 413
+    headers = {'Retry-After': 0}
+    safe = True
 
 
 class AggregateError(CinderException):
@@ -928,6 +896,42 @@ class SolidFireAPIDataException(SolidFireAPIException):
 
 class DuplicateVlan(Duplicate):
     message = _("Detected existing vlan with id %(vlan)d")
+
+
+class UnknownCmd(Invalid):
+    message = _("Unknown or unsupported command %(cmd)s")
+
+
+class MalformedResponse(Invalid):
+    message = _("Malformed response to command %(cmd)s: %(reason)s")
+
+
+class BadHTTPResponseStatus(CinderException):
+    message = _("Bad HTTP response status %(status)s")
+
+
+class FailedCmdWithDump(CinderException):
+    message = _("Operation failed with status=%(status)s. Full dump: %(data)s")
+
+
+class ZadaraServerCreateFailure(CinderException):
+    message = _("Unable to create server object for initiator %(name)s")
+
+
+class ZadaraServerNotFound(NotFound):
+    message = _("Unable to find server object for initiator %(name)s")
+
+
+class ZadaraVPSANoActiveController(CinderException):
+    message = _("Unable to find any active VPSA controller")
+
+
+class ZadaraAttachmentsNotFound(NotFound):
+    message = _("Failed to retrieve attachments for volume %(name)s")
+
+
+class ZadaraInvalidAttachmentInfo(Invalid):
+    message = _("Invalid attachment info for volume %(name)s: %(reason)s")
 
 
 class InstanceNotFound(NotFound):

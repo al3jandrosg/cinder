@@ -1,4 +1,5 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
 
 # Copyright 2010 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
@@ -25,6 +26,7 @@ import errno
 import functools
 import hashlib
 import inspect
+import itertools
 import os
 import pyclbr
 import random
@@ -43,15 +45,13 @@ from xml.sax import saxutils
 
 from eventlet import event
 from eventlet import greenthread
-from eventlet import semaphore
 from eventlet.green import subprocess
-import iso8601
 import netaddr
 
+from cinder.common import deprecated
 from cinder import exception
 from cinder import flags
 from cinder.openstack.common import log as logging
-from cinder.openstack.common import cfg
 from cinder.openstack.common import excutils
 from cinder.openstack.common import importutils
 from cinder.openstack.common import timeutils
@@ -61,12 +61,6 @@ LOG = logging.getLogger(__name__)
 ISO_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 PERFECT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 FLAGS = flags.FLAGS
-
-if FLAGS.rootwrap_config is None or FLAGS.root_helper != 'sudo':
-    LOG.warn(_('The root_helper option (which lets you specify a root '
-               'wrapper different from cinder-rootwrap, and defaults to '
-               'using sudo) is now deprecated. You should use the '
-               'rootwrap_config option instead.'))
 
 
 def find_config(config_path):
@@ -190,6 +184,14 @@ def execute(*cmd, **kwargs):
                                 'to utils.execute: %r') % kwargs)
 
     if run_as_root:
+
+        if FLAGS.rootwrap_config is None or FLAGS.root_helper != 'sudo':
+            deprecated.warn(_('The root_helper option (which lets you specify '
+                              'a root wrapper different from cinder-rootwrap, '
+                              'and defaults to using sudo) is now deprecated. '
+                              'You should use the rootwrap_config option '
+                              'instead.'))
+
         if (FLAGS.rootwrap_config is not None):
             cmd = ['sudo', 'cinder-rootwrap',
                    FLAGS.rootwrap_config] + list(cmd)
@@ -815,10 +817,11 @@ def monkey_patch():
     You can set decorators for each modules
     using FLAGS.monkey_patch_modules.
     The format is "Module path:Decorator function".
-    Example: 'cinder.api.ec2.cloud:cinder.notifier.api.notify_decorator'
+    Example: 'cinder.api.ec2.cloud:' \
+     cinder.openstack.common.notifier.api.notify_decorator'
 
     Parameters of the decorator is as follows.
-    (See cinder.notifier.api.notify_decorator)
+    (See cinder.openstack.common.notifier.api.notify_decorator)
 
     name - name of the function
     function - object of the function
@@ -960,6 +963,18 @@ def read_cached_file(filename, cache_info, reload_func=None):
     return cache_info['data']
 
 
+def file_open(*args, **kwargs):
+    """Open file
+
+    see built-in file() documentation for more details
+
+    Note: The reason this is kept in a separate module is to easily
+          be able to provide a stub module that doesn't alter system
+          state at all (for unit tests)
+    """
+    return file(*args, **kwargs)
+
+
 def hash_file(file_like_object):
     """Generate a hash for the contents of a file."""
     checksum = hashlib.sha1()
@@ -993,173 +1008,6 @@ def temporary_mutation(obj, **kwargs):
                 del obj[attr]
             else:
                 setattr(obj, attr, old_value)
-
-
-def warn_deprecated_class(cls, msg):
-    """
-    Issues a warning to indicate that the given class is deprecated.
-    If a message is given, it is appended to the deprecation warning.
-    """
-
-    fullname = '%s.%s' % (cls.__module__, cls.__name__)
-    if msg:
-        fullmsg = _("Class %(fullname)s is deprecated: %(msg)s")
-    else:
-        fullmsg = _("Class %(fullname)s is deprecated")
-
-    # Issue the warning
-    warnings.warn(fullmsg % locals(), DeprecationWarning, stacklevel=3)
-
-
-def warn_deprecated_function(func, msg):
-    """
-    Issues a warning to indicate that the given function is
-    deprecated.  If a message is given, it is appended to the
-    deprecation warning.
-    """
-
-    name = func.__name__
-
-    # Find the function's definition
-    sourcefile = inspect.getsourcefile(func)
-
-    # Find the line number, if possible
-    if inspect.ismethod(func):
-        code = func.im_func.func_code
-    else:
-        code = func.func_code
-    lineno = getattr(code, 'co_firstlineno', None)
-
-    if lineno is None:
-        location = sourcefile
-    else:
-        location = "%s:%d" % (sourcefile, lineno)
-
-    # Build up the message
-    if msg:
-        fullmsg = _("Function %(name)s in %(location)s is deprecated: %(msg)s")
-    else:
-        fullmsg = _("Function %(name)s in %(location)s is deprecated")
-
-    # Issue the warning
-    warnings.warn(fullmsg % locals(), DeprecationWarning, stacklevel=3)
-
-
-def _stubout(klass, message):
-    """
-    Scans a class and generates wrapping stubs for __new__() and every
-    class and static method.  Returns a dictionary which can be passed
-    to type() to generate a wrapping class.
-    """
-
-    overrides = {}
-
-    def makestub_class(name, func):
-        """
-        Create a stub for wrapping class methods.
-        """
-
-        def stub(cls, *args, **kwargs):
-            warn_deprecated_class(klass, message)
-            return func(*args, **kwargs)
-
-        # Overwrite the stub's name
-        stub.__name__ = name
-        stub.func_name = name
-
-        return classmethod(stub)
-
-    def makestub_static(name, func):
-        """
-        Create a stub for wrapping static methods.
-        """
-
-        def stub(*args, **kwargs):
-            warn_deprecated_class(klass, message)
-            return func(*args, **kwargs)
-
-        # Overwrite the stub's name
-        stub.__name__ = name
-        stub.func_name = name
-
-        return staticmethod(stub)
-
-    for name, kind, _klass, _obj in inspect.classify_class_attrs(klass):
-        # We're only interested in __new__(), class methods, and
-        # static methods...
-        if (name != '__new__' and
-            kind not in ('class method', 'static method')):
-            continue
-
-        # Get the function...
-        func = getattr(klass, name)
-
-        # Override it in the class
-        if kind == 'class method':
-            stub = makestub_class(name, func)
-        elif kind == 'static method' or name == '__new__':
-            stub = makestub_static(name, func)
-
-        # Save it in the overrides dictionary...
-        overrides[name] = stub
-
-    # Apply the overrides
-    for name, stub in overrides.items():
-        setattr(klass, name, stub)
-
-
-def deprecated(message=''):
-    """
-    Marks a function, class, or method as being deprecated.  For
-    functions and methods, emits a warning each time the function or
-    method is called.  For classes, generates a new subclass which
-    will emit a warning each time the class is instantiated, or each
-    time any class or static method is called.
-
-    If a message is passed to the decorator, that message will be
-    appended to the emitted warning.  This may be used to suggest an
-    alternate way of achieving the desired effect, or to explain why
-    the function, class, or method is deprecated.
-    """
-
-    def decorator(f_or_c):
-        # Make sure we can deprecate it...
-        if not callable(f_or_c) or isinstance(f_or_c, types.ClassType):
-            warnings.warn("Cannot mark object %r as deprecated" % f_or_c,
-                          DeprecationWarning, stacklevel=2)
-            return f_or_c
-
-        # If we're deprecating a class, create a subclass of it and
-        # stub out all the class and static methods
-        if inspect.isclass(f_or_c):
-            klass = f_or_c
-            _stubout(klass, message)
-            return klass
-
-        # OK, it's a function; use a traditional wrapper...
-        func = f_or_c
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            warn_deprecated_function(func, message)
-
-            return func(*args, **kwargs)
-
-        return wrapper
-    return decorator
-
-
-def _showwarning(message, category, filename, lineno, file=None, line=None):
-    """
-    Redirect warnings into logging.
-    """
-
-    fmtmsg = warnings.formatwarning(message, category, filename, lineno, line)
-    LOG.warning(fmtmsg)
-
-
-# Install our warnings handler
-warnings.showwarning = _showwarning
 
 
 def service_is_up(service):
@@ -1246,6 +1094,19 @@ def strcmp_const_time(s1, s2):
     return result == 0
 
 
+def walk_class_hierarchy(clazz, encountered=None):
+    """Walk class hierarchy, yielding most derived classes first"""
+    if not encountered:
+        encountered = []
+    for subclass in clazz.__subclasses__():
+        if subclass not in encountered:
+            encountered.append(subclass)
+            # drill down to leaves first
+            for subsubclass in walk_class_hierarchy(subclass, encountered):
+                yield subsubclass
+            yield subclass
+
+
 class UndoManager(object):
     """Provides a mechanism to facilitate rolling back a series of actions
     when an exception is raised.
@@ -1271,3 +1132,71 @@ class UndoManager(object):
                 LOG.exception(msg, **kwargs)
 
             self._rollback()
+
+
+def wrap_exception(notifier=None, publisher_id=None, event_type=None,
+                   level=None):
+    """This decorator wraps a method to catch any exceptions that may
+    get thrown. It logs the exception as well as optionally sending
+    it to the notification system.
+    """
+    # TODO(sandy): Find a way to import cinder.notifier.api so we don't have
+    # to pass it in as a parameter. Otherwise we get a cyclic import of
+    # cinder.notifier.api -> cinder.utils -> cinder.exception :(
+    # TODO(johannes): Also, it would be nice to use
+    # utils.save_and_reraise_exception() without an import loop
+    def inner(f):
+        def wrapped(*args, **kw):
+            try:
+                return f(*args, **kw)
+            except Exception, e:
+                # Save exception since it can be clobbered during processing
+                # below before we can re-raise
+                exc_info = sys.exc_info()
+
+                if notifier:
+                    payload = dict(args=args, exception=e)
+                    payload.update(kw)
+
+                    # Use a temp vars so we don't shadow
+                    # our outer definitions.
+                    temp_level = level
+                    if not temp_level:
+                        temp_level = notifier.ERROR
+
+                    temp_type = event_type
+                    if not temp_type:
+                        # If f has multiple decorators, they must use
+                        # functools.wraps to ensure the name is
+                        # propagated.
+                        temp_type = f.__name__
+
+                    context = get_context_from_function_and_args(f,
+                                                                 args,
+                                                                 kw)
+
+                    notifier.notify(context, publisher_id, temp_type,
+                                    temp_level, payload)
+
+                # re-raise original exception since it may have been clobbered
+                raise exc_info[0], exc_info[1], exc_info[2]
+
+        return functools.wraps(f)(wrapped)
+    return inner
+
+
+def get_context_from_function_and_args(function, args, kwargs):
+    """Find an arg of type RequestContext and return it.
+
+       This is useful in a couple of decorators where we don't
+       know much about the function we're wrapping.
+    """
+
+    # import here to avoid circularity:
+    from cinder import context
+
+    for arg in itertools.chain(kwargs.values(), args):
+        if isinstance(arg, context.RequestContext):
+            return arg
+
+    return None

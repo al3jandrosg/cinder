@@ -1,3 +1,5 @@
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
 # Copyright 2011 OpenStack LLC.
 # All Rights Reserved.
 #
@@ -13,7 +15,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+# NOTE(vish): this forces the fixtures from tests/__init.py:setup() to work
 
-def notify(message):
-    """Notifies the recipient of the desired event given the model"""
-    pass
+from cinder.tests import *

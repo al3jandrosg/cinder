@@ -14,21 +14,9 @@
 #    under the License.
 
 
-from cinder import flags
-from cinder.openstack.common import log as logging
-from cinder.openstack.common import jsonutils
+NOTIFICATIONS = []
 
 
-FLAGS = flags.FLAGS
-
-
-def notify(message):
-    """Notifies the recipient of the desired event given the model.
-    Log notifications using cinder's default logging system"""
-
-    priority = message.get('priority',
-                           FLAGS.default_notification_level)
-    priority = priority.lower()
-    logger = logging.getLogger(
-            'cinder.notification.%s' % message['event_type'])
-    getattr(logger, priority)(jsonutils.dumps(message))
+def notify(_context, message):
+    """Test notifier, stores notifications in memory for unittests."""
+    NOTIFICATIONS.append(message)

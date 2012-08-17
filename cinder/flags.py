@@ -130,6 +130,9 @@ global_opts = [
                 default=['$glance_host:$glance_port'],
                 help='A list of the glance api servers available to cinder '
                      '([hostname|ip]:port)'),
+    cfg.IntOpt('glance_num_retries',
+                default=0,
+                help='Number retries when downloading an image from glance'),
     cfg.StrOpt('scheduler_topic',
                default='cinder-scheduler',
                help='the topic scheduler nodes listen on'),
@@ -222,7 +225,7 @@ global_opts = [
                default='cinder',
                help='availability zone of this node'),
     cfg.StrOpt('notification_driver',
-               default='cinder.notifier.no_op_notifier',
+               default='cinder.openstack.common.notifier.no_op_notifier',
                help='Default driver for sending notifications'),
     cfg.ListOpt('memcached_servers',
                 default=None,

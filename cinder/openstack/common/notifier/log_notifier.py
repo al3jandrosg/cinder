@@ -13,4 +13,23 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cinder.tests import *
+
+from cinder.openstack.common import cfg
+from cinder.openstack.common import jsonutils
+from cinder.openstack.common import log as logging
+
+
+CONF = cfg.CONF
+
+
+def notify(_context, message):
+    """Notifies the recipient of the desired event given the model.
+    Log notifications using openstack's default logging system"""
+
+    priority = message.get('priority',
+                           CONF.default_notification_level)
+    priority = priority.lower()
+    logger = logging.getLogger(
+        'cinder.openstack.common.notification.%s' %
+        message['event_type'])
+    getattr(logger, priority)(jsonutils.dumps(message))

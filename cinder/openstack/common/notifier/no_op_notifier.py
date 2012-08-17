@@ -13,13 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cinder import flags
 
-FLAGS = flags.FLAGS
-
-NOTIFICATIONS = []
-
-
-def notify(message):
-    """Test notifier, stores notifications in memory for unittests."""
-    NOTIFICATIONS.append(message)
+def notify(_context, message):
+    """Notifies the recipient of the desired event given the model"""
+    pass

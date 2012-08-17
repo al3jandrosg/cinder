@@ -1,3 +1,11 @@
+cinder (2012.2~f3-0ubuntu1) quantal; urgency=low
+
+  * New upstream version.
+  * debian/patches/0001-Use-setuptools-git.patch: Dropped
+  * debian/control: Add python-glanceclient
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 17 Aug 2012 10:18:57 -0500
+
 cinder (2012.2~f3~20120809.102-0ubuntu2) quantal; urgency=low
 
   * debian/cinder.conf, cinder-common.install: Use rootwrap.conf. (LP: #1036240) 
