@@ -1,3 +1,9 @@
+cinder (2012.2~f3-0ubuntu3) quantal; urgency=low
+
+  * debian/cinder.conf: Re-add sql_connection and set it to sqllite.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 22 Aug 2012 20:14:41 -0500
+
 cinder (2012.2~f3-0ubuntu2) quantal; urgency=low
 
   * debian/cinder.conf: Get rid of deprecated warnings.
