@@ -61,6 +61,7 @@ Depends: ${python:Depends}, python-sqlalchemy,
  python-suds,
  python-paramiko,
  python-iso8601,
+ python-glanceclient,
  ${misc:Depends}
 Description: Cinder python libraries
  Cinder is a storage service for the Openstack project.

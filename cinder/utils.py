@@ -46,7 +46,6 @@ from xml.sax import saxutils
 from eventlet import event
 from eventlet import greenthread
 from eventlet.green import subprocess
-import netaddr
 
 from cinder.common import deprecated
 from cinder import exception
@@ -84,54 +83,6 @@ def find_config(config_path):
             return os.path.abspath(path)
 
     raise exception.ConfigNotFound(path=os.path.abspath(config_path))
-
-
-def vpn_ping(address, port, timeout=0.05, session_id=None):
-    """Sends a vpn negotiation packet and returns the server session.
-
-    Returns False on a failure. Basic packet structure is below.
-
-    Client packet (14 bytes)::
-
-         0 1      8 9  13
-        +-+--------+-----+
-        |x| cli_id |?????|
-        +-+--------+-----+
-        x = packet identifier 0x38
-        cli_id = 64 bit identifier
-        ? = unknown, probably flags/padding
-
-    Server packet (26 bytes)::
-
-         0 1      8 9  13 14    21 2225
-        +-+--------+-----+--------+----+
-        |x| srv_id |?????| cli_id |????|
-        +-+--------+-----+--------+----+
-        x = packet identifier 0x40
-        cli_id = 64 bit identifier
-        ? = unknown, probably flags/padding
-        bit 9 was 1 and the rest were 0 in testing
-
-    """
-    if session_id is None:
-        session_id = random.randint(0, 0xffffffffffffffff)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    data = struct.pack('!BQxxxxx', 0x38, session_id)
-    sock.sendto(data, (address, port))
-    sock.settimeout(timeout)
-    try:
-        received = sock.recv(2048)
-    except socket.timeout:
-        return False
-    finally:
-        sock.close()
-    fmt = '!BQxxxxxQxxxx'
-    if len(received) != struct.calcsize(fmt):
-        print struct.calcsize(fmt)
-        return False
-    (identifier, server_sess, client_sess) = struct.unpack(fmt, received)
-    if identifier == 0x40 and client_sess == session_id:
-        return server_sess
 
 
 def fetchfile(url, target):
@@ -713,36 +664,6 @@ def check_isinstance(obj, cls):
     return cls()  # Ugly PyLint hack
 
 
-def parse_server_string(server_str):
-    """
-    Parses the given server_string and returns a list of host and port.
-    If it's not a combination of host part and port, the port element
-    is a null string. If the input is invalid expression, return a null
-    list.
-    """
-    try:
-        # First of all, exclude pure IPv6 address (w/o port).
-        if netaddr.valid_ipv6(server_str):
-            return (server_str, '')
-
-        # Next, check if this is IPv6 address with a port number combination.
-        if server_str.find("]:") != -1:
-            (address, port) = server_str.replace('[', '', 1).split(']:')
-            return (address, port)
-
-        # Third, check if this is a combination of an address and a port
-        if server_str.find(':') == -1:
-            return (server_str, '')
-
-        # This must be a combination of an address and a port
-        (address, port) = server_str.split(':')
-        return (address, port)
-
-    except Exception:
-        LOG.debug(_('Invalid server_string: %s'), server_str)
-        return ('', '')
-
-
 def gen_uuid():
     return uuid.uuid4()
 
@@ -783,30 +704,6 @@ def is_valid_ipv4(address):
                 return False
         except ValueError:
             return False
-    return True
-
-
-def is_valid_cidr(address):
-    """Check if the provided ipv4 or ipv6 address is a valid
-    CIDR address or not"""
-    try:
-        # Validate the correct CIDR Address
-        netaddr.IPNetwork(address)
-    except netaddr.core.AddrFormatError:
-        return False
-    except UnboundLocalError:
-        # NOTE(MotoKen): work around bug in netaddr 0.7.5 (see detail in
-        # https://github.com/drkjam/netaddr/issues/2)
-        return False
-
-    # Prior validation partially verify /xx part
-    # Verify it here
-    ip_segment = address.split('/')
-
-    if (len(ip_segment) <= 1 or
-        ip_segment[1] == ''):
-        return False
-
     return True
 
 

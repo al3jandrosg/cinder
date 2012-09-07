@@ -18,7 +18,7 @@
 """
 Volume manager manages creating, attaching, detaching, and persistent storage.
 
-Persistant storage volumes keep their state independent of instances.  You can
+Persistent storage volumes keep their state independent of instances.  You can
 attach to an instance, terminate the instance, spawn a new instance (even
 one from a different image) and re-attach the volume with the same data
 intact.
@@ -257,6 +257,17 @@ class VolumeManager(manager.SchedulerDependentManager):
         if not utils.is_uuid_like(instance_uuid):
             raise exception.InvalidUUID(instance_uuid)
 
+        try:
+            self.driver.attach_volume(context,
+                                      volume_id,
+                                      instance_uuid,
+                                      mountpoint)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                self.db.volume_update(context,
+                                      volume_id,
+                                      {'status': 'error_attaching'})
+
         self.db.volume_attached(context.elevated(),
                                 volume_id,
                                 instance_uuid,
@@ -266,6 +277,14 @@ class VolumeManager(manager.SchedulerDependentManager):
         """Updates db to show volume is detached"""
         # TODO(vish): refactor this into a more general "unreserve"
         # TODO(sleepsonthefloor): Is this 'elevated' appropriate?
+        try:
+            self.driver.detach_volume(context, volume_id)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                self.db.volume_update(context,
+                                      volume_id,
+                                      {'status': 'error_detaching'})
+
         self.db.volume_detached(context.elevated(), volume_id)
 
     def _copy_image_to_volume(self, context, volume, image_id):
@@ -273,7 +292,6 @@ class VolumeManager(manager.SchedulerDependentManager):
         volume_id = volume['id']
         payload = {'volume_id': volume_id, 'image_id': image_id}
         try:
-            self.driver.ensure_export(context.elevated(), volume)
             image_service, image_id = glance.get_remote_image_service(context,
                                                                       image_id)
             self.driver.copy_image_to_volume(context, volume, image_service,

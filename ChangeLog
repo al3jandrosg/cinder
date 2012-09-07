@@ -1,3 +1,1371 @@
+commit 6eedab91fe1c298527dbbcbc5eaf20d6ab2ab972
+Merge: 9885eb1 aef9f4a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 15:53:08 2012 +0000
+
+    Merge "Filter volumes and snapshots by query string"
+
+commit 9885eb1d2f6edcaa2f9ab334a7809c4dcb403694
+Merge: 92e3b84 21f4153
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 15:40:37 2012 +0000
+
+    Merge "Rename test_nova_rootwrap.py to test_cinder_rootwrap.py"
+
+commit 92e3b84bf11e3ee8c6e8bedb29858ebac311e079
+Merge: 0c78f59 2d211b6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 15:08:12 2012 +0000
+
+    Merge "Update SolidFire driver to reflect IQN changes"
+
+commit 0c78f59907a18700292b8bd03667bf7711b201a9
+Merge: 178e483 f926eb6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 14:47:30 2012 +0000
+
+    Merge "Remove vpn_ping function in cinder/utils.py"
+
+commit 178e48339bb824d8a741dcdca95e7062b94dc7cd
+Merge: 0a67894 a17fc22
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 14:46:54 2012 +0000
+
+    Merge "Clean up some codes about compute in VolumeTestCase"
+
+commit 0a6789462e3bcebe49ffb30f450659d0de255c8d
+Merge: fb78951 3e9b64c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 14:46:35 2012 +0000
+
+    Merge "Typo nova => cinder"
+
+commit fb789516b0699a98afde017d3206a471c542885c
+Merge: e5a2cd8 aba4dcb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 14:46:12 2012 +0000
+
+    Merge "Remove unused db api"
+
+commit a17fc22b4d26b351a11aa5f3d4a2688cf46f007b
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 14:47:51 2012 +0800
+
+    Clean up some codes about compute in VolumeTestCase
+    
+    self.compute have not be assigned in VolumeTestCase, so clean up some
+    codes about it.
+    
+    Change-Id: Ie2577065ad27b4ee5b54dec65adfe723bf93985f
+
+ cinder/tests/test_volume.py |   17 ++---------------
+ 1 file changed, 2 insertions(+), 15 deletions(-)
+
+commit aba4dcbf9d8bcb2cc65109960e1e53169db8ff69
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 14:40:45 2012 +0800
+
+    Remove unused db api
+    
+    service_get_all_compute_by_host and service_get_all_compute_sorted are
+    not be used by cinder.
+    
+    Change-Id: Ie384d2666bbfea1d5fab74e4e3e021909f6c0e3f
+
+ cinder/db/api.py |   14 --------------
+ 1 file changed, 14 deletions(-)
+
+commit e5a2cd89761b041883433829fe9a751c15eab229
+Merge: 42cfb8f 590d3e7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 7 06:36:02 2012 +0000
+
+    Merge "Fixes potential bugs found by pylint"
+
+commit 3e9b64c09ee631b355e8131930f8e9c35c061029
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 14:25:27 2012 +0800
+
+    Typo nova => cinder
+    
+    Change-Id: I715feee8ca84fb65518e750585f82e942e710ecd
+
+ bin/cinder-manage |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit f926eb6f7ccca4dacad438382f48cf75f854ab77
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 14:13:11 2012 +0800
+
+    Remove vpn_ping function in cinder/utils.py
+    
+    vpn_ping is not be used by cinder.
+    
+    Change-Id: I3ea04200360a23259ce3cce54ff88125895e217b
+
+ cinder/utils.py |   48 ------------------------------------------------
+ 1 file changed, 48 deletions(-)
+
+commit 2d211b66994240b2047d78b3d084d52abeac72a2
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Thu Sep 6 23:50:49 2012 -0600
+
+    Update SolidFire driver to reflect IQN changes
+    
+     Prior to release the SolidFire device returned only
+     a partial iqn string in it's api call.
+    
+     With the GA release, this was modified to return the entire
+     iqn string, so just drop the prefix we were using in beta.
+    
+    Change-Id: I7fa9d1ec6e2639149375a1115198eee90c527ef1
+
+ cinder/volume/solidfire.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 21f415347a3f26f022427ea9c640396a4a19f4f5
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 12:21:40 2012 +0800
+
+    Rename test_nova_rootwrap.py to test_cinder_rootwrap.py
+    
+    Change-Id: I13554b7afa994ec7c68e86e27568110445d1e4ed
+
+ cinder/tests/test_cinder_rootwrap.py |  129 ++++++++++++++++++++++++++++++++++
+ cinder/tests/test_nova_rootwrap.py   |  129 ----------------------------------
+ 2 files changed, 129 insertions(+), 129 deletions(-)
+
+commit 590d3e7b0f74524093725a2e28150b083a77cf96
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Sep 7 11:16:36 2012 +0800
+
+    Fixes potential bugs found by pylint
+    
+    Partial fixes bug #1043884
+    
+    * remove _ec2_volume_get_query and _ec2_snapshot_get_query in
+    cinder.db.sqlalchemy.api, because they no longer be used in cinder.
+    * import openstack.commmon.utils.timeutils, because notify_usage_exists use it.
+    
+    Change-Id: I3e989b940b6a99ac7751c940fa766aa13c61607b
+
+ cinder/db/sqlalchemy/api.py |   12 ------------
+ cinder/volume/utils.py      |    3 ++-
+ 2 files changed, 2 insertions(+), 13 deletions(-)
+
+commit 42cfb8fbb29577e1a0ab98ec7d8614c270f241ae
+Author: Dan Prince <dprince@redhat.com>
+Date:   Thu Sep 6 22:52:35 2012 -0400
+
+    Handle missing 'provider_location' in rm_export.
+    
+    Updates the remove_export function in the ISCSIDriver so that
+    it handles the case where provider_location isn't set on
+    a volume. This can occur if a volume is created but not exported.
+    
+    This was a regression from a previous commit
+    (9785963c841aff5ea1c159da81f93c2bf62c70c6) which changed the way iscsi
+    targets are created/deleted.
+    
+    Fixes LP Bug #1046484.
+    
+    Change-Id: Ie762b092dd2a84fe4f3b72c46c03a97ae67c53b7
+
+ cinder/volume/driver.py |   14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+commit 2cd6a4d68f0faf592b5e2185f792afae27b438d9
+Merge: 956fb82 8eb6462
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 23:31:02 2012 +0000
+
+    Merge "Sync cfg changes from openstack-common"
+
+commit 956fb8236a62435a27c380fd42aff0c6dfa33bf0
+Merge: 66eb4a1 46060d6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 23:30:11 2012 +0000
+
+    Merge "Sync misc changes from openstack-common"
+
+commit 66eb4a1eb424b8fe27e2ec3bda7205129f0ef6af
+Merge: 8235a22 dc89c6f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 23:29:51 2012 +0000
+
+    Merge "Sync zmq changes from openstack-common"
+
+commit 8235a22f1990a5b2e1f1b706dd01eb752ec3d9a4
+Merge: 1d92751 6985bf4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 23:28:06 2012 +0000
+
+    Merge "Remove default_schedule_zone."
+
+commit 1d92751ccf024bfb3076c4f381101201f7206b60
+Merge: 5c0c720 c86483b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 23:09:43 2012 +0000
+
+    Merge "Remove memcached_servers config option."
+
+commit 5c0c72051fd0a32c51bb68d955169b07d36ec882
+Merge: 5edbbd3 7b45807
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 22:49:39 2012 +0000
+
+    Merge "Remove dependencies for netaddr."
+
+commit 5edbbd3f34256d60a3f39f129253680ec01cc159
+Merge: d16b820 d6a5d0f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 22:49:07 2012 +0000
+
+    Merge "Fix Typo in LOG.error"
+
+commit d16b820dd51344d5b96b095102fd5d465f69a489
+Merge: 01b1a9e 0903603
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 22:47:05 2012 +0000
+
+    Merge "Specify the conf file when creating a volume."
+
+commit 01b1a9e1795ecccccbdc66bf9068ccb4f544d5fe
+Merge: 5d72e7a 51a008d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 22:30:57 2012 +0000
+
+    Merge "Fix xml metadata for volumes api in cinder."
+
+commit 0903603971033536751ba40df98a3c39175d3189
+Author: Dan Prince <dprince@redhat.com>
+Date:   Thu Sep 6 14:50:50 2012 -0400
+
+    Specify the conf file when creating a volume.
+    
+    Updates the tgt-admin command to actually use the config file
+    we create for the volume being created.
+    
+    This fixes an issue introduced in
+    9785963c841aff5ea1c159da81f93c2bf62c70c6 which breaks iscsi
+    volume creation.
+    
+    Fixes LP Bug #1046985.
+    
+    Change-Id: I06e83c9ba351c2b4846b557a3abb170a51d506c0
+
+ cinder/tests/test_iscsi.py |    2 +-
+ cinder/volume/iscsi.py     |    2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+commit 5d72e7a40e49e6d69e6733b2564dcfc08f398bd1
+Merge: 802c05b c191d0d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 6 19:24:57 2012 +0000
+
+    Merge "Add admin actions extension"
+
+commit d6a5d0f9faa43a82104a0ed936382195b89d4107
+Author: Chuck Short <zulcss@ubuntu.com>
+Date:   Thu Sep 6 09:50:37 2012 -0500
+
+    Fix Typo in LOG.error
+    
+    Fix typo in LOG.error, it should be
+    vol_id rather than volume_id.
+    Fixes bug #1046875
+    
+    Change-Id: Id162c6f185a110b63e8f9f509f5cde75f3626cbf
+    Signed-off-by: Chuck Short <zulcss@ubuntu.com>
+
+ cinder/volume/iscsi.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 7b458073cefac296f41c11ffacb0f18785f127d8
+Author: Dan Prince <dprince@redhat.com>
+Date:   Mon Sep 3 22:11:59 2012 -0400
+
+    Remove dependencies for netaddr.
+    
+    Updates cinder utils.py to remove the parse_server_string and
+    is_valid_cidr functions. These functions aren't in use
+    and are the only reason we need the netaddr dependency.
+    
+    Updates pip-requires to drop the netaddr dependency.
+    
+    Also removes the unit tests for removed functions.
+    Change-Id: I521ae60b758324069fb1ffa1701b1f9deb780f65
+
+ cinder/tests/test_utils.py |   23 ------------------
+ cinder/utils.py            |   55 --------------------------------------------
+ tools/pip-requires         |    1 -
+ 3 files changed, 79 deletions(-)
+
+commit aef9f4ab05946e2bfef0cdb53071e52425c7f518
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Fri Aug 31 20:16:29 2012 +0000
+
+    Filter volumes and snapshots by query string
+    
+    Fix query string search_opts filters in api.openstack.volume.volumes and
+    snapshots.  Fix get_all methods in volumes.api to adequately handle
+    parameter matching.
+    
+    The current api does not properly apply query string filters by
+    display_name, status, or (in the case of snapshots) volume_id.  These
+    filters are needed both for the end user and operator to display logical
+    grouping of these resources.
+    
+    Fixes: bug #1046353
+    
+    Change-Id: Ia12ffe1bf8a27c8a78daa24c4b728b394932a2b0
+
+ cinder/api/openstack/volume/snapshots.py           |    4 +
+ cinder/api/openstack/volume/volumes.py             |    4 +-
+ .../tests/api/openstack/volume/test_snapshots.py   |   86 ++++++++++++++++++++
+ cinder/tests/api/openstack/volume/test_volumes.py  |   61 ++++++++++++++
+ cinder/volume/api.py                               |   33 ++++++--
+ 5 files changed, 177 insertions(+), 11 deletions(-)
+
+commit 6985bf48bed99f752d420071d0ac4db0ad81fd1c
+Author: Dan Prince <dprince@redhat.com>
+Date:   Wed Sep 5 13:17:24 2012 -0400
+
+    Remove default_schedule_zone.
+    
+    We don't use this config options.
+    
+    Change-Id: I94a7940dc74341580ab954ffcda1f91fb5433e3f
+
+ cinder/flags.py               |    3 ---
+ etc/cinder/cinder.conf.sample |    5 +----
+ 2 files changed, 1 insertion(+), 7 deletions(-)
+
+commit c86483b596c75003645e2c2052c8a63ae85294b4
+Author: Dan Prince <dprince@redhat.com>
+Date:   Wed Sep 5 13:15:58 2012 -0400
+
+    Remove memcached_servers config option.
+    
+    We don't use this in Cinder.
+    
+    Change-Id: Id8503ff373622a2667fe0575f79e089056677019
+
+ cinder/flags.py               |    3 ---
+ etc/cinder/cinder.conf.sample |    5 +----
+ 2 files changed, 1 insertion(+), 7 deletions(-)
+
+commit 802c05b86a927787d480d16798a62794613695b5
+Author: Dan Prince <dprince@redhat.com>
+Date:   Wed Sep 5 13:13:08 2012 -0400
+
+    Regenerate cinder.conf.sample.
+    
+    Create a new version of cinder.conf.sample using
+    tools/conf/generate_sample.sh.
+    
+    Old version had 475 options.
+    
+    New version has 133 options (more accurate).
+    
+    Change-Id: Id60aec1d91179a294e1969b7ab1f54051cb7a728
+
+ etc/cinder/cinder.conf.sample | 1012 ++++++++++++++++++-----------------------
+ 1 file changed, 443 insertions(+), 569 deletions(-)
+
+commit 0094303e36cf1c01db539a1eea7771ebcb4d336a
+Author: Dan Prince <dprince@redhat.com>
+Date:   Wed Sep 5 12:59:28 2012 -0400
+
+    Sync improvements to config file generator tools.
+    
+    We made some improvements to the config file generator in
+    Nova during Folsom including spacing and formatting changes.
+    
+    This patch merges these into Cinder so we can make use of
+    them to generate a new sample config file.
+    
+    Change-Id: I1e1166ac6e2a28cc179223e5af547995f58b36e6
+
+ tools/conf/create_conf.py     |  159 ----------------------------------
+ tools/conf/extract_opts.py    |  188 +++++++++++++++++++++++++++++++++++++++++
+ tools/conf/generate_sample.sh |   11 ++-
+ 3 files changed, 193 insertions(+), 165 deletions(-)
+
+commit b7745f5e8d871b6ce4a140eb9705b6ec39754159
+Merge: 700583d 8c30edf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 5 17:19:01 2012 +0000
+
+    Merge "Removed unnecessary call to ensure_export"
+
+commit 46060d64167c1f700a8af5b89744ac0909d53c5a
+Author: Mark McLoughlin <markmc@redhat.com>
+Date:   Wed Sep 5 12:21:36 2012 +0100
+
+    Sync misc changes from openstack-common
+    
+    Syncs the following changes from stable/folsom:
+    
+     769ec65 Don't trap then re-raise ImportError.
+     202b8b7 Fix spelling typos
+     01b4f31 Support for marshalling datetime while preserving microseconds.
+    
+    Change-Id: I6ed5e71ed18cdf3c528351713a42645f31fd8965
+
+ cinder/openstack/common/excutils.py    |    4 ++--
+ cinder/openstack/common/importutils.py |    2 +-
+ cinder/openstack/common/timeutils.py   |   22 ++++++++++++++++++++--
+ 3 files changed, 23 insertions(+), 5 deletions(-)
+
+commit dc89c6f3d2b0f54fd3056f1ff6c677ba50688b66
+Author: Mark McLoughlin <markmc@redhat.com>
+Date:   Wed Sep 5 12:19:07 2012 +0100
+
+    Sync zmq changes from openstack-common
+    
+    Syncs the following from stable/folsom:
+    
+     9f9e14c Update zmq context cleanup to use term.
+     704fb8b Remove register_opts from client methods
+     f88d38b Rename FLAGS to CONF; Remove self.conf
+    
+    Change-Id: Ic6ab732d71420aba032554c51904dd71f1d23b78
+
+ cinder/openstack/common/rpc/impl_zmq.py |   37 +++++++++++++------------------
+ 1 file changed, 15 insertions(+), 22 deletions(-)
+
+commit 8eb64625e52aa8a6a2046f5ac53e132e1c1ea6de
+Author: Mark McLoughlin <markmc@redhat.com>
+Date:   Wed Sep 5 12:04:16 2012 +0100
+
+    Sync cfg changes from openstack-common
+    
+    Syncs the following from stable/folsom:
+    
+     4dc2043 cfg: clean up None value handling
+     513bd3a Allow set_default and set_override to use None
+     0a36c92 Tilde expansion for --config-file and --config-dir
+     038d597 Add import_opt() method to ConfigOpts
+    
+    Change-Id: Ifa85280fdc072965f3e9ae8641bdf85268a9a6ac
+
+ cinder/openstack/common/cfg.py |   85 ++++++++++++++++++++++++++++++++--------
+ 1 file changed, 68 insertions(+), 17 deletions(-)
+
+commit 700583d26220cd3e792c1af33c60b8c1ba3c0769
+Merge: 5586119 ffe5036
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 4 17:59:05 2012 +0000
+
+    Merge "Fix bug where image size is incorrectly rejected."
+
+commit 5586119f4a838b12a46bd12b316c9944efa6691a
+Merge: bdba7e3 b84d623
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 4 17:56:21 2012 +0000
+
+    Merge "Make size optional when creating a volume from a snap"
+
+commit 51a008dfdbb80c158d85beed4e310f94b068d341
+Author: Matthew Treinish <treinish@linux.vnet.ibm.com>
+Date:   Tue Sep 4 11:08:16 2012 -0400
+
+    Fix xml metadata for volumes api in cinder.
+    
+    Fixes bug 1040891.
+    
+    Change-Id: Idf8cc641162617ade2aeb77b666270cf1ce54c54
+    Signed-off-by: Matthew Treinish <treinish@linux.vnet.ibm.com>
+
+ cinder/api/openstack/common.py                    |   74 +++++++++++
+ cinder/api/openstack/volume/volumes.py            |   53 +++++++-
+ cinder/api/openstack/wsgi.py                      |   12 ++
+ cinder/tests/api/openstack/volume/test_volumes.py |  136 ++++++++++++++++++++-
+ 4 files changed, 266 insertions(+), 9 deletions(-)
+
+commit ffe5036fa0e63ccde2d19aa0f425ec43de338dd7
+Author: Dermot Tynan <tynan@hp.com>
+Date:   Thu Aug 30 17:38:22 2012 +0000
+
+    Fix bug where image size is incorrectly rejected.
+    
+    Fixes bug 1043952.
+    
+    Added GB-1 (one byte less than a gig) to the numerator to
+    correct round-off errors.
+    
+    Change-Id: I6d97f3c53ab5a8ff5a0752400fd189f23223958f
+    
+    Fixed PEP8 complaints.
+    
+    Change-Id: Iacecddd4e65c80964f4860d6580872d897ec2356
+
+ cinder/tests/test_volume.py |   43 +++++++++++++++++++++++++++++++++++++++++++
+ cinder/volume/api.py        |    2 +-
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+commit bdba7e3bbf7cef4417309eb356aea4b805d3c974
+Merge: 56405da b60c390
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 4 03:24:45 2012 +0000
+
+    Merge "Several hacking compliance fixes."
+
+commit b60c3909cec2e96e09c664bf7caca4b7b3b6ba54
+Author: Dan Prince <dprince@redhat.com>
+Date:   Mon Sep 3 22:17:06 2012 -0400
+
+    Several hacking compliance fixes.
+    
+    Updates bin/nova-manage and the solidfire driver with several
+    hacking compliance fixes.
+    
+    Makes it so run_tests.sh -p runs clean again.
+    
+    Change-Id: Iee675cae06acda6a585a77073e773651aab9d5a1
+
+ bin/cinder-manage          |    6 +++---
+ cinder/volume/solidfire.py |    2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+commit 56405da849bc76dc97e3e1bcbfda00d3b73a57cd
+Author: Dan Prince <dprince@redhat.com>
+Date:   Mon Sep 3 22:02:22 2012 -0400
+
+    Remove Cheetah from pip-requires.
+    
+    We don't use Cheetah so no need to install it w/ pip.
+    
+    Change-Id: I29ea1b0ec2bf2eaebe4378c15c3cfc0caebabf99
+
+ tools/pip-requires |    1 -
+ 1 file changed, 1 deletion(-)
+
+commit bedc8b6622bc711acc86e7ef245be478c1e4a2b4
+Author: RongzeZhu <zrzhit@gmail.com>
+Date:   Mon Sep 3 12:26:35 2012 +0800
+
+    Typo fix: nova => cinder
+    
+    Change-Id: I816473b3aa7de16bd2d8569c695c6ced9e1d9033
+
+ cinder/volume/xiv.py                 |    2 +-
+ etc/cinder/rootwrap.d/volume.filters |   22 +++++++++++-----------
+ 2 files changed, 12 insertions(+), 12 deletions(-)
+
+commit c58e87cfe19adbd432b23cfea00ce72e8636403b
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Wed Aug 29 20:35:33 2012 -0400
+
+    Move newly created NFS exceptions to standard location in exception.py
+    Addresses bug 1037619
+    
+    bug 1037619
+    
+    Change-Id: I20b1c612c03ef90eeb074814b979a9bc7492109c
+
+ cinder/exception.py      |   12 ++++++++++++
+ cinder/tests/test_nfs.py |    9 +++++----
+ cinder/volume/nfs.py     |   23 +++++------------------
+ 3 files changed, 22 insertions(+), 22 deletions(-)
+
+commit 99e8882f5ff777ce19ea25b923416bbb4511dd63
+Merge: fe70a0e 91311d5
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Sep 1 00:57:54 2012 +0000
+
+    Merge "Remove unused flags"
+
+commit c191d0d10c6cb5730a4fb6540198ca3be6595b02
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Mon Aug 27 07:48:32 2012 +0000
+
+    Add admin actions extension
+    
+    The optional os-admin-actions extension adds new wsgi_actions to the
+    volumes/action resource and a new snapshots/action endpoint.
+    
+    With this extension both controllers will support an os-reset_status
+    action to force a database update of a volume or snapshot that is stuck
+    in a failed/incorrect status.  The os-reset_status action works
+    similarly to the compute api's os-reset_state action for instances.
+    
+    The os-force_delete action behaves similarly to the "cinder-manage
+    volume delete" command and allows operators/admins to retry the delete
+    operation after it has gone into an error_deleting status with an admin
+    api call.
+    
+    The os-admin-actions extension is enabled by default, but limited to the
+    admin api by the default policy.json rules.  Individual admin actions
+    can be disabled with policy rules as well.
+    
+    Example of os-reset_status action on a volume:
+    
+    curl http://localhost:8776/v1/${PROJECT_ID}/volumes/${VOLUME_ID}/action \
+        -H 'x-auth-token: ${ADMIN_AUTH_TOKEN}' \
+        -H 'content-type: application/json' \
+        -d '{"os-reset_status": {"status": "error"}}'
+    
+    The new admin only api can assist deployers who encounter bugs or
+    operational issues that result in failed actions.
+    
+    It can also be used by future storage backends to support async callback
+    style status updates from long running actions or operations which have
+    encountered an error will be retried.
+    
+    Also updates the api.openstack.wsgi.ControllerMetaclass to support
+    sub-classing wsgi.Controllers that define wsgi_actions.
+    
+    Partial fix for bug #1039706
+    
+    Change-Id: I29f4b892a99108b6c24eebc3eb58033a9e01e679
+
+ cinder/api/openstack/extensions.py                 |    5 +-
+ cinder/api/openstack/volume/__init__.py            |    5 +-
+ .../api/openstack/volume/contrib/admin_actions.py  |  129 ++++++++++++++
+ cinder/api/openstack/volume/snapshots.py           |    7 +-
+ cinder/api/openstack/wsgi.py                       |    3 +
+ .../openstack/volume/contrib/test_admin_actions.py |  176 ++++++++++++++++++++
+ cinder/tests/api/openstack/volume/test_router.py   |    8 +-
+ cinder/tests/policy.json                           |    5 +
+ cinder/tests/test_volume.py                        |   47 +++++-
+ cinder/volume/api.py                               |    4 +-
+ etc/cinder/policy.json                             |    5 +-
+ 11 files changed, 377 insertions(+), 17 deletions(-)
+
+commit fe70a0ebc47843a08d085e7ab4104898c069f427
+Merge: 48ce2b7 5da61a7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 16:41:24 2012 +0000
+
+    Merge "Use event.listen() instead of deprecated listeners kwarg"
+
+commit 48ce2b79a1d393de14c825e5722b5a7710eb36aa
+Merge: f5f1824 a3af3f8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 16:12:07 2012 +0000
+
+    Merge "Implement volume quota support in Cinder"
+
+commit f5f1824a4ba9a3e5fa29d955961b988168b22207
+Merge: aab103b 9785963
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 15:23:45 2012 +0000
+
+    Merge "Fix creation of iscsi targets"
+
+commit aab103bd25db6444a94a834224da662080f3105f
+Merge: 7f4cc61 560b650
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 15:22:33 2012 +0000
+
+    Merge "Add cinder- prefix to all binaries."
+
+commit 7f4cc61ceb026505654098bd630ea63a12001587
+Merge: cabb54c 4aebd52
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 31 15:06:31 2012 +0000
+
+    Merge "Make glance image service check base exception classes"
+
+commit 8c30edff982042d2533a810709308b586267c0e9
+Author: Unmesh Gurjar <unmesh.gurjar@vertex.co.in>
+Date:   Fri Aug 31 07:25:39 2012 -0700
+
+    Removed unnecessary call to ensure_export
+    
+    Removed the extra call to 'ensure_export' from '_copy_image_to_volume' while
+    creating a volume from an image.
+    
+    Fixes LP: #1044399
+    
+    Change-Id: I189a4cb66b965367289c2f677147ee085e431190
+
+ cinder/volume/manager.py |    1 -
+ 1 file changed, 1 deletion(-)
+
+commit 560b650fa83ff3ce274a705c321fb940c7499a75
+Author: Dan Prince <dprince@redhat.com>
+Date:   Fri Aug 31 09:56:50 2012 -0400
+
+    Add cinder- prefix to all binaries.
+    
+    Renames clear_rabbit_queues and volume-usuage-audit binaries
+    so that they are prefixed with 'cinder-'.
+    
+    As part of this change the clear_rabbit_queues binary was changed
+    to use dashes instead of underscores for consistency with the rest
+    of the cinder binaries.
+    
+    Fixes LP Bug #1044386.
+    
+    Change-Id: I7692a543cc67af2d342a64b84626de38c0a64f81
+
+ bin/cinder-clear-rabbit-queues |   77 +++++++++++++++++++++++++++++++++++
+ bin/cinder-volume-usage-audit  |   87 ++++++++++++++++++++++++++++++++++++++++
+ bin/clear_rabbit_queues        |   77 -----------------------------------
+ bin/volume-usage-audit         |   87 ----------------------------------------
+ setup.py                       |    8 ++--
+ 5 files changed, 168 insertions(+), 168 deletions(-)
+
+commit b84d6237729efb9241d934e2d06d77bf9adb8471
+Author: Duncan Thomas <duncan.thomas@gmail.com>
+Date:   Fri Aug 17 10:15:52 2012 +0000
+
+    Make size optional when creating a volume from a snap
+    
+    Changing the size of a volume when cloning a snapshot doesn't
+    make a great deal of sense *and isn't part of the ec2 api).
+    
+    This patch makes the field optional, defaulting to the same
+    size as the snapshot (and therefore the origination volume).
+    
+    Change-Id: I3fea7fe1c0415d10e549c66a242cf2a336a7204e
+
+ cinder/api/openstack/volume/volumes.py |   10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+commit 9785963c841aff5ea1c159da81f93c2bf62c70c6
+Author: Chuck Short <zulcss@ubuntu.com>
+Date:   Tue Aug 28 15:06:25 2012 -0500
+
+    Fix creation of iscsi targets
+    
+    Previously when creating iscsi volumes, we were using
+    
+    tgt-admin -e -c <config file> --update volume-id
+    
+    Unfortunately the side affect of this is that tgt-admin
+    removed other volumes that weren't connected to an iscsi
+    connector. Which is obvlously not what we want.
+    
+    In order to fix this we create the targets.conf for the
+    volume but we call tgt-admin --update icssi qualified name.
+    
+    We're dropping the use of iscsi_targets table when using TgtAdm.
+    Compatability for other target admin types is maintained.
+    
+    Fixes LP: #1038062
+    
+    Change-Id: I9060a43208df5b79e9b17dadcab8bc0a8eeef55e
+    Signed-off-by: Chuck Short <zulcss@ubuntu.com>
+
+ cinder/exception.py         |   15 ++++--
+ cinder/tests/test_iscsi.py  |   23 ++++----
+ cinder/tests/test_volume.py |   67 ++++-------------------
+ cinder/volume/driver.py     |  123 ++++++++++++++++++++++++++++++-------------
+ cinder/volume/iscsi.py      |  122 ++++++++++++++++++++++++++----------------
+ 5 files changed, 199 insertions(+), 151 deletions(-)
+
+commit cabb54c5806022e696697e7c1fa6c81b482d2b20
+Author: Joe Gordon <jogo@cloudscaling.com>
+Date:   Thu Aug 30 13:35:07 2012 -0700
+
+    Spelling: Persistant=>Persistent
+    
+    Change-Id: Id8e1bef634fe66e06624b5b3bcd82f59735d76e3
+
+ cinder/volume/manager.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit a3af3f87f5ca95e9b400dc15e7593746d01bc43a
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Thu Aug 16 15:52:52 2012 -0600
+
+    Implement volume quota support in Cinder
+    
+    parital fix for bug 1023311
+      * To use needs cinderclient https://review.openstack.org/#/c/11509/
+      * Updates quota classes with changes in Nova
+      * Adds needed quota related DB tables
+      * Updates test_quota to reflect changes in Nova
+      * Adds absolute limits and empty rate limit functions
+      * Updates test/integration/test_volume to make it work w/ above changes
+    
+    Change-Id: I221c7a9dc51a2bb9bf7228c056f63ba9546cf5f9
+
+ cinder/api/openstack/volume/__init__.py            |    5 +
+ .../api/openstack/volume/contrib/quota_classes.py  |  105 ++
+ cinder/api/openstack/volume/contrib/quotas.py      |  125 ++
+ cinder/api/openstack/volume/limits.py              |  482 ++++++
+ .../api/openstack/volume/schemas/v1.1/limits.rng   |   28 +
+ cinder/api/openstack/volume/views/limits.py        |  100 ++
+ cinder/api/openstack/wsgi.py                       |   60 +-
+ cinder/db/api.py                                   |    6 +-
+ cinder/db/sqlalchemy/api.py                        |  519 ++++++-
+ .../migrate_repo/versions/002_quota_class.py       |  140 ++
+ cinder/db/sqlalchemy/models.py                     |   37 +-
+ cinder/exception.py                                |   37 +
+ cinder/quota.py                                    |  911 +++++++++---
+ cinder/tests/api/openstack/fakes.py                |    1 +
+ cinder/tests/api/openstack/volume/test_limits.py   |  896 ++++++++++++
+ cinder/tests/integrated/test_volumes.py            |    2 +-
+ cinder/tests/test_quota.py                         | 1527 +++++++++++++++++---
+ cinder/tests/test_volume.py                        |   43 +-
+ cinder/volume/api.py                               |   44 +-
+ etc/cinder/policy.json                             |    8 +-
+ 20 files changed, 4617 insertions(+), 459 deletions(-)
+
+commit a55430ce286b291e5a5611b1e908b325ab3de20d
+Merge: 6db3732 3ed4d0b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 30 17:02:44 2012 +0000
+
+    Merge "Fix PEP8 issues."
+
+commit 6db37323239a4fa455c0708a15f082af5c68d096
+Merge: cc25287 5475deb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 30 17:01:50 2012 +0000
+
+    Merge "Add 'detaching' to volume status"
+
+commit cc252878f2c778cb63d383479b9dce63ca2d98c7
+Merge: c13d0d2 198a91a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 30 17:01:28 2012 +0000
+
+    Merge "Remove unused return values and commented out code from NFS driver"
+
+commit c13d0d2d19549cdd3f26eae43e6dca026fa55f7d
+Merge: 4533e5b 938d92e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Aug 30 15:43:42 2012 +0000
+
+    Merge "Remove unused exceptions from cinder/exception.py"
+
+commit 198a91a5e447915beca9585546cb92ab956fb0e6
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Wed Aug 29 19:10:11 2012 -0400
+
+    Remove unused return values and commented out code from NFS driver
+    
+    bug 1037622
+    
+    Change-Id: Idea3005ad94fd6bfc76fd0f3969ee78e3031767e
+
+ cinder/volume/nfs.py |    6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+commit 91311d5c2c89aca666bb40dc04d917eea9266ed1
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Wed Aug 29 09:46:32 2012 +0000
+
+    Remove unused flags
+    
+    * region_list
+    * aws_access_key_id
+    * aws_secret_access_key
+    * osapi_scheme
+    * osapi_path
+    * metadata_host
+    * metadata_port
+    * default_project
+    * default_image
+    * default_instance_type
+    * vpn_image_id
+    * vpn_key_suffix
+    * auth_token_ttl
+    * bandwith_poll_interval
+    * start_guests_on_host_boot
+    * resume_guests_state_on_host_boot
+    * default_ephemeral_format
+    * use_ipv6
+    * allow_resize_to_same_host
+    * zombie_instance_updated_at_window
+    * isolated_images
+    * isolated_hosts
+    
+    Change-Id: Ia3d5ac7d7c983845b5411e2fc1f49eb579e3280f
+
+ cinder/flags.py               |   70 -----------------------------------------
+ etc/cinder/cinder.conf.sample |   44 --------------------------
+ 2 files changed, 114 deletions(-)
+
+commit 3ed4d0b62838d53fedea5280523fdaaec76381bb
+Author: lrqrun <lrqrun@gmail.com>
+Date:   Tue Aug 28 23:28:48 2012 +0800
+
+    Fix PEP8 issues.
+    
+    Fix some pep8 issues in doc/ext/cinder_todo.py make the code looks pretty.
+    
+    Change-Id: I137c8bf5af30eb54a44cbff7f1fbc35bc2c3ed9e
+
+ doc/ext/cinder_todo.py |    6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+commit 4533e5b4509643768c070f6b5a672f1d6a62e27b
+Merge: eb9a58d ca25ea4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Aug 27 16:04:14 2012 +0000
+
+    Merge "Migrate volume related quota info in db migration"
+
+commit eb9a58d3eaa10a8a661baf0c1ed534aeb0877dcf
+Merge: 56b2e78 f80f8df
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Aug 25 17:57:27 2012 +0000
+
+    Merge "Fix PEP8 issues."
+
+commit 56b2e78a12bb3c61a64ea24420e1a94aa7fd4dea
+Merge: 5b34c99 8b92df9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Aug 25 17:49:37 2012 +0000
+
+    Merge "Typo fix in cinder: existant => existent"
+
+commit 5b34c99c734a5749ef03879745226dc5831f6642
+Merge: 53de0dd 3034247
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Aug 25 17:49:02 2012 +0000
+
+    Merge "Fix incorrect tgt-admin call in create_iscsi_target"
+
+commit 3034247a4ec7c9c6e433cad6d13183b001fe2e6d
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Thu Aug 23 13:23:04 2012 -0600
+
+    Fix incorrect tgt-admin call in create_iscsi_target
+    
+      * Fixes bug 1039826
+      * Missed one of the execute cmds that was using 'val %s' as args
+    
+    Change-Id: I5e6af737ada1c2bcf7a495710e2b10c8c74bb534
+
+ cinder/volume/iscsi.py |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+commit 5475debcf706e87b1df926d489b72074662614f3
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Tue Aug 21 15:07:02 2012 +0000
+
+    Add 'detaching' to volume status
+    
+    Fixes bug #1004382
+    
+    When attach a volume , the volume status is "available -> attaching ->
+    in-use", But when detaching a volume , the volume status is "in-use ->
+    available". So We need 'detaching' volume status, it make the change of
+    state of the volume more clearly.
+    
+    Change-Id: Idf8c38413135bf8e8cd025f11937f8c7250557c1
+
+ .../api/openstack/volume/contrib/volume_actions.py |   16 ++++++++++++++++
+ cinder/tests/policy.json                           |    2 ++
+ cinder/tests/test_volume.py                        |   11 +++++++++++
+ cinder/volume/api.py                               |    9 +++++++++
+ 4 files changed, 38 insertions(+)
+
+commit 8b92df9febce5bc45fa57bb347779b9644a38c44
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Thu Aug 23 03:00:08 2012 +0000
+
+    Typo fix in cinder: existant => existent
+    
+    Impact:
+    * locale message in cinder/locale/*/LC_MESSAGES/nova.po
+    * locale message in cinder/locale/nova.po
+    * Test function names
+    * Test strings and comments
+    
+    Change-Id: I623af176d3b556a1ea9f8bde2c609fc4f752d7da
+
+ cinder/locale/bs/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/cs/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/da/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/de/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/en_AU/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/en_GB/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/es/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/fr/LC_MESSAGES/nova.po    |    4 ++--
+ cinder/locale/it/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/ja/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/ko/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/nova.pot                  |    2 +-
+ cinder/locale/pt_BR/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/ru/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/tl/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/tr/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/uk/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/zh_CN/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/zh_TW/LC_MESSAGES/nova.po |    2 +-
+ cinder/tests/test_nova_rootwrap.py      |    4 ++--
+ cinder/tests/test_volume_types.py       |    2 +-
+ cinder/tests/test_wsgi.py               |    2 +-
+ 22 files changed, 24 insertions(+), 24 deletions(-)
+
+commit 4aebd529f979ed51f46c27b20ed5fe34e48757f7
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Wed Aug 22 16:26:15 2012 -0600
+
+    Make glance image service check base exception classes
+    
+    Fixes bug 1039675
+    
+    glanceclient can raise HTTPNotFound (as well as NotFound) it appears,
+    but glance image service is only converting NotFound ->
+    InstanceNotFound.  Same applies to 'Forbidden' and other exceptions.
+    
+    This patch converts 'exc_type is NotFound'-like checks to use
+    'isinstance' instead, which will cover HTTPNotFound, etc.
+    
+    Also add missing glance/image tests that weren't in Cinder
+    
+    Change-Id: I8787598daccf401a26d9397946ecd55f89ff62b3
+
+ cinder/image/glance.py            |   24 +-
+ cinder/tests/glance/__init__.py   |   20 ++
+ cinder/tests/glance/stubs.py      |  112 ++++++++
+ cinder/tests/image/test_glance.py |  546 +++++++++++++++++++++++++++++++++++++
+ 4 files changed, 690 insertions(+), 12 deletions(-)
+
+commit f80f8dfecb280673e9661447a9555bac0959e827
+Author: Ray Chen <oldsharp@163.com>
+Date:   Wed Aug 22 11:57:42 2012 +0800
+
+    Fix PEP8 issues.
+    
+    Fix some pep8 issues in doc/ext/cinder_todo.py and
+    doc/source/conf.py and make the code looks pretty.
+    
+    Change-Id: Ie164bc7328507e20b0ab5993ba97eaadbd74bf63
+
+ doc/ext/cinder_todo.py |   15 +++++++------
+ doc/source/conf.py     |   56 +++++++++++++++++++++++++++++-------------------
+ 2 files changed, 42 insertions(+), 29 deletions(-)
+
+commit 938d92e8a9a2ee97fb7951ed232b58d614a27adf
+Author: RongzeZhu <zrzhit@gmail.com>
+Date:   Wed Aug 22 11:37:26 2012 +0800
+
+    Remove unused exceptions from cinder/exception.py
+    
+    find cinder/ -type f -name "*pyc" -exec rm {} \;
+    exceptions=`cat cinder/exception.py| grep -E '^class' |\
+     awk {'print $2'} | awk -F '(' {'print $1'}`
+    for exc in $exceptions
+    do
+        i=`find cinder/ -type f -exec grep -R $exc {} \; |wc -l`
+        if [ $i -eq 1 ]
+        then
+            echo $exc
+        fi
+    done
+    
+    First removed exceptions:
+    
+    DecryptionFailure
+    ImagePaginationFailed
+    VirtualInterfaceCreateException
+    VirtualInterfaceMacAddressException
+    MelangeConnectionFailed
+    VolumeUnattached
+    InvalidKeypair
+    InvalidSignature
+    InvalidInstanceType
+    InvalidIpProtocol
+    InvalidCidr
+    InvalidAggregateAction
+    InvalidGroup
+    InstanceInvalidState
+    InstanceNotRunning
+    InstanceNotSuspended
+    InstanceNotInRescueMode
+    InstanceSuspendFailure
+    InstanceResumeFailure
+    InstanceRebootFailure
+    InstanceTerminationFailure
+    VolumeServiceUnavailable
+    UnableToMigrateToSelf
+    DestinationHostUnavailable
+    SourceHostUnavailable
+    InvalidHypervisorType
+    DestinationHypervisorTooOld
+    DestinationDiskExists
+    InvalidDevicePath
+    DeviceIsBusy
+    InvalidCPUInfo
+    InvalidIpAddressError
+    InvalidVLANTag
+    InvalidVLANPortGroup
+    InvalidDiskFormat
+    InstanceUnacceptable
+    FlagNotSet
+    NoVolumeTypesFound
+    VolumeDriverNotFound
+    ListingImageRefsNotSupported
+    KernelNotFoundForImage
+    ProjectNotFound
+    ProjectMembershipNotFound
+    UserRoleNotFound
+    StorageRepositoryNotFound
+    DatastoreNotFound
+    FixedIpNotFoundForAddress
+    FixedIpNotFoundForInstance
+    FixedIpNotFoundForNetworkHost
+    FixedIpNotFoundForSpecificInstance
+    FixedIpNotFoundForHost
+    FixedIpAlreadyInUse
+    FixedIpInvalid
+    NoMoreFixedIps
+    NoFixedIpsDefined
+    FloatingIpDNSExists
+    FloatingIpNotFoundForAddress
+    FloatingIpNotFoundForHost
+    NoMoreFloatingIps
+    FloatingIpAssociated
+    FloatingIpNotAssociated
+    NoFloatingIpsDefined
+    NoFloatingIpInterface
+    KeypairNotFound
+    CertificateNotFound
+    AuthTokenNotFound
+    AccessKeyNotFound
+    SecurityGroupNotFoundForProject
+    SecurityGroupNotFoundForRule
+    SecurityGroupExistsForInstance
+    SecurityGroupNotExistsForInstance
+    NoInstanceTypesFound
+    InstanceTypeNotFoundByName
+    FlavorNotFound
+    CellNotFound
+    SchedulerHostFilterNotFound
+    SchedulerCostFunctionNotFound
+    SchedulerWeightFlagNotFound
+    InstanceMetadataNotFound
+    InstanceTypeExtraSpecsNotFound
+    LDAPUserNotFound
+    LDAPGroupNotFound
+    LDAPGroupMembershipNotFound
+    NoFilesFound
+    SwitchNotFoundForNetworkAdapter
+    NetworkAdapterNotFound
+    GlobalRoleNotAllowed
+    ImageRotationNotAllowed
+    RotationRequiredForBackup
+    LDAPUserExists
+    LDAPGroupExists
+    LDAPMembershipExists
+    ProjectExists
+    InstanceExists
+    InstanceTypeExists
+    InvalidSharedStorage
+    CannotResizeToSameSize
+    ImageTooLarge
+    ZoneRequestError
+    InstanceTypeMemoryTooSmall
+    InstanceTypeDiskTooSmall
+    InsufficientFreeMemory
+    CouldNotFetchMetrics
+    AggregateError
+    AggregateNotFound
+    AggregateNameExists
+    AggregateHostNotFound
+    AggregateMetadataNotFound
+    AggregateHostConflict
+    AggregateHostExists
+    InstanceTypeCreateFailed
+    SolidFireAPIStatusException
+    DuplicateVlan
+    InvalidInstanceIDMalformed
+    CouldNotFetchImage
+    
+    Search again, Second removed exceptions:
+    
+    UserNotFound
+    FixedIpNotFoundForNetwork
+    FloatingIpNotFound
+    SecurityGroupNotFound
+    InstanceTypeNotFound
+    LDAPObjectNotFound
+    UserExists
+    
+    Search again, Third removed exceptions:
+    
+    FixedIpNotFound
+    
+    Change-Id: I028122c6132340b2fef2c144da787b7c4efddccf
+
+ cinder/exception.py |  517 ---------------------------------------------------
+ 1 file changed, 517 deletions(-)
+
+commit 53de0dd77ead04422e05a6251cb92c46d787aae6
+Author: Clark Boylan <clark.boylan@gmail.com>
+Date:   Tue Aug 21 14:08:57 2012 -0700
+
+    Add nosehtmloutput as a test dependency.
+    
+    Adding nosehtmloutput as a test dependency allows nose to output its
+    results to an html file. This will be used by Jenkins to save logs
+    on a different server.
+    
+    Change-Id: I03f61fe4a8f0daa4a43fc9e7d41456b65018cf66
+
+ tools/test-requires |    1 +
+ 1 file changed, 1 insertion(+)
+
+commit ca25ea47782be90f65e9e5311de295499de19f2b
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Aug 21 14:00:18 2012 -0600
+
+    Migrate volume related quota info in db migration
+    
+      * Fixes bug 1039615
+      * Now that quotas are back we need to handle migration
+        of volume related quota data in the cinder-manage migrate helper
+      * Only resource types transferred are volumes and gigabytes
+    
+    Change-Id: Idd9aab834612e929683491f47fa1e1861bdbd0d1
+
+ bin/cinder-manage |   17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+commit 4e81c907bbb9d94d4b76b00ff591418374175d41
+Merge: d2db1e9 bace7fb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Aug 21 00:19:27 2012 +0000
+
+    Merge "Add declare for xiv driver in fake_flags"
+
+commit d2db1e9c40cb13ac513184a6435b2eb581305a46
+Merge: d0c6448 e958531
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Aug 20 17:12:40 2012 +0000
+
+    Merge "Remove logging in volume tests"
+
+commit 5da61a7ad9d7c3320831c437c03c428b9df84ebb
+Author: unicell <unicell@gmail.com>
+Date:   Mon Aug 20 19:34:19 2012 +0800
+
+    Use event.listen() instead of deprecated listeners kwarg
+    
+    Fixes bug 1031405
+    
+    The listeners kwarg is deprecated in SQLAlchemy 0.7.0. Since 0.7.3 is
+    the minimum required version of SQLAlchemy, use the new event.listen()
+    API instead.
+    
+    Change-Id: I1b851e197c04b131ae96e814780b04e6dcdeeb1a
+
+ cinder/db/sqlalchemy/session.py |   39 +++++++++++++++++----------------------
+ 1 file changed, 17 insertions(+), 22 deletions(-)
+
+commit bace7fb1b6596c44c500468f689b9b1ef4ad5222
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Fri Aug 17 11:27:21 2012 -0600
+
+    Add declare for xiv driver in fake_flags
+    
+      fixes bug 1038183
+    
+    Change-Id: I324a8e4df61782c903146cc8e0bb1d1bbae46c2f
+
+ cinder/tests/fake_flags.py |    1 +
+ cinder/tests/test_xiv.py   |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+commit d0c6448cbc1334ee7e3053761d155f8044ecc6fa
+Merge: 68aaff4 1753889
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 17 16:34:33 2012 +0000
+
+    Merge "Call driver for attach/detach_volume."
+
+commit 68aaff4c742d7994c0dcbbd5d8ebf966efa3f38d
+Merge: e5b3ef5 b192cfe
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Aug 17 15:35:03 2012 +0000
+
+    Merge "Remove unused function"
+
+commit e958531929e04364759a721a689665ef891ff623
+Author: RongzeZhu <zrzhit@gmail.com>
+Date:   Fri Aug 17 22:24:43 2012 +0800
+
+    Remove logging in volume tests
+    
+    Fixes bug #932137
+    
+    Usage of logging seems to be limited to the check_for_export() tests and
+    should be to cleanup. check_for_export() raises an exception if there's
+    a problem and it does nothing if it succeeds. The tests should just
+    check whether an exception was raised.
+    
+    Change-Id: I72bc3d97aa75950c7f31fae03535c541059501c2
+
+ cinder/tests/test_volume.py |   26 +++-----------------------
+ 1 file changed, 3 insertions(+), 23 deletions(-)
+
+commit 17538890dc9d005652b2d912cea4a0307e5d6e18
+Author: Cory Stone <corystone@gmail.com>
+Date:   Fri Aug 17 09:18:52 2012 -0500
+
+    Call driver for attach/detach_volume.
+    
+    The volume driver may want to know which guest is going to be
+    attached to a volume. The manager now calls down into the driver
+    on attach_volume and detach_volume.
+    
+    Fixes bug 1038109.
+    
+    Change-Id: I084c2d09a1871fa158312f9ba479abb474da1d28
+
+ cinder/volume/driver.py  |    8 ++++++++
+ cinder/volume/manager.py |   19 +++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+
+commit e5b3ef5622fc2662addad17f96a9d903ca68db9b
+Author: RongzeZhu <zrzhit@gmail.com>
+Date:   Fri Aug 17 11:20:09 2012 +0800
+
+    Fix spelling typos
+    
+    Fixes for:
+    * cinder/locale/*/LC_MESSAGES/nova.po
+    * cinder/locale/nova.pot
+    * cinder/testing/README.rst
+    
+    Change-Id: Ib50432a72b2300742169ebe4c77584466be7bfba
+
+ cinder/locale/bs/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/cs/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/da/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/de/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/en_AU/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/en_GB/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/es/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/fr/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/it/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/ja/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/ko/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/nova.pot                  |    2 +-
+ cinder/locale/pt_BR/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/ru/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/tl/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/tr/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/uk/LC_MESSAGES/nova.po    |    2 +-
+ cinder/locale/zh_CN/LC_MESSAGES/nova.po |    2 +-
+ cinder/locale/zh_TW/LC_MESSAGES/nova.po |    2 +-
+ cinder/testing/README.rst               |    2 +-
+ 20 files changed, 20 insertions(+), 20 deletions(-)
+
+commit b192cfebb85b4cb6b5f35df3c21ecfa15fc0aa49
+Author: RongzeZhu <zrzhit@gmail.com>
+Date:   Fri Aug 17 10:07:05 2012 +0800
+
+    Remove unused function
+    
+    'wait_creation' function in cinder.volume.api.API is unused.
+    
+    Change-Id: I4062e026b3e227513321be18ee920a4e5882cbd7
+
+ cinder/volume/api.py |    9 ---------
+ 1 file changed, 9 deletions(-)
+
 commit d2babbfd4b59bde09fe17f7b69c86d857a82d104
 Merge: f276d01 6e5ef61
 Author: Jenkins <jenkins@review.openstack.org>
