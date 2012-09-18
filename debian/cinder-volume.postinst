@@ -1,0 +1,9 @@
+#!/bin/sh -e
+
+if [ "$1" = "configure" ]; then
+    chown cinder:cinder /var/lib/cinder/volumes
+    chmod 0750 /var/lib/cinder/volumes
+    chown root:root /etc/cinder/rootwrap.d/volume.filters
+fi
+
+#DEBHELPER#

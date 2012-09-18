@@ -119,9 +119,20 @@ class VolumeDriver(object):
                           volume_name, FLAGS.volume_group, run_as_root=True)
 
     def _copy_volume(self, srcstr, deststr, size_in_g):
+        # Use O_DIRECT to avoid thrashing the system buffer cache
+        direct_flags = ('iflag=direct', 'oflag=direct')
+
+        # Check whether O_DIRECT is supported
+        try:
+            self._execute('dd', 'count=0', 'if=%s' % srcstr, 'of=%s' % deststr,
+                          *direct_flags, run_as_root=True)
+        except exception.ProcessExecutionError:
+            direct_flags = ()
+
+        # Perform the copy
         self._execute('dd', 'if=%s' % srcstr, 'of=%s' % deststr,
                       'count=%d' % (size_in_g * 1024), 'bs=1M',
-                      run_as_root=True)
+                      *direct_flags, run_as_root=True)
 
     def _volume_not_present(self, volume_name):
         path_name = '%s/%s' % (FLAGS.volume_group, volume_name)
@@ -137,6 +148,10 @@ class VolumeDriver(object):
         # zero out old volumes to prevent data leaking between users
         # TODO(ja): reclaiming space should be done lazy and low priority
         self._copy_volume('/dev/zero', self.local_path(volume), size_in_g)
+        dev_path = self.local_path(volume)
+        if os.path.exists(dev_path):
+            self._try_execute('dmsetup', 'remove', '-f', dev_path,
+                              run_as_root=True)
         self._try_execute('lvremove', '-f', "%s/%s" %
                           (FLAGS.volume_group,
                            self._escape_snapshot(volume['name'])),

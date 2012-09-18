@@ -151,10 +151,6 @@ global_opts = [
                default=1000,
                help='the maximum number of items returned in a single '
                     'response from a collection resource'),
-    cfg.StrOpt('null_kernel',
-               default='nokernel',
-               help='kernel image that indicates not to use a kernel, but to '
-                    'use a raw disk image instead'),
     cfg.StrOpt('sqlite_db',
                default='cinder.sqlite',
                help='the filename to use with sqlite'),
@@ -184,9 +180,9 @@ global_opts = [
     cfg.StrOpt('storage_availability_zone',
                default='cinder',
                help='availability zone of this node'),
-    cfg.StrOpt('notification_driver',
-               default='cinder.openstack.common.notifier.no_op_notifier',
-               help='Default driver for sending notifications'),
+    cfg.ListOpt('memcached_servers',
+                default=None,
+                help='Memcached servers or None for in process cache.'),
     cfg.StrOpt('instance_usage_audit_period',
                default='month',
                help='time period to generate instance usages for.  '
@@ -217,6 +213,9 @@ global_opts = [
                default='noauth',
                help='The strategy to use for auth. Supports noauth, keystone, '
                     'and deprecated.'),
+    cfg.StrOpt('control_exchange',
+               default='cinder',
+               help='AMQP exchange to connect to if using RabbitMQ or Qpid'),
 ]
 
 FLAGS.register_opts(global_opts)

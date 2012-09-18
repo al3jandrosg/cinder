@@ -33,6 +33,7 @@ from cinder import db
 from cinder import flags
 from cinder.tests.image import fake as fake_image
 from cinder.openstack.common import importutils
+from cinder.openstack.common.notifier import api as notifier_api
 from cinder.openstack.common.notifier import test_notifier
 from cinder.openstack.common import rpc
 import cinder.policy
@@ -51,11 +52,10 @@ class VolumeTestCase(test.TestCase):
         super(VolumeTestCase, self).setUp()
         vol_tmpdir = tempfile.mkdtemp()
         self.flags(connection_type='fake',
-                   volumes_dir=vol_tmpdir)
+                   volumes_dir=vol_tmpdir,
+                   notification_driver=[test_notifier.__name__])
         self.volume = importutils.import_object(FLAGS.volume_manager)
         self.context = context.get_admin_context()
-        self.stubs.Set(cinder.flags.FLAGS, 'notification_driver',
-            'cinder.openstack.common.notifier.test_notifier')
         self.stubs.Set(iscsi.TgtAdm, '_get_target', self.fake_get_target)
         fake_image.stub_out_image_service(self.stubs)
         test_notifier.NOTIFICATIONS = []
@@ -65,15 +65,15 @@ class VolumeTestCase(test.TestCase):
             shutil.rmtree(FLAGS.volumes_dir)
         except OSError:
             pass
+        notifier_api._reset_drivers()
         super(VolumeTestCase, self).tearDown()
 
     def fake_get_target(obj, iqn):
         return 1
 
     @staticmethod
-    def _create_volume(size='0', snapshot_id=None, image_id=None,
+    def _create_volume(size=0, snapshot_id=None, image_id=None,
                        metadata=None):
-        #def _create_volume(size=0, snapshot_id=None):
         """Create a volume object."""
         vol = {}
         vol['size'] = size
@@ -122,7 +122,7 @@ class VolumeTestCase(test.TestCase):
     def test_create_delete_volume_with_metadata(self):
         """Test volume can be created with metadata and deleted."""
         test_meta = {'fake_key': 'fake_value'}
-        volume = self._create_volume('0', None, metadata=test_meta)
+        volume = self._create_volume(0, None, metadata=test_meta)
         volume_id = volume['id']
         self.volume.create_volume(self.context, volume_id)
         result_meta = {
@@ -181,7 +181,7 @@ class VolumeTestCase(test.TestCase):
         #              volume_create
         return True
         try:
-            volume = self._create_volume('1001')
+            volume = self._create_volume(1001)
             self.volume.create_volume(self.context, volume)
             self.fail("Should have thrown TypeError")
         except TypeError:

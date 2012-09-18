@@ -87,7 +87,14 @@ Description: Cinder storage service - api server
 
 Package: cinder-volume
 Architecture: all
-Depends: cinder-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: cinder-common (= ${binary:Version}),
+ lvm2,
+ tgt,
+ ${python:Depends},
+ ${misc:Depends}
+Suggests: python-ceph
+Breaks: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
+Replaces: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
 Description: Cinder storage service - api server
  Cinder is a storage service for the Openstack project
  .

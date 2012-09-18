@@ -55,7 +55,7 @@ sf_opts = [
                default='',
                help='Password for SF Cluster Admin'),
 
-    cfg.StrOpt('sf_allow_tenant_qos',
+    cfg.BoolOpt('sf_allow_tenant_qos',
                default=True,
                help='Allow tenants to specify QOS on create'), ]
 
@@ -409,7 +409,7 @@ class SolidFire(SanISCSIDriver):
         iqn = None
         for v in volume_list:
             if v['volumeID'] == volume_id:
-                iqn = 'iqn.2010-01.com.solidfire:' + v['iqn']
+                iqn = v['iqn']
                 break
 
         model_update = {}

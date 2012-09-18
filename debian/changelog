@@ -1,3 +1,25 @@
+cinder (2012.2~rc1-0ubuntu1) quantal; urgency=low
+
+  [ Adam Gandelman ]
+  * debian/control: Add lvm2 + tgt as a Dependency of cinder-volume.
+  * debian/cinder-volume.{dirs, postinst}:
+        - Create /var/lib/cinder/volumes (LP: #1047059)
+        - chmod 0600, not chown.
+  * debain/cinder-scheduler.postinst: Drop.
+  * debian/cinder.conf: Fix defaults.
+  * debian/*.upstart: Specify --log-file.
+  * debian/*.logrotate: Update.
+  * Only rootwrap filters with the packages that need them (cinder-volume).
+  * Ensure /etc/cinder/rootwrap.d/ is only writable by root, ensure
+    those permissions on /etc/cinder/rootwrap.conf and individual filter
+    configurations.
+
+  [ Chuck Short ]
+  * New upstream version.
+  * debian/control: Add python-ceph as a suggests
+
+ -- Chuck Short <zulcss@ubuntu.com>  Tue, 18 Sep 2012 14:24:45 -0500
+
 cinder (2012.2~rc1~20120907.230-0ubuntu4) quantal; urgency=low
 
   [Chuck Short]
