@@ -34,6 +34,7 @@ Build-Depends-Indep:
  python-sphinx,
  python-mysqldb,
  python-setuptools-git,
+ python-mysqldb,
  pep8,
 Standards-Version: 3.9.3
 Homepage: http://launchpad.net/cinder

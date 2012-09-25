@@ -1,3 +1,14 @@
+cinder (2012.2~rc2-0ubuntu1) quantal; urgency=low
+
+  [ Adam Gandelman ]
+  * debian/control: Add python-mysqldb to python-cinder Depends.
+
+  [ Chuck Short ]
+  * New upstream release
+  * debian/rules: Fail to build if the testsuite doesnt pass.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Tue, 25 Sep 2012 10:17:21 -0500
+
 cinder (2012.2~rc1-0ubuntu1) quantal; urgency=low
 
   [ Adam Gandelman ]

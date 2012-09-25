@@ -35,6 +35,7 @@ cinder/wsgi.py
 cinder.egg-info/PKG-INFO
 cinder.egg-info/SOURCES.txt
 cinder.egg-info/dependency_links.txt
+cinder.egg-info/requires.txt
 cinder.egg-info/top_level.txt
 cinder/api/__init__.py
 cinder/api/auth.py
@@ -117,6 +118,7 @@ cinder/openstack/__init__.py
 cinder/openstack/common/README
 cinder/openstack/common/__init__.py
 cinder/openstack/common/cfg.py
+cinder/openstack/common/context.py
 cinder/openstack/common/exception.py
 cinder/openstack/common/excutils.py
 cinder/openstack/common/gettextutils.py
