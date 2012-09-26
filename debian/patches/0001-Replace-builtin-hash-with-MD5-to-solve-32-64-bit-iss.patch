@@ -1,0 +1,73 @@
+From 4662fa29af88783cd9e95b553c044c733ea94753 Mon Sep 17 00:00:00 2001
+From: Ben Swartzlander <bswartz@netapp.com>
+Date: Wed, 19 Sep 2012 17:07:47 -0400
+Subject: [PATCH] Replace builtin hash with MD5 to solve 32/64-bit issues.
+
+It seems that Python's builtin hash returns different
+values on 32-bit and 64-bit architectures, so it's
+safer to use a well-defined hash like MD5.
+
+bug 1050359
+
+Change-Id: I0a4f11b34a1f76cda279ec801cede1440c6e5966
+---
+ cinder/tests/test_nfs.py |    9 +++++----
+ cinder/volume/nfs.py     |    4 ++--
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/cinder/tests/test_nfs.py b/cinder/tests/test_nfs.py
+index 458700f..402d84b 100644
+--- a/cinder/tests/test_nfs.py
++++ b/cinder/tests/test_nfs.py
+@@ -109,8 +109,9 @@ class NfsDriverTestCase(test.TestCase):
+         volume['provider_location'] = self.TEST_NFS_EXPORT1
+         volume['name'] = 'volume-123'
+ 
+-        self.assertEqual('/mnt/test/12118957640568004265/volume-123',
+-                         drv.local_path(volume))
++        self.assertEqual(
++            '/mnt/test/2f4f60214cf43c595666dd815f0360a4/volume-123',
++            drv.local_path(volume))
+ 
+     def test_mount_nfs_should_mount_correctly(self):
+         """_mount_nfs common case usage"""
+@@ -212,7 +213,7 @@ class NfsDriverTestCase(test.TestCase):
+         """_get_hash_str should calculation correct value"""
+         drv = self._driver
+ 
+-        self.assertEqual('12118957640568004265',
++        self.assertEqual('2f4f60214cf43c595666dd815f0360a4',
+                          drv._get_hash_str(self.TEST_NFS_EXPORT1))
+ 
+     def test_get_mount_point_for_share(self):
+@@ -221,7 +222,7 @@ class NfsDriverTestCase(test.TestCase):
+ 
+         nfs.FLAGS.nfs_mount_point_base = self.TEST_MNT_POINT_BASE
+ 
+-        self.assertEqual('/mnt/test/12118957640568004265',
++        self.assertEqual('/mnt/test/2f4f60214cf43c595666dd815f0360a4',
+                          drv._get_mount_point_for_share(self.TEST_NFS_EXPORT1))
+ 
+     def test_get_available_capacity_with_df(self):
+diff --git a/cinder/volume/nfs.py b/cinder/volume/nfs.py
+index 02fb3a0..a78fc27 100644
+--- a/cinder/volume/nfs.py
++++ b/cinder/volume/nfs.py
+@@ -17,7 +17,7 @@
+ 
+ import os
+ import errno
+-import ctypes
++import hashlib
+ 
+ from cinder import flags
+ from cinder.openstack.common import cfg
+@@ -291,4 +291,4 @@ class NfsDriver(driver.VolumeDriver):
+ 
+     def _get_hash_str(self, base_str):
+         """returns string that represents hash of base_str (in a hex format)"""
+-        return str(ctypes.c_uint64(hash(base_str)).value)
++        return hashlib.md5(base_str).hexdigest()
+-- 
+1.7.10.4
+

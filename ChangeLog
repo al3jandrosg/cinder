@@ -1,3 +1,69 @@
+commit 8bcfae7e2261812854cbd34ecfee960e109ac956
+Merge: 2da0df3 ce60315
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Sep 26 00:48:40 2012 +0000
+
+    Merge "Fix NetAppCmodeISCSIDriver._get_lun_handle() method" into milestone-proposed
+
+commit 2da0df3061ba77e53300aa9bfe95a714e88dbfef
+Merge: 615f336 f803536
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 23:55:17 2012 +0000
+
+    Merge "Revert explicit usage of tgt-adm --conf option." into milestone-proposed
+
+commit 615f336cc0359a83dd72bc8baf5d61bd69404959
+Author: MotoKen <motokentsai@gmail.com>
+Date:   Tue Sep 25 13:08:34 2012 +0800
+
+    Fixes remove_export for IetAdm
+    
+    * Corrects indentation.
+    * Uses specific iqn as keyword argument.
+    
+    Fixes bug 1055401
+    
+    Change-Id: Ie99dd8a34924f0d7f447cf41a305353659a51d11
+    (cherry picked from commit 5b61536fdf17332f48af4b422fe23c2e153934a1)
+
+ cinder/volume/driver.py |    2 +-
+ cinder/volume/iscsi.py  |   14 ++++++--------
+ 2 files changed, 7 insertions(+), 9 deletions(-)
+
+commit ce60315aaeed74d6d0ee64c825c4c2b4739064cc
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Mon Sep 24 12:30:48 2012 -0400
+
+    Fix NetAppCmodeISCSIDriver._get_lun_handle() method
+    
+    bug 1055578
+    
+    Change-Id: I06da6a9a59fa2320f1cae9698e5e63562e534916
+    (cherry picked from commit b2627b27dae521d719b90831dcc41695b389712f)
+
+ cinder/volume/netapp.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit f8035365288904bef42e6cf7fcd7f914db122b90
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Tue Sep 25 15:52:38 2012 +0100
+
+    Revert explicit usage of tgt-adm --conf option.
+    
+    Fixes bug 1056246.
+    
+    This reverts commit 0903603971033536751ba40df98a3c39175d3189.
+    
+    This ensures that we fail-fast if the tgtd configuration does
+    not include the directory for volume iscsi target configs,
+    instead of only blowing up when tgtd is restarted.
+    
+    Change-Id: I30aa3f1d8944eb33cd4a42d65e227031023406b4
+
+ cinder/tests/test_iscsi.py |    3 +--
+ cinder/volume/iscsi.py     |    8 +++++---
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
 commit 26f5ae0d61c7a3c5212873d726a437e349df8191
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Mon Sep 24 12:59:15 2012 -0600
