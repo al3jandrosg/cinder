@@ -1,3 +1,12 @@
+cinder (2012.2-0ubuntu1) quantal; urgency=low
+
+  * New upstream release. 
+  * debian/cinder-volume.postinst, debian/cinder-common.dirs,
+    debian/cinder.conf: Properly configure tgtd to be used with cinder.
+  * debian/pydist-overrides: Dont try to install babel.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Thu, 27 Sep 2012 11:32:27 -0500
+
 cinder (2012.2~rc3-0ubuntu1) quantal; urgency=low
 
   * New upstream release.
