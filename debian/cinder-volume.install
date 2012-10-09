@@ -1,2 +1,3 @@
 usr/bin/cinder-volume
 etc/cinder/rootwrap.d/volume.filters /etc/cinder/rootwrap.d
+debian/cinder_tgt.conf etc/tgt/conf.d
