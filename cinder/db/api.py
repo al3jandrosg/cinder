@@ -58,7 +58,7 @@ db_opts = [
                 help='Services to be added to the available pool on create'),
     cfg.StrOpt('volume_name_template',
                default='volume-%s',
-               help='Template string to be used to generate instance names'),
+               help='Template string to be used to generate volume names'),
     cfg.StrOpt('snapshot_name_template',
                default='snapshot-%s',
                help='Template string to be used to generate snapshot names'),
@@ -539,18 +539,6 @@ def quota_usage_get(context, project_id, resource):
 def quota_usage_get_all_by_project(context, project_id):
     """Retrieve all usage associated with a given resource."""
     return IMPL.quota_usage_get_all_by_project(context, project_id)
-
-
-def quota_usage_update(context, class_name, resource, in_use, reserved,
-                       until_refresh):
-    """Update a quota usage or raise if it does not exist."""
-    return IMPL.quota_usage_update(context, project_id, resource,
-                                   in_use, reserved, until_refresh)
-
-
-def quota_usage_destroy(context, project_id, resource):
-    """Destroy the quota usage or raise if it does not exist."""
-    return IMPL.quota_usage_destroy(context, project_id, resource)
 
 
 ###################

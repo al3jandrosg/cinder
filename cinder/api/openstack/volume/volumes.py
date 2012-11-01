@@ -107,6 +107,9 @@ def _translate_volume_summary_view(context, vol, image_id=None):
     if vol.get('volume_metadata'):
         metadata = vol.get('volume_metadata')
         d['metadata'] = dict((item['key'], item['value']) for item in metadata)
+    # avoid circular ref when vol is a Volume instance
+    elif vol.get('metadata') and isinstance(vol.get('metadata'), dict):
+        d['metadata'] = vol['metadata']
     else:
         d['metadata'] = {}
 
@@ -289,8 +292,9 @@ class VolumeController(wsgi.Controller):
             try:
                 kwargs['volume_type'] = volume_types.get_volume_type_by_name(
                         context, req_volume_type)
-            except exception.NotFound:
-                raise exc.HTTPNotFound()
+            except exception.VolumeTypeNotFound:
+                explanation = 'Volume type not found.'
+                raise exc.HTTPNotFound(explanation=explanation)
 
         kwargs['metadata'] = volume.get('metadata', None)
 
@@ -337,6 +341,40 @@ class VolumeController(wsgi.Controller):
     def _get_volume_search_options(self):
         """Return volume search options allowed by non-admin."""
         return ('display_name', 'status')
+
+    @wsgi.serializers(xml=VolumeTemplate)
+    def update(self, req, id, body):
+        """Update a volume."""
+        context = req.environ['cinder.context']
+
+        if not body:
+            raise exc.HTTPUnprocessableEntity()
+
+        if not 'volume' in body:
+            raise exc.HTTPUnprocessableEntity()
+
+        volume = body['volume']
+        update_dict = {}
+
+        valid_update_keys = (
+            'display_name',
+            'display_description',
+            'metadata',
+        )
+
+        for key in valid_update_keys:
+            if key in volume:
+                update_dict[key] = volume[key]
+
+        try:
+            volume = self.volume_api.get(context, id)
+            self.volume_api.update(context, volume, update_dict)
+        except exception.NotFound:
+            raise exc.HTTPNotFound()
+
+        volume.update(update_dict)
+
+        return {'volume': _translate_volume_detail_view(context, volume)}
 
 
 def create_resource(ext_mgr):

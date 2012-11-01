@@ -21,6 +21,7 @@ Drivers for volumes.
 """
 
 import os
+import re
 import tempfile
 import time
 import urllib
@@ -147,9 +148,9 @@ class VolumeDriver(object):
         """Deletes a logical volume."""
         # zero out old volumes to prevent data leaking between users
         # TODO(ja): reclaiming space should be done lazy and low priority
-        self._copy_volume('/dev/zero', self.local_path(volume), size_in_g)
         dev_path = self.local_path(volume)
         if os.path.exists(dev_path):
+            self._copy_volume('/dev/zero', dev_path, size_in_g)
             self._try_execute('dmsetup', 'remove', '-f', dev_path,
                               run_as_root=True)
         self._try_execute('lvremove', '-f', "%s/%s" %
@@ -238,10 +239,6 @@ class VolumeDriver(object):
         """Removes an export for a logical volume."""
         raise NotImplementedError()
 
-    def check_for_export(self, context, volume_id):
-        """Make sure volume is exported."""
-        raise NotImplementedError()
-
     def initialize_connection(self, volume, connector):
         """Allow connection to connector and return connection info."""
         raise NotImplementedError()
@@ -327,14 +324,72 @@ class ISCSIDriver(VolumeDriver):
         else:
             iscsi_target = 1  # dummy value when using TgtAdm
 
-        iscsi_name = "%s%s" % (FLAGS.iscsi_target_prefix, volume['name'])
-        volume_path = "/dev/%s/%s" % (FLAGS.volume_group, volume['name'])
+        # Check for https://bugs.launchpad.net/cinder/+bug/1065702
+        old_name = None
+        volume_name = volume['name']
+        if (volume['provider_location'] is not None and
+            volume['name'] not in volume['provider_location']):
+
+            msg = _('Detected inconsistency in provider_location id')
+            LOG.debug(msg)
+            old_name = self._fix_id_migration(context, volume)
+            if 'in-use' in volume['status']:
+                volume_name = old_name
+                old_name = None
+
+        iscsi_name = "%s%s" % (FLAGS.iscsi_target_prefix, volume_name)
+        volume_path = "/dev/%s/%s" % (FLAGS.volume_group, volume_name)
 
         # NOTE(jdg): For TgtAdm case iscsi_name is the ONLY param we need
         # should clean this all up at some point in the future
         self.tgtadm.create_iscsi_target(iscsi_name, iscsi_target,
                                         0, volume_path,
-                                        check_exit_code=False)
+                                        check_exit_code=False,
+                                        old_name=old_name)
+
+    def _fix_id_migration(self, context, volume):
+        """Fix provider_location and dev files to address bug 1065702.
+
+        For volumes that the provider_location has NOT been updated
+        and are not currently in-use we'll create a new iscsi target
+        and remove the persist file.
+
+        If the volume is in-use, we'll just stick with the old name
+        and when detach is called we'll feed back into ensure_export
+        again if necessary and fix things up then.
+
+        Details at: https://bugs.launchpad.net/cinder/+bug/1065702
+        """
+
+        model_update = {}
+        pattern = re.compile(r":|\s")
+        fields = pattern.split(volume['provider_location'])
+        old_name = fields[3]
+
+        volume['provider_location'] = \
+            volume['provider_location'].replace(old_name, volume['name'])
+        model_update['provider_location'] = volume['provider_location']
+
+        self.db.volume_update(context, volume['id'], model_update)
+
+        start = os.getcwd()
+        os.chdir('/dev/%s' % FLAGS.volume_group)
+
+        try:
+            (out, err) = self._execute('readlink', old_name)
+        except exception.ProcessExecutionError:
+            link_path = '/dev/%s/%s' % (FLAGS.volume_group, old_name)
+            LOG.debug(_('Symbolic link %s not found') % link_path)
+            os.chdir(start)
+            return
+
+        rel_path = out.rstrip()
+        self._execute('ln',
+                      '-s',
+                      rel_path, volume['name'],
+                      run_as_root=True)
+        os.chdir(start)
+        return old_name
 
     def _ensure_iscsi_targets(self, context, host):
         """Ensure that target ids have been created in datastore."""
@@ -354,7 +409,6 @@ class ISCSIDriver(VolumeDriver):
 
     def create_export(self, context, volume):
         """Creates an export for a logical volume."""
-        #BOOKMARK(jdg)
 
         iscsi_name = "%s%s" % (FLAGS.iscsi_target_prefix, volume['name'])
         volume_path = "/dev/%s/%s" % (FLAGS.volume_group, volume['name'])
@@ -372,14 +426,22 @@ class ISCSIDriver(VolumeDriver):
             lun = 1  # For tgtadm the controller is lun 0, dev starts at lun 1
             iscsi_target = 0  # NOTE(jdg): Not used by tgtadm
 
+        # Use the same method to generate the username and the password.
+        chap_username = utils.generate_username()
+        chap_password = utils.generate_password()
+        chap_auth = _iscsi_authentication('IncomingUser', chap_username,
+                                          chap_password)
         # NOTE(jdg): For TgtAdm case iscsi_name is the ONLY param we need
         # should clean this all up at some point in the future
         tid = self.tgtadm.create_iscsi_target(iscsi_name,
                                               iscsi_target,
                                               0,
-                                              volume_path)
+                                              volume_path,
+                                              chap_auth)
         model_update['provider_location'] = _iscsi_location(
             FLAGS.iscsi_ip_address, tid, iscsi_name, lun)
+        model_update['provider_auth'] = _iscsi_authentication(
+            'CHAP', chap_username, chap_password)
         return model_update
 
     def remove_export(self, context, volume):
@@ -538,33 +600,6 @@ class ISCSIDriver(VolumeDriver):
     def terminate_connection(self, volume, connector):
         pass
 
-    def check_for_export(self, context, volume_id):
-        """Make sure volume is exported."""
-        vol_uuid_file = 'volume-%s' % volume_id
-        volume_path = os.path.join(FLAGS.volumes_dir, vol_uuid_file)
-        if os.path.isfile(volume_path):
-            iqn = '%s%s' % (FLAGS.iscsi_target_prefix,
-                            vol_uuid_file)
-        else:
-            raise exception.PersistentVolumeFileNotFound(volume_id=volume_id)
-
-        # TODO(jdg): In the future move all of the dependent stuff into the
-        # cooresponding target admin class
-        if not isinstance(self.tgtadm, iscsi.TgtAdm):
-            tid = self.db.volume_get_iscsi_target_num(context, volume_id)
-        else:
-            tid = 0
-
-        try:
-            self.tgtadm.show_target(tid, iqn=iqn)
-        except exception.ProcessExecutionError, e:
-            # Instances remount read-only in this case.
-            # /etc/init.d/iscsitarget restart and rebooting cinder-volume
-            # is better since ensure_export() works at boot time.
-            LOG.error(_("Cannot confirm exported volume "
-                        "id:%(volume_id)s.") % locals())
-            raise
-
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Fetch the image from image_service and write it to the volume."""
         volume_path = self.local_path(volume)
@@ -714,10 +749,6 @@ class RBDDriver(VolumeDriver):
         """Removes an export for a logical volume"""
         pass
 
-    def check_for_export(self, context, volume_id):
-        """Make sure volume is exported."""
-        pass
-
     def initialize_connection(self, volume, connector):
         return {
             'driver_volume_type': 'rbd',
@@ -786,7 +817,7 @@ class RBDDriver(VolumeDriver):
         # TODO(jdurgin): replace with librbd
         # this is a temporary hack, since rewriting this driver
         # to use librbd would take too long
-        if FLAGS.volume_tmp_dir and not os.exists(FLAGS.volume_tmp_dir):
+        if FLAGS.volume_tmp_dir and not os.path.exists(FLAGS.volume_tmp_dir):
             os.makedirs(FLAGS.volume_tmp_dir)
 
         with tempfile.NamedTemporaryFile(dir=FLAGS.volume_tmp_dir) as tmp:
@@ -861,10 +892,6 @@ class SheepdogDriver(VolumeDriver):
         """Removes an export for a logical volume"""
         pass
 
-    def check_for_export(self, context, volume_id):
-        """Make sure volume is exported."""
-        pass
-
     def initialize_connection(self, volume, connector):
         return {
             'driver_volume_type': 'sheepdog',
@@ -908,9 +935,6 @@ class LoggingVolumeDriver(VolumeDriver):
     def terminate_connection(self, volume, connector):
         self.log_action('terminate_connection', volume)
 
-    def check_for_export(self, context, volume_id):
-        self.log_action('check_for_export', volume_id)
-
     _LOGS = []
 
     @staticmethod
@@ -950,3 +974,7 @@ class LoggingVolumeDriver(VolumeDriver):
 
 def _iscsi_location(ip, target, iqn, lun=None):
     return "%s:%s,%s %s %s" % (ip, FLAGS.iscsi_port, target, iqn, lun)
+
+
+def _iscsi_authentication(chap, name, password):
+    return "%s %s %s" % (chap, name, password)

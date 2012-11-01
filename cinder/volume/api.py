@@ -26,10 +26,12 @@ from cinder.db import base
 from cinder import exception
 from cinder import flags
 from cinder.openstack.common import cfg
+from cinder.openstack.common import excutils
 from cinder.image import glance
 from cinder.openstack.common import log as logging
 from cinder.openstack.common import rpc
 from cinder.openstack.common import timeutils
+from cinder.volume import volume_types
 import cinder.policy
 from cinder import quota
 
@@ -107,6 +109,16 @@ class API(base.Base):
             msg = (_("Volume size '%s' must be an integer and greater than 0")
                    % size)
             raise exception.InvalidInput(reason=msg)
+
+        if image_id:
+            # check image existence
+            image_meta = self.image_service.show(context, image_id)
+            image_size_in_gb = (int(image_meta['size']) + GB - 1) / GB
+            #check image size is not larger than volume size.
+            if image_size_in_gb > size:
+                msg = _('Size of specified image is larger than volume size.')
+                raise exception.InvalidInput(reason=msg)
+
         try:
             reservations = QUOTAS.reserve(context, volumes=1, gigabytes=size)
         except exception.OverQuota as e:
@@ -132,22 +144,13 @@ class API(base.Base):
                            % locals())
                 raise exception.VolumeLimitExceeded(allowed=quotas['volumes'])
 
-        if image_id:
-            # check image existence
-            image_meta = self.image_service.show(context, image_id)
-            image_size_in_gb = (int(image_meta['size']) + GB - 1) / GB
-            #check image size is not larger than volume size.
-            if image_size_in_gb > size:
-                msg = _('Size of specified image is larger than volume size.')
-                raise exception.InvalidInput(reason=msg)
-
         if availability_zone is None:
             availability_zone = FLAGS.storage_availability_zone
 
-        if volume_type is None:
-            volume_type_id = None
-        else:
-            volume_type_id = volume_type.get('id', None)
+        if not volume_type:
+            volume_type = volume_types.get_default_volume_type()
+
+        volume_type_id = volume_type.get('id')
 
         options = {
             'size': size,
@@ -163,9 +166,15 @@ class API(base.Base):
             'metadata': metadata,
             }
 
-        volume = self.db.volume_create(context, options)
-
-        QUOTAS.commit(context, reservations)
+        try:
+            volume = self.db.volume_create(context, options)
+            QUOTAS.commit(context, reservations)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                try:
+                    self.db.volume_destroy(context, volume['id'])
+                finally:
+                    QUOTAS.rollback(context, reservations)
 
         self._cast_create_volume(context, volume['id'], snapshot_id,
                                  image_id)
@@ -442,8 +451,8 @@ class API(base.Base):
                                      True)
 
     @wrap_check_policy
-    def delete_snapshot(self, context, snapshot):
-        if snapshot['status'] not in ["available", "error"]:
+    def delete_snapshot(self, context, snapshot, force=False):
+        if not force and snapshot['status'] not in ["available", "error"]:
             msg = _("Volume Snapshot status must be available or error")
             raise exception.InvalidVolume(reason=msg)
         self.db.snapshot_update(context, snapshot['id'],
@@ -454,6 +463,10 @@ class API(base.Base):
                  rpc.queue_get_for(context, FLAGS.volume_topic, host),
                  {"method": "delete_snapshot",
                   "args": {"snapshot_id": snapshot['id']}})
+
+    @wrap_check_policy
+    def update_snapshot(self, context, snapshot, fields):
+        self.db.snapshot_update(context, snapshot['id'], fields)
 
     @wrap_check_policy
     def get_volume_metadata(self, context, volume):

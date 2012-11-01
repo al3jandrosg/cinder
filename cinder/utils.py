@@ -33,6 +33,7 @@ import random
 import re
 import shlex
 import shutil
+import signal
 import socket
 import struct
 import sys
@@ -88,6 +89,12 @@ def find_config(config_path):
 def fetchfile(url, target):
     LOG.debug(_('Fetching %s') % url)
     execute('curl', '--fail', url, '-o', target)
+
+
+def _subprocess_setup():
+    # Python installs a SIGPIPE handler by default. This is usually not what
+    # non-Python subprocesses expect.
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 
 def execute(*cmd, **kwargs):
@@ -160,6 +167,7 @@ def execute(*cmd, **kwargs):
                                    stdout=_PIPE,
                                    stderr=_PIPE,
                                    close_fds=True,
+                                   preexec_fn=_subprocess_setup,
                                    shell=shell)
             result = None
             if process_input is not None:
@@ -304,7 +312,7 @@ def last_completed_audit_period(unit=None):
               The begin timestamp of this audit period is the same as the
               end of the previous."""
     if not unit:
-        unit = FLAGS.instance_usage_audit_period
+        unit = FLAGS.volume_usage_audit_period
 
     offset = 0
     if '@' in unit:
@@ -403,6 +411,11 @@ def generate_password(length=20, symbolgroups=DEFAULT_PASSWORD_SYMBOLS):
     r.shuffle(password)
 
     return ''.join(password)
+
+
+def generate_username(length=20, symbolgroups=DEFAULT_PASSWORD_SYMBOLS):
+    # Use the same implementation as the password generation.
+    return generate_password(length, symbolgroups)
 
 
 def last_octet(address):

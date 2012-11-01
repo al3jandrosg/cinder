@@ -40,6 +40,7 @@ import cinder.policy
 from cinder import quota
 from cinder import test
 from cinder.volume import iscsi
+from cinder.tests import fake_flags
 
 QUOTAS = quota.QUOTAS
 FLAGS = flags.FLAGS
@@ -113,6 +114,9 @@ class VolumeTestCase(test.TestCase):
                          volume_id).id)
 
         self.volume.delete_volume(self.context, volume_id)
+        vol = db.volume_get(context.get_admin_context(read_deleted='yes'),
+                            volume_id)
+        self.assertEquals(vol['status'], 'deleted')
         self.assertEquals(len(test_notifier.NOTIFICATIONS), 4)
         self.assertRaises(exception.NotFound,
                           db.volume_get,
@@ -134,6 +138,60 @@ class VolumeTestCase(test.TestCase):
                           db.volume_get,
                           self.context,
                           volume_id)
+
+    def test_create_volume_with_volume_type(self):
+        """Test volume creation with default volume type."""
+        def fake_reserve(context, expire=None, **deltas):
+            return ["RESERVATION"]
+
+        def fake_commit(context, reservations):
+            pass
+
+        def fake_rollback(context, reservations):
+            pass
+
+        self.stubs.Set(QUOTAS, "reserve", fake_reserve)
+        self.stubs.Set(QUOTAS, "commit", fake_commit)
+        self.stubs.Set(QUOTAS, "rollback", fake_rollback)
+
+        volume_api = cinder.volume.api.API()
+
+        # Create volume with default volume type while default
+        # volume type doesn't exist, volume_type_id should be NULL
+        volume = volume_api.create(self.context,
+                                   1,
+                                   'name',
+                                   'description')
+        self.assertEquals(volume['volume_type_id'], None)
+
+        # Create default volume type
+        vol_type = fake_flags.def_vol_type
+        db.volume_type_create(context.get_admin_context(),
+                              dict(name=vol_type, extra_specs={}))
+
+        db_vol_type = db.volume_type_get_by_name(context.get_admin_context(),
+                                                 vol_type)
+
+        # Create volume with default volume type
+        volume = volume_api.create(self.context,
+                                   1,
+                                   'name',
+                                   'description')
+        self.assertEquals(volume['volume_type_id'], db_vol_type.get('id'))
+
+        # Create volume with specific volume type
+        vol_type = 'test'
+        db.volume_type_create(context.get_admin_context(),
+                              dict(name=vol_type, extra_specs={}))
+        db_vol_type = db.volume_type_get_by_name(context.get_admin_context(),
+                                                 vol_type)
+
+        volume = volume_api.create(self.context,
+                                   1,
+                                   'name',
+                                   'description',
+                                   volume_type=db_vol_type)
+        self.assertEquals(volume['volume_type_id'], db_vol_type.get('id'))
 
     def test_delete_busy_volume(self):
         """Test volume survives deletion if driver reports it as busy."""
@@ -158,7 +216,7 @@ class VolumeTestCase(test.TestCase):
         """Test volume can be created from a snapshot."""
         volume_src = self._create_volume()
         self.volume.create_volume(self.context, volume_src['id'])
-        snapshot_id = self._create_snapshot(volume_src['id'])
+        snapshot_id = self._create_snapshot(volume_src['id'])['id']
         self.volume.create_snapshot(self.context, volume_src['id'],
                                     snapshot_id)
         volume_dst = self._create_volume(0, snapshot_id)
@@ -250,19 +308,22 @@ class VolumeTestCase(test.TestCase):
         snap['project_id'] = 'fake'
         snap['volume_id'] = volume_id
         snap['status'] = "creating"
-        return db.snapshot_create(context.get_admin_context(), snap)['id']
+        return db.snapshot_create(context.get_admin_context(), snap)
 
     def test_create_delete_snapshot(self):
         """Test snapshot can be created and deleted."""
         volume = self._create_volume()
         self.volume.create_volume(self.context, volume['id'])
-        snapshot_id = self._create_snapshot(volume['id'])
+        snapshot_id = self._create_snapshot(volume['id'])['id']
         self.volume.create_snapshot(self.context, volume['id'], snapshot_id)
         self.assertEqual(snapshot_id,
                          db.snapshot_get(context.get_admin_context(),
                                          snapshot_id).id)
 
         self.volume.delete_snapshot(self.context, snapshot_id)
+        snap = db.snapshot_get(context.get_admin_context(read_deleted='yes'),
+                               snapshot_id)
+        self.assertEquals(snap['status'], 'deleted')
         self.assertRaises(exception.NotFound,
                           db.snapshot_get,
                           self.context,
@@ -318,7 +379,7 @@ class VolumeTestCase(test.TestCase):
         """Test volume can't be deleted with dependent snapshots."""
         volume = self._create_volume()
         self.volume.create_volume(self.context, volume['id'])
-        snapshot_id = self._create_snapshot(volume['id'])
+        snapshot_id = self._create_snapshot(volume['id'])['id']
         self.volume.create_snapshot(self.context, volume['id'], snapshot_id)
         self.assertEqual(snapshot_id,
                          db.snapshot_get(context.get_admin_context(),
@@ -340,7 +401,7 @@ class VolumeTestCase(test.TestCase):
         """Test snapshot can be created and deleted."""
         volume = self._create_volume()
         self.volume.create_volume(self.context, volume['id'])
-        snapshot_id = self._create_snapshot(volume['id'])
+        snapshot_id = self._create_snapshot(volume['id'])['id']
         self.volume.create_snapshot(self.context, volume['id'], snapshot_id)
         snapshot = db.snapshot_get(context.get_admin_context(),
                                    snapshot_id)
@@ -388,7 +449,7 @@ class VolumeTestCase(test.TestCase):
         volume = self._create_volume()
         volume_id = volume['id']
         self.volume.create_volume(self.context, volume_id)
-        snapshot_id = self._create_snapshot(volume_id)
+        snapshot_id = self._create_snapshot(volume_id)['id']
         self.volume.create_snapshot(self.context, volume_id, snapshot_id)
 
         self.mox.StubOutWithMock(self.volume.driver, 'delete_snapshot')
@@ -717,6 +778,30 @@ class VolumeTestCase(test.TestCase):
         volume = db.volume_get(self.context, volume['id'])
         self.assertEqual(volume['status'], "in-use")
 
+    def test_volume_api_update(self):
+        # create a raw vol
+        volume = self._create_volume()
+        # use volume.api to update name
+        volume_api = cinder.volume.api.API()
+        update_dict = {'display_name': 'test update name'}
+        volume_api.update(self.context, volume, update_dict)
+        # read changes from db
+        vol = db.volume_get(context.get_admin_context(), volume['id'])
+        self.assertEquals(vol['display_name'], 'test update name')
+
+    def test_volume_api_update_snapshot(self):
+        # create raw snapshot
+        volume = self._create_volume()
+        snapshot = self._create_snapshot(volume['id'])
+        self.assertEquals(snapshot['display_name'], None)
+        # use volume.api to update name
+        volume_api = cinder.volume.api.API()
+        update_dict = {'display_name': 'test update name'}
+        volume_api.update_snapshot(self.context, snapshot, update_dict)
+        # read changes from db
+        snap = db.snapshot_get(context.get_admin_context(), snapshot['id'])
+        self.assertEquals(snap['display_name'], 'test update name')
+
 
 class DriverTestCase(test.TestCase):
     """Base Test class for Drivers."""
@@ -802,10 +887,6 @@ class ISCSITestCase(DriverTestCase):
             volume_id_list.append(vol_ref['id'])
 
         return volume_id_list
-
-    def test_check_for_export_with_no_volume(self):
-        instance_uuid = '12345678-1234-5678-1234-567812345678'
-        self.volume.check_for_export(self.context, instance_uuid)
 
 
 class VolumePolicyTestCase(test.TestCase):

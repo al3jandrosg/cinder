@@ -1,50 +1,781 @@
-commit 8bcfae7e2261812854cbd34ecfee960e109ac956
-Merge: 2da0df3 ce60315
+commit 1cb3a4f69cdb9706666b5d2a4679ef31adb4d0a1
+Merge: f5cc528 9fe4477
 Author: Jenkins <jenkins@review.openstack.org>
-Date:   Wed Sep 26 00:48:40 2012 +0000
+Date:   Thu Nov 1 03:48:14 2012 +0000
 
-    Merge "Fix NetAppCmodeISCSIDriver._get_lun_handle() method" into milestone-proposed
+    Merge "Allow the user to update a volume's metadata"
 
-commit 2da0df3061ba77e53300aa9bfe95a714e88dbfef
-Merge: 615f336 f803536
+commit f5cc52817af52e0e0c78925c56ca74556a0b80f9
+Merge: 4645e63 9ea375c
 Author: Jenkins <jenkins@review.openstack.org>
-Date:   Tue Sep 25 23:55:17 2012 +0000
+Date:   Thu Nov 1 03:44:20 2012 +0000
 
-    Merge "Revert explicit usage of tgt-adm --conf option." into milestone-proposed
+    Merge "Log the body of an /action"
 
-commit 615f336cc0359a83dd72bc8baf5d61bd69404959
-Author: MotoKen <motokentsai@gmail.com>
-Date:   Tue Sep 25 13:08:34 2012 +0800
+commit 4645e6326846a20b393fb218fce067b04df7decf
+Merge: 80654f8 524c7fa
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 31 22:01:29 2012 +0000
 
-    Fixes remove_export for IetAdm
+    Merge "Detect and fix issues caused by vol ID migration"
+
+commit 80654f8bcda3db3f55c838f17dee2fccfc77f854
+Merge: 04794c2 a105733
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 31 18:29:20 2012 +0000
+
+    Merge "Add VolumeTenantAttribute API extension"
+
+commit 04794c28b783193ec051e0bb1fd0293763a4a402
+Author: Sean Dague <sdague@linux.vnet.ibm.com>
+Date:   Wed Oct 31 10:10:29 2012 -0400
+
+    pin sqlalchemy to the 0.7 series
     
-    * Corrects indentation.
-    * Uses specific iqn as keyword argument.
+    sqlalchemy 0.8 beta has hit mirrors, and changes dependencies, thus
+    breaking jenkins. This pins it to 0.7 series until all the projects
+    agree to move forward to 0.8.
     
-    Fixes bug 1055401
+    Fixes bug #1073569
     
-    Change-Id: Ie99dd8a34924f0d7f447cf41a305353659a51d11
-    (cherry picked from commit 5b61536fdf17332f48af4b422fe23c2e153934a1)
+    Change-Id: If11f39d311ba9ef5cb2b198c9649a8997b2a52b5
 
- cinder/volume/driver.py |    2 +-
- cinder/volume/iscsi.py  |   14 ++++++--------
- 2 files changed, 7 insertions(+), 9 deletions(-)
-
-commit ce60315aaeed74d6d0ee64c825c4c2b4739064cc
-Author: Ben Swartzlander <bswartz@netapp.com>
-Date:   Mon Sep 24 12:30:48 2012 -0400
-
-    Fix NetAppCmodeISCSIDriver._get_lun_handle() method
-    
-    bug 1055578
-    
-    Change-Id: I06da6a9a59fa2320f1cae9698e5e63562e534916
-    (cherry picked from commit b2627b27dae521d719b90831dcc41695b389712f)
-
- cinder/volume/netapp.py |    2 +-
+ tools/pip-requires |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-commit f8035365288904bef42e6cf7fcd7f914db122b90
+commit a105733cc970eaac2f4bc28f04b48f9149a2c801
+Author: Brian Waldon <brian.waldon@rackspace.com>
+Date:   Tue Oct 30 15:06:12 2012 -0700
+
+    Add VolumeTenantAttribute API extension
+    
+    Expose the ID of the project to which a volume belongs through a
+    new API extension. This is only presented to Admins by default.
+    Visibility can be controlled with the 'volume_tenant_attribute'
+    policy rule.
+    
+    Change-Id: If85d9759af6a9457bf3230375cc64af9efe4a088
+
+ .../volume/contrib/volume_tenant_attribute.py      |   91 +++++++++++++
+ .../volume/contrib/test_volume_host_attribute.py   |    1 +
+ .../volume/contrib/test_volume_tenant_attribute.py |  134 ++++++++++++++++++++
+ cinder/tests/policy.json                           |    3 +-
+ etc/cinder/policy.json                             |    3 +-
+ 5 files changed, 230 insertions(+), 2 deletions(-)
+
+commit 4b6da60361f16e30da7233919b967069ce8f6285
+Merge: 826c452 39e763d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 30 18:28:08 2012 +0000
+
+    Merge "Split out drivers in san.py"
+
+commit 9ea375c5dce105c657694ce296fbb24b03a0c6ab
+Author: Derrick J. Wippler <thrawn01@gmail.com>
+Date:   Fri Oct 19 14:53:18 2012 +0000
+
+    Log the body of an /action
+    
+    The inability to deduce an /action request from the logs
+    makes diagnosing integration with nova difficult. This change
+    logs the action method and arguments
+    
+    Change-Id: Iea4f46c7da9c61e07aa23e897b60992b8fdb6663
+
+ cinder/api/openstack/wsgi.py |    1 +
+ 1 file changed, 1 insertion(+)
+
+commit 524c7fa6dfade6efcabda19b105d58cab8c434e2
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Wed Oct 24 16:28:02 2012 -0600
+
+    Detect and fix issues caused by vol ID migration
+    
+    The migration from volume ID to UUID neglected to update the provider_location
+    field on the volume.  As a result the iqn and volume name no long match and
+    existing volumes are no longer able to be attached after an upgrade
+    (essex -> folsom and then nova-vol->cinder).
+    
+    This patch adds a method to the volume driver that will check for the
+    mismatch of volume name in the iqn during service start up.  If
+    detected it will update the provider_location field in the database
+    to include the new ID.  Also it will create a symlink to the device backing
+    file that also has the correct naming convention.
+    
+    Note: We don't disturb an connections that are currently attached.
+    For this case we add a check in manager.detach and do any provider_location
+    cleanup that's needed at that time.  This ensures that connections
+    persist on restarts of tgtd and reboot.
+    
+    Change-Id: I8224824b793c98a9767c5d8dd741d892be720c4f
+    Fixes: bug 1065702
+
+ bin/cinder-volume-usage-audit        |    3 +-
+ cinder/volume/driver.py              |   66 +++++++++++++++++++++++++++++++---
+ cinder/volume/iscsi.py               |   11 +++++-
+ cinder/volume/manager.py             |    5 +++
+ etc/cinder/rootwrap.d/volume.filters |    1 +
+ 5 files changed, 80 insertions(+), 6 deletions(-)
+
+commit 39e763d3aff5181a00e88b1ff2707bff209240ea
+Author: Nirmal Ranganathan <rnirmal@gmail.com>
+Date:   Sun Oct 21 11:38:45 2012 -0500
+
+    Split out drivers in san.py
+    
+    The SolarisISCSIDriver and HpSanISCSIDriver have been removed from
+    san.py and placed in their own files. The default SanISCSIDriver
+    implementing some common methods still resides in san.py. These
+    san drivers have now been grouped in the san module.
+    
+    Implements bp driver-cleanup
+    
+    Change-Id: I68802f01a4a8c7e93e097777d305fbee0d15128a
+
+ cinder/tests/test_HpSanISCSIDriver.py |    8 +-
+ cinder/volume/san.py                  |  652 ---------------------------------
+ cinder/volume/san/__init__.py         |   27 ++
+ cinder/volume/san/hp_lefthand.py      |  265 ++++++++++++++
+ cinder/volume/san/san.py              |  146 ++++++++
+ cinder/volume/san/solaris.py          |  286 +++++++++++++++
+ cinder/volume/solidfire.py            |    2 +-
+ cinder/volume/storwize_svc.py         |    2 +-
+ cinder/volume/xiv.py                  |    2 +-
+ etc/cinder/cinder.conf.sample         |    3 +
+ 10 files changed, 734 insertions(+), 659 deletions(-)
+
+commit 826c4520d093f5e0809a08e10b5d18bf69adc698
+Author: Brian Waldon <brian.waldon@rackspace.com>
+Date:   Sat Oct 27 15:36:30 2012 -0700
+
+    Add VolumeHostAttribute API extension
+    
+    Expose the host on which a volume resides through a new API
+    extension. This is only presented to Admins by default. This
+    can be controlled with the 'volume_host_attribute' policy
+    rule.
+    
+    Fixes bug 1035350.
+    
+    Change-Id: I0a74a0dfbd78e853219150fbe0d3fba77c6f9bb6
+
+ .../volume/contrib/volume_host_attribute.py        |   93 ++++++++++++++
+ .../volume/contrib/test_volume_host_attribute.py   |  131 ++++++++++++++++++++
+ cinder/tests/policy.json                           |    3 +-
+ etc/cinder/policy.json                             |    4 +-
+ 4 files changed, 229 insertions(+), 2 deletions(-)
+
+commit 61917c2193ec4ca822af946a808dd0061cb77ef4
+Author: Zhiteng Huang <zhiteng.huang@intel.com>
+Date:   Wed Oct 3 17:10:57 2012 +0800
+
+    Add default volume type flag
+    
+    Where using volume type scheduler, 'volume type' is an essential input for
+    scheduler to perform sophysticated scheduling.  This patch adds a new
+    flag 'default_volume_type to allow admin to set one volume type as the
+    default type for volume creation if user doesn't specify any.
+    
+    Also add more clear 404 message to API if create request provided non-existing
+    volume type.
+    
+    Note: Setting the 'default_volume_type' flag to non-existing volume type
+    is problematic and should be avoided, and the outcome of such behavior is
+    equivlant to setting default volume type to None.
+    
+    This is part of patch set implementing 'volume-type-scheduler'.
+    
+    Change-Id: Ib2b2bbdc9bc96ab097cca2821c9aef04c65c2857
+
+ cinder/api/openstack/volume/volumes.py |    5 +--
+ cinder/flags.py                        |    3 ++
+ cinder/tests/fake_flags.py             |    3 ++
+ cinder/tests/test_volume.py            |   55 ++++++++++++++++++++++++++++++++
+ cinder/tests/test_volume_types.py      |   17 ++++++++++
+ cinder/volume/api.py                   |    9 +++---
+ cinder/volume/volume_types.py          |   19 +++++++++++
+ 7 files changed, 105 insertions(+), 6 deletions(-)
+
+commit 452b92a13bcf4cc2afdf97c742f0773455608a26
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 25 16:14:07 2012 -0700
+
+    Fix typo so setting volume_tmp_dir works
+    
+    This can be controlled by environment variables without setting
+    volume_tmp_dir as well, so there's an easy workaround for
+    Folsom.
+    
+    Fixes LP bug #1071536
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    
+    Change-Id: I50996c7c7a870d8e2bab1d3f44fd4d15b8ced6a6
+
+ cinder/tests/test_rbd.py |   29 +++++++++++++++++++++++++++++
+ cinder/volume/driver.py  |    2 +-
+ 2 files changed, 30 insertions(+), 1 deletion(-)
+
+commit 628adc99b41c097b0c071087a274ded850ff7df5
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Tue Oct 23 12:12:30 2012 +0000
+
+    Rollback for resources during volume creation failure
+    
+    Fixes bug #1070258
+    
+    Add a single QUOTAS.rollback for all exceptions. Ensure that no stale
+    "reservations" are left in place after a failed volume creation.
+    
+    Change-Id: Iedb193b213b8ee700a5765278ac4d00dac66d53a
+
+ cinder/volume/api.py |   32 ++++++++++++++++++++------------
+ 1 file changed, 20 insertions(+), 12 deletions(-)
+
+commit 9fe4477f9b1f4e825941cb1ce42ced1a1a862b33
+Author: jking-6 <jking@internap.com>
+Date:   Wed Oct 24 13:15:03 2012 -0400
+
+    Allow the user to update a volume's metadata
+    
+    The fix mainly involves updating the VolumeController's update method
+    to allow the 'metadata' key to be a valid key in a request body.
+    
+    The _translate_volume_summary_view method is updated to check for a
+    'metadata' key in the vol parameter after checking first for
+    'volume_metadata'.  This is to avoid making a third call to the
+    database after updating the volume model.  This solution introduces
+    the least amount of new code.
+    
+    Change-Id: I41256d03f9c4c7a0866ff0f2d35fce8e4fd26b11
+    Fixes: bug #1046382
+
+ cinder/api/openstack/volume/volumes.py            |    4 +++
+ cinder/db/sqlalchemy/api.py                       |   12 ++++-----
+ cinder/tests/api/openstack/volume/test_volumes.py |   28 +++++++++++++++++++++
+ 3 files changed, 38 insertions(+), 6 deletions(-)
+
+commit df2f070604dad61738ccd3113016f76f2af20cae
+Merge: b7df13c 5ddcf35
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 24 17:52:45 2012 +0000
+
+    Merge "Drop unused quota_usage db methods"
+
+commit b7df13c7b698556c5c43601a109231e843195eca
+Merge: 02755f3 b3b1d48
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 24 17:22:53 2012 +0000
+
+    Merge "Update HACKING.rst and related changes from Nova/PEP8."
+
+commit 02755f322104617936c0aaec8ae81c7f6adefce3
+Merge: f004634 1a7c6f4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 24 15:00:39 2012 +0000
+
+    Merge "Adds support for Windows 2012 Storage Server blueprint windows2012driver https://blueprints.launchpad.net/cinder/+spec/windows2012driver"
+
+commit f004634ac16839f543efdfae8c3b1ac0cb36ea35
+Author: Vincent Hou <sbhou@cn.ibm.com>
+Date:   Mon Oct 22 13:50:56 2012 +0800
+
+    Add the generation of the username and password for iSCSI target.
+    
+    When a volume is created, a pair of username and password is generated by the
+    driver for tgtadm and ietadm.
+    
+    Implementation of bpiSCSI-CHAP.
+    
+    Change-Id: I4f382a96ba4553158dc609e8caf9e70486e30603
+
+ cinder/utils.py         |    5 +++++
+ cinder/volume/driver.py |   14 +++++++++++++-
+ cinder/volume/iscsi.py  |   38 +++++++++++++++++++++++++++++---------
+ 3 files changed, 47 insertions(+), 10 deletions(-)
+
+commit c24a82a54e1a4be6d1e6f333763f15b435561573
+Merge: 00251c0 7dbc23c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 23 01:17:19 2012 +0000
+
+    Merge "Add trove classifiers for PyPI"
+
+commit b3b1d48d5384cb9f70fdc4b27e07006ba44daa14
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Oct 22 18:37:11 2012 -0400
+
+    Update HACKING.rst and related changes from Nova/PEP8.
+    
+    Sync up with changes made in Nova, this adds information
+    about line continuation (PEP8), OpenStack capitalization,
+    and commit messages.
+    
+    Change-Id: Id6637307411bcc7a3637ac514c4ec34e26481e0d
+
+ HACKING.rst                       |   43 +++++++++++++++++++++++++++++++++++++
+ bin/cinder-clear-rabbit-queues    |    2 +-
+ bin/cinder-rootwrap               |    2 +-
+ bin/cinder-volume-usage-audit     |    2 +-
+ doc/source/devref/xensmvolume.rst |    2 +-
+ etc/cinder/api-paste.ini          |    2 +-
+ 6 files changed, 48 insertions(+), 5 deletions(-)
+
+commit 00251c0e16f1149d3cee2719173490f3f0e8868e
+Merge: f41e596 8b58a46
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 22 22:39:03 2012 +0000
+
+    Merge "Ensure device node exists before wiping during volume deletion"
+
+commit f41e596607f0a6ef29985a571fb8316132d09932
+Merge: 921e13f 71994f4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 22 22:37:53 2012 +0000
+
+    Merge "Update volume and snapshot status on delete"
+
+commit 7dbc23c01eba6172a30448447084f4210457d99f
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Oct 22 18:25:01 2012 -0400
+
+    Add trove classifiers for PyPI
+    
+    Add classifiers so we can eventually register the project
+    on PyPI to reserve the name, even though we won't release
+    packages there.
+    
+    Change-Id: I11fa429d34301ba9a1ec9a543f88d57eb3ac56bb
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+ setup.py |   10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+commit 8b58a4605f83de6a6286ac9de2634dd3269c22b1
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Oct 22 18:02:17 2012 -0400
+
+    Ensure device node exists before wiping during volume deletion
+    
+    If the LVM device node is missing when a Cinder volume is deleted,
+    a large amount of data will be written to /dev/.  Check that the
+    device node exists before performing a _copy_volume('/dev/zero'...)
+    to wipe it.  Fixes bug 1070023.
+    
+    Change-Id: I77a0a5545a54a4adc905a781ed8120db7adccc27
+
+ cinder/volume/driver.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 71994f45f51bde72b3323fb84a2461ae452b6949
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Mon Oct 22 16:47:12 2012 -0500
+
+    Update volume and snapshot status on delete
+    
+    Change the status of "deleting" resources at the same time we update boolean
+    flag for deleted.  Makes dumb queries looking for stuck statuses a little
+    easier.
+    
+    Change-Id: Iaf3386526a369f9bf281eb4be42eb11277038c92
+
+ cinder/db/sqlalchemy/api.py |    6 ++++--
+ cinder/tests/test_volume.py |    6 ++++++
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+commit 5ddcf35d6889464182173c0524801d20d807e3b6
+Author: Brian Waldon <brian.waldon@rackspace.com>
+Date:   Mon Oct 22 14:37:26 2012 -0700
+
+    Drop unused quota_usage db methods
+    
+    The quota_usage_update and quota_usage_destroy db methods are
+    not used anywhere - drop them.
+    
+    Change-Id: Iaa23d1de1642ac7ec9ab4b4cbe119ec742346505
+
+ cinder/db/api.py            |   12 ------------
+ cinder/db/sqlalchemy/api.py |   29 -----------------------------
+ 2 files changed, 41 deletions(-)
+
+commit 921e13f644db987295d22530434f16319f2643aa
+Author: Brian Waldon <brian.waldon@rackspace.com>
+Date:   Mon Oct 22 14:17:40 2012 -0700
+
+    Drop duplicate sqlalchemy db api methods
+    
+    Several methods were redefined at the bottom of
+    cinder/db/sqlalchemy/api.py. They have been removed:
+    - quota_get
+    - quota_get_all_by_project
+    - quota_create
+    - quota_update
+    - quota_destroy
+    - quota_destroy_all_by_project
+    - quota_class_get
+    - quota_class_get_all_by_name
+    - quota_class_create
+    - quota_class_update
+    - quota_class_destroy
+    - quota_class_destroy_all_by_name
+    - quota_usage_get
+    - quota_usage_get_all_by_project
+    - quota_usage_create
+    - quota_usage_update
+    - quota_usage_destroy
+    
+    Fix bug 1070033
+    
+    Change-Id: I64b0b0045af7251853da97a8a8c4b2cb09b1dd53
+
+ cinder/db/sqlalchemy/api.py |  222 -------------------------------------------
+ 1 file changed, 222 deletions(-)
+
+commit 186e32da976b5b9a28952fceb967e2a7119b5851
+Merge: f3ecc59 1ea9588
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Oct 22 19:11:22 2012 +0000
+
+    Merge "Update common."
+
+commit f3ecc59364b9adf0bee60fa0dee81bf54587f712
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Mon Oct 22 03:39:04 2012 +0000
+
+    Change output strings to i18ned
+    
+    Fixes bug #1069601.
+    
+    Ensure visible message in cinder-volume-usage-audit got through
+    translation.
+    
+    Change-Id: I5c32ce3b2ef2541b8a5520ed53feaf8e00f43c9d
+
+ bin/cinder-volume-usage-audit |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+commit 1a7c6f4a09ef9980ead0c46d080078a7bbc81d10
+Author: Pedro Navarro Perez <pednape@gmail.com>
+Date:   Thu Oct 18 22:44:59 2012 +0200
+
+    Adds support for Windows 2012 Storage Server
+    blueprint windows2012driver
+    https://blueprints.launchpad.net/cinder/+spec/windows2012driver
+    
+    Change-Id: I3f7efb1b976fedc4afb736b87d550a34c330c839
+
+ cinder/tests/test_windows.py                       |  217 ++++++++++++++++++
+ cinder/tests/windows/basetestcase.py               |   96 ++++++++
+ cinder/tests/windows/db_fakes.py                   |   42 ++++
+ cinder/tests/windows/mockproxy.py                  |  234 ++++++++++++++++++++
+ cinder/tests/windows/stubs/README.rst              |    2 +
+ ...dowsDriver.test_check_for_setup_errors_wmi.p.gz |  Bin 0 -> 473 bytes
+ ...ws.TestWindowsDriver.test_create_export_os.p.gz |  Bin 0 -> 439 bytes
+ ...s.TestWindowsDriver.test_create_export_wmi.p.gz |  Bin 0 -> 1441 bytes
+ ....TestWindowsDriver.test_create_snapshot_os.p.gz |  Bin 0 -> 441 bytes
+ ...TestWindowsDriver.test_create_snapshot_wmi.p.gz |  Bin 0 -> 1479 bytes
+ ...Driver.test_create_volume_from_snapshot_os.p.gz |  Bin 0 -> 500 bytes
+ ...river.test_create_volume_from_snapshot_wmi.p.gz |  Bin 0 -> 1843 bytes
+ ...ws.TestWindowsDriver.test_create_volume_os.p.gz |  Bin 0 -> 439 bytes
+ ...s.TestWindowsDriver.test_create_volume_wmi.p.gz |  Bin 0 -> 1057 bytes
+ ....TestWindowsDriver.test_delete_snapshot_os.p.gz |  Bin 0 -> 441 bytes
+ ...TestWindowsDriver.test_delete_snapshot_wmi.p.gz |  Bin 0 -> 1502 bytes
+ ...ws.TestWindowsDriver.test_delete_volume_os.p.gz |  Bin 0 -> 472 bytes
+ ...s.TestWindowsDriver.test_delete_volume_wmi.p.gz |  Bin 0 -> 1039 bytes
+ ...ws.TestWindowsDriver.test_ensure_export_os.p.gz |  Bin 0 -> 439 bytes
+ ...s.TestWindowsDriver.test_ensure_export_wmi.p.gz |  Bin 0 -> 1441 bytes
+ ...indowsDriver.test_initialize_connection_os.p.gz |  Bin 0 -> 447 bytes
+ ...ndowsDriver.test_initialize_connection_wmi.p.gz |  Bin 0 -> 1976 bytes
+ ...ws.TestWindowsDriver.test_remove_export_os.p.gz |  Bin 0 -> 439 bytes
+ ...s.TestWindowsDriver.test_remove_export_wmi.p.gz |  Bin 0 -> 1451 bytes
+ cinder/tests/windows/windowsutils.py               |  145 ++++++++++++
+ cinder/volume/windows.py                           |  232 +++++++++++++++++++
+ 26 files changed, 968 insertions(+)
+
+commit 1ea9588c4df4ec5d36c2d56c66204138d6b68361
+Author: Michael Still <mikal@stillhq.com>
+Date:   Thu Oct 18 11:43:12 2012 -0700
+
+    Update common.
+    
+    policy.py is not updated as it causes test failures. I will investigate
+    that separately.
+    
+    Change-Id: I9936137c1ab5b368ba6c3c35c423568b38bf913f
+
+ cinder/openstack/common/rpc/impl_zmq.py   |   96 ++++++-----------------------
+ cinder/openstack/common/rpc/matchmaker.py |   31 +---------
+ cinder/openstack/common/rpc/service.py    |    9 +--
+ cinder/openstack/common/setup.py          |   24 ++++----
+ cinder/openstack/common/timeutils.py      |    5 ++
+ 5 files changed, 43 insertions(+), 122 deletions(-)
+
+commit a4104b76d62c4aa7035891e94ab7bce8469324b6
+Author: Cory Wright <corywright@gmail.com>
+Date:   Thu Oct 18 08:00:41 2012 -0700
+
+    Fix incorrect class path for legacycinder formatter in logging_sample.conf
+    
+    Change-Id: I313609f7b996650dfa2c804ebe964aa31549f5ea
+
+ etc/cinder/logging_sample.conf |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 1fa8442a525a49d4cf63a8f2b3fab00f2e6405ae
+Author: Eric Harney <eharney@redhat.com>
+Date:   Wed Oct 10 10:38:22 2012 -0400
+
+    Error message references incorrect variable
+    
+    In remove_iscsi_target() for the TgtAdm class, the "Failed to
+    create iscsi target for volume id:" message references a
+    variable that doesn't exist -- use the correct variable name.
+    
+    Fixes bug 1065073.
+    
+    Change-Id: I55acb0dd2ee368fdc62a0ded6280d7ef7cd8ab7f
+
+ cinder/volume/iscsi.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 69ab5832e8f4a6614903339c79a67faff06e61e4
+Merge: 6912195 45ca339
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 9 02:32:13 2012 +0000
+
+    Merge "Configuration Options clean up"
+
+commit 69121952feba0d0046ba6df24258f6011b0325ce
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Thu Sep 27 22:03:16 2012 +0100
+
+    Loosen anyjson dependency to avoid clash with ceilometer
+    
+    Ceilometer depends on anyjson 0.3.1, whereas cinder requires
+    exacly 0.2.4.
+    
+    The net effect is a devstack with ceilometer installed will
+    appear to work initially, as ceilometer is sparked up after
+    cinder. However, if any of the cinder services are subsequently
+    restarted, they fail with:
+    
+      pkg_resources.DistributionNotFound: anyjson==0.2.4
+    
+    By simply allowing the cinder anyjson dependency version to
+    be greater than as opposed to an exact match, we can avoid
+    the clash.
+    
+    Change-Id: I21737a2504705f15dd16e6762b44624678177442
+
+ tools/pip-requires |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 45ca3393b2e0348754fd943a00c4fcb2cf5c60d5
+Author: Zhiteng Huang <zhiteng.huang@intel.com>
+Date:   Mon Oct 8 15:36:39 2012 +0800
+
+    Configuration Options clean up
+    
+    Small clean up of configuration options including:
+     * unused config opts:
+       - reclaim_instance_interval
+     * rename 'instance' in config opts name/help message to 'volume'
+       - 'instance_usage_audit_period' to 'volume_usage_audit_period'
+       - help message of 'volume_name_template'
+    
+    This change also re-generates cinder.conf.sample file.
+    
+    Change-Id: I3d6c43cf56a5335b4bf768c51d65d76735213431
+
+ cinder/db/api.py              |    2 +-
+ cinder/flags.py               |    7 ++----
+ cinder/utils.py               |    2 +-
+ etc/cinder/cinder.conf.sample |   48 +++++++++++++++++++++++------------------
+ 4 files changed, 31 insertions(+), 28 deletions(-)
+
+commit 6205ef6f074a16ebe858c6721f37b00ec3373f9d
+Merge: 1a524f8 6750acc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Oct 5 18:16:35 2012 +0000
+
+    Merge "Add snapshot force delete admin action"
+
+commit 1a524f8b8088af65eb4551e6683b24a2fde17849
+Merge: 61a5ab8 121a519
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Oct 5 17:49:44 2012 +0000
+
+    Merge "Mock out sleep in some retry tests"
+
+commit 61a5ab81d3f784e498ff918a210767221f320785
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Oct 5 14:29:19 2012 +0200
+
+    Fix typo in policy documentation
+    
+    Change-Id: I61df9dc9b752e1598f4a472771e581091f4de18f
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+ cinder/policy.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 12678167d1b620e85413f2887c173ad2e238364d
+Merge: 30ac574 bdee787
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Oct 5 04:32:15 2012 +0000
+
+    Merge "Use policy based rule to define context.is_admin"
+
+commit 6750acc73420490172d557302d715433351f1373
+Author: clayg <clay.gerrard@gmail.com>
+Date:   Thu Oct 4 02:31:28 2012 -0500
+
+    Add snapshot force delete admin action
+    
+    Change-Id: I289030cf0db42aa78cd2d8441d89610dad6cbeaa
+
+ .../api/openstack/volume/contrib/admin_actions.py  |   70 ++++++++++++------
+ .../openstack/volume/contrib/test_admin_actions.py |   76 ++++++++++++++++++++
+ cinder/tests/policy.json                           |    1 +
+ cinder/volume/api.py                               |    4 +-
+ etc/cinder/policy.json                             |    3 +-
+ 5 files changed, 130 insertions(+), 24 deletions(-)
+
+commit 121a51911b6c88f97783cf57967506d81de12188
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Wed Oct 3 13:00:07 2012 -0500
+
+    Mock out sleep in some retry tests
+    
+    Stub sleep in storwize tests
+    Stub sleep in glance tests
+    
+    Change-Id: Ia935d561d104a4cd6373624208dedf5891b516e3
+
+ cinder/tests/image/test_glance.py |    1 +
+ cinder/tests/test_storwize_svc.py |    1 +
+ 2 files changed, 2 insertions(+)
+
+commit 30ac5746c1c8a93c50ee65b66340fa59f33936a6
+Merge: 08a1b5b 1fde9df
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 3 17:29:41 2012 +0000
+
+    Merge "Fix typo in sample configuration file"
+
+commit 08a1b5b2bf7638131bda890ed5cd360d26e10f86
+Merge: 3a654b7 4662fa2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 3 17:19:08 2012 +0000
+
+    Merge "Replace builtin hash with MD5 to solve 32/64-bit issues."
+
+commit 3a654b7c4495f890caf508521f1dd5bb00d15368
+Merge: 6d841d3 adc8340
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Oct 3 17:15:11 2012 +0000
+
+    Merge "Remove unused code: check_for_export."
+
+commit 6d841d3d0df00fdef5b16c588b20049d4708dca1
+Merge: 4cfb90a 38f4d6e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Oct 2 22:58:34 2012 +0000
+
+    Merge "Update distribute version in test requires."
+
+commit bdee787cf79c359cc4583483e010ddf3d356cb18
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Mon Oct 1 11:33:25 2012 -0500
+
+    Use policy based rule to define context.is_admin
+    
+    When creating a context set is_admin based on policy instead of
+    hard coded requirement for a role named 'admin'.
+    
+    Fixes: bug# 1053181
+    
+    Change-Id: I9c05b8ecde887467557c4f01e074145b6a6372aa
+
+ cinder/context.py           |    3 ++-
+ cinder/policy.py            |   18 ++++++++++++++++++
+ cinder/tests/policy.json    |    3 ++-
+ cinder/tests/test_policy.py |   44 ++++++++++++++++++++++++++++++++++++++++++-
+ etc/cinder/policy.json      |    5 +++--
+ 5 files changed, 68 insertions(+), 5 deletions(-)
+
+commit 4cfb90a9b82c52c476187204f8b0a83d9ba7c186
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Fri Sep 28 16:27:09 2012 -0500
+
+    Sync openstack common and add policy
+    
+    openstack-common.conf now includes network_utils and policy
+    
+    The default kombu imple for openstack.common.rpc seems to depends on
+    network_utils.
+    
+    Fixes: bug #1058353
+    
+    Change-Id: I2526c7355e7f2be67b25bf22854c56ec65741d9a
+
+ cinder/common/policy.py                   |  223 ---------------------
+ cinder/openstack/common/network_utils.py  |   68 +++++++
+ cinder/openstack/common/policy.py         |  301 +++++++++++++++++++++++++++++
+ cinder/openstack/common/rpc/impl_kombu.py |  132 ++++++++-----
+ cinder/openstack/common/rpc/impl_qpid.py  |   20 +-
+ cinder/openstack/common/rpc/impl_zmq.py   |   96 +++++++--
+ cinder/openstack/common/rpc/matchmaker.py |   31 ++-
+ cinder/openstack/common/rpc/service.py    |   69 +++++++
+ cinder/openstack/common/timeutils.py      |   16 +-
+ cinder/policy.py                          |    8 +-
+ cinder/tests/test_policy.py               |    9 +-
+ openstack-common.conf                     |    2 +-
+ 12 files changed, 664 insertions(+), 311 deletions(-)
+
+commit 1fde9df9a5a82edcb8125e34906520fa4813fb6c
+Author: Julien Danjou <julien@danjou.info>
+Date:   Fri Sep 28 11:49:46 2012 +0200
+
+    Fix typo in sample configuration file
+    
+    Change-Id: I9f7f6c7c15969fe8cd701ac7580f33d173ea1375
+    Signed-off-by: Julien Danjou <julien@danjou.info>
+
+ etc/cinder/cinder.conf.sample |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 38f4d6ef58ae6f89958a4cdc025d0c7aa0dcfb0c
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Thu Sep 27 18:45:39 2012 -0600
+
+    Update distribute version in test requires.
+    
+    Changes in openstack-infrastructure have upgraded version of distribute.
+    We should match this to keep things consistent.
+    
+    CI systems are installing virtualenv>=1.8 which gives distribute
+    0.6.28, so we'll add that to our test-requires.
+    
+    Change-Id: I44ad33fd0e96576379ee62a6f584f742e466ce74
+
+ tools/test-requires |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 2a15ffc589fc5f96fc91c40a27403128d100775b
+Merge: df818cc 5b61536
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 21:13:07 2012 +0000
+
+    Merge "Fixes remove_export for IetAdm"
+
+commit df818cc2bbd31d91d2055d0ec164736a36317f4d
+Merge: 94c4ec8 b2627b2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 25 20:55:17 2012 +0000
+
+    Merge "Fix NetAppCmodeISCSIDriver._get_lun_handle() method"
+
+commit 94c4ec8a1e68fe7a764732a65a48322c7d1cc724
 Author: Eoghan Glynn <eglynn@redhat.com>
 Date:   Tue Sep 25 15:52:38 2012 +0100
 
@@ -64,7 +795,24 @@ Date:   Tue Sep 25 15:52:38 2012 +0100
  cinder/volume/iscsi.py     |    8 +++++---
  2 files changed, 6 insertions(+), 5 deletions(-)
 
-commit 26f5ae0d61c7a3c5212873d726a437e349df8191
+commit 5b61536fdf17332f48af4b422fe23c2e153934a1
+Author: MotoKen <motokentsai@gmail.com>
+Date:   Tue Sep 25 13:08:34 2012 +0800
+
+    Fixes remove_export for IetAdm
+    
+    * Corrects indentation.
+    * Uses specific iqn as keyword argument.
+    
+    Fixes bug 1055401
+    
+    Change-Id: Ie99dd8a34924f0d7f447cf41a305353659a51d11
+
+ cinder/volume/driver.py |    2 +-
+ cinder/volume/iscsi.py  |   14 ++++++--------
+ 2 files changed, 7 insertions(+), 9 deletions(-)
+
+commit 7f00d13640edac8136241e546076f2106f7bfa61
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Mon Sep 24 12:59:15 2012 -0600
 
@@ -82,14 +830,87 @@ Date:   Mon Sep 24 12:59:15 2012 -0600
     Fixes bug #1055693
     
     Change-Id: Iaf9669d66e89507989ef3fde630dc2b488a97cfc
-    (cherry picked from commit 7f00d13640edac8136241e546076f2106f7bfa61)
 
  setup.py            |   10 +++++++---
  tools/pip-requires  |    7 ++++---
  tools/test-requires |    2 +-
  3 files changed, 12 insertions(+), 7 deletions(-)
 
-commit 2b5bc3cc8b8b68eec5251b237181019efd5abe70
+commit b2627b27dae521d719b90831dcc41695b389712f
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Mon Sep 24 12:30:48 2012 -0400
+
+    Fix NetAppCmodeISCSIDriver._get_lun_handle() method
+    
+    bug 1055578
+    
+    Change-Id: I06da6a9a59fa2320f1cae9698e5e63562e534916
+
+ cinder/volume/netapp.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 0f0a90ca0d16935fbd8d9af481a0ae0c263f133b
+Merge: 454d596 186143e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 21 21:56:48 2012 +0000
+
+    Merge "Fix cinder-volume-usage-audit"
+
+commit adc83405e599bd51abb8f3617916c8f80c8a9d4f
+Author: Russell Bryant <rbryant@redhat.com>
+Date:   Fri Sep 21 14:51:17 2012 -0400
+
+    Remove unused code: check_for_export.
+    
+    This code has been unused since cinder was split from nova.  It used to
+    be used as a safety check during live migration.  The check was removed
+    recently in nova, since it wasn't being used with Cinder anyway (just
+    nova-volumes).
+    
+    An alternative approach would be to expose this from Cinder somehow if
+    we feel it's important, but until then, there's no reason to keep dead
+    code around.
+    
+    Change-Id: I5adfb405c1bd04bcc1ad61d511afb227a198f4ed
+
+ cinder/tests/test_storwize_svc.py |    2 --
+ cinder/tests/test_volume.py       |    4 ----
+ cinder/tests/test_zadara.py       |    1 -
+ cinder/volume/driver.py           |   42 -------------------------------------
+ cinder/volume/manager.py          |    7 -------
+ cinder/volume/netapp.py           |    6 ------
+ cinder/volume/nfs.py              |    4 ----
+ cinder/volume/storwize_svc.py     |    3 ---
+ cinder/volume/zadara.py           |    4 ----
+ 9 files changed, 73 deletions(-)
+
+commit 454d596b65569eedcd6dc1e9bece66f2a13871f8
+Merge: 414757d c678b04
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 21 17:23:25 2012 +0000
+
+    Merge "Return 400 if create volume snapshot force parameter is invalid"
+
+commit c678b045c9839ed30e13fe5e7e655e3cb2e2c3f9
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Wed Sep 12 10:18:31 2012 +0000
+
+    Return 400 if create volume snapshot force parameter is invalid
+    
+    Fixes bug #1014689
+    
+    * Add is_valid_boolstr function in utils.py
+    * Add force parameter check in SnapshotsController.create()
+    * Add unittest for invalid force parameter.
+    
+    Change-Id: I0f64326f33eb4fad1cf384bd825f56f09e935f40
+
+ cinder/api/openstack/volume/snapshots.py           |    7 ++++++-
+ .../tests/api/openstack/volume/test_snapshots.py   |   11 +++++++++++
+ cinder/utils.py                                    |    9 +++++++++
+ 3 files changed, 26 insertions(+), 1 deletion(-)
+
+commit 186143ecc81369c02aca51b81feb976259bcad41
 Author: Julien Danjou <julien@danjou.info>
 Date:   Thu Sep 20 18:37:36 2012 +0200
 
@@ -104,7 +925,6 @@ Date:   Thu Sep 20 18:37:36 2012 +0200
     
     Change-Id: I306b8671e7b0ed8c2ce2548a51a4c5e6393e13cb
     Signed-off-by: Julien Danjou <julien@danjou.info>
-    (cherry picked from commit 186143ecc81369c02aca51b81feb976259bcad41)
 
  bin/cinder-volume-usage-audit           |   22 +++------
  cinder/openstack/common/context.py      |   81 +++++++++++++++++++++++++++++++
@@ -113,55 +933,46 @@ Date:   Thu Sep 20 18:37:36 2012 +0200
  openstack-common.conf                   |    2 +-
  5 files changed, 94 insertions(+), 21 deletions(-)
 
-commit 418ad3ef2dd52200f6d6c26687e64f023c7ba107
-Author: Rongze Zhu <zrzhit@gmail.com>
-Date:   Wed Sep 12 10:18:31 2012 +0000
+commit 414757d8c336ef791f9654a425693918e1ecd792
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Fri Sep 21 15:58:27 2012 +0300
 
-    Return 400 if create volume snapshot force parameter is invalid
+    Sync with nova change I135ed85a.
     
-    Fixes bug #1014689
+    This patch syncs the cinder driver code with that of the nova code,
+    as we received comments in the review process there.  All changes are
+    minor: (1) removing unnecessary type checks of the flags, (2) not
+    using getattr to access the FLAGS, and (3) using the self.flags()
+    infrastructure that test.TestCase provides.
     
-    * Add is_valid_boolstr function in utils.py
-    * Add force parameter check in SnapshotsController.create()
-    * Add unittest for invalid force parameter.
-    
-    Change-Id: I0f64326f33eb4fad1cf384bd825f56f09e935f40
-    (cherry picked from commit c678b045c9839ed30e13fe5e7e655e3cb2e2c3f9)
+    Change-Id: Id740be6441862f048c3a9267394492a7ed65db84
 
- cinder/api/openstack/volume/snapshots.py           |    7 ++++++-
- .../tests/api/openstack/volume/test_snapshots.py   |   11 +++++++++++
- cinder/utils.py                                    |    9 +++++++++
- 3 files changed, 26 insertions(+), 1 deletion(-)
+ cinder/tests/test_storwize_svc.py |  134 ++++++++++++++++++-------------------
+ cinder/volume/storwize_svc.py     |   67 ++++++-------------
+ 2 files changed, 88 insertions(+), 113 deletions(-)
 
-commit 4edc1e82bc13e2d234333956db5bf6e551b7bb89
-Merge: fe236e6 d2f9449
+commit 5c74bf51f6ef131db7c47606949b99c57cbbe217
+Merge: 52de540 bc0fb11
 Author: Jenkins <jenkins@review.openstack.org>
-Date:   Fri Sep 21 05:45:15 2012 +0000
+Date:   Fri Sep 21 04:45:51 2012 +0000
 
-    Merge "Stop double logging to the console" into milestone-proposed
+    Merge "Remove cinder gating hack"
 
-commit d2f9449dd13152a8e270855f17e06d33d6971fb3
-Author: Vishvananda Ishaya <vishvananda@gmail.com>
-Date:   Thu Sep 20 16:52:51 2012 +0000
+commit 52de54082cd0dbacd2c79ccc8c6b0cbbd7609884
+Merge: a978780 a1cbbe2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 21 04:04:42 2012 +0000
 
-    Stop double logging to the console
-    
-    The code in nova for logging added an extra root handler to be
-    able to log messages to the console during log setup. This handler
-    was removed in the setup method. The common setup method no longer
-    removes this handler, so don't create it. Note that there may be
-    a small period before the logging setup is finished where messages
-    will not appear.
-    
-    Fixes bug 1053512
-    
-    Change-Id: I559cca8ffc2a33beff22025e42a9713487245980
-    (cherry picked from commit a1cbbe2e9e5d7a5ec55ec1197571cd68fcdbad15)
+    Merge "Stop double logging to the console"
 
- cinder/__init__.py |    5 -----
- 1 file changed, 5 deletions(-)
+commit a978780f710a9eff34cd3720160ba2757d3215b9
+Merge: f551985 d051ca9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Sep 21 03:32:03 2012 +0000
 
-commit fe236e66094a172da63e09b36c905c7265156fd7
+    Merge "Set the default availability zone back to nova"
+
+commit bc0fb113af225878b4305da7d834673a6b7f5e97
 Author: Vishvananda Ishaya <vishvananda@gmail.com>
 Date:   Fri Sep 21 00:32:56 2012 +0000
 
@@ -171,19 +982,11 @@ Date:   Fri Sep 21 00:32:56 2012 +0000
     in the gating tests. Now it can be removed
     
     Change-Id: I970205910ac0950ab4a961aa0537eb964d7f0d3c
-    (cherry picked from commit bc0fb113af225878b4305da7d834673a6b7f5e97)
 
  cinder/api/openstack/volume/volumes.py |    3 ---
  1 file changed, 3 deletions(-)
 
-commit a0b9820dca0654cf3580533354f9af2444d84301
-Merge: 95cae99 78d12e8
-Author: Jenkins <jenkins@review.openstack.org>
-Date:   Fri Sep 21 04:04:03 2012 +0000
-
-    Merge "Set the default availability zone back to nova" into milestone-proposed
-
-commit 78d12e86e792c14dc075221613e2838eea948005
+commit d051ca9cdf828b1e47ef5158c4b83beb9484109e
 Author: Vishvananda Ishaya <vishvananda@gmail.com>
 Date:   Thu Sep 20 16:34:59 2012 +0000
 
@@ -200,7 +1003,6 @@ Date:   Thu Sep 20 16:34:59 2012 +0000
     Fixes bug 1053508
     
     Change-Id: I9c30ccc5c79b9c4e6c1ebeb3e80d0098e1ffbb11
-    (cherry picked from commit d051ca9cdf828b1e47ef5158c4b83beb9484109e)
 
  cinder/api/openstack/volume/volumes.py            |    3 +++
  cinder/flags.py                                   |    3 ++-
@@ -209,7 +1011,7 @@ Date:   Thu Sep 20 16:34:59 2012 +0000
  cinder/tests/test_service.py                      |    8 ++++----
  5 files changed, 13 insertions(+), 9 deletions(-)
 
-commit 95cae99475e7a0eb549478306f56210bb2b8a597
+commit f55198570fd59b7a2a4ddd2f5e77b3d03d0a3d64
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Thu Sep 20 17:27:13 2012 -0600
 
@@ -223,13 +1025,19 @@ Date:   Thu Sep 20 17:27:13 2012 -0600
     Fixes bug #1053717
     
     Change-Id: If82a66c6a78ab03da09223a7b79abe559a6f702f
-    (cherry picked from commit f55198570fd59b7a2a4ddd2f5e77b3d03d0a3d64)
 
  cinder/tests/test_HpSanISCSIDriver.py |    2 +-
  cinder/volume/san.py                  |    7 +++++--
  2 files changed, 6 insertions(+), 3 deletions(-)
 
-commit b33bf44eca13520587c94f00798988cee49475c9
+commit 6929fa2166b44e47da40e798148ed901ede673f1
+Merge: 730ebab 3b8a630
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Sep 20 22:59:47 2012 +0000
+
+    Merge "Fixes to the SolarisISCSI Driver"
+
+commit 3b8a6303e6c04f0c7b45043c2fcd53948910d37e
 Author: Yosef Berman <yosef@cloudscaling.com>
 Date:   Thu Sep 20 10:34:24 2012 -0700
 
@@ -242,19 +1050,96 @@ Date:   Thu Sep 20 10:34:24 2012 -0700
     Fix bug 1053041
     
     Change-Id: Ie3299f5065e2b084644ec2956f0c6ebae4264a49
-    (cherry picked from commit 3b8a6303e6c04f0c7b45043c2fcd53948910d37e)
 
  cinder/volume/san.py |   17 ++++++++++-------
  1 file changed, 10 insertions(+), 7 deletions(-)
 
-commit 6a88977fd47545461e02e3bee8bff0b70b59977e
-Merge: f8d49ae 6b31057
+commit a1cbbe2e9e5d7a5ec55ec1197571cd68fcdbad15
+Author: Vishvananda Ishaya <vishvananda@gmail.com>
+Date:   Thu Sep 20 16:52:51 2012 +0000
+
+    Stop double logging to the console
+    
+    The code in nova for logging added an extra root handler to be
+    able to log messages to the console during log setup. This handler
+    was removed in the setup method. The common setup method no longer
+    removes this handler, so don't create it. Note that there may be
+    a small period before the logging setup is finished where messages
+    will not appear.
+    
+    Fixes bug 1053512
+    
+    Change-Id: I559cca8ffc2a33beff22025e42a9713487245980
+
+ cinder/__init__.py |    5 -----
+ 1 file changed, 5 deletions(-)
+
+commit 730ebab71e11812b6b5990180e7bd9cabfe237c4
+Author: Thierry Carrez <thierry@openstack.org>
+Date:   Thu Sep 20 14:21:00 2012 +0200
+
+    Restore SIGPIPE default action for subprocesses
+    
+    Python ignores SIGPIPE on startup, because it prefers to check every
+    write and raise an IOError exception rather than taking the signal. Most
+    Unix subprocesses don't expect to work this way. This patch (adapted
+    from Colin Watson's post at http://tinyurl.com/2a7mzh5) sets SIGPIPE
+    back to the default action for cinder.utils.execute and cinder-rootwrap
+    created subprocesses.
+    
+    Fixes bug 1053364
+    
+    Change-Id: I4b3307bd2f0f5d0da529d8b7d80fabae28c57732
+
+ bin/cinder-rootwrap |    9 +++++++++
+ cinder/utils.py     |    8 ++++++++
+ 2 files changed, 17 insertions(+)
+
+commit 32721a67ae2936093aef5ecea4efd8b32a516c32
+Merge: 321d323 f14e955
 Author: Jenkins <jenkins@review.openstack.org>
-Date:   Thu Sep 20 03:14:43 2012 +0000
+Date:   Thu Sep 20 05:05:14 2012 +0000
 
-    Merge "Correct IetAdm remove_iscsi_target" into milestone-proposed
+    Merge "Correct IetAdm remove_iscsi_target"
 
-commit f8d49ae61021e1ad2aaaf2555c4954ba0e3dc026
+commit 4662fa29af88783cd9e95b553c044c733ea94753
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Wed Sep 19 17:07:47 2012 -0400
+
+    Replace builtin hash with MD5 to solve 32/64-bit issues.
+    
+    It seems that Python's builtin hash returns different
+    values on 32-bit and 64-bit architectures, so it's
+    safer to use a well-defined hash like MD5.
+    
+    bug 1050359
+    
+    Change-Id: I0a4f11b34a1f76cda279ec801cede1440c6e5966
+
+ cinder/tests/test_nfs.py |    9 +++++----
+ cinder/volume/nfs.py     |    4 ++--
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+commit f14e955735065a998cd78280661f6d33c850d9e2
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Wed Sep 19 11:18:51 2012 -0600
+
+    Correct IetAdm remove_iscsi_target
+    
+    Remove logical units should be done before delete the target while
+    unexport iSCSI volume. Or ietd will show "No such file or directory"
+    error.
+    
+    Fix bug 1043107
+    
+    Change-Id: Iab5b97044c5a30c788fcabce827923ff82a84b91
+
+ cinder/tests/test_iscsi.py |    4 ++--
+ cinder/utils.py            |   15 +++++++++++++++
+ cinder/volume/iscsi.py     |    5 ++---
+ 3 files changed, 19 insertions(+), 5 deletions(-)
+
+commit 321d32379cd6044378f2f9c32c068de18f514df5
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Tue Sep 18 13:29:20 2012 -0600
 
@@ -268,43 +1153,23 @@ Date:   Tue Sep 18 13:29:20 2012 -0600
     Addresses bug #1052598
     
     Change-Id: I7f32cf35e33320f4348b7bc44a8e92b5716b71d8
-    (cherry picked from commit 321d32379cd6044378f2f9c32c068de18f514df5)
 
  bin/cinder-manage |   12 +++++++++++-
  1 file changed, 11 insertions(+), 1 deletion(-)
 
-commit 6b310577e9ef8b24eb50df5fe5bcef28e1d260a7
-Author: John Griffith <john.griffith@solidfire.com>
-Date:   Wed Sep 19 11:18:51 2012 -0600
+commit 45e67e8b77ffbc783da111dda96add68f1687341
+Merge: cbf2e46 04ca527
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 18 20:13:30 2012 +0000
 
-    Correct IetAdm remove_iscsi_target
-    
-    Remove logical units should be done before delete the target while
-    unexport iSCSI volume. Or ietd will show "No such file or directory"
-    error.
-    
-    Fix bug 1043107
-    
-    Change-Id: Iab5b97044c5a30c788fcabce827923ff82a84b91
-    (cherry picked from commit f14e955735065a998cd78280661f6d33c850d9e2)
+    Merge "Add update to volume and snapshot controllers"
 
- cinder/tests/test_iscsi.py |    4 ++--
- cinder/utils.py            |   15 +++++++++++++++
- cinder/volume/iscsi.py     |    5 ++---
- 3 files changed, 19 insertions(+), 5 deletions(-)
+commit cbf2e466ad47c0911b10d5b16b734ed8311d250a
+Merge: a5e9461 8cf45c9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Sep 18 17:30:17 2012 +0000
 
-commit f4ab45cfe9dfa9df9277ce052f21607d4aa6f3c7
-Author: Thierry Carrez <thierry@openstack.org>
-Date:   Tue Sep 18 20:12:45 2012 +0200
-
-    Mark Cinder 2012.2 Final as we near RC1
-    
-    Mark Final=True as we prepare to publish Folsom RC1.
-    
-    Change-Id: Ie95dd290aef49633586a4b483c3c80dca3e72aa2
-
- cinder/version.py |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+    Merge "Bump version to 2013.1"
 
 commit a5e9461d47238579509fd558cc5e83a8102bb102
 Merge: 8c99195 58dd238
@@ -312,6 +1177,19 @@ Author: Jenkins <jenkins@review.openstack.org>
 Date:   Tue Sep 18 16:30:19 2012 +0000
 
     Merge "Clean up db.volume_create()"
+
+commit 8cf45c9382461d29c5449d2ab542d9746064df24
+Author: Thierry Carrez <thierry@openstack.org>
+Date:   Tue Sep 18 15:41:42 2012 +0200
+
+    Bump version to 2013.1
+    
+    Bump version to 2013.1 on master branch to open Grizzly development.
+    
+    Change-Id: Iad73bf47c4ff77216ee27c3b08117dcaa9487ddf
+
+ cinder/version.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 commit 8c9919582ce329822259474c55fec12f4a0dbf82
 Merge: 2693b40 f9cf780
@@ -707,6 +1585,48 @@ Date:   Tue Sep 11 21:41:30 2012 +0000
  cinder/tests/test_volume.py |    6 +++---
  cinder/volume/driver.py     |   22 +++++++++-------------
  2 files changed, 12 insertions(+), 16 deletions(-)
+
+commit 04ca527aa394376b20e1fc09b1cdd1ca8a0a105a
+Author: Clay Gerrard <clay.gerrard@gmail.com>
+Date:   Mon Aug 27 21:38:25 2012 +0000
+
+    Add update to volume and snapshot controllers
+    
+    Add update method to api.openstack.volume.volumes and snapshots
+    controllers.  Url mapping automatically routes a PUT on the resource to
+    the update method.  Implementation closely matches updates to server
+    resource for the openstack compute api.
+    
+    e.g.
+    
+    curl http://localhost:8776/v1/${PROJECT_ID}/volumes/${VOLUME_ID} \
+        -H 'x-auth-token: ${ADMIN_AUTH_TOKEN}' \
+        -H 'content-type: application/json' \
+        -XPUT -d '{"volume": {"display_name": "new-name"}}'
+    
+    Add volume.api.API.update_snapshot method to avoid making db calls
+    directly from the SnapshotsController.
+    
+    Add tests for new methods.
+    
+    Update return value of test_volume.VolumeTestCase._create_snapshot
+    to return the whole model like _create_volume
+    
+    fixes lp bug #1042904
+    
+    Change-Id: I887178f9b7834cc7afd54bba8fb902b630faf8c0
+
+ cinder/api/openstack/volume/snapshots.py           |   33 ++++++++++++
+ cinder/api/openstack/volume/volumes.py             |   33 ++++++++++++
+ cinder/tests/api/openstack/fakes.py                |    4 ++
+ .../tests/api/openstack/volume/test_snapshots.py   |   43 ++++++++++++++++
+ cinder/tests/api/openstack/volume/test_volumes.py  |   53 ++++++++++++++++++++
+ cinder/tests/integrated/api/client.py              |    3 ++
+ cinder/tests/integrated/test_volumes.py            |   17 +++++++
+ cinder/tests/policy.json                           |    1 +
+ cinder/tests/test_volume.py                        |   36 ++++++++++---
+ cinder/volume/api.py                               |    4 ++
+ 10 files changed, 221 insertions(+), 6 deletions(-)
 
 commit 2ed3eeb13514ce502ce1df873970404084b50999
 Merge: f070460 2c7c976

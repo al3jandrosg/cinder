@@ -59,7 +59,8 @@ class TargetAdmin(object):
     def _run(self, *args, **kwargs):
         self._execute(self._cmd, *args, run_as_root=True, **kwargs)
 
-    def create_iscsi_target(self, name, tid, lun, path, **kwargs):
+    def create_iscsi_target(self, name, tid, lun, path,
+                            chap_auth=None, **kwargs):
         """Create a iSCSI target and logical unit"""
         raise NotImplementedError()
 
@@ -105,18 +106,27 @@ class TgtAdm(TargetAdmin):
 
         return None
 
-    def create_iscsi_target(self, name, tid, lun, path, **kwargs):
+    def create_iscsi_target(self, name, tid, lun, path,
+                            chap_auth=None, **kwargs):
         # Note(jdg) tid and lun aren't used by TgtAdm but remain for
         # compatibility
 
         utils.ensure_tree(FLAGS.volumes_dir)
 
         vol_id = name.split(':')[1]
-        volume_conf = """
-            <target %s>
-                backing-store %s
-            </target>
-        """ % (name, path)
+        if chap_auth is None:
+            volume_conf = """
+                <target %s>
+                    backing-store %s
+                </target>
+            """ % (name, path)
+        else:
+            volume_conf = """
+                <target %s>
+                    backing-store %s
+                    %s
+                </target>
+            """ % (name, path, chap_auth)
 
         LOG.info(_('Creating volume: %s') % vol_id)
         volumes_dir = FLAGS.volumes_dir
@@ -125,6 +135,11 @@ class TgtAdm(TargetAdmin):
         f = open(volume_path, 'w+')
         f.write(volume_conf)
         f.close()
+
+        old_persist_file = None
+        old_name = kwargs.get('old_name', None)
+        if old_name is not None:
+            old_persist_file = os.path.join(volumes_dir, old_name)
 
         try:
             (out, err) = self._execute('tgt-admin',
@@ -147,6 +162,9 @@ class TgtAdm(TargetAdmin):
                         "contains 'include %(volumes_dir)s/*'") % locals())
             raise exception.NotFound()
 
+        if old_persist_file is not None and os.path.exists(old_persist_file):
+            os.unlink(old_persist_file)
+
         return tid
 
     def remove_iscsi_target(self, tid, lun, vol_id, **kwargs):
@@ -164,8 +182,8 @@ class TgtAdm(TargetAdmin):
                           iqn,
                           run_as_root=True)
         except exception.ProcessExecutionError, e:
-            LOG.error(_("Failed to create iscsi target for volume "
-                        "id:%(volume_id)s.") % locals())
+            LOG.error(_("Failed to delete iscsi target for volume "
+                        "id:%(vol_id)s.") % locals())
             raise exception.ISCSITargetRemoveFailed(volume_id=vol_id)
 
         os.unlink(volume_path)
@@ -186,9 +204,13 @@ class IetAdm(TargetAdmin):
     def __init__(self, execute=utils.execute):
         super(IetAdm, self).__init__('ietadm', execute)
 
-    def create_iscsi_target(self, name, tid, lun, path, **kwargs):
+    def create_iscsi_target(self, name, tid, lun, path,
+                            chap_auth=None, **kwargs):
         self._new_target(name, tid, **kwargs)
         self._new_logicalunit(tid, lun, path, **kwargs)
+        if chap_auth is not None:
+            (type, username, password) = chap_auth.split()
+            self._new_auth(tid, type, username, password, **kwargs)
         return tid
 
     def remove_iscsi_target(self, tid, lun, vol_id, **kwargs):
@@ -223,6 +245,13 @@ class IetAdm(TargetAdmin):
         self._run('--op', 'delete',
                   '--tid=%s' % tid,
                   '--lun=%d' % lun,
+                  **kwargs)
+
+    def _new_auth(self, tid, type, username, password, **kwargs):
+        self._run('--op', 'new',
+                  '--tid=%s' % tid,
+                  '--user',
+                  '--params=%s=%s,Password=%s' % (type, username, password),
                   **kwargs)
 
 
