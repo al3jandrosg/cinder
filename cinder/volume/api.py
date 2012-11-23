@@ -25,16 +25,17 @@ import functools
 from cinder.db import base
 from cinder import exception
 from cinder import flags
+from cinder.image import glance
 from cinder.openstack.common import cfg
 from cinder.openstack.common import excutils
-from cinder.image import glance
 from cinder.openstack.common import log as logging
 from cinder.openstack.common import rpc
 from cinder.openstack.common import timeutils
-from cinder.volume import volume_types
 import cinder.policy
 from cinder import quota
-
+from cinder.scheduler import rpcapi as scheduler_rpcapi
+from cinder.volume import rpcapi as volume_rpcapi
+from cinder.volume import volume_types
 
 volume_host_opt = cfg.BoolOpt('snapshot_same_host',
         default=True,
@@ -79,6 +80,8 @@ class API(base.Base):
     def __init__(self, db_driver=None, image_service=None):
         self.image_service = (image_service or
                               glance.get_default_image_service())
+        self.scheduler_rpcapi = scheduler_rpcapi.SchedulerAPI()
+        self.volume_rpcapi = volume_rpcapi.VolumeAPI()
         super(API, self).__init__(db_driver)
 
     def create(self, context, size, name, description, snapshot=None,
@@ -176,39 +179,50 @@ class API(base.Base):
                 finally:
                     QUOTAS.rollback(context, reservations)
 
-        self._cast_create_volume(context, volume['id'], snapshot_id,
-                                 image_id)
+        request_spec = {
+            'volume_properties': options,
+            'volume_type': volume_type,
+            'volume_id': volume['id'],
+            'snapshot_id': volume['snapshot_id'],
+            'image_id': image_id
+        }
+
+        filter_properties = {}
+
+        self._cast_create_volume(context, request_spec, filter_properties)
+
         return volume
 
-    def _cast_create_volume(self, context, volume_id, snapshot_id,
-                            image_id):
+    def _cast_create_volume(self, context, request_spec, filter_properties):
 
         # NOTE(Rongze Zhu): It is a simple solution for bug 1008866
         # If snapshot_id is set, make the call create volume directly to
         # the volume host where the snapshot resides instead of passing it
-        # through the scheduer. So snapshot can be copy to new volume.
+        # through the scheduler. So snapshot can be copy to new volume.
+        volume_id = request_spec['volume_id']
+        snapshot_id = request_spec['snapshot_id']
+        image_id = request_spec['image_id']
 
         if snapshot_id and FLAGS.snapshot_same_host:
             snapshot_ref = self.db.snapshot_get(context, snapshot_id)
             src_volume_ref = self.db.volume_get(context,
                                                 snapshot_ref['volume_id'])
-            topic = rpc.queue_get_for(context,
-                                      FLAGS.volume_topic,
-                                      src_volume_ref['host'])
-            rpc.cast(context,
-                     topic,
-                     {"method": "create_volume",
-                      "args": {"volume_id": volume_id,
-                               "snapshot_id": snapshot_id,
-                               "image_id": image_id}})
+            volume_ref = self.db.volume_get(context,
+                                            volume_id)
+            # bypass scheduler and send request directly to volume
+            self.volume_rpcapi.create_volume(context,
+                                            volume_ref,
+                                            src_volume_ref['host'],
+                                            snapshot_id,
+                                            image_id)
         else:
-            rpc.cast(context,
-                     FLAGS.scheduler_topic,
-                     {"method": "create_volume",
-                      "args": {"topic": FLAGS.volume_topic,
-                               "volume_id": volume_id,
-                               "snapshot_id": snapshot_id,
-                               "image_id": image_id}})
+            self.scheduler_rpcapi.create_volume(context,
+                                    FLAGS.volume_topic,
+                                    volume_id,
+                                    snapshot_id,
+                                    image_id,
+                                    request_spec=request_spec,
+                                    filter_properties=filter_properties)
 
     @wrap_check_policy
     def delete(self, context, volume, force=False):
@@ -240,11 +254,8 @@ class API(base.Base):
         now = timeutils.utcnow()
         self.db.volume_update(context, volume_id, {'status': 'deleting',
                                                    'terminated_at': now})
-        host = volume['host']
-        rpc.cast(context,
-                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
-                 {"method": "delete_volume",
-                  "args": {"volume_id": volume_id}})
+
+        self.volume_rpcapi.delete_volume(context, volume)
 
     @wrap_check_policy
     def update(self, context, volume, fields):
@@ -352,14 +363,6 @@ class API(base.Base):
             msg = _("already detached")
             raise exception.InvalidVolume(reason=msg)
 
-    def remove_from_compute(self, context, volume, instance_id, host):
-        """Remove volume from specified compute host."""
-        rpc.call(context,
-                 rpc.queue_get_for(context, FLAGS.compute_topic, host),
-                 {"method": "remove_volume_connection",
-                  "args": {'instance_id': instance_id,
-                           'volume_id': volume['id']}})
-
     @wrap_check_policy
     def reserve_volume(self, context, volume):
         self.update(context, volume, {"status": "attaching"})
@@ -380,40 +383,28 @@ class API(base.Base):
 
     @wrap_check_policy
     def attach(self, context, volume, instance_uuid, mountpoint):
-        host = volume['host']
-        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
-        return rpc.call(context, queue,
-                        {"method": "attach_volume",
-                         "args": {"volume_id": volume['id'],
-                                  "instance_uuid": instance_uuid,
-                                  "mountpoint": mountpoint}})
+        return self.volume_rpcapi.attach_volume(context,
+                                        volume,
+                                        instance_uuid,
+                                        mountpoint)
 
     @wrap_check_policy
     def detach(self, context, volume):
-        host = volume['host']
-        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
-        return rpc.call(context, queue,
-                 {"method": "detach_volume",
-                  "args": {"volume_id": volume['id']}})
+        return self.volume_rpcapi.detach_volume(context, volume)
 
     @wrap_check_policy
     def initialize_connection(self, context, volume, connector):
-        host = volume['host']
-        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
-        return rpc.call(context, queue,
-                        {"method": "initialize_connection",
-                         "args": {"volume_id": volume['id'],
-                                  "connector": connector}})
+        return self.volume_rpcapi.initialize_connection(context,
+                                                volume,
+                                                connector)
 
     @wrap_check_policy
-    def terminate_connection(self, context, volume, connector):
+    def terminate_connection(self, context, volume, connector, force=False):
         self.unreserve_volume(context, volume)
-        host = volume['host']
-        queue = rpc.queue_get_for(context, FLAGS.volume_topic, host)
-        return rpc.call(context, queue,
-                        {"method": "terminate_connection",
-                         "args": {"volume_id": volume['id'],
-                                  "connector": connector}})
+        return self.volume_rpcapi.terminate_connection(context,
+                                                volume,
+                                                connector,
+                                                force)
 
     def _create_snapshot(self, context, volume, name, description,
                          force=False):
@@ -434,12 +425,8 @@ class API(base.Base):
             'display_description': description}
 
         snapshot = self.db.snapshot_create(context, options)
-        host = volume['host']
-        rpc.cast(context,
-                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
-                 {"method": "create_snapshot",
-                  "args": {"volume_id": volume['id'],
-                           "snapshot_id": snapshot['id']}})
+        self.volume_rpcapi.create_snapshot(context, volume, snapshot)
+
         return snapshot
 
     def create_snapshot(self, context, volume, name, description):
@@ -458,11 +445,7 @@ class API(base.Base):
         self.db.snapshot_update(context, snapshot['id'],
                                 {'status': 'deleting'})
         volume = self.db.volume_get(context, snapshot['volume_id'])
-        host = volume['host']
-        rpc.cast(context,
-                 rpc.queue_get_for(context, FLAGS.volume_topic, host),
-                 {"method": "delete_snapshot",
-                  "args": {"snapshot_id": snapshot['id']}})
+        self.volume_rpcapi.delete_snapshot(context, snapshot, volume['host'])
 
     @wrap_check_policy
     def update_snapshot(self, context, snapshot, fields):
@@ -521,13 +504,8 @@ class API(base.Base):
 
         recv_metadata = self.image_service.create(context, metadata)
         self.update(context, volume, {'status': 'uploading'})
-        rpc.cast(context,
-                 rpc.queue_get_for(context,
-                                   FLAGS.volume_topic,
-                                   volume['host']),
-                 {"method": "copy_volume_to_image",
-                  "args": {"volume_id": volume['id'],
-                           "image_id": recv_metadata['id']}})
+        self.volume_rpcapi.copy_volume_to_image(context, volume,
+                                            recv_metadata['id'])
 
         response = {"id": volume['id'],
                "updated_at": volume['updated_at'],
@@ -541,3 +519,25 @@ class API(base.Base):
                "image_name": recv_metadata.get('name', None)
         }
         return response
+
+
+class HostAPI(base.Base):
+    def __init__(self):
+        super(HostAPI, self).__init__()
+
+    """Sub-set of the Volume Manager API for managing host operations."""
+    def set_host_enabled(self, context, host, enabled):
+        """Sets the specified host's ability to accept new volumes."""
+        raise NotImplementedError()
+
+    def get_host_uptime(self, context, host):
+        """Returns the result of calling "uptime" on the target host."""
+        raise NotImplementedError()
+
+    def host_power_action(self, context, host, action):
+        raise NotImplementedError()
+
+    def set_host_maintenance(self, context, host, mode):
+        """Start/Stop host maintenance window. On start, it triggers
+        volume evacuation."""
+        raise NotImplementedError()

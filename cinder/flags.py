@@ -130,18 +130,27 @@ global_opts = [
     cfg.StrOpt('volume_topic',
                default='cinder-volume',
                help='the topic volume nodes listen on'),
+    cfg.BoolOpt('enable_v1_api',
+                default=True,
+                help=_("Deploy v1 of the Cinder API. ")),
+    cfg.BoolOpt('enable_v2_api',
+                default=True,
+                help=_("Deploy v2 of the Cinder API. ")),
     cfg.BoolOpt('api_rate_limit',
                 default=True,
                 help='whether to rate limit the api'),
     cfg.ListOpt('osapi_volume_ext_list',
                 default=[],
                 help='Specify list of extensions to load when using osapi_'
-                     'volume_extension option with cinder.api.openstack.'
-                     'volume.contrib.select_extensions'),
+                     'volume_extension option with cinder.api.contrib.'
+                     'select_extensions'),
+    # NOTE(thingee): default contrib for old and new location for compatibility
     cfg.MultiStrOpt('osapi_volume_extension',
                     default=[
-                      'cinder.api.openstack.volume.contrib.standard_extensions'
-                      ],
+                        'cinder.api.openstack.volume.contrib.'
+                        'standard_extensions',
+                        'cinder.api.contrib.standard_extensions',
+                    ],
                     help='osapi volume extension to load'),
     cfg.StrOpt('osapi_compute_link_prefix',
                default=None,
@@ -217,6 +226,9 @@ global_opts = [
     cfg.StrOpt('control_exchange',
                default='cinder',
                help='AMQP exchange to connect to if using RabbitMQ or Qpid'),
+    cfg.BoolOpt('secure_delete',
+                default=True,
+                help='Whether to perform secure delete'),
 ]
 
 FLAGS.register_opts(global_opts)

@@ -19,8 +19,10 @@ import datetime
 import hashlib
 import os
 import os.path
+import paramiko
 import StringIO
 import tempfile
+import uuid
 
 import mox
 
@@ -435,31 +437,6 @@ class GenericUtilsTestCase(test.TestCase):
         self.assertEquals(h1, h2)
 
 
-class IsUUIDLikeTestCase(test.TestCase):
-    def assertUUIDLike(self, val, expected):
-        result = utils.is_uuid_like(val)
-        self.assertEqual(result, expected)
-
-    def test_good_uuid(self):
-        val = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-        self.assertUUIDLike(val, True)
-
-    def test_integer_passed(self):
-        val = 1
-        self.assertUUIDLike(val, False)
-
-    def test_non_uuid_string_passed(self):
-        val = 'foo-fooo'
-        self.assertUUIDLike(val, False)
-
-    def test_non_uuid_string_passed2(self):
-        val = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
-        self.assertUUIDLike(val, False)
-
-    def test_gen_valid_uuid(self):
-        self.assertUUIDLike(str(utils.gen_uuid()), True)
-
-
 class MonkeyPatchTestCase(test.TestCase):
     """Unit test for utils.monkey_patch()."""
     def setUp(self):
@@ -667,3 +644,88 @@ class AuditPeriodTest(test.TestCase):
                                            day=1,
                                            month=6,
                                            year=2011))
+
+
+class FakeSSHClient(object):
+
+    def __init__(self):
+        self.id = uuid.uuid4()
+        self.transport = FakeTransport()
+
+    def set_missing_host_key_policy(self, policy):
+        pass
+
+    def connect(self, ip, port=22, username=None, password=None,
+                pkey=None, timeout=10):
+        pass
+
+    def get_transport(self):
+        return self.transport
+
+    def close(self):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        pass
+
+
+class FakeSock(object):
+    def settimeout(self, timeout):
+        pass
+
+
+class FakeTransport(object):
+
+    def __init__(self):
+        self.active = True
+        self.sock = FakeSock()
+
+    def set_keepalive(self, timeout):
+        pass
+
+    def is_active(self):
+        return self.active
+
+
+class SSHPoolTestCase(test.TestCase):
+    """Unit test for SSH Connection Pool."""
+
+    def setup(self):
+        self.mox.StubOutWithMock(paramiko, "SSHClient")
+        paramiko.SSHClient().AndReturn(FakeSSHClient())
+        self.mox.ReplayAll()
+
+    def test_single_ssh_connect(self):
+        self.setup()
+        sshpool = utils.SSHPool("127.0.0.1", 22, 10, "test", password="test",
+                                min_size=1, max_size=1)
+        with sshpool.item() as ssh:
+            first_id = ssh.id
+
+        with sshpool.item() as ssh:
+            second_id = ssh.id
+
+        self.assertEqual(first_id, second_id)
+
+    def test_closed_reopend_ssh_connections(self):
+        self.setup()
+        sshpool = utils.SSHPool("127.0.0.1", 22, 10, "test", password="test",
+                                min_size=1, max_size=2)
+        with sshpool.item() as ssh:
+            first_id = ssh.id
+        with sshpool.item() as ssh:
+            second_id = ssh.id
+            # Close the connection and test for a new connection
+            ssh.get_transport().active = False
+
+        self.assertEqual(first_id, second_id)
+
+        # The mox items are not getting setup in a new pool connection,
+        # so had to reset and set again.
+        self.mox.UnsetStubs()
+        self.setup()
+
+        with sshpool.item() as ssh:
+            third_id = ssh.id
+
+        self.assertNotEqual(first_id, third_id)

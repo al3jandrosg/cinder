@@ -16,25 +16,24 @@
 #    under the License.
 
 import datetime
+import uuid
 
 import routes
 import webob
 import webob.dec
 import webob.request
 
-from cinder.api import auth as api_auth
-from cinder.api import openstack as openstack_api
-from cinder.api.openstack import auth
-from cinder.api.openstack.volume import limits
-from cinder.api.openstack import urlmap
-from cinder.api.openstack import volume
-from cinder.api.openstack.volume import versions
+from cinder.api.middleware import auth
+from cinder.api.middleware import fault
 from cinder.api.openstack import wsgi as os_wsgi
+from cinder.api import urlmap
+from cinder.api.v1 import limits
+from cinder.api.v1 import router
+from cinder.api import versions
 from cinder import context
 from cinder import exception as exc
-from cinder import utils
-from cinder import wsgi
 from cinder.openstack.common import timeutils
+from cinder import wsgi
 
 
 FAKE_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -65,25 +64,25 @@ def fake_wsgi(self, req):
 def wsgi_app(inner_app_v1=None, fake_auth=True, fake_auth_context=None,
         use_no_auth=False, ext_mgr=None):
     if not inner_app_v1:
-        inner_app_v1 = volume.APIRouter(ext_mgr)
+        inner_app_v1 = router.APIRouter(ext_mgr)
 
     if fake_auth:
         if fake_auth_context is not None:
             ctxt = fake_auth_context
         else:
             ctxt = context.RequestContext('fake', 'fake', auth_token=True)
-        api_v1 = openstack_api.FaultWrapper(api_auth.InjectContext(ctxt,
+        api_v1 = fault.FaultWrapper(auth.InjectContext(ctxt,
               inner_app_v1))
     elif use_no_auth:
-        api_v1 = openstack_api.FaultWrapper(auth.NoAuthMiddleware(
+        api_v1 = fault.FaultWrapper(auth.NoAuthMiddleware(
               limits.RateLimitingMiddleware(inner_app_v1)))
     else:
-        api_v1 = openstack_api.FaultWrapper(auth.AuthMiddleware(
+        api_v1 = fault.FaultWrapper(auth.AuthMiddleware(
               limits.RateLimitingMiddleware(inner_app_v1)))
 
     mapper = urlmap.URLMap()
     mapper['/v1'] = api_v1
-    mapper['/'] = openstack_api.FaultWrapper(versions.Versions())
+    mapper['/'] = fault.FaultWrapper(versions.Versions())
     return mapper
 
 
@@ -172,7 +171,7 @@ class FakeRateLimiter(object):
 
 def get_fake_uuid(token=0):
     if not token in FAKE_UUIDS:
-        FAKE_UUIDS[token] = str(utils.gen_uuid())
+        FAKE_UUIDS[token] = str(uuid.uuid4())
     return FAKE_UUIDS[token]
 
 
@@ -188,6 +187,7 @@ def stub_volume(id, **kwargs):
         'mountpoint': '/',
         'status': 'fakestatus',
         'attach_status': 'attached',
+        'bootable': 'false',
         'name': 'vol name',
         'display_name': 'displayname',
         'display_description': 'displaydesc',

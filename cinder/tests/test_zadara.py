@@ -23,9 +23,9 @@ import copy
 import httplib
 
 from cinder import exception
-from cinder import test
 from cinder.openstack.common import log as logging
-from cinder.volume import zadara
+from cinder import test
+from cinder.volume.drivers import zadara
 
 from lxml import etree
 

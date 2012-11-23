@@ -1,0 +1,27 @@
+From f97ae564a10b837490a9f846b4b715e909093d03 Mon Sep 17 00:00:00 2001
+From: Chuck Short <chuck.short@canonical.com>
+Date: Thu, 22 Nov 2012 08:31:22 -0600
+Subject: [PATCH] Avoid installation of python-setuptools-git
+
+Remove setuptools_git from pip-requires so that it is not automatically
+added to the dependency list by dh_python2, and avoid having it and its
+dependencies (git!) installed with python-nova.
+
+Signed-off-by: Chuck Short <chuck.short@canonical.com>
+---
+ tools/pip-requires | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tools/pip-requires b/tools/pip-requires
+index 1a460b5..de056ce 100644
+--- a/tools/pip-requires
++++ b/tools/pip-requires
+@@ -16,5 +16,4 @@ suds==0.4
+ paramiko
+ Babel>=0.9.6
+ iso8601>=0.1.4
+-setuptools_git>=0.4
+ python-glanceclient>=0.5.0,<2
+-- 
+1.8.0
+

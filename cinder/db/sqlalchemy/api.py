@@ -21,16 +21,9 @@
 
 import datetime
 import functools
+import uuid
 import warnings
 
-from cinder import db
-from cinder import exception
-from cinder import flags
-from cinder import utils
-from cinder.openstack.common import log as logging
-from cinder.db.sqlalchemy import models
-from cinder.db.sqlalchemy.session import get_session
-from cinder.openstack.common import timeutils
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
@@ -38,8 +31,18 @@ from sqlalchemy.orm import joinedload_all
 from sqlalchemy.sql.expression import asc
 from sqlalchemy.sql.expression import desc
 from sqlalchemy.sql.expression import literal_column
-from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import literal_column
+from sqlalchemy.sql import func
+
+from cinder import db
+from cinder.db.sqlalchemy import models
+from cinder.db.sqlalchemy.session import get_session
+from cinder import exception
+from cinder import flags
+from cinder.openstack.common import log as logging
+from cinder.openstack.common import timeutils
+from cinder.openstack.common import uuidutils
+
 
 FLAGS = flags.FLAGS
 
@@ -135,6 +138,20 @@ def require_volume_exists(f):
     def wrapper(context, volume_id, *args, **kwargs):
         db.volume_get(context, volume_id)
         return f(context, volume_id, *args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+
+def require_snapshot_exists(f):
+    """Decorator to require the specified snapshot to exist.
+
+    Requires the wrapped function to use context and snapshot_id as
+    their first two arguments.
+    """
+
+    def wrapper(context, snapshot_id, *args, **kwargs):
+        db.api.snapshot_get(context, snapshot_id)
+        return f(context, snapshot_id, *args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
 
@@ -254,11 +271,14 @@ def service_get_all_by_topic(context, topic):
 
 @require_admin_context
 def service_get_by_host_and_topic(context, host, topic):
-    return model_query(context, models.Service, read_deleted="no").\
+    result = model_query(context, models.Service, read_deleted="no").\
                 filter_by(disabled=False).\
                 filter_by(host=host).\
                 filter_by(topic=topic).\
                 first()
+    if not result:
+        raise exception.ServiceNotFound(host=host, topic=topic)
+    return result
 
 
 @require_admin_context
@@ -733,7 +753,7 @@ def quota_reserve(context, resources, quotas, deltas, expire,
             reservations = []
             for resource, delta in deltas.items():
                 reservation = reservation_create(elevated,
-                                                 str(utils.gen_uuid()),
+                                                 str(uuid.uuid4()),
                                                  usages[resource],
                                                  context.project_id,
                                                  resource, delta, expire,
@@ -893,7 +913,7 @@ def volume_allocate_iscsi_target(context, volume_id, host):
 
 @require_admin_context
 def volume_attached(context, volume_id, instance_uuid, mountpoint):
-    if not utils.is_uuid_like(instance_uuid):
+    if not uuidutils.is_uuid_like(instance_uuid):
         raise exception.InvalidUUID(instance_uuid)
 
     session = get_session()
@@ -912,7 +932,7 @@ def volume_create(context, values):
                                                models.VolumeMetadata)
     volume_ref = models.Volume()
     if not values.get('id'):
-        values['id'] = str(utils.gen_uuid())
+        values['id'] = str(uuid.uuid4())
     volume_ref.update(values)
 
     session = get_session()
@@ -920,6 +940,20 @@ def volume_create(context, values):
         volume_ref.save(session=session)
 
     return volume_get(context, values['id'], session=session)
+
+
+@require_admin_context
+def volume_data_get_for_host(context, host, session=None):
+    result = model_query(context,
+                         func.count(models.Volume.id),
+                         func.sum(models.Volume.size),
+                         read_deleted="no",
+                         session=session).\
+                     filter_by(host=host).\
+                     first()
+
+    # NOTE(vish): convert None to 0
+    return (result[0] or 0, result[1] or 0)
 
 
 @require_admin_context
@@ -1043,6 +1077,7 @@ def volume_update(context, volume_id, values):
         volume_ref = volume_get(context, volume_id, session=session)
         volume_ref.update(values)
         volume_ref.save(session=session)
+        return volume_ref
 
 
 ####################
@@ -1130,7 +1165,7 @@ def volume_metadata_update(context, volume_id, metadata, delete):
 def snapshot_create(context, values):
     snapshot_ref = models.Snapshot()
     if not values.get('id'):
-        values['id'] = str(utils.gen_uuid())
+        values['id'] = str(uuid.uuid4())
     snapshot_ref.update(values)
 
     session = get_session()
@@ -1182,6 +1217,21 @@ def snapshot_get_all_by_project(context, project_id):
     return model_query(context, models.Snapshot).\
                    filter_by(project_id=project_id).\
                    all()
+
+
+@require_context
+def snapshot_data_get_for_project(context, project_id, session=None):
+    authorize_project_context(context, project_id)
+    result = model_query(context,
+                         func.count(models.Snapshot.id),
+                         func.sum(models.Snapshot.volume_size),
+                         read_deleted="no",
+                         session=session).\
+                     filter_by(project_id=project_id).\
+                     first()
+
+    # NOTE(vish): convert None to 0
+    return (result[0] or 0, result[1] or 0)
 
 
 @require_context
@@ -1430,6 +1480,134 @@ def volume_type_extra_specs_update_or_create(context, volume_type_id,
                          "deleted": 0})
         spec_ref.save(session=session)
     return specs
+
+
+####################
+
+
+@require_context
+@require_volume_exists
+def volume_glance_metadata_get(context, volume_id, session=None):
+    """Return the Glance metadata for the specified volume."""
+    if not session:
+        session = get_session()
+
+    return session.query(models.VolumeGlanceMetadata).\
+                         filter_by(volume_id=volume_id).\
+                         filter_by(deleted=False).all()
+
+
+@require_context
+@require_snapshot_exists
+def volume_snapshot_glance_metadata_get(context, snapshot_id, session=None):
+    """Return the Glance metadata for the specified snapshot."""
+    if not session:
+        session = get_session()
+
+    return session.query(models.VolumeGlanceMetadata).\
+                         filter_by(snapshot_id=snapshot_id).\
+                         filter_by(deleted=False).all()
+
+
+@require_context
+@require_volume_exists
+def volume_glance_metadata_create(context, volume_id, key, value,
+                                  session=None):
+    """
+    Update the Glance metadata for a volume by adding a new key:value pair.
+    This API does not support changing the value of a key once it has been
+    created.
+    """
+    if session is None:
+        session = get_session()
+
+    with session.begin():
+        rows = session.query(models.VolumeGlanceMetadata).\
+                filter_by(volume_id=volume_id).\
+                filter_by(key=key).\
+                filter_by(deleted=False).all()
+
+        if len(rows) > 0:
+            raise exception.GlanceMetadataExists(key=key,
+                                                 volume_id=volume_id)
+
+        vol_glance_metadata = models.VolumeGlanceMetadata()
+        vol_glance_metadata.volume_id = volume_id
+        vol_glance_metadata.key = key
+        vol_glance_metadata.value = value
+
+        vol_glance_metadata.save(session=session)
+
+    return
+
+
+@require_context
+@require_snapshot_exists
+def volume_glance_metadata_copy_to_snapshot(context, snapshot_id, volume_id,
+                                            session=None):
+    """
+    Update the Glance metadata for a snapshot by copying all of the key:value
+    pairs from the originating volume. This is so that a volume created from
+    the snapshot will retain the original metadata.
+    """
+    if session is None:
+        session = get_session()
+
+    metadata = volume_glance_metadata_get(context, volume_id, session=session)
+    with session.begin():
+        for meta in metadata:
+            vol_glance_metadata = models.VolumeGlanceMetadata()
+            vol_glance_metadata.snapshot_id = snapshot_id
+            vol_glance_metadata.key = meta['key']
+            vol_glance_metadata.value = meta['value']
+
+            vol_glance_metadata.save(session=session)
+
+
+@require_context
+@require_volume_exists
+def volume_glance_metadata_copy_to_volume(context, volume_id, snapshot_id,
+                                          session=None):
+    """
+    Update the Glance metadata from a volume (created from a snapshot) by
+    copying all of the key:value pairs from the originating snapshot. This is
+    so that the Glance metadata from the original volume is retained.
+    """
+    if session is None:
+        session = get_session()
+
+    metadata = volume_snapshot_glance_metadata_get(context, snapshot_id,
+                                                session=session)
+    with session.begin():
+        for meta in metadata:
+            vol_glance_metadata = models.VolumeGlanceMetadata()
+            vol_glance_metadata.volume_id = volume_id
+            vol_glance_metadata.key = meta['key']
+            vol_glance_metadata.value = meta['value']
+
+            vol_glance_metadata.save(session=session)
+
+
+@require_context
+def volume_glance_metadata_delete_by_volume(context, volume_id):
+    session = get_session()
+    session.query(models.VolumeGlanceMetadata).\
+        filter_by(volume_id=volume_id).\
+        filter_by(deleted=False).\
+        update({'deleted': True,
+                'deleted_at': timeutils.utcnow(),
+                'updated_at': literal_column('updated_at')})
+
+
+@require_context
+def volume_glance_metadata_delete_by_snapshot(context, snapshot_id):
+    session = get_session()
+    session.query(models.VolumeGlanceMetadata).\
+        filter_by(snapshot_id=snapshot_id).\
+        filter_by(deleted=False).\
+        update({'deleted': True,
+                'deleted_at': timeutils.utcnow(),
+                'updated_at': literal_column('updated_at')})
 
 
 ####################

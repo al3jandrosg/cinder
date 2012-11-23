@@ -21,11 +21,11 @@
 SQLAlchemy models for cinder data.
 """
 
-from sqlalchemy.orm import relationship, backref, object_mapper
-from sqlalchemy import Column, Integer, String, schema
-from sqlalchemy import ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, schema
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import ForeignKey, DateTime, Boolean
+from sqlalchemy.orm import relationship, backref, object_mapper
 
 from cinder.db.sqlalchemy.session import get_session
 
@@ -205,6 +205,21 @@ class VolumeTypeExtraSpecs(BASE, CinderBase):
     )
 
 
+class VolumeGlanceMetadata(BASE, CinderBase):
+    """Glance metadata for a bootable volume"""
+    __tablename__ = 'volume_glance_metadata'
+    id = Column(Integer, primary_key=True, nullable=False)
+    volume_id = Column(String(36), ForeignKey('volumes.id'))
+    snapshot_id = Column(String(36), ForeignKey('snapshots.id'))
+    key = Column(String(255))
+    value = Column(Text)
+    volume = relationship(Volume, backref="volume_glance_metadata",
+                          foreign_keys=volume_id,
+                          primaryjoin='and_('
+                          'VolumeGlanceMetadata.volume_id == Volume.id,'
+                          'VolumeGlanceMetadata.deleted == False)')
+
+
 class Quota(BASE, CinderBase):
     """Represents a single quota override for a project.
 
@@ -378,6 +393,7 @@ def register_models():
               VolumeMetadata,
               VolumeTypeExtraSpecs,
               VolumeTypes,
+              VolumeGlanceMetadata,
               )
     engine = create_engine(FLAGS.sql_connection, echo=False)
     for model in models:
