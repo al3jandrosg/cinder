@@ -31,7 +31,7 @@ authorize = extensions.extension_authorizer('volume', 'types_manage')
 
 
 class VolumeTypesManageController(wsgi.Controller):
-    """ The volume types API controller for the OpenStack API """
+    """The volume types API controller for the OpenStack API."""
 
     _view_builder_class = views_types.ViewBuilder
 
@@ -64,13 +64,13 @@ class VolumeTypesManageController(wsgi.Controller):
 
     @wsgi.action("delete")
     def _delete(self, req, id):
-        """ Deletes an existing volume type """
+        """Deletes an existing volume type."""
         context = req.environ['cinder.context']
         authorize(context)
 
         try:
             vol_type = volume_types.get_volume_type(context, id)
-            volume_types.destroy(context, vol_type['name'])
+            volume_types.destroy(context, vol_type['id'])
         except exception.NotFound:
             raise webob.exc.HTTPNotFound()
 
@@ -78,7 +78,7 @@ class VolumeTypesManageController(wsgi.Controller):
 
 
 class Types_manage(extensions.ExtensionDescriptor):
-    """Types manage support"""
+    """Types manage support."""
 
     name = "TypesManage"
     alias = "os-types-manage"

@@ -3,8 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Chuck Short <zulcss@ubuntu.com>
 Build-Depends: debhelper (>= 8.0.0),
- python-all (>= 2.6),
- python-all-dev (>= 2.6.6-3~)
+ python-all (>= 2.6)
 Build-Depends-Indep:
  python-sqlalchemy,
  python-setuptools,
@@ -20,6 +19,7 @@ Build-Depends-Indep:
  python-webob,
  python-greenlet,
  python-glanceclient,
+ python-keystoneclient,
  python-pastedeploy,
  python-paste,
  python-migrate,
@@ -36,6 +36,7 @@ Build-Depends-Indep:
  python-setuptools-git,
  python-mysqldb,
  pep8,
+ python-stevedore (>= 0.7)
 Standards-Version: 3.9.3
 Homepage: http://launchpad.net/cinder
 
@@ -64,27 +65,42 @@ Depends: ${python:Depends}, python-sqlalchemy,
  python-iso8601,
  python-glanceclient,
  ${misc:Depends}
-Description: Cinder python libraries
- Cinder is a storage service for the Openstack project.
+Description: Cinder Python libraries
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
  .
- This package contains the proython parts of cinder.
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains the Python library for Cinder.
 
 Package: cinder-common
 Architecture: all
 Depends: python-cinder (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
 Provides: ${python:Provides}
-Description: Cinder starage service - common files
- Cinder is a storage service for the Openstack project
+Description: Cinder storage service - common files
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
  .
- This package contains things that are needed for all parts of cinder
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains commons components for Cinder.
 
 Package: cinder-api
 Architecture: all
 Depends: cinder-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: Cinder storage service - api server
- Cinder is a storage service for the Openstack project
+Description: Cinder storage service - API server
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
  .
- This package contains the api server
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains the Cinder API server.
 
 Package: cinder-volume
 Architecture: all
@@ -96,15 +112,25 @@ Depends: cinder-common (= ${binary:Version}),
 Suggests: ceph-common
 Breaks: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
 Replaces: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
-Description: Cinder storage service - api server
- Cinder is a storage service for the Openstack project
+Description: Cinder storage service - Volume server
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
  .
- This package contains the volume server
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains the Cinder Volume server.
 
 Package: cinder-scheduler
 Architecture: all
 Depends: cinder-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
-Description: Cinder storage service - api server
- Cinder is a storage service for the Openstack project
+Description: Cinder storage service - Scheduler server
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
  .
- This package contains the scheduler server
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains the Cinder Scheduler server.

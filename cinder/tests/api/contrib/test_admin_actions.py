@@ -1,3 +1,5 @@
+import shutil
+import tempfile
 import webob
 
 from cinder import context
@@ -5,7 +7,8 @@ from cinder import db
 from cinder import exception
 from cinder.openstack.common import jsonutils
 from cinder import test
-from cinder.tests.api.openstack import fakes
+from cinder.tests.api import fakes
+from cinder.tests.api.v2 import stubs
 from cinder.volume import api as volume_api
 
 
@@ -13,23 +16,28 @@ def app():
     # no auth, just let environ['cinder.context'] pass through
     api = fakes.router.APIRouter()
     mapper = fakes.urlmap.URLMap()
-    mapper['/v1'] = api
+    mapper['/v2'] = api
     return mapper
 
 
 class AdminActionsTest(test.TestCase):
 
     def setUp(self):
+        self.tempdir = tempfile.mkdtemp()
         super(AdminActionsTest, self).setUp()
         self.flags(rpc_backend='cinder.openstack.common.rpc.impl_fake')
+        self.flags(lock_path=self.tempdir)
         self.volume_api = volume_api.API()
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir)
 
     def test_reset_status_as_admin(self):
         # admin context
         ctx = context.RequestContext('admin', 'fake', True)
         # current status is available
         volume = db.volume_create(ctx, {'status': 'available'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # request status of 'error'
@@ -47,7 +55,7 @@ class AdminActionsTest(test.TestCase):
         # current status is 'error'
         volume = db.volume_create(context.get_admin_context(),
                                   {'status': 'error'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # request changing status to available
@@ -67,7 +75,7 @@ class AdminActionsTest(test.TestCase):
         ctx = context.RequestContext('admin', 'fake', True)
         # current status is available
         volume = db.volume_create(ctx, {'status': 'available'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # malformed request body
@@ -86,7 +94,7 @@ class AdminActionsTest(test.TestCase):
         ctx = context.RequestContext('admin', 'fake', True)
         # current status is available
         volume = db.volume_create(ctx, {'status': 'available'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # 'invalid' is not a valid status
@@ -104,7 +112,7 @@ class AdminActionsTest(test.TestCase):
         # admin context
         ctx = context.RequestContext('admin', 'fake', True)
         # missing-volume-id
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' %
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' %
                                   'missing-volume-id')
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
@@ -125,7 +133,7 @@ class AdminActionsTest(test.TestCase):
         # current status is available
         volume = db.volume_create(ctx, {'status': 'available',
                                         'attach_status': 'attached'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # request update attach_status to detached
@@ -149,7 +157,7 @@ class AdminActionsTest(test.TestCase):
         # current status is available
         volume = db.volume_create(ctx, {'status': 'available',
                                         'attach_status': 'detached'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # 'invalid' is not a valid attach_status
@@ -173,7 +181,7 @@ class AdminActionsTest(test.TestCase):
         volume = db.volume_create(ctx, {})
         snapshot = db.snapshot_create(ctx, {'status': 'error_deleting',
                                             'volume_id': volume['id']})
-        req = webob.Request.blank('/v1/fake/snapshots/%s/action' %
+        req = webob.Request.blank('/v2/fake/snapshots/%s/action' %
                                   snapshot['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
@@ -195,7 +203,7 @@ class AdminActionsTest(test.TestCase):
         volume = db.volume_create(ctx, {})
         snapshot = db.snapshot_create(ctx, {'status': 'available',
                                             'volume_id': volume['id']})
-        req = webob.Request.blank('/v1/fake/snapshots/%s/action' %
+        req = webob.Request.blank('/v2/fake/snapshots/%s/action' %
                                   snapshot['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
@@ -216,7 +224,7 @@ class AdminActionsTest(test.TestCase):
         ctx = context.RequestContext('admin', 'fake', True)
         # current status is creating
         volume = db.volume_create(ctx, {'status': 'creating'})
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         req.body = jsonutils.dumps({'os-force_delete': {}})
@@ -236,7 +244,7 @@ class AdminActionsTest(test.TestCase):
         snapshot = db.snapshot_create(ctx, {'status': 'creating',
                                             'volume_size': 1,
                                             'volume_id': volume['id']})
-        path = '/v1/fake/snapshots/%s/action' % snapshot['id']
+        path = '/v2/fake/snapshots/%s/action' % snapshot['id']
         req = webob.Request.blank(path)
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
@@ -264,15 +272,15 @@ class AdminActionsTest(test.TestCase):
         self.volume_api.reserve_volume(ctx, volume)
         self.volume_api.initialize_connection(ctx, volume, {})
         mountpoint = '/dev/vbd'
-        self.volume_api.attach(ctx, volume, fakes.FAKE_UUID, mountpoint)
+        self.volume_api.attach(ctx, volume, stubs.FAKE_UUID, mountpoint)
         # volume is attached
         volume = db.volume_get(ctx, volume['id'])
         self.assertEquals(volume['status'], 'in-use')
-        self.assertEquals(volume['instance_uuid'], fakes.FAKE_UUID)
+        self.assertEquals(volume['instance_uuid'], stubs.FAKE_UUID)
         self.assertEquals(volume['mountpoint'], mountpoint)
         self.assertEquals(volume['attach_status'], 'attached')
         # build request to force detach
-        req = webob.Request.blank('/v1/fake/volumes/%s/action' % volume['id'])
+        req = webob.Request.blank('/v2/fake/volumes/%s/action' % volume['id'])
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
         # request status of 'error'
@@ -289,3 +297,44 @@ class AdminActionsTest(test.TestCase):
         self.assertEquals(volume['instance_uuid'], None)
         self.assertEquals(volume['mountpoint'], None)
         self.assertEquals(volume['attach_status'], 'detached')
+
+    def test_attach_in_use_volume(self):
+        """Test that attaching to an in-use volume fails."""
+        # admin context
+        ctx = context.RequestContext('admin', 'fake', True)
+        # current status is available
+        volume = db.volume_create(ctx, {'status': 'available', 'host': 'test',
+                                        'provider_location': ''})
+        # start service to handle rpc messages for attach requests
+        self.start_service('volume', host='test')
+        self.volume_api.reserve_volume(ctx, volume)
+        self.volume_api.initialize_connection(ctx, volume, {})
+        mountpoint = '/dev/vbd'
+        self.volume_api.attach(ctx, volume, stubs.FAKE_UUID, mountpoint)
+        self.assertRaises(exception.InvalidVolume,
+                          self.volume_api.attach,
+                          ctx,
+                          volume,
+                          fakes.get_fake_uuid(),
+                          mountpoint)
+
+    def test_attach_attaching_volume_with_different_instance(self):
+        """Test that attaching volume reserved for another instance fails."""
+        # admin context
+        ctx = context.RequestContext('admin', 'fake', True)
+        # current status is available
+        volume = db.volume_create(ctx, {'status': 'available', 'host': 'test',
+                                        'provider_location': ''})
+        # start service to handle rpc messages for attach requests
+        self.start_service('volume', host='test')
+        self.volume_api.initialize_connection(ctx, volume, {})
+        values = {'status': 'attaching',
+                  'instance_uuid': fakes.get_fake_uuid()}
+        db.volume_update(ctx, volume['id'], values)
+        mountpoint = '/dev/vbd'
+        self.assertRaises(exception.InvalidVolume,
+                          self.volume_api.attach,
+                          ctx,
+                          volume,
+                          stubs.FAKE_UUID,
+                          mountpoint)

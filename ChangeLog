@@ -1,3 +1,1572 @@
+commit 141a4cab68cae6eef7f3fcc22b40e6c708e19126
+Merge: c622cc7 8dd2140
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 09:59:11 2013 +0000
+
+    Merge "Implement filter scheduler"
+
+commit c622cc7a103e946726bd968a05990140dd1836b7
+Merge: 9853972 027b78a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 07:28:18 2013 +0000
+
+    Merge "Provide HP 3PAR array iSCSI driver"
+
+commit 985397225ba942c086ffa6c5ab14a0d79c01e597
+Merge: ba9604b c6f7f19
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 04:02:39 2013 +0000
+
+    Merge "Use tempdir for lock_path in tests."
+
+commit ba9604b0d8abe353926899eee2b072cd56e24262
+Merge: cba4194 f791565
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 02:19:50 2013 +0000
+
+    Merge "Enable cinder exception format checking in tests."
+
+commit cba41944b54caf6e5bdd244c63c9e0f298fc2dfc
+Merge: a3a28fe 3cb7ee4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 02:12:36 2013 +0000
+
+    Merge "Update exceptions to pass correct kwargs."
+
+commit a3a28fe010437878d17f0b31f51b9139873794a9
+Merge: edb5491 a363c41
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 9 02:12:33 2013 +0000
+
+    Merge "Add option to make exception format errors fatal."
+
+commit 027b78a214e1f7ab7bbda342a024cb13dae8944d
+Author: Walter A. Boring IV <walter.boring@hp.com>
+Date:   Tue Dec 18 14:16:33 2012 -0800
+
+    Provide HP 3PAR array iSCSI driver
+    
+    implements blueprint hp3par-volume-driver
+    
+    We have the driver broken into 2 files:
+    hp_3par_common.py and
+    hp_3par_iscsi.py
+    
+    The reason we do this is because we have a fibre channel driver
+    that will be submitted shortly after this is committed.   The
+    fibre channel driver and the iscsi driver share a lot of the same
+    code that talks to the 3PAR array for provisioning.  So,
+    it made sense not to have duplicate code.  The fibre channel driver
+    will be dependent on the fibre channel support I am actively working
+    on for nova/cinder grizzly release.
+    
+    The driver uses a 2 mechanisms to talk to the 3PAR array:
+    1) a python REST client (hp3parclient) that lives in the pypi
+       repository here:
+       http://pypi.python.org/pypi/hp3parclient
+    
+    2) SSH.  We had to pull in some of the ssh code from the base san
+       driver to help fix an issue with executing commands on the 3PAR
+       array.  The 3PAR has the ability to turn on CSV output for command
+       results, which makes this easier to parse.  Unfortunately, there
+       is no way to turn CSV mode on permanently for all ssh requests.
+       So, we have to turn on the CSV output for every single ssh command
+       issued.  Since we use ssh as well, we require the san_* options
+       to be set.
+    
+    We use a dual mechianism because the REST API that ships with the 3.1.2
+    firmware doesn't support all of the capabilities a cinder driver needs
+    to export volumes.
+    
+    When a newer version of the firmware comes out that supports host
+    management on the 3PAR array, then we will get rid of the SSH code.
+    
+    Change-Id: I9826ba1a36e27a9be05457ee9236a491dbfd0713
+
+ cinder/tests/test_hp3par_iscsi.py              |  443 ++++++++++++++++++++++
+ cinder/volume/drivers/san/hp/hp_3par_common.py |  484 ++++++++++++++++++++++++
+ cinder/volume/drivers/san/hp/hp_3par_iscsi.py  |  232 ++++++++++++
+ etc/cinder/cinder.conf.sample                  |   30 ++
+ tools/test-requires                            |    1 +
+ 5 files changed, 1190 insertions(+)
+
+commit edb5491070f7a6bab257089e7b98278b68949cb1
+Author: Dan Prince <dprince@redhat.com>
+Date:   Tue Jan 8 14:00:09 2013 -0500
+
+    Fix CinderClient exception name in EMCISCSIDriver.
+    
+    Change NovaException to CinderException in the emc driver.
+    
+    Change-Id: Id84ca2a354afc6a7b795aef779a9fdd2567ce0d6
+
+ cinder/volume/drivers/emc.py |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+commit f791565c5bff7b08bc10af538e54d0505457ef41
+Author: Dan Prince <dprince@redhat.com>
+Date:   Tue Jan 8 13:24:49 2013 -0500
+
+    Enable cinder exception format checking in tests.
+    
+    Updates the Cinder test runner so that it enables
+    'fatal_exception_format_errors' for testing.
+    
+    Includes a bunch of fixes to test exceptions as well so they
+    will continue to pass.
+    
+    Change-Id: Idd30a810fb81e8e14490644779c3e03b6af25ff3
+
+ cinder/test.py                                     |    1 +
+ .../contrib/test_extended_snapshot_attributes.py   |    2 +-
+ cinder/tests/api/contrib/test_volume_actions.py    |    2 +-
+ cinder/tests/test_exception.py                     |    3 +++
+ cinder/tests/test_misc.py                          |    2 ++
+ cinder/tests/test_volume.py                        |    6 ++++--
+ cinder/tests/test_xiv.py                           |   12 ++++++------
+ 7 files changed, 18 insertions(+), 10 deletions(-)
+
+commit 3cb7ee45557ad68458bb96c3f4bcea1f796dcde9
+Author: Dan Prince <dprince@redhat.com>
+Date:   Tue Jan 8 13:23:15 2013 -0500
+
+    Update exceptions to pass correct kwargs.
+    
+    Updates a variety of Cinder exceptions so that they pass the correct
+    kwargs for proper exception message formatting. Previously
+    these exceptions would work but have incorrect error messages
+    because of how CinderException handled exception formatting errors.
+    
+    Change-Id: Id1d15b112cad46a698227fa172d81a9ab586e66e
+
+ cinder/db/sqlalchemy/api.py             |    2 +-
+ cinder/volume/driver.py                 |    6 +++---
+ cinder/volume/drivers/nexenta/volume.py |    4 ++--
+ cinder/volume/drivers/rbd.py            |   12 ++++++------
+ cinder/volume/manager.py                |    2 +-
+ 5 files changed, 13 insertions(+), 13 deletions(-)
+
+commit a363c410a0900a113293b14fef5b3d14814cc05e
+Author: Dan Prince <dprince@redhat.com>
+Date:   Tue Jan 8 13:20:57 2013 -0500
+
+    Add option to make exception format errors fatal.
+    
+    Adds a new fatal_exception_format_errors config option which
+    defaults to False. This option is use to control how the base
+    CinderException class handles errors which can occur when it
+    formats error messages.
+    
+    The motivation for this change is to be able to enable exception
+    format checking in our tests by setting fatal_exception_format_errors=True.
+    
+    Change-Id: I2df952558d3f30a557cbb094f8bddcc37af9b5aa
+
+ cinder/exception.py |   18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+commit 8dd2140c4c03582965d74232c7b61aef34e43661
+Author: Zhiteng Huang <zhiteng.huang@intel.com>
+Date:   Sat Oct 6 00:08:09 2012 +0800
+
+    Implement filter scheduler
+    
+    In order to do more sophisticated scheduling (e.g. schedule based on volume
+    type), filter scheduler is introduced. Several changes are made to make this
+    possible, some of them are similar to the counterpart in Nova:
+    
+    - add HostState class to host_manager in order to store volume capabilities
+    - implement get_volume_stats() method of iSCSIDriver as an example to
+    demonstrate how volume backend driver reports capabilities as well as status
+    - add scheduler_options.py and 'scheduler_json_config_location' flag to be
+    allow loading json configuration file for scheduler at run time
+    - port common filters/weights from oslo
+    - add capacity weigher (scheduler/weights/capacity.py) for picking up
+    target volume backend by weighing free capacity of the host. The default
+    behavior is to spread volumes across hosts; by changing the
+    'capacity_weight_multiplier' to negative number, volume placing behavior will
+    become stacking.
+    - add capacity filter which filters those hosts have insufficient storage space
+    to serve the request.
+    - add 'reserved_percentage' config option to indicate how much space is
+    reserved. Capacity reservation is needed when volume resize is enabled.
+    - change default scheduler to 'filter.FilterScheduler'.
+    - add 'publish_service_capabilities()' method to volume RPC API to allow
+    scheduler to have volume service report capabilities. This bumps volume RPC
+    API to version 1.2
+    - remove 'volume_force_update_capabilities' config option, volume status will be
+    report to scheduler in every checking.
+    
+    The implication of this change to storage/backend driver developer:
+    - implementation of get_volume_stats() of the driver is now a *MUST*, filter
+    scheduler heavily relies on the status/capabilities reported by backend driver
+    to makeplacement decision.  To ensure Cinder works seamlessly on the storage
+    system, driver should at least report following capabilities/status:
+    ----------------------+---------------------------+---------------------------
+      Capability/Status   |      Description          |         Example
+    ----------------------+---------------------------+---------------------------
+     'volume_backend_name'| back-end name, string     | 'Example_Storage_Backend'
+    ----------------------+---------------------------+---------------------------
+      'vendor_name'       | vendor name, string       | 'OpenStackCinder'
+    ----------------------+---------------------------+---------------------------
+      'driver_version'    | version, string           |  '1.0a'
+    ----------------------+---------------------------+---------------------------
+      'storage_protocol'  | supported protocols,      | 'iSCSI', 'RBD', 'FC', 'NFS'
+                          | string or list of strings | ['iSCSI', 'NFS', 'FC']
+    ----------------------+---------------------------+---------------------------
+      'total_capacity_gb' | capacity in GB, integer   |  102400
+    ----------------------+---------------------------+---------------------------
+      'free_capacity_gb'  | available capacity in GB, |  1000
+                          | integer                   |
+    ----------------------+---------------------------+---------------------------
+    'reserved_percentage' | reserved space in         |  0, 10
+                          | percentage, integer       |
+    ----------------------+---------------------------+---------------------------
+    
+    The implication of this change to Cinder administrator:
+    - the default setting for filter scheduler should work well with the benefits
+    of:
+      * being able to fully utilize capacity of backends (driver now has to report
+      actul total space and space utilization and scheduler uses these info) not
+      limited by the 'max_gigabytes' config option any more;
+      * being able to choose placement policy between spreading & stacking for
+      volume creation (by modifying the 'capacity_weight_multiplier' in
+      CapacityWeigher)
+    - with filter scheduler, Cinder is now able to utilize the advanced features/
+    capabilities provided by different storage back-ends via: defining different
+    volume types with proper extra_specs. Volume types can be considered as sets
+    of back-end capabilities requirement.
+     For example, a volume type which has 'storage_protocol':'FC' key/value pair
+    definition in its extra_spec can only be served by those back-ends who report
+    they support FiberChannel protocol. Another example is volume type has 'QoS'
+    requirement can only be served by back-ends support QoS.
+    
+    Note/TODO:
+    * Currently scheduler makes its decision based on the status and capabilities
+    information reported by volume nodes, and these information is stored in memory
+    of scheduler process. More sophisticated way may be add on table in DB to
+    record status/capabilities of all volume nodes, like Nova does for compute nodes.
+    
+    implement bp volume-type-scheduler
+    
+    DocImpact
+    
+    Change-Id: I8b5305bce3b24bcc85365037356a8f36d0107133
+
+ cinder/exception.py                                |    8 +
+ cinder/openstack/common/scheduler/filter.py        |   71 ++++++
+ .../openstack/common/scheduler/filters/__init__.py |   41 ++++
+ .../scheduler/filters/availability_zone_filter.py  |   30 +++
+ .../scheduler/filters/capabilities_filter.py       |   63 +++++
+ .../common/scheduler/filters/extra_specs_ops.py    |   68 ++++++
+ .../common/scheduler/filters/json_filter.py        |  150 ++++++++++++
+ cinder/openstack/common/scheduler/weight.py        |   91 +++++++
+ .../openstack/common/scheduler/weights/__init__.py |   45 ++++
+ cinder/scheduler/filter_scheduler.py               |  130 ++++++++++
+ cinder/scheduler/filters/__init__.py               |   14 ++
+ cinder/scheduler/filters/capacity_filter.py        |   44 ++++
+ cinder/scheduler/host_manager.py                   |  257 +++++++++++++++++++-
+ cinder/scheduler/manager.py                        |   19 +-
+ cinder/scheduler/scheduler_options.py              |  105 ++++++++
+ cinder/scheduler/weights/__init__.py               |   14 ++
+ cinder/scheduler/weights/capacity.py               |   50 ++++
+ cinder/tests/scheduler/fakes.py                    |   77 ++++--
+ cinder/tests/scheduler/test_capacity_weigher.py    |   87 +++++++
+ cinder/tests/scheduler/test_filter_scheduler.py    |  107 ++++++++
+ cinder/tests/scheduler/test_host_filters.py        |   99 ++++++++
+ cinder/tests/scheduler/test_host_manager.py        |  176 ++++++++++++++
+ cinder/tests/scheduler/test_scheduler_options.py   |  138 +++++++++++
+ cinder/volume/driver.py                            |   51 +++-
+ cinder/volume/manager.py                           |   42 ++--
+ cinder/volume/rpcapi.py                            |    5 +
+ openstack-common.conf                              |    2 +-
+ setup.py                                           |   21 ++
+ tools/pip-requires                                 |    1 +
+ 29 files changed, 1935 insertions(+), 71 deletions(-)
+
+commit 93bb58732ddb1f2e561347f35699f66c5263ac02
+Merge: d6dc273 d99fb60
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 8 04:10:32 2013 +0000
+
+    Merge "Implement ability to Clone volumes in Cinder."
+
+commit d6dc273cb72ce0ffe09251436332d9b12605f0f9
+Merge: e57cd51 e3132d2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Jan 7 18:22:05 2013 +0000
+
+    Merge "Add service mgmt extension."
+
+commit e57cd5171d89fb60c41e5a301bbc442374d34fb8
+Merge: 9c29408 3068391
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Jan 7 17:57:24 2013 +0000
+
+    Merge "Make WebOb version specification more flexible"
+
+commit c6f7f1920e52ff3d44ab16e1fe77b895b5a4ab16
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Mon Jan 7 10:08:16 2013 -0700
+
+    Use tempdir for lock_path in tests.
+    
+    Commit: 2331d3336a6adf4fc13a3b187e91a5d1b1f7c723
+    introduced use of lockutils but wasn't setting a lock_path, in the tests.
+    As a result we were polluting cinder/openstack/ with cinder-xxxx lockfiles.
+    
+    This patch adds a tempfile and cleanup to the test so we don't leave any
+    junk behind.
+    
+    Change-Id: Idd9fee928ff0fcf3f8d1c30ee88c5306b88e290c
+
+ cinder/tests/api/contrib/test_admin_actions.py |    7 +++++++
+ 1 file changed, 7 insertions(+)
+
+commit 3068391b52d8b86d2560bfea9014f4c70e10fd72
+Author: Doug Hellmann <doug.hellmann@dreamhost.com>
+Date:   Mon Jan 7 10:52:39 2013 -0500
+
+    Make WebOb version specification more flexible
+    
+    Change the WebOb version to >=1.0.8 as an temporary
+    measure to allow the actual version update to 1.2.3
+    to roll out across the projects one at a time without
+    breaking the integration tests.
+    
+    Change-Id: I9969b02a6896f7b952301e40e96f0ef6df8f34c0
+    Signed-off-by: Doug Hellmann <doug.hellmann@dreamhost.com>
+
+ tools/pip-requires |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 9c294087e4cebf04bc87b32ffd3afdf8f91a2436
+Author: Eric Harney <eharney@redhat.com>
+Date:   Thu Jan 3 15:08:53 2013 -0500
+
+    Fix cmds clearing in TargetAdminTestCase.
+    
+    clear_cmds() should reference self.cmds rather than cmds.
+    
+    Change-Id: I1d191aee6a713cf9f2b08c46bf47c1959235cc15
+
+ cinder/tests/test_iscsi.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 0b93217fa75959f9f83b259e38c356a43eb8a720
+Author: Chuck Short <zulcss@ubuntu.com>
+Date:   Thu Jan 3 09:50:57 2013 -0600
+
+    Add missing library
+    
+    According to pyflakes:
+    
+    cinder/api/common.py:246: undefined name 'minidom'
+    cinder/api/common.py:254: undefined name 'minidom'
+    cinder/api/common.py:272: undefined name 'minidom'
+    cinder/api/common.py:284: undefined name 'minidom'
+    
+    Add from xml.dom import minidom
+    
+    Change-Id: Iadb1586ac15c29bb1f2154324e529976f82c19f0
+    Signed-off-by: Chuck Short <zulcss@ubuntu.com>
+
+ cinder/api/common.py |    1 +
+ 1 file changed, 1 insertion(+)
+
+commit f8e683f13bfa435ddbd221b8832b9c7ae65f6a2e
+Merge: 9963cb7 f0d5dee
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Jan 3 05:13:59 2013 +0000
+
+    Merge "Adding marker, pagination, sort key and sort direction to v2 api"
+
+commit 9963cb70fd4d07227077e7269fa7b325faa3868f
+Merge: d833297 2adf688
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Jan 3 05:12:07 2013 +0000
+
+    Merge "Add pyflakes"
+
+commit d833297d5a8d27a2aeab6b035eaf1590e294dccb
+Merge: 5f6cb2f 2331d33
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 2 23:48:08 2013 +0000
+
+    Merge "Adds synchronization to attach volume."
+
+commit 5f6cb2f1c19687ef3a40cf6988f12b25c5269193
+Author: Sean Dague <sdague@linux.vnet.ibm.com>
+Date:   Wed Jan 2 14:16:19 2013 -0500
+
+    use deleted = False, not 0 for update
+    
+    Fixes bug #1095401
+    
+    When running tempest on cinder on postgresql we get a number
+    of errors because this call was trying to set deleted = 0.
+    On mysql 0 == False, but on postgresql this is a type error.
+    
+    Change-Id: Ice85550e8138e0656c93a8a800afdbc5935e4bcc
+
+ cinder/db/sqlalchemy/api.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit d99fb6011cc610b78d42891800189feed0391742
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Wed Dec 12 15:23:56 2012 -0700
+
+    Implement ability to Clone volumes in Cinder.
+    
+    This implements the capability to create usable volume clones in Cinder,
+    for the LVM case we create a temporary snapshot to copy from so that
+    volumes can remain attached during cloning.  This works by passing
+    in a source-volume-id to the create command (similar to create-from-snapshot).
+    
+    Currently we limit clone to the same Cinder node, and only for the base LVM driver.
+    All other drivers should raise NotImplemented, most inherit from the SANISCSIDriver,
+    so move the function there and raise until we have a general implementation
+    for SANISCSI based drivers.
+    
+    Those drivers that inherit from ISCSI directly instead of SANISCSI,
+    add the function explicitly and raise NotImplementedError there as well.
+    
+    Implements blueprint add-cloning-support-to-cinder
+    
+    Change-Id: I72bf90baf22bec2d4806d00e2b827a594ed213f4
+
+ cinder/api/v1/volumes.py                           |   11 ++++
+ cinder/api/v2/views/volumes.py                     |    1 +
+ cinder/api/v2/volumes.py                           |   10 +++
+ .../versions/005_add_source_volume_column.py       |   41 ++++++++++++
+ cinder/db/sqlalchemy/models.py                     |    1 +
+ cinder/tests/api/v1/stubs.py                       |    2 +
+ cinder/tests/api/v1/test_volumes.py                |   13 ++++
+ cinder/tests/api/v2/stubs.py                       |    2 +
+ cinder/tests/api/v2/test_volumes.py                |   11 +++-
+ cinder/tests/test_migrations.py                    |   17 +++++
+ cinder/tests/test_volume_rpcapi.py                 |    4 +-
+ cinder/volume/api.py                               |   65 +++++++++++++++++---
+ cinder/volume/driver.py                            |   19 ++++++
+ cinder/volume/drivers/netapp.py                    |    8 +++
+ cinder/volume/drivers/nexenta/volume.py            |    4 ++
+ cinder/volume/drivers/nfs.py                       |    3 +
+ cinder/volume/drivers/rbd.py                       |    3 +
+ cinder/volume/drivers/san/san.py                   |    4 ++
+ cinder/volume/drivers/sheepdog.py                  |    3 +
+ cinder/volume/drivers/xenapi/sm.py                 |    3 +
+ cinder/volume/drivers/zadara.py                    |    4 ++
+ cinder/volume/manager.py                           |   12 ++--
+ cinder/volume/rpcapi.py                            |   10 ++-
+ 23 files changed, 232 insertions(+), 19 deletions(-)
+
+commit 2adf6889233273f5bd03260d408dce91aa9c6275
+Author: Chuck Short <zulcss@ubuntu.com>
+Date:   Wed Jan 2 08:43:53 2013 -0600
+
+    Add pyflakes
+    
+    Add tox option to use pyflakes.
+    
+    Change-Id: Ic77ec3f54cb89341d5b01feb3417e07f43d20c9c
+    Signed-off-by: Chuck Short <zulcss@ubuntu.com>
+
+ tools/flakes.py |   22 ++++++++++++++++++++++
+ tox.ini         |    4 ++++
+ 2 files changed, 26 insertions(+)
+
+commit 2331d3336a6adf4fc13a3b187e91a5d1b1f7c723
+Author: Rohit Karajgi <rohit.karajgi@nttdata.com>
+Date:   Fri Dec 28 04:58:46 2012 -0800
+
+    Adds synchronization to attach volume.
+    
+    This patch adds the following changes:
+    1. Move db update for volume status during attach to volume.manager
+    2. Add lock synchronization to volume attach operation
+    3. Related unit tests
+    
+    Fixes Bug 1087253
+    Change-Id: I15242766bf4cfa4da67789c485fdf6886983eb45
+
+ cinder/tests/api/contrib/test_admin_actions.py |   41 +++++++++++++++++
+ cinder/tests/test_volume.py                    |    5 +--
+ cinder/volume/api.py                           |    2 -
+ cinder/volume/manager.py                       |   57 ++++++++++++++++--------
+ 4 files changed, 81 insertions(+), 24 deletions(-)
+
+commit 18269eaad82bae89a21929ece49f145f299e4632
+Merge: 4c42d1e 21788e4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 28 01:47:36 2012 +0000
+
+    Merge "Add EMC Volume Driver in Cinder"
+
+commit 21788e4a42118d45fbcb3649110cf6c92363d4fc
+Author: Xing Yang <xing.yang@emc.com>
+Date:   Fri Dec 14 00:05:14 2012 -0500
+
+    Add EMC Volume Driver in Cinder
+    
+    Add support for EMC storage in the Cinder-Volume service.
+    This driver is based on the existing ISCSIDriver, with the ability to
+    create/delete and attach/detach volumes and create/delete snapshots, etc.
+    The Cinder Driver executes the volume operations by communicating with the
+    backend EMC storage. It uses a CIM client in python called PyWBEM to make
+    CIM operations over HTTP.
+    EMC CIM Object Manager (ECOM) is packaged with the SMI-S Provider. It is a
+    CIM server that allows CIM clients to make CIM operations over HTTP, using
+    SMI-S in the backend for EMC storage operations.
+    SMI-S Provider supports the SNIA Storage Management Initiative (SMI), an
+    ANSI standard for storage management. It supports VMAX/VMAXe and VNX
+    storage systems.
+    
+    Implement bp: emc-volume-driver
+    
+    Change-Id: Iafce98603d31d66a7297ef11c92d5e6ac6ba3737
+
+ cinder/tests/test_emc.py                |  381 ++++++++
+ cinder/volume/drivers/emc.py            | 1445 +++++++++++++++++++++++++++++++
+ etc/cinder/cinder_emc_config.xml.sample |   12 +
+ 3 files changed, 1838 insertions(+)
+
+commit f0d5dee0d3aed14d9c49df073a220c19e695461c
+Author: Mike Perez <thingee@gmail.com>
+Date:   Tue Dec 18 00:42:49 2012 -0800
+
+    Adding marker, pagination, sort key and sort direction to v2 api
+    
+    Taking a cue from quantum, use glance's pagination function.
+    
+    bp api-pagination
+    
+    Change-Id: Ida7ade8d9332c88679849f7c640651df7e855abb
+
+ cinder/api/v1/volumes.py            |    4 +-
+ cinder/api/v2/volumes.py            |   33 +++++----
+ cinder/common/sqlalchemyutils.py    |  128 +++++++++++++++++++++++++++++++++++
+ cinder/db/api.py                    |   10 +--
+ cinder/db/sqlalchemy/api.py         |   32 +++++++--
+ cinder/tests/api/v1/test_volumes.py |    6 +-
+ cinder/tests/api/v2/stubs.py        |    6 +-
+ cinder/tests/api/v2/test_volumes.py |   89 +++++++++++++++++++++++-
+ cinder/volume/api.py                |   26 ++++---
+ 9 files changed, 294 insertions(+), 40 deletions(-)
+
+commit 4c42d1eb86a44fb3c3ee3a3f446103dce95be8ec
+Merge: c2e9e2f 035cd28
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 22 07:00:09 2012 +0000
+
+    Merge "Make the NetAppISCSIDriver._is_clone_done() method able to handle empty responses. Add unit tests to exercise this case."
+
+commit c2e9e2f37804e1fe55830e221df584844c5390f2
+Author: Vishvananda Ishaya <vishvananda@gmail.com>
+Date:   Fri Dec 21 09:33:22 2012 -0800
+
+    Fix typo in image_utils tempfile handling
+    
+    Commit cbcd340 changed from NamedTemporaryFile to mkstemp, but
+    mkstemp returns a file descripter, not a file object. We therefore
+    need to close the fd using os.close(). This was tested using
+    devstack.
+    
+    Change-Id: I808fa470a141e249fe30ee762ee94f47ecfd3f63
+
+ cinder/image/image_utils.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 035cd28ed36c4ec34c20e7cedf0815af72e3f2c0
+Author: Ben Swartzlander <bswartz@netapp.com>
+Date:   Fri Dec 21 00:24:46 2012 -0500
+
+    Make the NetAppISCSIDriver._is_clone_done() method able to handle
+    empty responses. Add unit tests to exercise this case.
+    
+    bug 1090168
+    
+    Change-Id: Ia51a73b8ebead7a0f3be9202794ca8549bdf3e5b
+
+ cinder/tests/test_netapp.py     |   29 ++++++++++++++++++++++++++++-
+ cinder/volume/drivers/netapp.py |    2 ++
+ 2 files changed, 30 insertions(+), 1 deletion(-)
+
+commit cbcd340c67c914e38342471c8a1a0aba984c15ff
+Author: Vishvananda Ishaya <vishvananda@gmail.com>
+Date:   Thu Dec 20 13:43:09 2012 -0800
+
+    Make sure we don't double remove tmp on exception
+    
+    The fetch_to_raw code would fail if an exception is thrown during
+    fetch because it would attempt to delete the same file twice.
+    
+    Fix this by using mkstemp and our wrapper which only deletes the
+    tmp file if it exists.
+    
+    Change-Id: I7bb3171d3c7dc023fc743578c2ce6e804bbc49f5
+
+ cinder/image/image_utils.py |   62 +++++++++++++++++++++----------------------
+ 1 file changed, 31 insertions(+), 31 deletions(-)
+
+commit e3132d29f40333e66500a454ac8f68b652d4ef12
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Dec 18 23:02:32 2012 +0000
+
+    Add service mgmt extension.
+    
+    Add capability to list, enable and disable cinder services on a node.
+    
+    Change-Id: I6728fee46d7b15a009bc6c329414ede8c01852b4
+
+ cinder/api/contrib/services.py            |  139 +++++++++++++++++++
+ cinder/tests/api/contrib/test_services.py |  216 +++++++++++++++++++++++++++++
+ cinder/tests/api/v2/test_volumes.py       |    1 -
+ etc/cinder/policy.json                    |    4 +-
+ 4 files changed, 358 insertions(+), 2 deletions(-)
+
+commit 3b02985805a1442c97edb119ec01c013f3ab36cb
+Author: Walter A. Boring IV <walter.boring@hp.com>
+Date:   Tue Dec 11 11:26:16 2012 -0800
+
+    Added the lockutils, fileutils, gettextutils
+    
+    The 3par driver, for both iSCSI and Fibre Channel,
+    that I will commit soon, needs the lockutils to ensure thread safety in
+    each of the driver entry points.  The driver uses a single shared http
+    session for all of it's connections to the 3par drive array.
+    This is required for the driver because of the limitation on the
+    3par's WSAPI only supporting a very small number of open connections.
+    
+    For example without this, the driver will have problems when 2 users try and
+    create a volume at the same time.   I've discovered this in my threaded
+    stress test tool.
+    
+    Change-Id: Ic9d7295e7bcbf5c06086ddf5bd9b8b2fe771faa5
+
+ cinder/openstack/common/fileutils.py    |   35 +++++
+ cinder/openstack/common/gettextutils.py |    2 +-
+ cinder/openstack/common/lockutils.py    |  233 +++++++++++++++++++++++++++++++
+ openstack-common.conf                   |    2 +-
+ 4 files changed, 270 insertions(+), 2 deletions(-)
+
+commit 319221d567e7a1c237fcf0eb1706181ea4cdf53c
+Merge: deb88ed afe1d21
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 19 18:02:27 2012 +0000
+
+    Merge "Moving host admin extension with other extensions"
+
+commit deb88ed7cbe8a5d018b03cbdc71dd41dd1d5ecc3
+Merge: 10c6c7c 147e30b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 19 18:02:06 2012 +0000
+
+    Merge "Fixes a Windows volume driver bug on disk export"
+
+commit 147e30b4a8a9ce8361b048239a0187ac04679db1
+Author: Alessandro Pilotti <ap@pilotti.it>
+Date:   Wed Dec 12 22:10:35 2012 +0200
+
+    Fixes a Windows volume driver bug on disk export
+    
+    Fixes Bug #1089168
+    
+    When a VHD created by Cinder using the iSCSI Target Server is deleted
+    manually, at the next startup the cinder-volume service terminates with an
+    exception.
+    This fix adds a check to verify if the disk exists.
+    
+    Change-Id: I830cb8332dcef845591bd88cccef1e0e9781ffcc
+
+ cinder/tests/test_windows.py                       |    2 +-
+ ...dowsDriver.test_check_for_setup_errors_wmi.p.gz |  Bin 473 -> 473 bytes
+ ...ws.TestWindowsDriver.test_create_export_os.p.gz |  Bin 439 -> 439 bytes
+ ...s.TestWindowsDriver.test_create_export_wmi.p.gz |  Bin 1441 -> 1455 bytes
+ ....TestWindowsDriver.test_create_snapshot_os.p.gz |  Bin 441 -> 441 bytes
+ ...TestWindowsDriver.test_create_snapshot_wmi.p.gz |  Bin 1479 -> 1476 bytes
+ ...Driver.test_create_volume_from_snapshot_os.p.gz |  Bin 500 -> 500 bytes
+ ...river.test_create_volume_from_snapshot_wmi.p.gz |  Bin 1843 -> 1840 bytes
+ ...ws.TestWindowsDriver.test_create_volume_os.p.gz |  Bin 439 -> 439 bytes
+ ...s.TestWindowsDriver.test_create_volume_wmi.p.gz |  Bin 1057 -> 1057 bytes
+ ....TestWindowsDriver.test_delete_snapshot_os.p.gz |  Bin 441 -> 441 bytes
+ ...TestWindowsDriver.test_delete_snapshot_wmi.p.gz |  Bin 1502 -> 1504 bytes
+ ...ws.TestWindowsDriver.test_delete_volume_os.p.gz |  Bin 472 -> 472 bytes
+ ...s.TestWindowsDriver.test_delete_volume_wmi.p.gz |  Bin 1039 -> 1040 bytes
+ ...ws.TestWindowsDriver.test_ensure_export_os.p.gz |  Bin 439 -> 439 bytes
+ ...s.TestWindowsDriver.test_ensure_export_wmi.p.gz |  Bin 1441 -> 1453 bytes
+ ...indowsDriver.test_initialize_connection_os.p.gz |  Bin 447 -> 447 bytes
+ ...ndowsDriver.test_initialize_connection_wmi.p.gz |  Bin 1976 -> 1982 bytes
+ ...ws.TestWindowsDriver.test_remove_export_os.p.gz |  Bin 439 -> 439 bytes
+ ...s.TestWindowsDriver.test_remove_export_wmi.p.gz |  Bin 1451 -> 1462 bytes
+ cinder/volume/drivers/windows.py                   |    6 +++++-
+ 21 files changed, 6 insertions(+), 2 deletions(-)
+
+commit 10c6c7cfcbe767ae16b29f29625d2617efd921b1
+Merge: f61e854 349d5bd
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 19 05:00:51 2012 +0000
+
+    Merge "Add image metadata API extension"
+
+commit afe1d219883c99b98e8850d07dad88417e9b3334
+Author: Mike Perez <thingee@gmail.com>
+Date:   Tue Dec 18 20:26:29 2012 -0800
+
+    Moving host admin extension with other extensions
+    
+    Think this was merged during the big api changes in g1. This allows the
+    extension to actually be enabled.
+    
+    Change-Id: I07bb9646fd11368fe5ffd7f85617ecbf103dc788
+
+ cinder/api/contrib/hosts.py                  |  266 ++++++++++++++++++++++++++
+ cinder/api/openstack/volume/contrib/hosts.py |  266 --------------------------
+ 2 files changed, 266 insertions(+), 266 deletions(-)
+
+commit f61e854460c5ad8129b2230686465884eb6b8852
+Author: Vishvananda Ishaya <vishvananda@gmail.com>
+Date:   Mon Dec 17 14:38:53 2012 -0800
+
+    Allow the lvm backed drivers to use mirrrors
+    
+    Adds a new configuration option called lvm_mirrors. If this is
+    set to a value > 0, it will create the specified number of mirrors
+    when creating volumes. Note that lvm_mirrors + 2 pvs are required
+    in the volume group for lvm mirroring to work properly.
+    
+    Change-Id: I7e28d11c48cdbb99e17b0930b720fbd805bf9931
+
+ cinder/volume/driver.py       |   19 +++++++++++++++++--
+ etc/cinder/cinder.conf.sample |    4 ++++
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+commit 792d3a166b7ac8478e21bcd255ac53f7bdec719e
+Merge: 5bda255 be3d8ea
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 17 04:13:51 2012 +0000
+
+    Merge "CHAP support for IBM Storwize/SVC driver."
+
+commit be3d8ea90a9238b7afc5558db14c080e15001685
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Thu Nov 29 12:22:00 2012 +0200
+
+    CHAP support for IBM Storwize/SVC driver.
+    
+    This implements support for CHAP authentication of hosts by the IBM
+    Storwize/SVC controller. A host entity was created on the controller for
+    each server that logs in with iSCSI. Now a randomly-generated CHAP
+    secret is added to the host entity on the controller (passed via the
+    controller CLI over SSH).
+    
+    Implements blueprint add-chap-support-to-storwize-svc-driver
+    
+    Change-Id: I60b5ddd0ea2e1ede3070779e5293820480aa0401
+
+ cinder/tests/test_storwize_svc.py     |   37 +++++++++++++++
+ cinder/volume/drivers/storwize_svc.py |   80 +++++++++++++++++++++++++++++++++
+ 2 files changed, 117 insertions(+)
+
+commit 5bda255e64ad8394ca4e39393db4114aa613464f
+Merge: e10da6e 33b21f3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 15 04:29:12 2012 +0000
+
+    Merge "Remove instance quota re-sync code"
+
+commit e10da6e8eedd96dc8c4e5b680659e6509a8742c3
+Merge: 403142a db9cf2b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 14 16:24:39 2012 +0000
+
+    Merge "Support glance servers over https"
+
+commit 33b21f3f466d94b83df95d4a756b60ec2a02437d
+Author: Eoghan Glynn <eglynn@redhat.com>
+Date:   Fri Dec 14 14:19:20 2012 +0000
+
+    Remove instance quota re-sync code
+    
+    Obviously came in inadvertantly in a copy'n'paste from the
+    nova quotas logic.
+    
+    Not relevant to volume quotas and would fail if ever called
+    (as instance_data_get_for_project is not part of the cinder
+    DB API).
+    
+    Change-Id: Ib52b962b51003955430ad292084a3e3010736a2c
+
+ cinder/quota.py |   19 ++++++-------------
+ 1 file changed, 6 insertions(+), 13 deletions(-)
+
+commit 349d5bdf0ed6fb18308c1e1e352d726ed9e00d8f
+Author: Nikola Dipanov <ndipanov@redhat.com>
+Date:   Fri Dec 7 15:53:28 2012 +0100
+
+    Add image metadata API extension
+    
+    This patch introduces an API extension that will expose the volume
+    metadata inherited from the image if the volume was created from an image.
+    
+    This data will be used by Nova when booting from volume without any
+    image supplied.
+    
+    In addition, the patch introduces a helper method on the volume.API
+    class for accessing the image metadata and also updates the policy.json
+    files to be aware of the new extension.
+    
+    This patch is part of the blueprint improve-boot-from-volume
+    
+    This patch also introduces DocImpact as it extends the cinder API
+    
+    Change-Id: I64515cc02f8de863e65e96c66eb1fda1a1954ac7
+
+ cinder/api/contrib/volume_image_metadata.py        |  106 ++++++++++++++++
+ .../api/contrib/test_volume_image_metadata.py      |  130 ++++++++++++++++++++
+ cinder/tests/policy.json                           |    1 +
+ cinder/volume/api.py                               |    7 ++
+ etc/cinder/policy.json                             |    1 +
+ 5 files changed, 245 insertions(+)
+
+commit 403142a43f553b1488eae795c6dfff3967825bf1
+Author: Sam Morrison <sorrison@gmail.com>
+Date:   Fri Dec 14 13:49:46 2012 +1100
+
+    Raise NotImplemented for drivers that don't support images
+    
+    Fixes bug #1090169
+    
+    Raise NotImplementedError on copy_image_to_volume and
+    copy_volume_to_image on drivers that inherit from
+    driver.ISCSIDriver that don't support this feature yet.
+    
+    Change-Id: I516d424a75dd21260f2ccc68467a8f6e6ac08e4d
+
+ cinder/volume/drivers/netapp.py         |    8 ++++++++
+ cinder/volume/drivers/nexenta/volume.py |    8 ++++++++
+ cinder/volume/drivers/san/san.py        |    8 ++++++++
+ cinder/volume/drivers/windows.py        |    8 ++++++++
+ cinder/volume/drivers/zadara.py         |    8 ++++++++
+ 5 files changed, 40 insertions(+)
+
+commit 11c80571ae7b4c4afff99edd30f51e060fbac396
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Thu Dec 13 13:17:31 2012 -0700
+
+    Add *.swp to gitignore.
+    
+    Add swap files and alphabetize the list.
+    
+    Change-Id: Idaa9aec831740aa965a8d2d2486f4d9ffbb50746
+
+ .gitignore |   35 ++++++++++++++++++-----------------
+ 1 file changed, 18 insertions(+), 17 deletions(-)
+
+commit db9cf2bca1cc6158ca129c7bfc6bead59ff1c7de
+Author: Sam Morrison <sorrison@gmail.com>
+Date:   Wed Dec 12 10:54:54 2012 +1100
+
+    Support glance servers over https
+    
+    Fixes bug 1089147
+    
+    Updated glance.py from nova's version to support glance over ssl
+    eg. glance_api_servers=https://glance.mydomain:9292
+    
+    New Flag: glance_api_insecure
+    Set to True to disable certificate checking
+    
+    Change-Id: I53e62900265fea2de9b0ec20bbff0c40f1b14c91
+
+ cinder/flags.py                   |    4 +++
+ cinder/image/glance.py            |   62 ++++++++++++++++++++++++-------------
+ cinder/tests/image/test_glance.py |    2 +-
+ 3 files changed, 45 insertions(+), 23 deletions(-)
+
+commit 97ec98530331b590ab736252aa2cbe3ef7a557c6
+Merge: 65b3421 484fb9e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 12 18:17:30 2012 +0000
+
+    Merge "Changing display_name to name in v2 api"
+
+commit 65b3421f4b66b1e26be54f4bcb93fd3f6c7fb6f8
+Author: Carlos Goncalves <cgoncalves@av.it.pt>
+Date:   Thu Dec 6 14:50:29 2012 +0000
+
+    Add commands used by NFS volume driver to rootwrap
+    
+    Fixes bug 1087282
+    
+    Change-Id: Ib873c334633b4d586c2e53bac5d1cae0dcf65be7
+
+ etc/cinder/rootwrap.d/volume.filters |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+commit 484fb9e1c748e718349e451e80a0e025ed007b1d
+Author: Mike Perez <thingee@gmail.com>
+Date:   Sat Dec 8 12:16:43 2012 -0800
+
+    Changing display_name to name in v2 api
+    
+    This allows the v2 api responses to be more consistent with other
+    projects. This approach is making the idea compatible in v2, rather
+    than changing the model.
+    
+    blueprint name-attr-consistency
+    
+    Change-Id: I74e46b4204353d5712be788fe2138784b2a72305
+
+ cinder/api/v2/views/volumes.py      |    4 +-
+ cinder/api/v2/volumes.py            |   23 +++++++--
+ cinder/tests/api/v2/test_volumes.py |   91 ++++++++++++++++++-----------------
+ 3 files changed, 67 insertions(+), 51 deletions(-)
+
+commit 29b9290cb9f9556d5f9e1e90af4cfaba64e4ba2f
+Merge: 0c507aa 6a31bf3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 8 04:21:13 2012 +0000
+
+    Merge "Make copy_to_volume a bit more useful."
+
+commit 0c507aa6d08a9471bf896961cc99d40f337f1e4d
+Author: Mike Perez <thingee@gmail.com>
+Date:   Mon Dec 3 10:38:27 2012 -0800
+
+    Make summary and detail view consistent with other projects
+    
+    This introduces the v2 volume view builder for ease of response
+    changing.
+    
+    blueprint vol-api-consistency
+    
+    Change-Id: If061e069d3b09ee5de15f1cbc7a46fa29c95a4cd
+
+ cinder/api/v2/views/__init__.py     |   16 ++++
+ cinder/api/v2/views/volumes.py      |  122 ++++++++++++++++++++++++++
+ cinder/api/v2/volumes.py            |  108 ++++-------------------
+ cinder/tests/api/v2/test_volumes.py |  162 ++++++++++++++++++++++-------------
+ 4 files changed, 255 insertions(+), 153 deletions(-)
+
+commit 29b3da71bfb3389c7826efaa3ad76045e74c463e
+Author: Mike Perez <thingee@gmail.com>
+Date:   Fri Nov 30 16:23:37 2012 -0800
+
+    creating separate v1 and v2 stubs and general fakes
+    
+    For now contribs will use v2, but in the future will test against all
+    supported versions.
+    
+    Change-Id: I47c30f8c2fc8a89f92065122bf1ca6aec1ce8b2d
+
+ cinder/tests/api/contrib/test_admin_actions.py     |   33 +--
+ .../contrib/test_extended_snapshot_attributes.py   |    8 +-
+ cinder/tests/api/contrib/test_types_extra_specs.py |    4 +-
+ cinder/tests/api/contrib/test_types_manage.py      |    8 +-
+ cinder/tests/api/contrib/test_volume_actions.py    |   23 +-
+ .../api/contrib/test_volume_host_attribute.py      |   18 +-
+ .../api/contrib/test_volume_tenant_attribute.py    |   18 +-
+ cinder/tests/api/fakes.py                          |  175 ++++++++++++
+ cinder/tests/api/openstack/fakes.py                |  283 --------------------
+ cinder/tests/api/openstack/test_wsgi.py            |    2 +-
+ cinder/tests/api/test_router.py                    |    2 +-
+ cinder/tests/api/v1/stubs.py                       |  129 +++++++++
+ cinder/tests/api/v1/test_snapshots.py              |   31 +--
+ cinder/tests/api/v1/test_types.py                  |    2 +-
+ cinder/tests/api/v1/test_volumes.py                |   51 ++--
+ cinder/tests/api/v2/stubs.py                       |  129 +++++++++
+ cinder/tests/api/v2/test_snapshots.py              |   31 +--
+ cinder/tests/api/v2/test_types.py                  |    2 +-
+ cinder/tests/api/v2/test_volumes.py                |   49 ++--
+ cinder/tests/image/test_glance.py                  |    1 -
+ 20 files changed, 577 insertions(+), 422 deletions(-)
+
+commit 6a31bf3e436c1b975630615af0b381df3b7c8756
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Mon Dec 3 21:02:19 2012 -0700
+
+    Make copy_to_volume a bit more useful.
+    
+    The current implementation of cinder.driver.copy_to_volume
+    does not take in to account image type and is only valid
+    for raw images.  This doesn't do much good for the majority
+    of cases, and rather than require folks to have a raw version
+    uploaded to Glance, let's just do a convert if needed on the fly.
+    
+    This simply creates a temp file, does the conversion and then
+    writes the temp file directly to the volume.
+    
+    Change-Id: I849b04b8aae76da068abcd2a20c1fcecca8a5caa
+
+ cinder/image/image_utils.py          |  241 ++++++++++++++++++++++++++++++++++
+ cinder/tests/test_volume.py          |    5 +
+ cinder/utils.py                      |   36 +++++
+ cinder/volume/driver.py              |    9 +-
+ etc/cinder/rootwrap.d/volume.filters |    2 +
+ 5 files changed, 289 insertions(+), 4 deletions(-)
+
+commit ad770a3eaeaea9c00871a8b45157adc85dba6c79
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Thu Dec 6 13:36:23 2012 -0700
+
+    Delete type call in api needs update to use ID.
+    
+    https://github.com/openstack/cinder/commit/51a438c8f3f0d13c6779602264d72cde82feab9c
+    Introduced UUID's for volume_type ID and also changed delete to use ID
+    instead of name.
+    
+    That changed neglected to update the call in contrib/types_manage,
+    this patch fixes that.
+    
+    Fixes bug 1087161
+    
+    Change-Id: I839228cd656afaf68caedfe673f9191488ccc397
+
+ cinder/api/contrib/types_manage.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 51a438c8f3f0d13c6779602264d72cde82feab9c
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Sun Dec 2 00:01:49 2012 -0700
+
+    Convert volume_type id from int to uuid.
+    
+    This converts the volume_type id from int to uuid.  In
+    addition, this also corrects an issue of deleting volume_types
+    by name.  Even though the client/api is taking the id, it was
+    converting to the name of the volume_type for the db access.
+    
+    We also want to continue enforcing that the name is unique on creation
+    so as to avoid any confusion and for clarity in Horizon.  The api
+    has also been enhanced to allow you to specify the type by name
+    or by uuid.
+    
+    This does NOT modify the things like the volume details display field
+    (currently shows the type 'name' not 'uuid'), these types of changes
+    will go in to V2 of the API.
+    
+    Implements blueprint vol-type-to-uuid
+    
+    Change-Id: I1c54ff2a1e0c5df5891408fc11b15176db4028c3
+
+ cinder/api/v1/volumes.py                           |   21 ++-
+ cinder/db/api.py                                   |    4 +-
+ cinder/db/sqlalchemy/api.py                        |   21 ++-
+ .../versions/004_volume_type_to_uuid.py            |  155 ++++++++++++++++++++
+ cinder/db/sqlalchemy/models.py                     |    6 +-
+ cinder/exception.py                                |    2 +-
+ cinder/tests/api/openstack/fakes.py                |    2 +-
+ cinder/tests/api/v1/test_volumes.py                |    1 -
+ cinder/tests/test_migrations.py                    |   30 ++++
+ cinder/tests/test_volume_types.py                  |   22 +--
+ cinder/tests/test_volume_types_extra_specs.py      |    4 +-
+ cinder/volume/volume_types.py                      |   15 +-
+ 12 files changed, 242 insertions(+), 41 deletions(-)
+
+commit b1e423299632016b7ee0528cba8ecb44016cf941
+Merge: c4a4a4e 842521c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 3 15:09:52 2012 +0000
+
+    Merge "Rename Config osapi_compute_link_prefix to osapi_volume_base_URL"
+
+commit c4a4a4e59d52f10e88830fb4cbe52956e7b819b9
+Merge: 9d73415 44a2b89
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Dec 2 16:10:34 2012 +0000
+
+    Merge "Revert changes to monkey_patch."
+
+commit 9d73415f11602032c75fd87a46cf2349275b8b2f
+Merge: e1b834a 503e923
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 30 23:17:51 2012 +0000
+
+    Merge "Fix exception when size is None."
+
+commit 842521cb1267413025c47248dae8cd622d1d104c
+Author: sathish-nagappan <sathish.nagappan@nebula.com>
+Date:   Fri Nov 30 14:53:21 2012 -0800
+
+    Rename Config osapi_compute_link_prefix to osapi_volume_base_URL
+    
+    fixes Bug #1046451
+    
+    Renamed the config option.
+    
+    Change-Id: Ia6eb057a11828bdc216e0bddbd29855285ba938c
+
+ cinder/api/common.py          |    6 +++---
+ cinder/flags.py               |    5 +++--
+ etc/cinder/cinder.conf.sample |    4 ++--
+ 3 files changed, 8 insertions(+), 7 deletions(-)
+
+commit 503e92332db78a2469fcc853a2be1c5dee9c8da4
+Author: Matthew Treinish <treinish@linux.vnet.ibm.com>
+Date:   Thu Nov 29 17:48:03 2012 -0500
+
+    Fix exception when size is None.
+    
+    If an incoming create request has a size of None raise
+    an exception.
+    
+    Fixes: bug 1084711
+    Change-Id: I5ad377073cc6853b502889ad9292b5758522ca88
+
+ cinder/volume/api.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit e1b834a294244030b7fd48b10a88aafdaa60c202
+Merge: 31629f6 e27b171
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 30 17:42:58 2012 +0000
+
+    Merge "attaching volumes will set instance_uuid instantly"
+
+commit 31629f637b6b18ca762604a24278249eeb6cfaf1
+Author: Russell Bryant <rbryant@redhat.com>
+Date:   Fri Nov 30 09:19:05 2012 -0500
+
+    Ensure request_spec can be serialized.
+    
+    request_spec includes some objects that must be converted to primitive
+    types to ensure they can be serialized by any of the rpc drivers.  In
+    this case, it's the volume type.  It's a sqlalchemy model.
+    to_primitive() will ensure that it gets converted to a dict so that it
+    can be serialized for messaging.
+    
+    I saw this error in a smokestack log that was running tempest with qpid.
+    You won't see this error if you're using rabbit with the kombu driver.
+    We have some magic with the kombu driver that will fix these problems
+    automatically if they are missed.
+    
+    Change-Id: I9a1b7662bca7caa2acb61d1e3879ac2654d5b32e
+
+ cinder/scheduler/rpcapi.py |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+commit e27b171883c1b87b8d2fdf0994947d4b93e640d9
+Author: Mike Perez <thingee@gmail.com>
+Date:   Thu Nov 29 03:18:08 2012 -0800
+
+    attaching volumes will set instance_uuid instantly
+    
+    This change allows the instance_uuid field to be set instantly when
+    beginning an attach action. The user will no longer have to wait for the
+    attachment to be complete to know what it is attaching to. If attaching
+    fails on the driver layer, we got error state and keep the instance_uuid
+    set for troubleshooting purposes.
+    
+    blueprint instance-attached-field
+    Change-Id: Ie9860876ab865f766c0ae4cb616a45fd363931f8
+
+ cinder/tests/test_volume.py |   17 +++++++++++++++++
+ cinder/volume/api.py        |    2 ++
+ 2 files changed, 19 insertions(+)
+
+commit de14700f955bd8393d016abe6644f646c0e0baf4
+Merge: 79e0052 70e4f2c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 28 19:25:15 2012 +0000
+
+    Merge "Unpin lxml requirements"
+
+commit 44a2b8949fba07d9a3427137d59fe81fafbc3458
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Wed Nov 28 12:19:14 2012 -0700
+
+    Revert changes to monkey_patch.
+    
+    As a work-around to deal with bug 1075838, we modified
+    monkey_patch in the Cinder binaries.  The root cause of the
+    issue is/was actually a bug in eventlet but this was a quick
+    work-around.
+    
+    Since the change Change-Id: I69ba75136e32e95c6fdf108f0c4fe21a5e3bdbe6
+    to do this landed, the problem has also been addressed in Keystone.
+    
+    So, let's revert this patch to get back the greenthread performance
+    that we may have lost with this change.  For now, everything should
+    be addressed as long as we don't implement multi api worker in Cinder,
+    if we do and the evenlet fix hasn't been released we'll need to turn
+    the modification back on for bin/cinder-api.
+    
+    Change-Id: Ie845bade85dbceacd91f15e082325602d9a79c74
+
+ bin/cinder-all       |    2 +-
+ bin/cinder-api       |    6 +++++-
+ bin/cinder-scheduler |    2 +-
+ bin/cinder-volume    |    2 +-
+ 4 files changed, 8 insertions(+), 4 deletions(-)
+
+commit 79e0052e79fc8411b385c36cb1533d039ab09333
+Merge: 4b6ba6e e78667d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 28 05:44:37 2012 +0000
+
+    Merge "Provide i18n to those messages without _()"
+
+commit 4b6ba6eeb97cbac6c23be82d4d14ad056e1649cf
+Merge: e40ec2d de289a6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 28 05:21:24 2012 +0000
+
+    Merge "Use auth_token middleware from keystoneclient."
+
+commit e40ec2d83258690929fe89e85b971d9706af5970
+Merge: d030c5b 2bdc7a7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Nov 28 03:54:29 2012 +0000
+
+    Merge "Fix import order to make it alphabetical."
+
+commit d030c5b10e9e8d73d967562259e7db6146347108
+Author: Adam Gandelman <adam.gandelman@canonical.com>
+Date:   Tue Nov 27 17:51:26 2012 -0800
+
+    Improve provider_location cleanup code for RBD.
+    
+    The RBD driver does not make use of the 'provider_location' field
+    but the current cleanup code assumes it does.  Ensure the field
+    is in use before testing whether or not it needs fixing.
+    
+    Fixes bug 1083818.
+    
+    Change-Id: Id6ff85101f85e70575ba244c2df7aca0196cf224
+
+ cinder/volume/manager.py |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+commit 2bdc7a7feb37dbf05dc98383bc0d6faff2f503b7
+Author: Matthew Treinish <treinish@linux.vnet.ibm.com>
+Date:   Tue Nov 27 11:01:05 2012 -0500
+
+    Fix import order to make it alphabetical.
+    
+    Change-Id: I159d9f5a6d131485d6063985a4e1638878b7463e
+
+ cinder/api/openstack/volume/contrib/hosts.py       |    4 ++--
+ .../api/openstack/volume/contrib/test_hosts.py     |    3 ++-
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+commit d81113f55e7a40adceae5bdab9878acbee42e518
+Merge: dc9f039 3fe5bd6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 27 21:08:17 2012 +0000
+
+    Merge "Fix None being passed into as_int()."
+
+commit dc9f03901abd68f292bd1911777f43b05aa02b27
+Merge: 461ae54 51418bd
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 27 16:32:23 2012 +0000
+
+    Merge "Make pep8 checks a bit stricter."
+
+commit 3fe5bd6a7112315a978be38a9e51a1787b300af3
+Author: Matthew Treinish <treinish@linux.vnet.ibm.com>
+Date:   Tue Nov 27 10:41:25 2012 -0500
+
+    Fix None being passed into as_int().
+    
+    Currently when a create is received and the size is of NoneType
+    a stack trace is dumped because of the TypeError. This will
+    correct it so the functionality won't change, but the TypeError
+    is will be caught now.
+    
+    Change-Id: Ic83dd182e0083c887af8f6209a23af38bfff2be7
+
+ cinder/volume/api.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit de289a666fd9f03725ade1f6ffb5ad3904295a94
+Author: Yaguang Tang <heut2008@gmail.com>
+Date:   Tue Nov 27 17:06:25 2012 +0800
+
+    Use auth_token middleware from keystoneclient.
+    
+    auth_token middleware has been move from keystone to python-keystonecient,
+    so add python-keystoneclient dependence instead of keystone.Also adds
+    missing signing_dir option.
+    
+    Change-Id: I24a4f422c35b721338c7519212c21ed2fbc255b3
+
+ etc/cinder/api-paste.ini |    3 ++-
+ tools/pip-requires       |    1 +
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+commit e78667da0dbcb6b65dc9017822854c9e97f5a4ab
+Author: daisy-ycguo <daisy.ycguo@gmail.com>
+Date:   Thu Nov 22 00:16:04 2012 +0800
+
+    Provide i18n to those messages without _()
+    
+    bug 1081498
+    
+    There are a few log messages without _(), but a lot messages with _().
+    Wrap these log messages with _() in order to make the code consistent.
+    
+    Change-Id: Ie8961453569e9a75bd0fd0733344db8059d05222
+
+ .../migrate_repo/versions/001_cinder_init.py       |    4 ++--
+ .../migrate_repo/versions/003_glance_metadata.py   |    4 ++--
+ cinder/db/sqlalchemy/session.py                    |    2 +-
+ cinder/volume/drivers/nfs.py                       |    2 +-
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+commit 461ae5443d1816eefa1bd8877a4b085a5cb7fda3
+Merge: 0fb9897 444cd54
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Nov 27 07:18:34 2012 +0000
+
+    Merge "Revert "use O_DIRECT when copying from /dev/zero too""
+
+commit 444cd5429cc00f3a4ddb5cde4b8b1c974b886e19
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Nov 27 05:46:58 2012 +0000
+
+    Revert "use O_DIRECT when copying from /dev/zero too"
+    
+    It turns out running oflag=direct against the LVM snapshot fails for an IO error every time.  Works fine against the regular volume, but fails on snapshot.
+    
+    This reverts commit 1405a6440d646524d41adfed4fc1344948e2871f
+
+ cinder/volume/driver.py |   11 +----------
+ 1 file changed, 1 insertion(+), 10 deletions(-)
+
+commit 51418bdd5b44496694998b8123c0b62e9166d547
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Sat Nov 24 20:17:32 2012 -0700
+
+    Make pep8 checks a bit stricter.
+    
+    Along with moving to pep8 1.3.3, we also want to standardize
+    on what we ignore. This patch get's us most of the way there
+    by setting the ignore list to:
+    N4,E125, E126, E711,E712.
+    
+    Almost all changes made here are white-space/indentation changes.
+    
+    The removal of Hacking N4 errors from the ignore list will
+    be handled in a seperate patch.
+    
+    Change-Id: If45f156600485d23769449018590f60b4f69b0c5
+
+ bin/cinder-manage                                  |   90 ++-
+ cinder/api/common.py                               |   12 +-
+ cinder/api/contrib/extended_snapshot_attributes.py |    7 +-
+ cinder/api/contrib/quota_classes.py                |    6 +-
+ cinder/api/contrib/quotas.py                       |    4 +-
+ cinder/api/contrib/types_extra_specs.py            |    8 +-
+ cinder/api/contrib/types_manage.py                 |    6 +-
+ cinder/api/contrib/volume_actions.py               |    2 +-
+ cinder/api/middleware/auth.py                      |    9 +-
+ cinder/api/middleware/fault.py                     |    2 +-
+ cinder/api/openstack/__init__.py                   |    7 +-
+ cinder/api/openstack/volume/contrib/hosts.py       |   37 +-
+ cinder/api/openstack/wsgi.py                       |   30 +-
+ cinder/api/urlmap.py                               |   10 +-
+ cinder/api/v1/router.py                            |    4 +-
+ cinder/api/v1/snapshots.py                         |   18 +-
+ cinder/api/v1/types.py                             |    8 +-
+ cinder/api/v1/volumes.py                           |    4 +-
+ cinder/api/v2/router.py                            |    4 +-
+ cinder/api/v2/snapshots.py                         |   18 +-
+ cinder/api/v2/types.py                             |    8 +-
+ cinder/api/v2/volumes.py                           |    4 +-
+ cinder/api/views/types.py                          |    4 +-
+ cinder/api/views/versions.py                       |   25 +-
+ cinder/common/deprecated.py                        |    3 +-
+ cinder/context.py                                  |    2 +-
+ cinder/db/api.py                                   |   24 +-
+ cinder/db/sqlalchemy/api.py                        |  338 ++++-----
+ .../migrate_repo/versions/002_quota_class.py       |  137 ++--
+ .../migrate_repo/versions/003_glance_metadata.py   |   44 +-
+ cinder/db/sqlalchemy/models.py                     |   12 +-
+ cinder/db/sqlalchemy/session.py                    |    4 +-
+ cinder/flags.py                                    |   14 +-
+ cinder/image/glance.py                             |   23 +-
+ cinder/manager.py                                  |    7 +-
+ cinder/policy.py                                   |    3 +-
+ cinder/quota.py                                    |   33 +-
+ cinder/scheduler/chance.py                         |    2 +-
+ cinder/scheduler/driver.py                         |    8 +-
+ cinder/scheduler/manager.py                        |   27 +-
+ cinder/scheduler/rpcapi.py                         |   33 +-
+ cinder/scheduler/simple.py                         |   21 +-
+ cinder/service.py                                  |    5 +-
+ cinder/test.py                                     |    3 +-
+ cinder/testing/runner.py                           |   23 +-
+ .../contrib/test_extended_snapshot_attributes.py   |   30 +-
+ cinder/tests/api/contrib/test_volume_actions.py    |   26 +-
+ .../api/contrib/test_volume_tenant_attribute.py    |    4 +-
+ cinder/tests/api/extensions/foxinsocks.py          |    5 +-
+ cinder/tests/api/middleware/test_faults.py         |    2 +-
+ cinder/tests/api/openstack/fakes.py                |   32 +-
+ cinder/tests/api/openstack/test_wsgi.py            |    7 +-
+ .../api/openstack/volume/contrib/test_hosts.py     |   50 +-
+ cinder/tests/api/test_extensions.py                |   48 +-
+ cinder/tests/api/test_xmlutil.py                   |   75 +-
+ cinder/tests/api/v1/test_limits.py                 |   93 ++-
+ cinder/tests/api/v1/test_snapshots.py              |   93 ++-
+ cinder/tests/api/v1/test_volumes.py                |  174 ++---
+ cinder/tests/api/v2/test_limits.py                 |  110 ++-
+ cinder/tests/api/v2/test_volumes.py                |   25 +-
+ cinder/tests/db/fakes.py                           |    2 +-
+ cinder/tests/image/fake.py                         |  168 ++---
+ cinder/tests/image/test_glance.py                  |   27 +-
+ cinder/tests/integrated/api/client.py              |    6 +-
+ cinder/tests/monkey_patch_example/__init__.py      |    2 +-
+ cinder/tests/scheduler/test_rpcapi.py              |   19 +-
+ cinder/tests/scheduler/test_scheduler.py           |   57 +-
+ cinder/tests/test_HpSanISCSIDriver.py              |   11 +-
+ cinder/tests/test_api.py                           |   10 +-
+ cinder/tests/test_cinder_rootwrap.py               |    9 +-
+ cinder/tests/test_context.py                       |    6 +-
+ cinder/tests/test_flags.py                         |    8 +-
+ cinder/tests/test_iscsi.py                         |   18 +-
+ cinder/tests/test_migrations.py                    |   19 +-
+ cinder/tests/test_netapp.py                        |   60 +-
+ cinder/tests/test_netapp_nfs.py                    |   24 +-
+ cinder/tests/test_nexenta.py                       |   86 ++-
+ cinder/tests/test_nfs.py                           |   71 +-
+ cinder/tests/test_policy.py                        |   10 +-
+ cinder/tests/test_quota.py                         |  780 +++++++++-----------
+ cinder/tests/test_rbd.py                           |   37 +-
+ cinder/tests/test_service.py                       |   31 +-
+ cinder/tests/test_storwize_svc.py                  |   75 +-
+ cinder/tests/test_test_utils.py                    |    2 +-
+ cinder/tests/test_utils.py                         |  217 +++---
+ cinder/tests/test_versions.py                      |   26 +-
+ cinder/tests/test_volume.py                        |   98 +--
+ cinder/tests/test_volume_glance_metadata.py        |   11 +-
+ cinder/tests/test_volume_rpcapi.py                 |   58 +-
+ cinder/tests/test_volume_types.py                  |   57 +-
+ cinder/tests/test_volume_types_extra_specs.py      |   54 +-
+ cinder/tests/test_volume_utils.py                  |    2 +-
+ cinder/tests/test_windows.py                       |   47 +-
+ cinder/tests/test_xenapi_sm.py                     |    4 +-
+ cinder/tests/test_xiv.py                           |   89 ++-
+ cinder/tests/test_zadara.py                        |   39 +-
+ cinder/tests/windows/basetestcase.py               |   12 +-
+ cinder/tests/windows/db_fakes.py                   |   22 +-
+ cinder/tests/windows/mockproxy.py                  |   18 +-
+ cinder/tests/windows/windowsutils.py               |   34 +-
+ cinder/utils.py                                    |   27 +-
+ cinder/volume/api.py                               |  131 ++--
+ cinder/volume/driver.py                            |   19 +-
+ cinder/volume/drivers/netapp.py                    |   87 ++-
+ cinder/volume/drivers/netapp_nfs.py                |   24 +-
+ cinder/volume/drivers/nexenta/jsonrpc.py           |    6 +-
+ cinder/volume/drivers/nexenta/volume.py            |   25 +-
+ cinder/volume/drivers/nfs.py                       |    9 +-
+ cinder/volume/drivers/rbd.py                       |    6 +-
+ cinder/volume/drivers/san/san.py                   |    6 +-
+ cinder/volume/drivers/san/solaris.py               |    3 +-
+ cinder/volume/drivers/solidfire.py                 |    4 +-
+ cinder/volume/drivers/storwize_svc.py              |  570 +++++++-------
+ cinder/volume/drivers/windows.py                   |   10 +-
+ cinder/volume/drivers/xenapi/lib.py                |   31 +-
+ cinder/volume/drivers/xiv.py                       |   27 +-
+ cinder/volume/drivers/zadara.py                    |   55 +-
+ cinder/volume/iscsi.py                             |   23 +-
+ cinder/volume/manager.py                           |   59 +-
+ cinder/volume/rpcapi.py                            |   65 +-
+ cinder/volume/utils.py                             |   30 +-
+ cinder/wsgi.py                                     |    4 +-
+ run_tests.sh                                       |    2 +-
+ setup.py                                           |   64 +-
+ tools/hacking.py                                   |   90 ++-
+ tools/install_venv.py                              |   14 +-
+ tox.ini                                            |    4 +-
+ 127 files changed, 2756 insertions(+), 2832 deletions(-)
+
+commit 0fb98971a7d7836335906197a1bf7c7d448b8dab
+Merge: 9922541 6da9686
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 18:21:45 2012 +0000
+
+    Merge "Remove redundant db.volume_update() in volume manager create_volume()"
+
+commit 9922541a05148da5e2e1d0344090b4128caa8dd0
+Merge: df3f9d7 1405a64
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Nov 26 17:04:28 2012 +0000
+
+    Merge "use O_DIRECT when copying from /dev/zero too"
+
+commit 70e4f2cdad6100cf73c59f60c741c11f69acbe30
+Author: Chuck Short <zulcss@ubuntu.com>
+Date:   Sun Nov 25 15:42:19 2012 -0600
+
+    Unpin lxml requirements
+    
+    Ubuntu is using a much newer version of lxml so
+    we shouldn't lock the versions in our infrasctructure.
+    
+    Change-Id: I73589af70e4156968f14d2494b3af36fa8f4794e
+    Signed-off-by: Chuck Short <zulcss@ubuntu.com>
+
+ tools/pip-requires |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit df3f9d76b9bc353133cbcc7cea20c572cd302733
+Merge: 5023fb5 67168a8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Nov 23 16:54:11 2012 +0000
+
+    Merge "Add CONTRIBUTING file."
+
+commit 1405a6440d646524d41adfed4fc1344948e2871f
+Author: Pádraig Brady <pbrady@redhat.com>
+Date:   Fri Nov 23 11:24:44 2012 +0000
+
+    use O_DIRECT when copying from /dev/zero too
+    
+    We need to avoid trying O_DIRECT with virtual
+    devices like /dev/zero and /dev/urandom etc.
+    as it's not supported there, which because of
+    our later check, would cause O_DIRECT to be
+    not applied to the output device either.
+    
+    Related to bug 937694
+    Possibly related to bug 1023755
+    Change-Id: I034d8345c3d00689c1f1fffcc2c110735c49ee01
+
+ cinder/volume/driver.py |   11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+commit 67168a8d8024b2369963fd1ae98b6c12df100f72
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Thu Nov 22 09:44:53 2012 -0700
+
+    Add CONTRIBUTING file.
+    
+    If the CONTRIBUTING[.md] file exists, Github will show a link to it to
+    anyone who files an issue on Github or opens a pull request on
+    Github. This files points folks to the OpenStack wiki page which
+    provides the proper instructions on how to contribute to OpenStack.
+    
+    See also <https://github.com/blog/1184-contributing-guidelines>.
+    
+    Change-Id: I8fef06b71aa993c4c68a1ec92c39a540318aaf31
+
+ CONTRIBUTING.md |   12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+commit 5023fb58d448ad2baad6139c34353f70b27a7ed2
+Author: Vincent Hou <sbhou@cn.ibm.com>
+Date:   Tue Nov 13 17:15:41 2012 +0800
+
+    Add the persistency to the volume created by iscsi IET.
+    
+    Bug 1070649.
+    
+    Change-Id: Ia2e095a8a60a5d5ca028272ed2a35c20b4ad45a7
+
+ cinder/volume/iscsi.py |   47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
 commit 683344f6e7baa31c17e4b500542b3da67d4e85bc
 Merge: 75ca60f 71d9f11
 Author: Jenkins <jenkins@review.openstack.org>
@@ -442,6 +2011,26 @@ Date:   Thu Nov 15 11:48:27 2012 +0000
  cinder/tests/test_volume_glance_metadata.py        |  114 ++++++++++++++++
  cinder/volume/manager.py                           |   28 ++++
  7 files changed, 424 insertions(+), 1 deletion(-)
+
+commit 6da9686ca64ef2a559d7120910d15cb495bc3b50
+Author: Zhiteng Huang <zhiteng.huang@intel.com>
+Date:   Wed Nov 21 01:02:37 2012 +0800
+
+    Remove redundant db.volume_update() in volume manager create_volume()
+    
+    Since scheduler has already updated db to set the 'host' field and
+    recorded 'scheduled_at' time, it's not necessary to do db.volume_update()
+    again in volume manager create_volume() method.  Also let volume api
+    to update db when creating volume from snapshot while snapshot_same_host
+    is true, thus the behavior is consistent (updating db when placement
+    decision is made).
+    
+    Change-Id: I43aaee8e2a5d0ceadb98bd608cc147467488349e
+
+ cinder/tests/test_volume.py |    1 +
+ cinder/volume/api.py        |    8 +++++---
+ cinder/volume/manager.py    |    3 ---
+ 3 files changed, 6 insertions(+), 6 deletions(-)
 
 commit ceee1fdaf2f54666ac72c6aa8076f92b6289327c
 Author: Chuck Short <zulcss@ubuntu.com>

@@ -21,6 +21,7 @@ from xml.dom import minidom
 
 from cinder.api import common
 from cinder.api.openstack import wsgi
+from cinder.api.v2.views import volumes as volume_views
 from cinder.api import xmlutil
 from cinder import exception
 from cinder import flags
@@ -36,86 +37,6 @@ LOG = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 
 
-def _translate_attachment_detail_view(_context, vol):
-    """Maps keys for attachment details view."""
-
-    d = _translate_attachment_summary_view(_context, vol)
-
-    # No additional data / lookups at the moment
-
-    return d
-
-
-def _translate_attachment_summary_view(_context, vol):
-    """Maps keys for attachment summary view."""
-    d = {}
-
-    volume_id = vol['id']
-
-    # NOTE(justinsb): We use the volume id as the id of the attachment object
-    d['id'] = volume_id
-
-    d['volume_id'] = volume_id
-    d['server_id'] = vol['instance_uuid']
-    if vol.get('mountpoint'):
-        d['device'] = vol['mountpoint']
-
-    return d
-
-
-def _translate_volume_detail_view(context, vol, image_id=None):
-    """Maps keys for volumes details view."""
-
-    d = _translate_volume_summary_view(context, vol, image_id)
-
-    # No additional data / lookups at the moment
-
-    return d
-
-
-def _translate_volume_summary_view(context, vol, image_id=None):
-    """Maps keys for volumes summary view."""
-    d = {}
-
-    d['id'] = vol['id']
-    d['status'] = vol['status']
-    d['size'] = vol['size']
-    d['availability_zone'] = vol['availability_zone']
-    d['created_at'] = vol['created_at']
-
-    d['attachments'] = []
-    if vol['attach_status'] == 'attached':
-        attachment = _translate_attachment_detail_view(context, vol)
-        d['attachments'].append(attachment)
-
-    d['display_name'] = vol['display_name']
-    d['display_description'] = vol['display_description']
-
-    if vol['volume_type_id'] and vol.get('volume_type'):
-        d['volume_type'] = vol['volume_type']['name']
-    else:
-        # TODO(bcwaldon): remove str cast once we use uuids
-        d['volume_type'] = str(vol['volume_type_id'])
-
-    d['snapshot_id'] = vol['snapshot_id']
-
-    if image_id:
-        d['image_id'] = image_id
-
-    LOG.audit(_("vol=%s"), vol, context=context)
-
-    if vol.get('volume_metadata'):
-        metadata = vol.get('volume_metadata')
-        d['metadata'] = dict((item['key'], item['value']) for item in metadata)
-    # avoid circular ref when vol is a Volume instance
-    elif vol.get('metadata') and isinstance(vol.get('metadata'), dict):
-        d['metadata'] = vol['metadata']
-    else:
-        d['metadata'] = {}
-
-    return d
-
-
 def make_attachment(elem):
     elem.set('id')
     elem.set('server_id')
@@ -129,10 +50,11 @@ def make_volume(elem):
     elem.set('size')
     elem.set('availability_zone')
     elem.set('created_at')
-    elem.set('display_name')
+    elem.set('name')
     elem.set('display_description')
     elem.set('volume_type')
     elem.set('snapshot_id')
+    elem.set('source_volid')
 
     attachments = xmlutil.SubTemplateElement(elem, 'attachments')
     attachment = xmlutil.SubTemplateElement(attachments, 'attachment',
@@ -175,7 +97,7 @@ class CommonDeserializer(wsgi.MetadataXMLDeserializer):
         volume = {}
         volume_node = self.find_first_child_named(node, 'volume')
 
-        attributes = ['display_name', 'display_description', 'size',
+        attributes = ['name', 'display_description', 'size',
                       'volume_type', 'availability_zone']
         for attr in attributes:
             if volume_node.getAttribute(attr):
@@ -205,6 +127,8 @@ class CreateDeserializer(CommonDeserializer):
 class VolumeController(wsgi.Controller):
     """The Volumes API controller for the OpenStack API."""
 
+    _view_builder_class = volume_views.ViewBuilder
+
     def __init__(self, ext_mgr):
         self.volume_api = volume.API()
         self.ext_mgr = ext_mgr
@@ -220,7 +144,7 @@ class VolumeController(wsgi.Controller):
         except exception.NotFound:
             raise exc.HTTPNotFound()
 
-        return {'volume': _translate_volume_detail_view(context, vol)}
+        return self._view_builder.detail(req, vol)
 
     def delete(self, req, id):
         """Delete a volume."""
@@ -238,27 +162,42 @@ class VolumeController(wsgi.Controller):
     @wsgi.serializers(xml=VolumesTemplate)
     def index(self, req):
         """Returns a summary list of volumes."""
-        return self._items(req, entity_maker=_translate_volume_summary_view)
+        return self._get_volumes(req, is_detail=False)
 
     @wsgi.serializers(xml=VolumesTemplate)
     def detail(self, req):
         """Returns a detailed list of volumes."""
-        return self._items(req, entity_maker=_translate_volume_detail_view)
+        return self._get_volumes(req, is_detail=True)
 
-    def _items(self, req, entity_maker):
-        """Returns a list of volumes, transformed through entity_maker."""
-
-        search_opts = {}
-        search_opts.update(req.GET)
+    def _get_volumes(self, req, is_detail):
+        """Returns a list of volumes, transformed through view builder."""
 
         context = req.environ['cinder.context']
-        remove_invalid_options(context,
-                               search_opts, self._get_volume_search_options())
 
-        volumes = self.volume_api.get_all(context, search_opts=search_opts)
+        params = req.params.copy()
+        marker = params.pop('marker', None)
+        limit = params.pop('limit', None)
+        sort_key = params.pop('sort_key', 'created_at')
+        sort_dir = params.pop('sort_dir', 'desc')
+        filters = params
+
+        remove_invalid_options(context,
+                               filters, self._get_volume_filter_options())
+
+        # NOTE(thingee): v2 API allows name instead of display_name
+        if 'name' in filters:
+            filters['display_name'] = filters['name']
+            del filters['name']
+
+        volumes = self.volume_api.get_all(context, marker, limit, sort_key,
+                                          sort_dir, filters)
         limited_list = common.limited(volumes, req)
-        res = [entity_maker(context, vol) for vol in limited_list]
-        return {'volumes': res}
+
+        if is_detail:
+            volumes = self._view_builder.detail_list(req, limited_list)
+        else:
+            volumes = self._view_builder.summary_list(req, limited_list)
+        return volumes
 
     def _image_uuid_from_href(self, image_href):
         # If the image href was generated by nova api, strip image_href
@@ -287,11 +226,16 @@ class VolumeController(wsgi.Controller):
 
         kwargs = {}
 
+        # NOTE(thingee): v2 API allows name instead of display_name
+        if volume.get('name'):
+            volume['display_name'] = volume.get('name')
+            del volume['name']
+
         req_volume_type = volume.get('volume_type', None)
         if req_volume_type:
             try:
                 kwargs['volume_type'] = volume_types.get_volume_type_by_name(
-                        context, req_volume_type)
+                    context, req_volume_type)
             except exception.VolumeTypeNotFound:
                 explanation = 'Volume type not found.'
                 raise exc.HTTPNotFound(explanation=explanation)
@@ -305,9 +249,18 @@ class VolumeController(wsgi.Controller):
         else:
             kwargs['snapshot'] = None
 
+        source_volid = volume.get('source_volid')
+        if source_volid is not None:
+            kwargs['source_volume'] = self.volume_api.get_volume(context,
+                                                                 source_volid)
+        else:
+            kwargs['source_volume'] = None
+
         size = volume.get('size', None)
         if size is None and kwargs['snapshot'] is not None:
             size = kwargs['snapshot']['volume_size']
+        elif size is None and kwargs['source_volume'] is not None:
+            size = kwargs['source_volume']['size']
 
         LOG.audit(_("Create volume of %s GB"), size, context=context)
 
@@ -333,15 +286,13 @@ class VolumeController(wsgi.Controller):
         # TODO(vish): Instance should be None at db layer instead of
         #             trying to lazy load, but for now we turn it into
         #             a dict to avoid an error.
-        retval = _translate_volume_detail_view(context,
-                                               dict(new_volume.iteritems()),
-                                               image_uuid)
+        retval = self._view_builder.summary(req, dict(new_volume.iteritems()))
 
-        return {'volume': retval}
+        return retval
 
-    def _get_volume_search_options(self):
+    def _get_volume_filter_options(self):
         """Return volume search options allowed by non-admin."""
-        return ('display_name', 'status')
+        return ('name', 'status')
 
     @wsgi.serializers(xml=VolumeTemplate)
     def update(self, req, id, body):
@@ -358,7 +309,7 @@ class VolumeController(wsgi.Controller):
         update_dict = {}
 
         valid_update_keys = (
-            'display_name',
+            'name',
             'display_description',
             'metadata',
         )
@@ -366,6 +317,11 @@ class VolumeController(wsgi.Controller):
         for key in valid_update_keys:
             if key in volume:
                 update_dict[key] = volume[key]
+
+        # NOTE(thingee): v2 API allows name instead of display_name
+        if 'name' in update_dict:
+            update_dict['display_name'] = update_dict['name']
+            del update_dict['name']
 
         try:
             volume = self.volume_api.get(context, id)
@@ -375,23 +331,23 @@ class VolumeController(wsgi.Controller):
 
         volume.update(update_dict)
 
-        return {'volume': _translate_volume_detail_view(context, volume)}
+        return self._view_builder.detail(req, volume)
 
 
 def create_resource(ext_mgr):
     return wsgi.Resource(VolumeController(ext_mgr))
 
 
-def remove_invalid_options(context, search_options, allowed_search_options):
+def remove_invalid_options(context, filters, allowed_search_options):
     """Remove search options that are not valid for non-admin API/context."""
     if context.is_admin:
         # Allow all options
         return
     # Otherwise, strip out all unknown options
-    unknown_options = [opt for opt in search_options
-            if opt not in allowed_search_options]
+    unknown_options = [opt for opt in filters
+                       if opt not in allowed_search_options]
     bad_options = ", ".join(unknown_options)
-    log_msg = _("Removing options '%(bad_options)s' from query") % locals()
+    log_msg = _("Removing options '%s' from query") % bad_options
     LOG.debug(log_msg)
     for opt in unknown_options:
-        del search_options[opt]
+        del filters[opt]

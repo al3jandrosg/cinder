@@ -117,8 +117,10 @@ class SanISCSIDriver(ISCSIDriver):
                 while attempts > 0:
                     attempts -= 1
                     try:
-                        return utils.ssh_execute(ssh, command,
-                                               check_exit_code=check_exit_code)
+                        return utils.ssh_execute(
+                            ssh,
+                            command,
+                            check_exit_code=check_exit_code)
                     except Exception as e:
                         LOG.error(e)
                         greenthread.sleep(random.randint(20, 500) / 100.0)
@@ -151,3 +153,15 @@ class SanISCSIDriver(ISCSIDriver):
         # The san_ip must always be set, because we use it for the target
         if not FLAGS.san_ip:
             raise exception.InvalidInput(reason=_("san_ip must be set"))
+
+    def copy_image_to_volume(self, context, volume, image_service, image_id):
+        """Fetch the image from image_service and write it to the volume."""
+        raise NotImplementedError()
+
+    def copy_volume_to_image(self, context, volume, image_service, image_id):
+        """Copy the volume to the specified image."""
+        raise NotImplementedError()
+
+    def create_cloned_volume(self, volume, src_vref):
+        """Create a cloen of the specified volume."""
+        raise NotImplementedError()

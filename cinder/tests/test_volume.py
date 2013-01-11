@@ -31,6 +31,7 @@ from cinder import context
 from cinder import db
 from cinder import exception
 from cinder import flags
+from cinder.image import image_utils
 from cinder.openstack.common import importutils
 from cinder.openstack.common.notifier import api as notifier_api
 from cinder.openstack.common.notifier import test_notifier
@@ -85,6 +86,7 @@ class VolumeTestCase(test.TestCase):
         vol['availability_zone'] = FLAGS.storage_availability_zone
         vol['status'] = "creating"
         vol['attach_status'] = "detached"
+        vol['host'] = FLAGS.host
         if metadata is not None:
             vol['metadata'] = metadata
         return db.volume_create(context.get_admin_context(), vol)
@@ -200,8 +202,9 @@ class VolumeTestCase(test.TestCase):
         self.volume.create_volume(self.context, volume_id)
 
         self.mox.StubOutWithMock(self.volume.driver, 'delete_volume')
-        self.volume.driver.delete_volume(mox.IgnoreArg()) \
-                                              .AndRaise(exception.VolumeIsBusy)
+        self.volume.driver.delete_volume(
+            mox.IgnoreArg()).AndRaise(exception.VolumeIsBusy(
+                                      volume_name='fake'))
         self.mox.ReplayAll()
         res = self.volume.delete_volume(self.context, volume_id)
         self.assertEqual(True, res)
@@ -225,9 +228,9 @@ class VolumeTestCase(test.TestCase):
                          db.volume_get(
                              context.get_admin_context(),
                              volume_dst['id']).id)
-        self.assertEqual(snapshot_id, db.volume_get(
-                context.get_admin_context(),
-                volume_dst['id']).snapshot_id)
+        self.assertEqual(snapshot_id,
+                         db.volume_get(context.get_admin_context(),
+                                       volume_dst['id']).snapshot_id)
 
         self.volume.delete_volume(self.context, volume_dst['id'])
         self.volume.delete_snapshot(self.context, snapshot_id)
@@ -272,6 +275,22 @@ class VolumeTestCase(test.TestCase):
                           db.volume_get,
                           self.context,
                           volume_id)
+
+    def test_preattach_status_volume(self):
+        """Ensure volume goes into pre-attaching state"""
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
+        mountpoint = "/dev/sdf"
+        volume = db.volume_create(self.context, {'size': 1,
+                                                 'status': 'available'})
+        volume_id = volume['id']
+
+        volume_api = cinder.volume.api.API()
+        volume_api.attach(self.context, volume, instance_uuid, mountpoint)
+
+        vol = db.volume_get(self.context, volume_id)
+        self.assertEqual(vol['status'], "available")
+        self.assertEqual(vol['attach_status'], None)
+        self.assertEqual(vol['instance_uuid'], None)
 
     def test_concurrent_volumes_get_different_targets(self):
         """Ensure multiple concurrent volumes get different targets."""
@@ -453,8 +472,9 @@ class VolumeTestCase(test.TestCase):
         self.volume.create_snapshot(self.context, volume_id, snapshot_id)
 
         self.mox.StubOutWithMock(self.volume.driver, 'delete_snapshot')
-        self.volume.driver.delete_snapshot(mox.IgnoreArg()) \
-                                            .AndRaise(exception.SnapshotIsBusy)
+        self.volume.driver.delete_snapshot(
+            mox.IgnoreArg()).AndRaise(
+                exception.SnapshotIsBusy(snapshot_name='fake'))
         self.mox.ReplayAll()
         self.volume.delete_snapshot(self.context, snapshot_id)
         snapshot_ref = db.snapshot_get(self.context, snapshot_id)
@@ -475,9 +495,13 @@ class VolumeTestCase(test.TestCase):
         def fake_copy_image_to_volume(context, volume, image_id):
             pass
 
+        def fake_fetch_to_raw(context, image_service, image_id, vol_path):
+            pass
+
         dst_fd, dst_path = tempfile.mkstemp()
         os.close(dst_fd)
         self.stubs.Set(self.volume.driver, 'local_path', fake_local_path)
+        self.stubs.Set(image_utils, 'fetch_to_raw', fake_fetch_to_raw)
         if fakeout_copy_image_to_volume:
             self.stubs.Set(self.volume, '_copy_image_to_volume',
                            fake_copy_image_to_volume)
@@ -485,13 +509,14 @@ class VolumeTestCase(test.TestCase):
         image_id = 'c905cedb-7281-47e4-8a62-f26bc5fc4c77'
         volume_id = 1
         # creating volume testdata
-        db.volume_create(self.context, {'id': volume_id,
-                            'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                            'display_description': 'Test Desc',
-                            'size': 20,
-                            'status': 'creating',
-                            'instance_uuid': None,
-                            'host': 'dummy'})
+        db.volume_create(self.context,
+                         {'id': volume_id,
+                          'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+                          'display_description': 'Test Desc',
+                          'size': 20,
+                          'status': 'creating',
+                          'instance_uuid': None,
+                          'host': 'dummy'})
         try:
             self.volume.create_volume(self.context,
                                       volume_id,
@@ -525,12 +550,13 @@ class VolumeTestCase(test.TestCase):
         image_id = 'aaaaaaaa-0000-0000-0000-000000000000'
         # creating volume testdata
         volume_id = 1
-        db.volume_create(self.context, {'id': volume_id,
-                             'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                             'display_description': 'Test Desc',
-                             'size': 20,
-                             'status': 'creating',
-                             'host': 'dummy'})
+        db.volume_create(self.context,
+                         {'id': volume_id,
+                          'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+                          'display_description': 'Test Desc',
+                          'size': 20,
+                          'status': 'creating',
+                          'host': 'dummy'})
 
         self.assertRaises(exception.ImageNotFound,
                           self.volume.create_volume,
@@ -556,19 +582,20 @@ class VolumeTestCase(test.TestCase):
         image_id = '70a599e0-31e7-49b7-b260-868f441e862b'
         # creating volume testdata
         volume_id = 1
-        db.volume_create(self.context, {'id': volume_id,
-                             'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                             'display_description': 'Test Desc',
-                             'size': 20,
-                             'status': 'uploading',
-                             'instance_uuid': None,
-                             'host': 'dummy'})
+        db.volume_create(self.context,
+                         {'id': volume_id,
+                          'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+                          'display_description': 'Test Desc',
+                          'size': 20,
+                          'status': 'uploading',
+                          'instance_uuid': None,
+                          'host': 'dummy'})
 
         try:
             # start test
             self.volume.copy_volume_to_image(self.context,
-                                                volume_id,
-                                                image_id)
+                                             volume_id,
+                                             image_id)
 
             volume = db.volume_get(self.context, volume_id)
             self.assertEqual(volume['status'], 'available')
@@ -590,21 +617,21 @@ class VolumeTestCase(test.TestCase):
         image_id = 'a440c04b-79fa-479c-bed1-0b816eaec379'
         # creating volume testdata
         volume_id = 1
-        db.volume_create(self.context,
-                         {'id': volume_id,
-                         'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                         'display_description': 'Test Desc',
-                         'size': 20,
-                         'status': 'uploading',
-                         'instance_uuid':
-                            'b21f957d-a72f-4b93-b5a5-45b1161abb02',
-                         'host': 'dummy'})
+        db.volume_create(
+            self.context,
+            {'id': volume_id,
+             'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+             'display_description': 'Test Desc',
+             'size': 20,
+             'status': 'uploading',
+             'instance_uuid': 'b21f957d-a72f-4b93-b5a5-45b1161abb02',
+             'host': 'dummy'})
 
         try:
             # start test
             self.volume.copy_volume_to_image(self.context,
-                                                volume_id,
-                                                image_id)
+                                             volume_id,
+                                             image_id)
 
             volume = db.volume_get(self.context, volume_id)
             self.assertEqual(volume['status'], 'in-use')
@@ -625,12 +652,13 @@ class VolumeTestCase(test.TestCase):
         image_id = 'aaaaaaaa-0000-0000-0000-000000000000'
         # creating volume testdata
         volume_id = 1
-        db.volume_create(self.context, {'id': volume_id,
-                             'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                             'display_description': 'Test Desc',
-                             'size': 20,
-                             'status': 'in-use',
-                             'host': 'dummy'})
+        db.volume_create(self.context,
+                         {'id': volume_id,
+                          'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+                          'display_description': 'Test Desc',
+                          'size': 20,
+                          'status': 'in-use',
+                          'host': 'dummy'})
 
         try:
             # start test
@@ -662,7 +690,7 @@ class VolumeTestCase(test.TestCase):
         try:
             volume_id = None
             volume_api = cinder.volume.api.API(
-                                            image_service=_FakeImageService())
+                image_service=_FakeImageService())
             volume = volume_api.create(self.context, 2, 'name', 'description',
                                        image_id=1)
             volume_id = volume['id']

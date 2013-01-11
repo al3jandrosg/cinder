@@ -8,20 +8,15 @@ added to the dependency list by dh_python2, and avoid having it and its
 dependencies (git!) installed with python-nova.
 
 Signed-off-by: Chuck Short <chuck.short@canonical.com>
----
- tools/pip-requires | 1 -
- 1 file changed, 1 deletion(-)
 
-diff --git a/tools/pip-requires b/tools/pip-requires
-index 1a460b5..de056ce 100644
---- a/tools/pip-requires
-+++ b/tools/pip-requires
-@@ -16,5 +16,4 @@ suds==0.4
+diff -Naurp cinder-2013.1.orig/tools/pip-requires cinder-2013.1/tools/pip-requires
+--- cinder-2013.1.orig/tools/pip-requires	2012-11-28 13:25:36.000000000 -0600
++++ cinder-2013.1/tools/pip-requires	2012-11-29 10:41:07.931555948 -0600
+@@ -16,6 +16,5 @@ suds==0.4
  paramiko
  Babel>=0.9.6
  iso8601>=0.1.4
 -setuptools_git>=0.4
  python-glanceclient>=0.5.0,<2
--- 
-1.8.0
-
+ python-keystoneclient>=0.2.0
++stevedore>=0.7

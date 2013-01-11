@@ -20,14 +20,17 @@ Drivers for volumes.
 
 """
 
+import math
 import os
 import re
 import time
 
 from cinder import exception
 from cinder import flags
+from cinder.image import image_utils
 from cinder.openstack.common import cfg
 from cinder.openstack.common import log as logging
+from cinder.openstack.common import timeutils
 from cinder import utils
 from cinder.volume import iscsi
 
@@ -38,6 +41,10 @@ volume_opts = [
     cfg.StrOpt('volume_group',
                default='cinder-volumes',
                help='Name for the VG that will contain exported volumes'),
+    cfg.IntOpt('lvm_mirrors',
+               default=0,
+               help='If set, create lvms with multiple mirrors. Note that '
+                    'this requires lvm_mirrors + 2 pvs with available space'),
     cfg.IntOpt('num_shell_tries',
                default=3,
                help='number of times to attempt to run flakey shell commands'),
@@ -56,7 +63,10 @@ volume_opts = [
     cfg.IntOpt('iscsi_port',
                default=3260,
                help='The port that the iSCSI daemon is listening on'),
-    ]
+    cfg.IntOpt('reserved_percentage',
+               default=0,
+               help='The percentage of backend capacity is reserved'),
+]
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(volume_opts)
@@ -68,6 +78,7 @@ class VolumeDriver(object):
         # NOTE(vish): db is set by Manager
         self.db = None
         self.set_execute(execute)
+        self._stats = {}
 
     def set_execute(self, execute):
         self._execute = execute
@@ -92,16 +103,26 @@ class VolumeDriver(object):
     def check_for_setup_error(self):
         """Returns an error if prerequisites aren't met"""
         out, err = self._execute('vgs', '--noheadings', '-o', 'name',
-                                run_as_root=True)
+                                 run_as_root=True)
         volume_groups = out.split()
         if not FLAGS.volume_group in volume_groups:
             exception_message = (_("volume group %s doesn't exist")
-                                  % FLAGS.volume_group)
+                                 % FLAGS.volume_group)
             raise exception.VolumeBackendAPIException(data=exception_message)
 
     def _create_volume(self, volume_name, sizestr):
-        self._try_execute('lvcreate', '-L', sizestr, '-n',
-                          volume_name, FLAGS.volume_group, run_as_root=True)
+        cmd = ['lvcreate', '-L', sizestr, '-n', volume_name,
+               FLAGS.volume_group]
+        if FLAGS.lvm_mirrors:
+            cmd += ['-m', FLAGS.lvm_mirrors, '--nosync']
+            terras = int(sizestr[:-1]) / 1024.0
+            if terras >= 1.5:
+                rsize = int(2 ** math.ceil(math.log(terras) / math.log(2)))
+                # NOTE(vish): Next power of two for region size. See:
+                #             http://red.ht/U2BPOD
+                cmd += ['-R', str(rsize)]
+
+        self._try_execute(*cmd, run_as_root=True)
 
     def _copy_volume(self, srcstr, deststr, size_in_g):
         # Use O_DIRECT to avoid thrashing the system buffer cache
@@ -134,6 +155,8 @@ class VolumeDriver(object):
         # TODO(ja): reclaiming space should be done lazy and low priority
         dev_path = self.local_path(volume)
         if FLAGS.secure_delete and os.path.exists(dev_path):
+            LOG.info(_("Performing secure delete on volume: %s")
+                     % volume['id'])
             self._copy_volume('/dev/zero', dev_path, size_in_g)
 
         self._try_execute('lvremove', '-f', "%s/%s" %
@@ -163,6 +186,23 @@ class VolumeDriver(object):
         self._create_volume(volume['name'], self._sizestr(volume['size']))
         self._copy_volume(self.local_path(snapshot), self.local_path(volume),
                           snapshot['volume_size'])
+
+    def create_cloned_volume(self, volume, src_vref):
+        """Creates a clone of the specified volume."""
+        LOG.info(_('Creating clone of volume: %s') % src_vref['id'])
+        volume_name = FLAGS.volume_name_template % src_vref['id']
+        temp_snapshot = {'volume_name': volume_name,
+                         'size': src_vref['size'],
+                         'volume_size': src_vref['size'],
+                         'name': 'clone-snap-%s' % src_vref['id']}
+        self.create_snapshot(temp_snapshot)
+        self._create_volume(volume['name'], self._sizestr(volume['size']))
+        try:
+            self._copy_volume(self.local_path(temp_snapshot),
+                              self.local_path(volume),
+                              src_vref['size'])
+        finally:
+            self.delete_snapshot(temp_snapshot)
 
     def delete_volume(self, volume):
         """Deletes a logical volume."""
@@ -298,8 +338,9 @@ class ISCSIDriver(VolumeDriver):
         # cooresponding target admin class
         if not isinstance(self.tgtadm, iscsi.TgtAdm):
             try:
-                iscsi_target = self.db.volume_get_iscsi_target_num(context,
-                                                               volume['id'])
+                iscsi_target = self.db.volume_get_iscsi_target_num(
+                    context,
+                    volume['id'])
             except exception.NotFound:
                 LOG.info(_("Skipping ensure_export. No iscsi_target "
                            "provisioned for volume: %s"), volume['id'])
@@ -311,7 +352,7 @@ class ISCSIDriver(VolumeDriver):
         old_name = None
         volume_name = volume['name']
         if (volume['provider_location'] is not None and
-            volume['name'] not in volume['provider_location']):
+                volume['name'] not in volume['provider_location']):
 
             msg = _('Detected inconsistency in provider_location id')
             LOG.debug(msg)
@@ -434,8 +475,9 @@ class ISCSIDriver(VolumeDriver):
         # cooresponding target admin class
         if not isinstance(self.tgtadm, iscsi.TgtAdm):
             try:
-                iscsi_target = self.db.volume_get_iscsi_target_num(context,
-                                                               volume['id'])
+                iscsi_target = self.db.volume_get_iscsi_target_num(
+                    context,
+                    volume['id'])
             except exception.NotFound:
                 LOG.info(_("Skipping remove_export. No iscsi_target "
                            "provisioned for volume: %s"), volume['id'])
@@ -511,9 +553,9 @@ class ISCSIDriver(VolumeDriver):
             location = self._do_iscsi_discovery(volume)
 
             if not location:
-                raise exception.InvalidVolume(_("Could not find iSCSI export "
-                                                " for volume %s") %
-                                              (volume['name']))
+                msg = (_("Could not find iSCSI export for volume %s") %
+                        (volume['name']))
+                raise exception.InvalidVolume(reason=msg)
 
             LOG.debug(_("ISCSI Discovery: Found %s") % (location))
             properties['target_discovered'] = True
@@ -583,12 +625,55 @@ class ISCSIDriver(VolumeDriver):
     def terminate_connection(self, volume, connector, **kwargs):
         pass
 
+    def get_volume_stats(self, refresh=False):
+        """Get volume status.
+
+        If 'refresh' is True, run update the stats first."""
+        if refresh:
+            self._update_volume_status()
+
+        return self._stats
+
+    def _update_volume_status(self):
+        """Retrieve status info from volume group."""
+
+        LOG.debug(_("Updating volume status"))
+        data = {}
+
+        # Note(zhiteng): These information are driver/backend specific,
+        # each driver may define these values in its own config options
+        # or fetch from driver specific configuration file.
+        data["volume_backend_name"] = 'LVM_iSCSI'
+        data["vendor_name"] = 'Open Source'
+        data["driver_version"] = '1.0'
+        data["storage_protocol"] = 'iSCSI'
+
+        data['total_capacity_gb'] = 0
+        data['free_capacity_gb'] = 0
+        data['reserved_percentage'] = FLAGS.reserved_percentage
+        data['QoS_support'] = False
+
+        try:
+            out, err = self._execute('vgs', '--noheadings', '--nosuffix',
+                                     '--unit=G', '-o', 'name,size,free',
+                                     FLAGS.volume_group, run_as_root=True)
+        except exception.ProcessExecutionError as exc:
+            LOG.error(_("Error retrieving volume status: "), exc.stderr)
+            out = False
+
+        if out:
+            volume = out.split()
+            data['total_capacity_gb'] = float(volume[1])
+            data['free_capacity_gb'] = float(volume[2])
+
+        self._stats = data
+
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Fetch the image from image_service and write it to the volume."""
-        volume_path = self.local_path(volume)
-        with utils.temporary_chown(volume_path):
-            with utils.file_open(volume_path, "wb") as image_file:
-                image_service.download(context, image_id, image_file)
+        image_utils.fetch_to_raw(context,
+                                 image_service,
+                                 image_id,
+                                 self.local_path(volume))
 
     def copy_volume_to_image(self, context, volume, image_service, image_id):
         """Copy the volume to the specified image."""

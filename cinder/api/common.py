@@ -25,6 +25,7 @@ from cinder.api.openstack import wsgi
 from cinder.api import xmlutil
 from cinder import flags
 from cinder.openstack.common import log as logging
+from xml.dom import minidom
 
 
 LOG = logging.getLogger(__name__)
@@ -181,21 +182,17 @@ class ViewBuilder(object):
     _collection_name = None
 
     def _get_links(self, request, identifier):
-        return [{
-            "rel": "self",
-            "href": self._get_href_link(request, identifier),
-        },
-        {
-            "rel": "bookmark",
-            "href": self._get_bookmark_link(request, identifier),
-        }]
+        return [{"rel": "self",
+                 "href": self._get_href_link(request, identifier), },
+                {"rel": "bookmark",
+                 "href": self._get_bookmark_link(request, identifier), }]
 
     def _get_next_link(self, request, identifier):
         """Return href string with proper limit and marker params."""
         params = request.params.copy()
         params["marker"] = identifier
         prefix = self._update_link_prefix(request.application_url,
-                                          FLAGS.osapi_compute_link_prefix)
+                                          FLAGS.osapi_volume_base_URL)
         url = os.path.join(prefix,
                            request.environ["cinder.context"].project_id,
                            self._collection_name)
@@ -204,7 +201,7 @@ class ViewBuilder(object):
     def _get_href_link(self, request, identifier):
         """Return an href string pointing to this object."""
         prefix = self._update_link_prefix(request.application_url,
-                                          FLAGS.osapi_compute_link_prefix)
+                                          FLAGS.osapi_volume_base_URL)
         return os.path.join(prefix,
                             request.environ["cinder.context"].project_id,
                             self._collection_name,
@@ -214,7 +211,7 @@ class ViewBuilder(object):
         """Create a URL that refers to a specific resource."""
         base_url = remove_version_from_href(request.application_url)
         base_url = self._update_link_prefix(base_url,
-                                            FLAGS.osapi_compute_link_prefix)
+                                            FLAGS.osapi_volume_base_URL)
         return os.path.join(base_url,
                             request.environ["cinder.context"].project_id,
                             self._collection_name,

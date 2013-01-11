@@ -40,8 +40,8 @@ FLAGS = flags.FLAGS
 
 windows_opts = [
     cfg.StrOpt('windows_iscsi_lun_path',
-              default='C:\iSCSIVirtualDisks',
-              help='Path to store VHD backed volumes'),
+               default='C:\iSCSIVirtualDisks',
+               help='Path to store VHD backed volumes'),
 ]
 
 FLAGS.register_opts(windows_opts)
@@ -147,8 +147,8 @@ class WindowsDriver(driver.ISCSIDriver):
         wt_disk = self._conn_wmi.WT_Disk(Description=vol_name)[0]
         wt_disk.Delete_()
         vhdfiles = self._conn_cimv2.query(
-        "Select * from CIM_DataFile where Name = '" +
-        self._get_vhd_path(volume) + "'")
+            "Select * from CIM_DataFile where Name = '" +
+            self._get_vhd_path(volume) + "'")
         if len(vhdfiles) > 0:
             vhdfiles[0].Delete()
 
@@ -203,10 +203,14 @@ class WindowsDriver(driver.ISCSIDriver):
                 raise
             else:
                 LOG.info(_('Ignored target creation error "%s"'
-                                             ' while ensuring export'), exc)
+                           ' while ensuring export'), exc)
         #Get the disk to add
         vol_name = volume['name']
-        wt_disk = self._conn_wmi.WT_Disk(Description=vol_name)[0]
+        q = self._conn_wmi.WT_Disk(Description=vol_name)
+        if not len(q):
+            LOG.debug(_('Disk not found: %s'), vol_name)
+            return None
+        wt_disk = q[0]
         wt_host = self._conn_wmi.WT_Host(HostName=target_name)[0]
         wt_host.AddWTDisk(wt_disk.WTD)
 
@@ -230,3 +234,11 @@ class WindowsDriver(driver.ISCSIDriver):
         wt_host = self._conn_wmi.WT_Host(HostName=target_name)[0]
         wt_host.RemoveAllWTDisks()
         wt_host.Delete_()
+
+    def copy_image_to_volume(self, context, volume, image_service, image_id):
+        """Fetch the image from image_service and write it to the volume."""
+        raise NotImplementedError()
+
+    def copy_volume_to_image(self, context, volume, image_service, image_id):
+        """Copy the volume to the specified image."""
+        raise NotImplementedError()

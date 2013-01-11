@@ -29,8 +29,8 @@ LOG = logging.getLogger(__name__)
 
 volume_opts = [
     cfg.StrOpt('nfs_shares_config',
-                default=None,
-                help='File with the list of available nfs shares'),
+               default=None,
+               help='File with the list of available nfs shares'),
     cfg.StrOpt('nfs_mount_point_base',
                default='$state_path/mnt',
                help='Base dir where nfs expected to be mounted'),
@@ -41,8 +41,7 @@ volume_opts = [
                 default=True,
                 help=('Create volumes as sparsed files which take no space.'
                       'If set to False volume is created as regular file.'
-                      'In such case volume creation takes a lot of time.'))
-]
+                      'In such case volume creation takes a lot of time.'))]
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(volume_opts)
@@ -75,6 +74,9 @@ class NfsDriver(driver.VolumeDriver):
     def check_for_setup_error(self):
         """Just to override parent behavior"""
         pass
+
+    def create_cloned_volume(self, volume, src_vref):
+        raise NotImplementedError()
 
     def create_volume(self, volume):
         """Creates a volume"""
@@ -191,7 +193,7 @@ class NfsDriver(driver.VolumeDriver):
                 self._ensure_share_mounted(share)
                 self._mounted_shares.append(share)
             except Exception, exc:
-                LOG.warning('Exception during mounting %s' % (exc,))
+                LOG.warning(_('Exception during mounting %s') % (exc,))
 
         LOG.debug('Available shares %s' % str(self._mounted_shares))
 
@@ -226,7 +228,7 @@ class NfsDriver(driver.VolumeDriver):
 
         if volume_size_for * 1024 * 1024 * 1024 > greatest_size:
             raise exception.NfsNoSuitableShareFound(
-                    volume_size=volume_size_for)
+                volume_size=volume_size_for)
         return greatest_share
 
     def _get_mount_point_for_share(self, nfs_share):

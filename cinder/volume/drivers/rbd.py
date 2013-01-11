@@ -42,8 +42,7 @@ rbd_opts = [
     cfg.StrOpt('volume_tmp_dir',
                default=None,
                help='where to store temporary image files if the volume '
-                    'driver does not write them directly to the volume'),
-    ]
+                    'driver does not write them directly to the volume'), ]
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(rbd_opts)
@@ -64,6 +63,9 @@ class RBDDriver(driver.VolumeDriver):
     def _supports_layering(self):
         stdout, _ = self._execute('rbd', '--help')
         return 'clone' in stdout
+
+    def create_cloned_volume(self, volume, src_vref):
+        raise NotImplementedError()
 
     def create_volume(self, volume):
         """Creates a logical volume."""
@@ -165,8 +167,7 @@ class RBDDriver(driver.VolumeDriver):
                 'auth_enabled': FLAGS.rbd_secret_uuid is not None,
                 'auth_username': FLAGS.rbd_user,
                 'secret_type': 'ceph',
-                'secret_uuid': FLAGS.rbd_secret_uuid,
-                }
+                'secret_uuid': FLAGS.rbd_secret_uuid, }
         }
 
     def terminate_connection(self, volume, connector, **kwargs):
@@ -175,15 +176,15 @@ class RBDDriver(driver.VolumeDriver):
     def _parse_location(self, location):
         prefix = 'rbd://'
         if not location.startswith(prefix):
-            reason = _('Image %s is not stored in rbd') % location
-            raise exception.ImageUnacceptable(reason)
+            reason = _('Not stored in rbd')
+            raise exception.ImageUnacceptable(image_id=location, reason=reason)
         pieces = map(urllib.unquote, location[len(prefix):].split('/'))
         if any(map(lambda p: p == '', pieces)):
-            reason = _('Image %s has blank components') % location
-            raise exception.ImageUnacceptable(reason)
+            reason = _('Blank components')
+            raise exception.ImageUnacceptable(image_id=location, reason=reason)
         if len(pieces) != 4:
-            reason = _('Image %s is not an rbd snapshot') % location
-            raise exception.ImageUnacceptable(reason)
+            reason = _('Not an rbd snapshot')
+            raise exception.ImageUnacceptable(image_id=location, reason=reason)
         return pieces
 
     def _get_fsid(self):

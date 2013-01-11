@@ -98,6 +98,7 @@ def _translate_volume_summary_view(context, vol, image_id=None):
         d['volume_type'] = str(vol['volume_type_id'])
 
     d['snapshot_id'] = vol['snapshot_id']
+    d['source_volid'] = vol['source_volid']
 
     if image_id:
         d['image_id'] = image_id
@@ -138,6 +139,7 @@ def make_volume(elem):
     elem.set('display_description')
     elem.set('volume_type')
     elem.set('snapshot_id')
+    elem.set('source_volid')
 
     attachments = xmlutil.SubTemplateElement(elem, 'attachments')
     attachment = xmlutil.SubTemplateElement(attachments, 'attachment',
@@ -260,7 +262,9 @@ class VolumeController(wsgi.Controller):
         remove_invalid_options(context,
                                search_opts, self._get_volume_search_options())
 
-        volumes = self.volume_api.get_all(context, search_opts=search_opts)
+        volumes = self.volume_api.get_all(context, marker=None, limit=None,
+                                          sort_key='created_at',
+                                          sort_dir='desc', filters=search_opts)
         limited_list = common.limited(volumes, req)
         res = [entity_maker(context, vol) for vol in limited_list]
         return {'volumes': res}
@@ -294,12 +298,21 @@ class VolumeController(wsgi.Controller):
 
         req_volume_type = volume.get('volume_type', None)
         if req_volume_type:
-            try:
-                kwargs['volume_type'] = volume_types.get_volume_type_by_name(
+            if not uuidutils.is_uuid_like(req_volume_type):
+                try:
+                    kwargs['volume_type'] = \
+                        volume_types.get_volume_type_by_name(
+                            context, req_volume_type)
+                except exception.VolumeTypeNotFound:
+                    explanation = 'Volume type not found.'
+                    raise exc.HTTPNotFound(explanation=explanation)
+            else:
+                try:
+                    kwargs['volume_type'] = volume_types.get_volume_type(
                         context, req_volume_type)
-            except exception.VolumeTypeNotFound:
-                explanation = 'Volume type not found.'
-                raise exc.HTTPNotFound(explanation=explanation)
+                except exception.VolumeTypeNotFound:
+                    explanation = 'Volume type not found.'
+                    raise exc.HTTPNotFound(explanation=explanation)
 
         kwargs['metadata'] = volume.get('metadata', None)
 
@@ -310,9 +323,18 @@ class VolumeController(wsgi.Controller):
         else:
             kwargs['snapshot'] = None
 
+        source_volid = volume.get('source_volid')
+        if source_volid is not None:
+            kwargs['source_volume'] = self.volume_api.get_volume(context,
+                                                                 source_volid)
+        else:
+            kwargs['source_volume'] = None
+
         size = volume.get('size', None)
         if size is None and kwargs['snapshot'] is not None:
             size = kwargs['snapshot']['volume_size']
+        elif size is None and kwargs['source_volume'] is not None:
+            size = kwargs['source_volume']['size']
 
         LOG.audit(_("Create volume of %s GB"), size, context=context)
 
@@ -394,7 +416,7 @@ def remove_invalid_options(context, search_options, allowed_search_options):
         return
     # Otherwise, strip out all unknown options
     unknown_options = [opt for opt in search_options
-            if opt not in allowed_search_options]
+                       if opt not in allowed_search_options]
     bad_options = ", ".join(unknown_options)
     log_msg = _("Removing options '%(bad_options)s' from query") % locals()
     LOG.debug(log_msg)

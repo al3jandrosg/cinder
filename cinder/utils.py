@@ -181,10 +181,10 @@ def execute(*cmd, **kwargs):
                 if not ignore_exit_code and _returncode not in check_exit_code:
                     (stdout, stderr) = result
                     raise exception.ProcessExecutionError(
-                            exit_code=_returncode,
-                            stdout=stdout,
-                            stderr=stderr,
-                            cmd=' '.join(cmd))
+                        exit_code=_returncode,
+                        stdout=stdout,
+                        stderr=stderr,
+                        cmd=' '.join(cmd))
             return result
         except exception.ProcessExecutionError:
             if not attempts:
@@ -439,9 +439,9 @@ def last_completed_audit_period(unit=None):
 
     elif unit == 'day':
         end = datetime.datetime(hour=offset,
-                               day=rightnow.day,
-                               month=rightnow.month,
-                               year=rightnow.year)
+                                day=rightnow.day,
+                                month=rightnow.month,
+                                year=rightnow.year)
         if end >= rightnow:
             end = end - datetime.timedelta(days=1)
         begin = end - datetime.timedelta(days=1)
@@ -766,10 +766,10 @@ def bool_from_str(val):
 def is_valid_boolstr(val):
     """Check if the provided string is a valid bool string or not. """
     val = str(val).lower()
-    return val == 'true' or val == 'false' or \
-           val == 'yes' or val == 'no' or \
-           val == 'y' or val == 'n' or \
-           val == '1' or val == '0'
+    return (val == 'true' or val == 'false' or
+            val == 'yes' or val == 'no' or
+            val == 'y' or val == 'n' or
+            val == '1' or val == '0')
 
 
 def is_valid_ipv4(address):
@@ -820,13 +820,14 @@ def monkey_patch():
             if isinstance(module_data[key], pyclbr.Class):
                 clz = importutils.import_class("%s.%s" % (module, key))
                 for method, func in inspect.getmembers(clz, inspect.ismethod):
-                    setattr(clz, method,
+                    setattr(
+                        clz, method,
                         decorator("%s.%s.%s" % (module, key, method), func))
             # set the decorator for the function
             if isinstance(module_data[key], pyclbr.Function):
                 func = importutils.import_class("%s.%s" % (module, key))
                 setattr(sys.modules[module], key,
-                    decorator("%s.%s" % (module, key), func))
+                        decorator("%s.%s" % (module, key), func))
 
 
 def convert_to_list_dict(lst, label):
@@ -1125,3 +1126,39 @@ def ensure_tree(path):
                 raise
         else:
             raise
+
+
+def to_bytes(text, default=0):
+    """Try to turn a string into a number of bytes. Looks at the last
+    characters of the text to determine what conversion is needed to
+    turn the input text into a byte number.
+
+    Supports: B/b, K/k, M/m, G/g, T/t (or the same with b/B on the end)
+
+    """
+    BYTE_MULTIPLIERS = {
+        '': 1,
+        't': 1024 ** 4,
+        'g': 1024 ** 3,
+        'm': 1024 ** 2,
+        'k': 1024,
+    }
+
+    # Take off everything not number 'like' (which should leave
+    # only the byte 'identifier' left)
+    mult_key_org = text.lstrip('-1234567890')
+    mult_key = mult_key_org.lower()
+    mult_key_len = len(mult_key)
+    if mult_key.endswith("b"):
+        mult_key = mult_key[0:-1]
+    try:
+        multiplier = BYTE_MULTIPLIERS[mult_key]
+        if mult_key_len:
+            # Empty cases shouldn't cause text[0:-0]
+            text = text[0:-mult_key_len]
+        return int(text) * multiplier
+    except KeyError:
+        msg = _('Unknown byte multiplier: %s') % mult_key_org
+        raise TypeError(msg)
+    except ValueError:
+        return default

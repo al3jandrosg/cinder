@@ -1,1 +1,4 @@
-avoid_setuptools_git_dependency.patch
+fix_cinder_dependencies.patch
+removed_hp3parclient_dependency.patch
+#skip_failed_tests.patch
+skip_hp3par_tests.patch

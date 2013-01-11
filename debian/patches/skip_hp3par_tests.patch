@@ -1,0 +1,31 @@
+From 28520168567f635d90d5ff7f38853708f9aa4c58 Mon Sep 17 00:00:00 2001
+From: Yolanda Robla <yolanda.robla@canonical.com>
+Date: Thu, 10 Jan 2013 14:15:47 +0000
+Subject: [PATCH] skipping hp3par tests if no hp3parclient module available
+ Signed-off-by: Yolanda Robla <yolanda.robla@canonical.com>
+
+---
+ cinder/tests/test_hp3par_iscsi.py |    7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/cinder/tests/test_hp3par_iscsi.py b/cinder/tests/test_hp3par_iscsi.py
+index 637038e..d89328a 100644
+--- a/cinder/tests/test_hp3par_iscsi.py
++++ b/cinder/tests/test_hp3par_iscsi.py
+@@ -21,7 +21,12 @@ Unit tests for OpenStack Cinder volume driver
+ import shutil
+ import tempfile
+ 
+-from hp3parclient import exceptions as hpexceptions
++from nose import SkipTest
++
++try:
++    from hp3parclient import exceptions as hpexceptions
++except Exception:
++    raise SkipTest
+ 
+ import cinder.flags
+ from cinder.openstack.common import log as logging
+-- 
+1.7.9.5
+

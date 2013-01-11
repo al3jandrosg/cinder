@@ -24,7 +24,8 @@ from cinder import flags
 from cinder.openstack.common import jsonutils
 from cinder.openstack.common.rpc import common as rpc_common
 from cinder import test
-from cinder.tests.api.openstack import fakes
+from cinder.tests.api import fakes
+from cinder.tests.api.v2 import stubs
 from cinder import volume
 from cinder.volume import api as volume_api
 
@@ -58,8 +59,8 @@ class VolumeActionsTest(test.TestCase):
     def test_simple_api_actions(self):
         app = fakes.wsgi_app()
         for _action in self._actions:
-            req = webob.Request.blank('/v1/fake/volumes/%s/action' %
-                    self.UUID)
+            req = webob.Request.blank('/v2/fake/volumes/%s/action' %
+                                      self.UUID)
             req.method = 'POST'
             req.body = jsonutils.dumps({_action: None})
             req.content_type = 'application/json'
@@ -73,7 +74,7 @@ class VolumeActionsTest(test.TestCase):
                        fake_initialize_connection)
 
         body = {'os-initialize_connection': {'connector': 'fake'}}
-        req = webob.Request.blank('/v1/fake/volumes/1/action')
+        req = webob.Request.blank('/v2/fake/volumes/1/action')
         req.method = "POST"
         req.body = jsonutils.dumps(body)
         req.headers["content-type"] = "application/json"
@@ -88,7 +89,7 @@ class VolumeActionsTest(test.TestCase):
                        fake_terminate_connection)
 
         body = {'os-terminate_connection': {'connector': 'fake'}}
-        req = webob.Request.blank('/v1/fake/volumes/1/action')
+        req = webob.Request.blank('/v2/fake/volumes/1/action')
         req.method = "POST"
         req.body = jsonutils.dumps(body)
         req.headers["content-type"] = "application/json"
@@ -99,7 +100,7 @@ class VolumeActionsTest(test.TestCase):
     def test_attach(self):
         body = {'os-attach': {'instance_uuid': 'fake',
                               'mountpoint': '/dev/vdc'}}
-        req = webob.Request.blank('/v1/fake/volumes/1/action')
+        req = webob.Request.blank('/v2/fake/volumes/1/action')
         req.method = "POST"
         req.body = jsonutils.dumps(body)
         req.headers["content-type"] = "application/json"
@@ -109,7 +110,7 @@ class VolumeActionsTest(test.TestCase):
 
 
 def stub_volume_get(self, context, volume_id):
-    volume = fakes.stub_volume(volume_id)
+    volume = stubs.stub_volume(volume_id)
     if volume_id == 5:
         volume['status'] = 'in-use'
     else:
@@ -150,18 +151,18 @@ class VolumeImageActionsTest(test.TestCase):
                "image_name": 'image_name',
                "force": True}
         body = {"os-volume_upload_image": vol}
-        req = fakes.HTTPRequest.blank('/v1/tenant1/volumes/%s/action' % id)
+        req = fakes.HTTPRequest.blank('/v2/tenant1/volumes/%s/action' % id)
         res_dict = self.controller._volume_upload_image(req, id, body)
         expected = {'os-volume_upload_image': {'id': id,
-                           'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
-                           'status': 'uploading',
-                           'display_description': 'displaydesc',
-                           'size': 1,
-                           'volume_type': {'name': 'vol_type_name'},
-                           'image_id': 1,
-                           'container_format': 'bare',
-                           'disk_format': 'raw',
-                           'image_name': 'image_name'}}
+                    'updated_at': datetime.datetime(1, 1, 1, 1, 1, 1),
+                    'status': 'uploading',
+                    'display_description': 'displaydesc',
+                    'size': 1,
+                    'volume_type': {'name': 'vol_type_name'},
+                    'image_id': 1,
+                    'container_format': 'bare',
+                    'disk_format': 'raw',
+                    'image_name': 'image_name'}}
         self.assertDictMatch(res_dict, expected)
 
     def test_copy_volume_to_image_volumenotfound(self):
@@ -176,7 +177,7 @@ class VolumeImageActionsTest(test.TestCase):
                "image_name": 'image_name',
                "force": True}
         body = {"os-volume_upload_image": vol}
-        req = fakes.HTTPRequest.blank('/v1/tenant1/volumes/%s/action' % id)
+        req = fakes.HTTPRequest.blank('/v2/tenant1/volumes/%s/action' % id)
         self.assertRaises(webob.exc.HTTPNotFound,
                           self.controller._volume_upload_image,
                           req,
@@ -185,8 +186,8 @@ class VolumeImageActionsTest(test.TestCase):
 
     def test_copy_volume_to_image_invalidvolume(self):
         def stub_upload_volume_to_image_service_raise(self, context, volume,
-                                               metadata, force):
-            raise exception.InvalidVolume
+                                                      metadata, force):
+            raise exception.InvalidVolume(reason='blah')
         self.stubs.Set(volume_api.API,
                        "copy_volume_to_image",
                        stub_upload_volume_to_image_service_raise)
@@ -197,7 +198,7 @@ class VolumeImageActionsTest(test.TestCase):
                "image_name": 'image_name',
                "force": True}
         body = {"os-volume_upload_image": vol}
-        req = fakes.HTTPRequest.blank('/v1/tenant1/volumes/%s/action' % id)
+        req = fakes.HTTPRequest.blank('/v2/tenant1/volumes/%s/action' % id)
         self.assertRaises(webob.exc.HTTPBadRequest,
                           self.controller._volume_upload_image,
                           req,
@@ -206,7 +207,7 @@ class VolumeImageActionsTest(test.TestCase):
 
     def test_copy_volume_to_image_valueerror(self):
         def stub_upload_volume_to_image_service_raise(self, context, volume,
-                                               metadata, force):
+                                                      metadata, force):
             raise ValueError
         self.stubs.Set(volume_api.API,
                        "copy_volume_to_image",
@@ -218,7 +219,7 @@ class VolumeImageActionsTest(test.TestCase):
                "image_name": 'image_name',
                "force": True}
         body = {"os-volume_upload_image": vol}
-        req = fakes.HTTPRequest.blank('/v1/tenant1/volumes/%s/action' % id)
+        req = fakes.HTTPRequest.blank('/v2/tenant1/volumes/%s/action' % id)
         self.assertRaises(webob.exc.HTTPBadRequest,
                           self.controller._volume_upload_image,
                           req,
@@ -227,7 +228,7 @@ class VolumeImageActionsTest(test.TestCase):
 
     def test_copy_volume_to_image_remoteerror(self):
         def stub_upload_volume_to_image_service_raise(self, context, volume,
-                                               metadata, force):
+                                                      metadata, force):
             raise rpc_common.RemoteError
         self.stubs.Set(volume_api.API,
                        "copy_volume_to_image",
@@ -239,7 +240,7 @@ class VolumeImageActionsTest(test.TestCase):
                "image_name": 'image_name',
                "force": True}
         body = {"os-volume_upload_image": vol}
-        req = fakes.HTTPRequest.blank('/v1/tenant1/volumes/%s/action' % id)
+        req = fakes.HTTPRequest.blank('/v2/tenant1/volumes/%s/action' % id)
         self.assertRaises(webob.exc.HTTPBadRequest,
                           self.controller._volume_upload_image,
                           req,
