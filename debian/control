@@ -2,69 +2,74 @@ Source: cinder
 Section: net
 Priority: extra
 Maintainer: Chuck Short <zulcss@ubuntu.com>
-Build-Depends: debhelper (>= 8.0.0),
- python-all (>= 2.6)
+Build-Depends: debhelper (>= 8.0.0), python-all (>= 2.6)
 Build-Depends-Indep:
- python-sqlalchemy,
- python-setuptools,
- python-cheetah,
+ pep8,
  python-amqplib,
  python-anyjson,
+ python-cheetah,
+ python-coverage,
+ python-daemon,
  python-eventlet,
+ python-glance,
+ python-glanceclient,
+ python-greenlet,
+ python-hp3parclient (>= 1.0.0),
+ python-iso8601,
+ python-keystoneclient,
  python-kombu,
  python-lockfile,
  python-lxml,
- python-daemon,
- python-routes,
- python-webob,
- python-greenlet,
- python-glanceclient,
- python-keystoneclient,
- python-pastedeploy,
- python-paste,
  python-migrate,
- python-netaddr,
- python-glance,
- python-suds,
- python-paramiko,
- python-iso8601,
- python-coverage,
+ python-mock,
  python-mox,
+ python-mysqldb,
+ python-netaddr,
  python-nose,
- python-sphinx,
- python-mysqldb,
+ python-oslo-config,
+ python-paramiko,
+ python-paste,
+ python-pastedeploy,
+ python-routes,
+ python-setuptools,
  python-setuptools-git,
- python-mysqldb,
- pep8,
- python-stevedore (>= 0.7)
+ python-sphinx,
+ python-sqlalchemy,
+ python-stevedore (>= 0.7),
+ python-suds,
+ python-webob
 Standards-Version: 3.9.3
 Homepage: http://launchpad.net/cinder
 
 Package: python-cinder
 Section: python
 Architecture: all
-Depends: ${python:Depends}, python-sqlalchemy,
- python-cheetah,
+Depends:
  python-amqplib,
  python-anyjson,
+ python-cheetah,
+ python-daemon,
  python-eventlet,
+ python-glance,
+ python-glanceclient,
+ python-greenlet,
+ python-iso8601,
  python-kombu,
  python-lockfile,
  python-lxml,
- python-daemon,
- python-routes,
- python-webob,
- python-greenlet,
- python-pastedeploy,
- python-paste,
  python-migrate,
  python-netaddr,
- python-glance,
- python-suds,
  python-paramiko,
- python-iso8601,
- python-glanceclient,
- ${misc:Depends}
+ python-paste,
+ python-pastedeploy,
+ python-routes,
+ python-rtslib,
+ python-sqlalchemy,
+ python-suds,
+ python-webob,
+ ${misc:Depends},
+ ${python:Depends}
+Suggests: python-hp3parclient
 Description: Cinder Python libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -77,7 +82,11 @@ Description: Cinder Python libraries
 
 Package: cinder-common
 Architecture: all
-Depends: python-cinder (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
+Depends:
+ adduser,
+ python-cinder (= ${binary:Version}),
+ ${misc:Depends},
+ ${python:Depends}
 Provides: ${python:Provides}
 Description: Cinder storage service - common files
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
@@ -91,7 +100,7 @@ Description: Cinder storage service - common files
 
 Package: cinder-api
 Architecture: all
-Depends: cinder-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: cinder-common (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Description: Cinder storage service - API server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -104,11 +113,12 @@ Description: Cinder storage service - API server
 
 Package: cinder-volume
 Architecture: all
-Depends: cinder-common (= ${binary:Version}),
+Depends:
+ cinder-common (= ${binary:Version}),
  lvm2,
  tgt,
- ${python:Depends},
- ${misc:Depends}
+ ${misc:Depends},
+ ${python:Depends}
 Suggests: ceph-common
 Breaks: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
 Replaces: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
@@ -124,7 +134,7 @@ Description: Cinder storage service - Volume server
 
 Package: cinder-scheduler
 Architecture: all
-Depends: cinder-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Depends: cinder-common (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Description: Cinder storage service - Scheduler server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public

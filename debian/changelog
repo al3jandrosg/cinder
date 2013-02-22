@@ -1,3 +1,23 @@
+cinder (2013.1.g3-0ubuntu1) raring; urgency=low
+
+  [ Yolanda Robla Mota ]
+  * d/control: Add BD on python-hp3parclient.
+  * d/patches: Drop patches related to disabling hp3parclient.
+
+  [ James Page ]
+  * d/control: Add Suggests: python-hp3parclient for python-cinder.
+  * d/control: Add BD on python-oslo-config.
+  * d/*: Wrapped and sorted.
+
+  [ Chuck Short ]
+  * New upstream release.
+  * debian/rules, debian/cinder-volumes.install: 
+    - Fail if binaries are missing and install missing binaries.
+  * debian/patches/fix-ubuntu-tests.patch: Fix failing tests.
+  * debian/control: Add python-rtslib and python-mock.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 22 Feb 2013 10:45:17 -0600
+
 cinder (2013.1~g2-0ubuntu2) raring; urgency=low
 
   * debian/patches/series: Enable skip_failed_tests to fix FTBFS. 

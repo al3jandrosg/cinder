@@ -1,22 +1,11 @@
-From f97ae564a10b837490a9f846b4b715e909093d03 Mon Sep 17 00:00:00 2001
-From: Chuck Short <chuck.short@canonical.com>
-Date: Thu, 22 Nov 2012 08:31:22 -0600
-Subject: [PATCH] Avoid installation of python-setuptools-git
-
-Remove setuptools_git from pip-requires so that it is not automatically
-added to the dependency list by dh_python2, and avoid having it and its
-dependencies (git!) installed with python-nova.
-
-Signed-off-by: Chuck Short <chuck.short@canonical.com>
-
-diff -Naurp cinder-2013.1.orig/tools/pip-requires cinder-2013.1/tools/pip-requires
---- cinder-2013.1.orig/tools/pip-requires	2012-11-28 13:25:36.000000000 -0600
-+++ cinder-2013.1/tools/pip-requires	2012-11-29 10:41:07.931555948 -0600
-@@ -16,6 +16,5 @@ suds==0.4
+diff -Naurp cinder-2013.1.g3.orig/tools/pip-requires cinder-2013.1.g3/tools/pip-requires
+--- cinder-2013.1.g3.orig/tools/pip-requires	2013-02-21 16:08:48.000000000 -0600
++++ cinder-2013.1.g3/tools/pip-requires	2013-02-22 10:38:34.786411293 -0600
+@@ -18,7 +18,6 @@ suds>=0.4
  paramiko
  Babel>=0.9.6
  iso8601>=0.1.4
 -setuptools_git>=0.4
  python-glanceclient>=0.5.0,<2
  python-keystoneclient>=0.2.0
-+stevedore>=0.7
+ python-swiftclient

@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 2013.1
+Version: 2013.1.g3
 Summary: block storage service
 Home-page: http://www.openstack.org/
 Author: OpenStack
