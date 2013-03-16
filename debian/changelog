@@ -1,3 +1,30 @@
+cinder (1:2013.1~rc1-0ubuntu1) raring; urgency=low
+
+  [ Chuck Short ]
+  * debian/patches/fix-ubuntu-tests.patch: Dropped.
+  * debian/rules: Fix version number when building the testsuite. 
+  * debian/cinder-backup{.install, upstart, logroate}: Add cinder-backup
+    service.
+  * debian/rules: Run the testsuite against PYTHONPATH.
+  * debian/control: Update build-depends and run-time depends.
+    - Dropped python-glance not needed.
+    - Dropped python-cheetah not needed.
+    - Droped python-daemon not needed.
+    - Dropped python-netaddr not needed.
+    - Renamed python-oslo-config to python-oslo.config.
+    - Added python-keystoneclient to depends.
+    - Added python-swiftclient to depends.
+   * debian/pydist-overrides: No longer needed.
+
+  [ James Page ]
+  * New upstream release candidate.
+  * d/watch: Update uversionmangle to deal with upstream versioning
+    changes, remove tarballs.openstack.org.
+  * d/cinder.conf: Set lock_path to /var/lock/cinder (default is not
+    sensible).
+
+ -- James Page <james.page@ubuntu.com>  Sat, 16 Mar 2013 09:30:20 +0000
+
 cinder (2013.1.g3-0ubuntu1) raring; urgency=low
 
   [ Yolanda Robla Mota ]
