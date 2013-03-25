@@ -60,7 +60,6 @@ Depends:
  python-paste,
  python-pastedeploy,
  python-routes,
- python-rtslib,
  python-swiftclient,
  python-sqlalchemy,
  python-suds,

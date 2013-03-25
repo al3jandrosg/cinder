@@ -20,7 +20,6 @@ bin/cinder-clear-rabbit-queues
 bin/cinder-manage
 bin/cinder-rootwrap
 bin/cinder-rpc-zmq-receiver
-bin/cinder-rtstool
 bin/cinder-scheduler
 bin/cinder-volume
 bin/cinder-volume-usage-audit
@@ -178,6 +177,8 @@ cinder/openstack/common/notifier/api.py
 cinder/openstack/common/notifier/log_notifier.py
 cinder/openstack/common/notifier/no_op_notifier.py
 cinder/openstack/common/notifier/rabbit_notifier.py
+cinder/openstack/common/notifier/rpc_notifier.py
+cinder/openstack/common/notifier/rpc_notifier2.py
 cinder/openstack/common/notifier/test_notifier.py
 cinder/openstack/common/rootwrap/__init__.py
 cinder/openstack/common/rootwrap/filters.py
