@@ -1,3 +1,9 @@
+cinder (1:2013.1~rc3-0ubuntu1) raring; urgency=low
+
+  * New upstream release. 
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 27 Mar 2013 07:51:21 -0500
+
 cinder (1:2013.1~rc2-0ubuntu2) raring; urgency=low
 
   * debian/rules: Fix FTBFS, we want '-v' and not '-V'. 

@@ -1,3 +1,93 @@
+commit 85b7453f68f76dcd6edd7043026e7a6676eadf23
+Author: Yug Suo <yugsuo@gmail.com>
+Date:   Mon Mar 11 16:30:07 2013 +0800
+
+    Fix quota updating when admin deletes common user's volume
+    
+    Add 'project_id=None' optional argument in QUOTAS related methods.
+    
+    There are two problems when admin deletes volumes of common user
+    before fixing this bug:
+    Firstly, It will get tenant quotas using context.project_id which
+    results in getting admin's quotas not common user's.
+    Secondly, It will also get wrong quota usages using context.project_id
+    when updating common user's quota_usages.
+    
+    So we could pass into QUOTAS related methods an optional argument to
+    specify the tenant ID to be affected. And if it's not set, then we
+    default to drawing the tenant ID from the context.
+    
+    Fixes: bug 1078668
+    Change-Id: Ie250da84726d1c5c3280430038184000dfd1e9e2
+    (cherry picked from commit 576c9b0880c32bfc8053550b8f25a76df98c60e4)
+
+commit 3a9fcc337cd0eaa1412a1f5fc634ce03fa6c6f0d
+Author: Cory Stone <corystone@gmail.com>
+Date:   Mon Mar 25 15:09:37 2013 -0500
+
+    Add the volume and snapshot gigabytes together.
+    
+    The quota sync functions were not working correctly for both
+    snapshots and volumes regarding gigabytes. Each would report
+    their own count as the total gigabytes.
+    
+    Now the gigabytes sync is separate from the volume and snapshot
+    count syncs.
+    
+    Fixes bug #1160004
+    
+    Change-Id: Ib1200813acb6055412b3f7f6b63fa9ba2b8fa3be
+    (cherry picked from commit 1fde5a4fbc73a31453f0fe288a0b4a929d7f3026)
+
+commit 75af3f7669938e799df28adce228f0a5a9d7e109
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Mar 26 10:19:47 2013 -0600
+
+    Sync lockutils from oslo-incubator stable/grizzly.
+    
+    Changes include:
+    
+    3cb71ff Locking edge case when lock_path does not exist
+    21925b6 Fix locking issues in Windows
+    547ab34 Fix Copyright Headers - Rename LLC to Foundation
+    
+    Fix bug 1158179.
+    
+    Change-Id: I0d5fb58bef593233068accfcea0dff9fa05f61ef
+    (cherry picked from commit 649e8926cf6a6ee1cc01a34e6f718e0996feb930)
+
+commit 7c96a85c8d3815fb21cdd92bfdaaa31641504b49
+Merge: 4645123 e9b0738
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Mar 26 16:38:06 2013 +0000
+
+    Merge "Remove AGPL rtslib pkg from pip-requires." into milestone-proposed
+
+commit e9b07388f1b35ace0cb296148135723df6bef753
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Tue Mar 19 09:02:52 2013 -0600
+
+    Remove AGPL rtslib pkg from pip-requires.
+    
+    Fixes bug: 1157091
+    
+    Change-Id: I1879712ab33324740496b284500fa2b22a1bc310
+    (cherry picked from commit 7bb449aa5a0a069cc6df918acc33bf550fbd5834)
+
+commit 4645123cadc441ed138355d94823310255f548ba
+Author: Vishvananda Ishaya <vishvananda@gmail.com>
+Date:   Mon Mar 25 12:46:51 2013 -0700
+
+    Force deletes using tgt to workaround bug 1159948
+    
+    Tgt has a bug where it can have multiple copies of an initiator
+    if there has been a reconnect.
+    
+    See https://bugs.launchpad.net/cinder/+bug/1159948
+    
+    Change-Id: I9a1b6757eb780efbaa1403016e50de7c0e45d720
+    (cherry picked from commit b84218633ab5417adf94c568eb54243f4074ab11)
+
 commit 6a29bda3c2050bb79298a088be17372c1687266a
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Sun Mar 24 20:49:46 2013 +0000
