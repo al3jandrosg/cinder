@@ -33,7 +33,7 @@ Build-Depends-Indep:
  python-setuptools-git,
  python-sphinx,
  python-sqlalchemy,
- python-stevedore (>= 0.7),
+ python-stevedore (>= 0.8),
  python-suds,
  python-webob
 Standards-Version: 3.9.3
@@ -60,6 +60,7 @@ Depends:
  python-paste,
  python-pastedeploy,
  python-routes,
+ python-stevedore (>= 0.8),
  python-swiftclient,
  python-sqlalchemy,
  python-suds,
