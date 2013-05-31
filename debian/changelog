@@ -1,3 +1,26 @@
+cinder (1:2013.2~b1-0ubuntu1) saucy; urgency=low
+
+  [ Chuck Short ]
+  * New upstream version.
+  * debian/patches/fix_cinder_dependencies.patch: Dropped.
+  * debian/control: Bump standards version to 3.9.4.
+  * debian/control: Add python-pbr and python-d2to1 to build-depends.
+  * debian/control: Add python-testtools and python-fixtures to build-depends
+  * debian/rules: Add work around to remove wonky setup.py setup
+  * debian/cinder-common.install: Add cinder-rpc-zmq-receiver binary.
+
+  [ James Page ]
+  * debian/control: Drop surplus dependency on python-glance (LP: #1175600).
+  * debian/control,rules: Drop dependency on pep8, don't run pep8 tests during
+    package build process (its just way to late).
+  * debian/control: Drop surplus BD on python-cheetah.
+
+  [ Adam Gandelman ]
+  * debian/patches/avoid_paramiko_vers_depends.patch: Avoid version
+    requirement on paramiko.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 31 May 2013 10:01:03 -0500
+
 cinder (1:2013.1-0ubuntu2) raring; urgency=low
 
   * debian/control: Bump minimum stevedore version 0.8.

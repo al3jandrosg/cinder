@@ -1,1 +1,1 @@
-fix_cinder_dependencies.patch
+avoid_paramiko_vers_depends.patch

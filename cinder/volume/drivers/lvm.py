@@ -26,13 +26,13 @@ import re
 
 from oslo.config import cfg
 
+from cinder.brick.iscsi import iscsi
 from cinder import exception
 from cinder import flags
 from cinder.image import image_utils
 from cinder.openstack.common import log as logging
 from cinder import utils
 from cinder.volume import driver
-from cinder.volume import iscsi
 
 LOG = logging.getLogger(__name__)
 
@@ -47,6 +47,9 @@ volume_opts = [
     cfg.IntOpt('volume_clear_size',
                default=0,
                help='Size in MiB to wipe at start of old volumes. 0 => all'),
+    cfg.StrOpt('volume_dd_blocksize',
+               default='1M',
+               help='The default block size used when clearing volumes'),
     cfg.StrOpt('pool_size',
                default=None,
                help='Size of thin provisioning pool '
@@ -63,6 +66,9 @@ FLAGS.register_opts(volume_opts)
 
 class LVMVolumeDriver(driver.VolumeDriver):
     """Executes commands relating to Volumes."""
+
+    VERSION = '1.0'
+
     def __init__(self, *args, **kwargs):
         super(LVMVolumeDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(volume_opts)
@@ -110,7 +116,8 @@ class LVMVolumeDriver(driver.VolumeDriver):
 
         # Perform the copy
         self._execute('dd', 'if=%s' % srcstr, 'of=%s' % deststr,
-                      'count=%d' % (size_in_g * 1024), 'bs=1M',
+                      'count=%d' % (size_in_g * 1024),
+                      'bs=%s' % self.configuration.volume_dd_blocksize,
                       *extra_flags, run_as_root=True)
 
     def _volume_not_present(self, volume_name):
@@ -559,7 +566,7 @@ class LVMISCSIDriver(LVMVolumeDriver, driver.ISCSIDriver):
         backend_name = self.configuration.safe_get('volume_backend_name')
         data["volume_backend_name"] = backend_name or 'LVM_iSCSI'
         data["vendor_name"] = 'Open Source'
-        data["driver_version"] = '1.0'
+        data["driver_version"] = self.VERSION
         data["storage_protocol"] = 'iSCSI'
 
         data['total_capacity_gb'] = 0
@@ -593,6 +600,9 @@ class LVMISCSIDriver(LVMVolumeDriver, driver.ISCSIDriver):
 
 class ThinLVMVolumeDriver(LVMISCSIDriver):
     """Subclass for thin provisioned LVM's."""
+
+    VERSION = '1.0'
+
     def __init__(self, *args, **kwargs):
         super(ThinLVMVolumeDriver, self).__init__(*args, **kwargs)
 
@@ -651,3 +661,28 @@ class ThinLVMVolumeDriver(LVMISCSIDriver):
         """Creates a snapshot of a volume."""
         orig_lv_name = "%s/%s" % (FLAGS.volume_group, snapshot['volume_name'])
         self._do_lvm_snapshot(orig_lv_name, snapshot)
+
+    def get_volume_stats(self, refresh=False):
+        """Get volume status.
+        If 'refresh' is True, run update the stats first."""
+        if refresh:
+            self._update_volume_status()
+
+        return self._stats
+
+    def _update_volume_status(self):
+        """Retrieve status info from volume group."""
+
+        LOG.debug(_("Updating volume status"))
+        data = {}
+
+        backend_name = self.configuration.safe_get('volume_backend_name')
+        data["volume_backend_name"] = backend_name or self.__class__.__name__
+        data["vendor_name"] = 'Open Source'
+        data["driver_version"] = self.VERSION
+        data["storage_protocol"] = 'iSCSI'
+        data['reserved_percentage'] = self.configuration.reserved_percentage
+        data['QoS_support'] = False
+        data['total_capacity_gb'] = 'infinite'
+        data['free_capacity_gb'] = 'infinite'
+        self._stats = data

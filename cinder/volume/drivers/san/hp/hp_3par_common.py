@@ -50,7 +50,6 @@ from oslo.config import cfg
 
 from cinder import context
 from cinder import exception
-from cinder.openstack.common import lockutils
 from cinder.openstack.common import log as logging
 from cinder import utils
 from cinder.volume import volume_types
@@ -95,13 +94,7 @@ hp3par_opts = [
 
 class HP3PARCommon():
 
-    stats = {'driver_version': '1.0',
-             'free_capacity_gb': 'unknown',
-             'reserved_percentage': 0,
-             'storage_protocol': None,
-             'total_capacity_gb': 'unknown',
-             'vendor_name': 'Hewlett-Packard',
-             'volume_backend_name': None}
+    stats = {}
 
     # Valid values for volume type extra specs
     # The first value in the list is the default value
@@ -272,7 +265,12 @@ exit
         self._cli_run('removehost %s' % hostname, None)
 
     def _create_3par_vlun(self, volume, hostname):
-        self._cli_run('createvlun %s auto %s' % (volume, hostname), None)
+        out = self._cli_run('createvlun %s auto %s' % (volume, hostname), None)
+        if out and len(out) > 1:
+            if "must be in the same domain" in out[0]:
+                err = out[0].strip()
+                err = err + " " + out[1].strip()
+                raise exception.Invalid3PARDomain(err=err)
 
     def _safe_hostname(self, hostname):
         """
@@ -413,29 +411,44 @@ exit
         return ports
 
     def get_volume_stats(self, refresh, client):
+        if refresh:
+            self._update_volume_stats(client)
+
+        return self.stats
+
+    def _update_volume_stats(self, client):
         # const to convert MiB to GB
         const = 0.0009765625
 
-        if refresh:
-            try:
-                cpg = client.getCPG(self.config.hp3par_cpg)
-                if 'limitMiB' not in cpg['SDGrowth']:
-                    total_capacity = 'infinite'
-                    free_capacity = 'infinite'
-                else:
-                    total_capacity = int(cpg['SDGrowth']['limitMiB'] * const)
-                    free_capacity = int((cpg['SDGrowth']['limitMiB'] -
-                                        cpg['UsrUsage']['usedMiB']) * const)
+        # storage_protocol and volume_backend_name are
+        # set in the child classes
+        stats = {'driver_version': '1.0',
+                 'free_capacity_gb': 'unknown',
+                 'reserved_percentage': 0,
+                 'storage_protocol': None,
+                 'total_capacity_gb': 'unknown',
+                 'vendor_name': 'Hewlett-Packard',
+                 'volume_backend_name': None}
 
-                self.stats['total_capacity_gb'] = total_capacity
-                self.stats['free_capacity_gb'] = free_capacity
-            except hpexceptions.HTTPNotFound:
-                err = (_("CPG (%s) doesn't exist on array")
-                       % self.config.hp3par_cpg)
-                LOG.error(err)
-                raise exception.InvalidInput(reason=err)
+        try:
+            cpg = client.getCPG(self.config.hp3par_cpg)
+            if 'limitMiB' not in cpg['SDGrowth']:
+                total_capacity = 'infinite'
+                free_capacity = 'infinite'
+            else:
+                total_capacity = int(cpg['SDGrowth']['limitMiB'] * const)
+                free_capacity = int((cpg['SDGrowth']['limitMiB'] -
+                                    cpg['UsrUsage']['usedMiB']) * const)
 
-        return self.stats
+            stats['total_capacity_gb'] = total_capacity
+            stats['free_capacity_gb'] = free_capacity
+        except hpexceptions.HTTPNotFound:
+            err = (_("CPG (%s) doesn't exist on array")
+                   % self.config.hp3par_cpg)
+            LOG.error(err)
+            raise exception.InvalidInput(reason=err)
+
+        self.stats = stats
 
     def create_vlun(self, volume, host, client):
         """
@@ -487,7 +500,6 @@ exit
         persona_id = persona_value.split(' ')
         return persona_id[0]
 
-    @lockutils.synchronized('3par', 'cinder-', True)
     def create_volume(self, volume, client):
         LOG.debug("CREATE VOLUME (%s : %s %s)" %
                   (volume['display_name'], volume['name'],
@@ -570,11 +582,9 @@ exit
                     'snapCPG': extras['snapCPG']}
         return metadata
 
-    @lockutils.synchronized('3parcopy', 'cinder-', True)
     def _copy_volume(self, src_name, dest_name):
         self._cli_run('createvvcopy -p %s %s' % (src_name, dest_name), None)
 
-    @lockutils.synchronized('3parstate', 'cinder-', True)
     def _get_volume_state(self, vol_name):
         out = self._cli_run('showvv -state %s' % vol_name, None)
         status = None
@@ -585,7 +595,7 @@ exit
 
         return status
 
-    @lockutils.synchronized('3parclone', 'cinder-', True)
+    @utils.synchronized('3parclone', external=True)
     def create_cloned_volume(self, volume, src_vref, client):
 
         try:
@@ -628,7 +638,6 @@ exit
 
         return None
 
-    @lockutils.synchronized('3par', 'cinder-', True)
     def delete_volume(self, volume, client):
         try:
             volume_name = self._get_3par_vol_name(volume['id'])
@@ -644,7 +653,6 @@ exit
             LOG.error(str(ex))
             raise exception.CinderException(ex.get_description())
 
-    @lockutils.synchronized('3par', 'cinder-', True)
     def create_volume_from_snapshot(self, volume, snapshot, client):
         """
         Creates a volume from a snapshot.
@@ -684,7 +692,6 @@ exit
         except hpexceptions.HTTPNotFound:
             raise exception.NotFound()
 
-    @lockutils.synchronized('3par', 'cinder-', True)
     def create_snapshot(self, snapshot, client):
         LOG.debug("Create Snapshot\n%s" % pprint.pformat(snapshot))
 
@@ -723,7 +730,6 @@ exit
         except hpexceptions.HTTPNotFound:
             raise exception.NotFound()
 
-    @lockutils.synchronized('3par', 'cinder-', True)
     def delete_snapshot(self, snapshot, client):
         LOG.debug("Delete Snapshot\n%s" % pprint.pformat(snapshot))
 

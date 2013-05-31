@@ -3,10 +3,6 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-DEBVERS ?= $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
-VERSION ?= $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//')
-export OSLO_PACKAGE_VERSION=$(VERSION)
-
 %:
 	dh $@  --with python2
 
@@ -15,7 +11,7 @@ get-orig-source:
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	PYTHONPATH=$(CURDIR) bash run_tests.sh -N -v
+	PYTHONPATH=$(CURDIR) bash run_tests.sh -N -P
 endif
 
 override_dh_install:
@@ -23,3 +19,7 @@ override_dh_install:
 
 override_dh_fixperms:
 	dh_fixperms -Xcinder_tgt.conf
+
+override_dh_clean:
+	# temporary workaround for d2to1 wonkyness
+	dh_clean -Xsetup.cfg

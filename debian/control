@@ -4,12 +4,12 @@ Priority: extra
 Maintainer: Chuck Short <zulcss@ubuntu.com>
 Build-Depends: debhelper (>= 8.0.0), python-all (>= 2.6)
 Build-Depends-Indep:
- pep8,
  python-amqplib,
  python-anyjson,
- python-cheetah,
  python-coverage,
+ python-d2to1,
  python-eventlet,
+ python-fixtures,
  python-glanceclient,
  python-greenlet,
  python-hp3parclient (>= 1.0.0),
@@ -27,6 +27,7 @@ Build-Depends-Indep:
  python-paramiko,
  python-paste,
  python-pastedeploy,
+ python-pbr,
  python-routes,
  python-swiftclient,
  python-setuptools,
@@ -35,8 +36,9 @@ Build-Depends-Indep:
  python-sqlalchemy,
  python-stevedore (>= 0.8),
  python-suds,
+ python-testtools,
  python-webob
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Homepage: http://launchpad.net/cinder
 
 Package: python-cinder
@@ -46,7 +48,6 @@ Depends:
  python-amqplib,
  python-anyjson,
  python-eventlet,
- python-glance,
  python-glanceclient,
  python-keystoneclient,
  python-oslo.config,

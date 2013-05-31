@@ -35,8 +35,8 @@ from hp3parclient import exceptions as hpexceptions
 from oslo.config import cfg
 
 from cinder import exception
-from cinder.openstack.common import lockutils
 from cinder.openstack.common import log as logging
+from cinder import utils
 import cinder.volume.driver
 from cinder.volume.drivers.san.hp import hp_3par_common as hpcommon
 from cinder.volume.drivers.san import san
@@ -76,7 +76,8 @@ class HP3PARFCDriver(cinder.volume.driver.FibreChannelDriver):
     def get_volume_stats(self, refresh):
         stats = self.common.get_volume_stats(refresh, self.client)
         stats['storage_protocol'] = 'FC'
-        stats['volume_backend_name'] = 'HP3PARFCDriver'
+        backend_name = self.configuration.safe_get('volume_backend_name')
+        stats['volume_backend_name'] = backend_name or self.__class__.__name__
         return stats
 
     def do_setup(self, context):
@@ -116,6 +117,7 @@ must be the same" % (cpg['domain'], self.configuration.hp3par_domain)
         """Returns an error if prerequisites aren't met."""
         self._check_flags()
 
+    @utils.synchronized('3par-vol', external=True)
     def create_volume(self, volume):
         metadata = self.common.create_volume(volume, self.client)
         return {'metadata': metadata}
@@ -125,9 +127,11 @@ must be the same" % (cpg['domain'], self.configuration.hp3par_domain)
                                                    self.client)
         return {'metadata': new_vol}
 
+    @utils.synchronized('3par-vol', external=True)
     def delete_volume(self, volume):
         self.common.delete_volume(volume, self.client)
 
+    @utils.synchronized('3par-vol', external=True)
     def create_volume_from_snapshot(self, volume, snapshot):
         """
         Creates a volume from a snapshot.
@@ -136,12 +140,15 @@ must be the same" % (cpg['domain'], self.configuration.hp3par_domain)
         """
         self.common.create_volume_from_snapshot(volume, snapshot, self.client)
 
+    @utils.synchronized('3par-snap', external=True)
     def create_snapshot(self, snapshot):
         self.common.create_snapshot(snapshot, self.client)
 
+    @utils.synchronized('3par-snap', external=True)
     def delete_snapshot(self, snapshot):
         self.common.delete_snapshot(snapshot, self.client)
 
+    @utils.synchronized('3par-attach', external=True)
     def initialize_connection(self, volume, connector):
         """Assigns the volume to a server.
 
@@ -193,6 +200,7 @@ must be the same" % (cpg['domain'], self.configuration.hp3par_domain)
                          'target_wwn': ports['FC']}}
         return info
 
+    @utils.synchronized('3par-attach', external=True)
     def terminate_connection(self, volume, connector, force):
         """
         Driver entry point to unattach a volume from an instance.
@@ -238,11 +246,14 @@ must be the same" % (cpg['domain'], self.configuration.hp3par_domain)
 
         return host
 
+    @utils.synchronized('3par-exp', external=True)
     def create_export(self, context, volume):
         pass
 
+    @utils.synchronized('3par-exp', external=True)
     def ensure_export(self, context, volume):
         pass
 
+    @utils.synchronized('3par-exp', external=True)
     def remove_export(self, context, volume):
         pass

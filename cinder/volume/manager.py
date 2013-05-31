@@ -45,19 +45,17 @@ from oslo.config import cfg
 
 from cinder import context
 from cinder import exception
-from cinder import flags
 from cinder.image import glance
 from cinder import manager
 from cinder.openstack.common import excutils
 from cinder.openstack.common import importutils
-from cinder.openstack.common import lockutils
 from cinder.openstack.common import log as logging
 from cinder.openstack.common import timeutils
 from cinder.openstack.common import uuidutils
 from cinder import quota
+from cinder import utils
 from cinder.volume.configuration import Configuration
 from cinder.volume import utils as volume_utils
-from cinder.volume import volume_types
 
 LOG = logging.getLogger(__name__)
 
@@ -69,8 +67,8 @@ volume_manager_opts = [
                help='Driver to use for volume creation'),
 ]
 
-FLAGS = flags.FLAGS
-FLAGS.register_opts(volume_manager_opts)
+CONF = cfg.CONF
+CONF.register_opts(volume_manager_opts)
 
 MAPPING = {
     'cinder.volume.driver.RBDDriver': 'cinder.volume.drivers.rbd.RBDDriver',
@@ -147,6 +145,11 @@ class VolumeManager(manager.SchedulerDependentManager):
         for volume in volumes:
             if volume['status'] in ['available', 'in-use']:
                 self.driver.ensure_export(ctxt, volume)
+            elif volume['status'] == 'downloading':
+                LOG.info(_("volume %s stuck in a downloading state"),
+                         volume['id'])
+                self.driver.clear_download(ctxt, volume)
+                self.db.volume_update(ctxt, volume['id'], {'status': 'error'})
             else:
                 LOG.info(_("volume %s: skipping export"), volume['name'])
 
@@ -183,7 +186,6 @@ class VolumeManager(manager.SchedulerDependentManager):
                 volume_ref = self.db.volume_update(context,
                                                    volume_ref['id'],
                                                    updates)
-
                 self._copy_image_to_volume(context,
                                            volume_ref,
                                            image_service,
@@ -249,6 +251,13 @@ class VolumeManager(manager.SchedulerDependentManager):
                                                            image_service,
                                                            image_id,
                                                            image_location)
+            except exception.ImageCopyFailure as ex:
+                LOG.error(_('Setting volume: %s status to error '
+                            'after failed image copy.'), volume_ref['id'])
+                self.db.volume_update(context,
+                                      volume_ref['id'],
+                                      {'status': 'error'})
+                return
             except Exception:
                 # restore source volume status before reschedule
                 if sourcevol_ref is not None:
@@ -260,6 +269,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                                             snapshot_id, image_id,
                                             request_spec, filter_properties,
                                             allow_reschedule)
+                return
 
             if model_update:
                 volume_ref = self.db.volume_update(
@@ -274,7 +284,6 @@ class VolumeManager(manager.SchedulerDependentManager):
             model_update = self.driver.create_export(context, volume_ref)
             if model_update:
                 self.db.volume_update(context, volume_ref['id'], model_update)
-
         except Exception:
             with excutils.save_and_reraise_exception():
                 self.db.volume_update(context,
@@ -332,7 +341,7 @@ class VolumeManager(manager.SchedulerDependentManager):
         rescheduled = False
 
         try:
-            method_args = (FLAGS.volume_topic, volume_id, snapshot_id,
+            method_args = (CONF.volume_topic, volume_id, snapshot_id,
                            image_id, request_spec, filter_properties)
 
             rescheduled = self._reschedule(context, request_spec,
@@ -368,7 +377,7 @@ class VolumeManager(manager.SchedulerDependentManager):
             LOG.debug(_("No request spec, will not reschedule"))
             return
 
-        request_spec['volume_id'] = [volume_id]
+        request_spec['volume_id'] = volume_id
 
         LOG.debug(_("volume %(volume_id)s: re-scheduling %(method)s "
                     "attempt %(num)d") %
@@ -445,6 +454,8 @@ class VolumeManager(manager.SchedulerDependentManager):
         if reservations:
             QUOTAS.commit(context, reservations, project_id=project_id)
 
+        self.publish_service_capabilities(context)
+
         return True
 
     def create_snapshot(self, context, volume_id, snapshot_id):
@@ -452,6 +463,8 @@ class VolumeManager(manager.SchedulerDependentManager):
         context = context.elevated()
         snapshot_ref = self.db.snapshot_get(context, snapshot_id)
         LOG.info(_("snapshot %s: creating"), snapshot_ref['name'])
+        self._notify_about_snapshot_usage(
+            context, snapshot_ref, "create.start")
 
         try:
             snap_name = snapshot_ref['name']
@@ -474,6 +487,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                                                         snapshot_ref['id'],
                                                         volume_id)
         LOG.info(_("snapshot %s: created successfully"), snapshot_ref['name'])
+        self._notify_about_snapshot_usage(context, snapshot_ref, "create.end")
         return snapshot_id
 
     def delete_snapshot(self, context, snapshot_id):
@@ -481,6 +495,8 @@ class VolumeManager(manager.SchedulerDependentManager):
         context = context.elevated()
         snapshot_ref = self.db.snapshot_get(context, snapshot_id)
         LOG.info(_("snapshot %s: deleting"), snapshot_ref['name'])
+        self._notify_about_snapshot_usage(
+            context, snapshot_ref, "delete.start")
 
         if context.project_id != snapshot_ref['project_id']:
             project_id = snapshot_ref['project_id']
@@ -520,6 +536,7 @@ class VolumeManager(manager.SchedulerDependentManager):
         self.db.volume_glance_metadata_delete_by_snapshot(context, snapshot_id)
         self.db.snapshot_destroy(context, snapshot_id)
         LOG.info(_("snapshot %s: deleted successfully"), snapshot_ref['name'])
+        self._notify_about_snapshot_usage(context, snapshot_ref, "delete.end")
 
         # Commit the reservations
         if reservations:
@@ -529,7 +546,7 @@ class VolumeManager(manager.SchedulerDependentManager):
     def attach_volume(self, context, volume_id, instance_uuid, mountpoint):
         """Updates db to show volume is attached"""
 
-        @lockutils.synchronized(volume_id, 'cinder-', external=True)
+        @utils.synchronized(volume_id, external=True)
         def do_attach():
             # check the volume status before attaching
             volume = self.db.volume_get(context, volume_id)
@@ -590,11 +607,24 @@ class VolumeManager(manager.SchedulerDependentManager):
     def _copy_image_to_volume(self, context, volume, image_service, image_id):
         """Downloads Glance image to the specified volume. """
         volume_id = volume['id']
-        self.driver.copy_image_to_volume(context, volume,
-                                         image_service,
-                                         image_id)
-        LOG.debug(_("Downloaded image %(image_id)s to %(volume_id)s "
-                    "successfully") % locals())
+        try:
+            self.driver.copy_image_to_volume(context, volume,
+                                             image_service,
+                                             image_id)
+        except exception.ProcessExecutionError as ex:
+            LOG.error(_("Failed to copy image to volume: %(volume_id)s, "
+                        "error: %(error)s") % {'volume_id': volume_id,
+                                               'error': ex.stderr})
+            raise exception.ImageCopyFailure(reason=ex.stderr)
+        except exception.ImageUnacceptable as ex:
+            LOG.error(_("Failed to copy image to volume: %(volume_id)s, "
+                        "error: %(error)s") % {'volume_id': volume_id,
+                                               'error': ex})
+            raise exception.ImageCopyFailure(reason=ex)
+
+        LOG.info(_("Downloaded image %(image_id)s to %(volume_id)s "
+                   "successfully.") % {'image_id': image_id,
+                                       'volume_id': volume_id})
 
     def copy_volume_to_image(self, context, volume_id, image_meta):
         """Uploads the specified volume to Glance.
@@ -701,4 +731,13 @@ class VolumeManager(manager.SchedulerDependentManager):
                                    extra_usage_info=None):
         volume_utils.notify_about_volume_usage(
             context, volume, event_suffix,
+            extra_usage_info=extra_usage_info, host=self.host)
+
+    def _notify_about_snapshot_usage(self,
+                                     context,
+                                     snapshot,
+                                     event_suffix,
+                                     extra_usage_info=None):
+        volume_utils.notify_about_snapshot_usage(
+            context, snapshot, event_suffix,
             extra_usage_info=extra_usage_info, host=self.host)

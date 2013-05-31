@@ -192,10 +192,6 @@ class InvalidVolume(Invalid):
     message = _("Invalid volume") + ": %(reason)s"
 
 
-class InvalidPortRange(Invalid):
-    message = _("Invalid port range %(from_port)s:%(to_port)s. %(msg)s")
-
-
 class InvalidContentType(Invalid):
     message = _("Invalid content type %(content_type)s.")
 
@@ -474,6 +470,10 @@ class Duplicate3PARHost(CinderException):
     message = _("3PAR Host already exists: %(err)s.  %(info)s")
 
 
+class Invalid3PARDomain(CinderException):
+    message = _("Invalid 3PAR Domain: %(err)s")
+
+
 class VolumeTypeCreateFailed(CinderException):
     message = _("Cannot create volume_type with "
                 "name %(name)s and specs %(extra_specs)s")
@@ -562,7 +562,7 @@ class GlanceMetadataExists(Invalid):
 
 
 class ImageCopyFailure(Invalid):
-    message = _("Failed to copy image to volume")
+    message = _("Failed to copy image to volume: %(reason)s")
 
 
 class BackupNotFound(NotFound):

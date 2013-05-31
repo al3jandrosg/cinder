@@ -29,11 +29,11 @@ LOG = logging.getLogger(__name__)
 
 volume_opts = [
     cfg.StrOpt('glusterfs_shares_config',
-               default=None,
+               default='/etc/cinder/glusterfs_shares',
                help='File with the list of available gluster shares'),
     cfg.StrOpt('glusterfs_mount_point_base',
                default='$state_path/mnt',
-               help='Base dir where gluster expected to be mounted'),
+               help='Base dir containing mount points for gluster shares'),
     cfg.StrOpt('glusterfs_disk_util',
                default='df',
                help='Use du or df for free space calculation'),
@@ -42,6 +42,7 @@ volume_opts = [
                 help=('Create volumes as sparsed files which take no space.'
                       'If set to False volume is created as regular file.'
                       'In such case volume creation takes a lot of time.'))]
+VERSION = '1.0'
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(volume_opts)
@@ -70,6 +71,8 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
                    locals())
             LOG.warn(msg)
             raise exception.GlusterfsException(msg)
+
+        self.shares = {}
 
         try:
             self._execute('mount.glusterfs', check_exit_code=False)
@@ -112,13 +115,6 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
 
         mounted_path = self.local_path(volume)
 
-        if not self._path_exists(mounted_path):
-            volume = volume['name']
-
-            LOG.warn(_('Trying to delete non-existing volume %(volume)s at '
-                     'path %(mounted_path)s') % locals())
-            return
-
         self._execute('rm', '-f', mounted_path, run_as_root=True)
 
     def ensure_export(self, ctx, volume):
@@ -138,6 +134,8 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
         """Allow connection to connector and return connection info."""
         data = {'export': volume['provider_location'],
                 'name': volume['name']}
+        if volume['provider_location'] in self.shares:
+            data['options'] = self.shares[volume['provider_location']]
         return {
             'driver_volume_type': 'glusterfs',
             'data': data
@@ -166,7 +164,9 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
            locally."""
         self._mounted_shares = []
 
-        for share in self._load_shares_config():
+        self._load_shares_config(self.configuration.glusterfs_shares_config)
+
+        for share in self.shares.keys():
             try:
                 self._ensure_share_mounted(share)
                 self._mounted_shares.append(share)
@@ -175,14 +175,9 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
 
         LOG.debug('Available shares %s' % str(self._mounted_shares))
 
-    def _load_shares_config(self):
-        return [share.strip() for share
-                in open(self.configuration.glusterfs_shares_config)
-                if share and not share.startswith('#')]
-
     def _ensure_share_mounted(self, glusterfs_share):
         """Mount GlusterFS share.
-        :param glusterfs_share:
+        :param glusterfs_share: string
         """
         mount_path = self._get_mount_point_for_share(glusterfs_share)
         self._mount_glusterfs(glusterfs_share, mount_path, ensure=True)
@@ -200,7 +195,7 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
         greatest_share = None
 
         for glusterfs_share in self._mounted_shares:
-            capacity = self._get_available_capacity(glusterfs_share)
+            capacity = self._get_available_capacity(glusterfs_share)[0]
             if capacity > greatest_size:
                 greatest_share = glusterfs_share
                 greatest_size = capacity
@@ -229,28 +224,65 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
 
         available = 0
 
+        size = int(out.split()[1])
         if self.configuration.glusterfs_disk_util == 'df':
             available = int(out.split()[3])
         else:
-            size = int(out.split()[1])
             out, _ = self._execute('du', '-sb', '--apparent-size',
                                    '--exclude', '*snapshot*', mount_point,
                                    run_as_root=True)
             used = int(out.split()[0])
             available = size - used
 
-        return available
+        return available, size
 
     def _mount_glusterfs(self, glusterfs_share, mount_path, ensure=False):
         """Mount GlusterFS share to mount path."""
-        if not self._path_exists(mount_path):
-            self._execute('mkdir', '-p', mount_path)
+        self._execute('mkdir', '-p', mount_path)
+
+        command = ['mount', '-t', 'glusterfs', glusterfs_share,
+                   mount_path]
+        if self.shares.get(glusterfs_share) is not None:
+            command.extend(self.shares[glusterfs_share].split())
 
         try:
-            self._execute('mount', '-t', 'glusterfs', glusterfs_share,
-                          mount_path, run_as_root=True)
+            self._execute(*command, run_as_root=True)
         except exception.ProcessExecutionError as exc:
             if ensure and 'already mounted' in exc.stderr:
                 LOG.warn(_("%s is already mounted"), glusterfs_share)
             else:
                 raise
+
+    def get_volume_stats(self, refresh=False):
+        """Get volume stats.
+
+        If 'refresh' is True, update the stats first."""
+        if refresh or not self._stats:
+            self._update_volume_stats()
+
+        return self._stats
+
+    def _update_volume_stats(self):
+        """Retrieve stats info from volume group."""
+
+        data = {}
+        backend_name = self.configuration.safe_get('volume_backend_name')
+        data['volume_backend_name'] = backend_name or 'GlusterFS'
+        data['vendor_name'] = 'Open Source'
+        data['driver_version'] = VERSION
+        data['storage_protocol'] = 'glusterfs'
+
+        self._ensure_shares_mounted()
+
+        global_capacity = 0
+        global_free = 0
+        for nfs_share in self._mounted_shares:
+            free, capacity = self._get_available_capacity(nfs_share)
+            global_capacity += capacity
+            global_free += free
+
+        data['total_capacity_gb'] = global_capacity / 1024.0 ** 3
+        data['free_capacity_gb'] = global_free / 1024.0 ** 3
+        data['reserved_percentage'] = 0
+        data['QoS_support'] = False
+        self._stats = data
