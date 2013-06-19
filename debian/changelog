@@ -1,3 +1,16 @@
+cinder (1:2013.2~b1-0ubuntu2) saucy; urgency=low
+
+  [ Chuck Short ]
+  * debian/patches/avoid_paramiko_vers_depends.patch: Refreshed
+
+  [ Adam Gandelman ]
+  * debian/control: Bump min. stevedore version >= 0.9.
+ 
+  [Yolanda Robla]
+  * debian/tests: Added autopkgtests.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 19 Jun 2013 12:45:18 -0500
+
 cinder (1:2013.2~b1-0ubuntu1) saucy; urgency=low
 
   [ Chuck Short ]

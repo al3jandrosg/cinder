@@ -34,12 +34,13 @@ Build-Depends-Indep:
  python-setuptools-git,
  python-sphinx,
  python-sqlalchemy,
- python-stevedore (>= 0.8),
+ python-stevedore (>= 0.9),
  python-suds,
  python-testtools,
  python-webob
 Standards-Version: 3.9.4
 Homepage: http://launchpad.net/cinder
+XS-Testsuite: autopkgtest
 
 Package: python-cinder
 Section: python
@@ -61,7 +62,7 @@ Depends:
  python-paste,
  python-pastedeploy,
  python-routes,
- python-stevedore (>= 0.8),
+ python-stevedore (>= 0.9),
  python-swiftclient,
  python-sqlalchemy,
  python-suds,

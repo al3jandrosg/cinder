@@ -6,11 +6,10 @@ cherry-picked patch to avoid the bug that prompted the version requirement
 here.
 
 
-Index: cinder/tools/pip-requires
-===================================================================
---- cinder.orig/tools/pip-requires	2013-05-23 19:09:24.115223372 -0700
-+++ cinder/tools/pip-requires	2013-05-23 19:10:22.699221220 -0700
-@@ -11,7 +11,7 @@
+diff -Naurp cinder-2013.2.b1.orig/tools/pip-requires cinder-2013.2.b1/tools/pip-requires
+--- cinder-2013.2.b1.orig/tools/pip-requires	2013-06-19 12:37:49.147728578 -0500
++++ cinder-2013.2.b1/tools/pip-requires	2013-06-19 12:41:13.171728677 -0500
+@@ -11,7 +11,7 @@ kombu>=1.0.4
  lockfile>=0.8
  lxml>=2.3
  oslo.config>=1.1.0
