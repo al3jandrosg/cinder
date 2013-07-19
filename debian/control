@@ -5,7 +5,7 @@ Maintainer: Chuck Short <zulcss@ubuntu.com>
 Build-Depends: debhelper (>= 8.0.0), python-all (>= 2.6)
 Build-Depends-Indep:
  python-amqplib,
- python-anyjson,
+ python-anyjson (>= 0.3.3),
  python-coverage,
  python-d2to1,
  python-eventlet,
@@ -14,8 +14,8 @@ Build-Depends-Indep:
  python-greenlet,
  python-hp3parclient (>= 1.0.0),
  python-iso8601,
- python-keystoneclient,
- python-kombu,
+ python-keystoneclient (>= 1:0.2.3),
+ python-kombu (>= 2.5.12),
  python-lockfile,
  python-lxml,
  python-migrate,
@@ -37,9 +37,12 @@ Build-Depends-Indep:
  python-stevedore (>= 0.9),
  python-suds,
  python-testtools,
- python-webob
+ python-webob,
+ testrepository
 Standards-Version: 3.9.4
 Homepage: http://launchpad.net/cinder
+Vcs-Browser: http://bazaar.launchpad.net/~ubuntu-server-dev/cinder/havana/files
+Vcs-Bzr: https://code.launchpad.net/~ubuntu-server-dev/cinder/havana
 XS-Testsuite: autopkgtest
 
 Package: python-cinder
@@ -47,14 +50,14 @@ Section: python
 Architecture: all
 Depends:
  python-amqplib,
- python-anyjson,
+ python-anyjson (>= 0.3.3),
  python-eventlet,
  python-glanceclient,
- python-keystoneclient,
+ python-keystoneclient (>= 1:0.2.3),
  python-oslo.config,
  python-greenlet,
  python-iso8601,
- python-kombu,
+ python-kombu (>= 2.5.12),
  python-lockfile,
  python-lxml,
  python-migrate,
