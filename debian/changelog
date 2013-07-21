@@ -1,3 +1,10 @@
+cinder (1:2013.2~b2-0ubuntu2) saucy; urgency=low
+
+  * d/rules: Disable test parallel execution; causing FTBFS when high
+    levels of concurrency occur on buildds. 
+
+ -- James Page <james.page@ubuntu.com>  Sun, 21 Jul 2013 10:10:10 +0100
+
 cinder (1:2013.2~b2-0ubuntu1) saucy; urgency=low
 
   [ Chuck Short ]
