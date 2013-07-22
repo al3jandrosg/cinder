@@ -1,3 +1,10 @@
+cinder (1:2013.2~b2-0ubuntu3) saucy; urgency=low
+
+  * debian/patches/fix-sqlalchemy-requirements.patch: Fix requirements for sqlalchemy
+    0.8.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Mon, 22 Jul 2013 10:03:52 -0400
+
 cinder (1:2013.2~b2-0ubuntu2) saucy; urgency=low
 
   * d/rules: Disable test parallel execution; causing FTBFS when high

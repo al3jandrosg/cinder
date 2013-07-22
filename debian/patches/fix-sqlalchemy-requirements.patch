@@ -1,0 +1,15 @@
+Description: Bump sqlalchemy to support 0.8.
+Author: Chuck Short <zulcss@ubuntu.com>
+Forwarded: No
+diff -Naurp cinder-2013.2.b2.orig/requirements.txt cinder-2013.2.b2/requirements.txt
+--- cinder-2013.2.b2.orig/requirements.txt	2013-07-18 11:49:19.000000000 -0400
++++ cinder-2013.2.b2/requirements.txt	2013-07-22 08:05:15.282522549 -0400
+@@ -19,7 +19,7 @@ python-keystoneclient>=0.2.1
+ python-swiftclient>=1.2
+ routes>=1.12.3
+ six
+-sqlalchemy>=0.7,<=0.7.99
++sqlalchemy>=0.7,<=0.8.99
+ sqlalchemy-migrate>=0.7
+ stevedore>=0.9
+ webob>=1.2.3,<1.3
