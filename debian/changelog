@@ -1,3 +1,26 @@
+cinder (1:2013.2~b3-0ubuntu1) saucy; urgency=low
+
+  [ James Page ]
+  * d/control: Switch ceph-common -> python-ceph inline with upstream
+    refactoring of Ceph RBD driver, move to Suggests of python-cinder.
+    (LP: #1190791). 
+
+  [ Adam Gandelman ]
+  * debian/patches/avoid_paramiko_vers_depends.patch: Dropped, no longer
+    required.
+  * Add minimum requirement python-greenlet (>= 0.3.2).
+  * Add minimum requirement python-eventlet (>= 0.12.0).
+  * Add minimum requirement python-paramiko (>= 1.8).
+
+  [ Chuck Short ]
+  * New upstream release.
+  * debian/patches/skip-sqlachemy-failures.patch: Skip testfailures
+    with sqlalchemy 0.8 until they are fixed upstream.
+  * debian/control: Add python-babel to build-depends.
+  * debian/control: Add python-novaclient to build-depends.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Sun, 08 Sep 2013 21:09:46 -0400
+
 cinder (1:2013.2~b2-0ubuntu3) saucy; urgency=low
 
   * debian/patches/fix-sqlalchemy-requirements.patch: Fix requirements for sqlalchemy

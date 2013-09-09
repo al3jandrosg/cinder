@@ -6,12 +6,13 @@ Build-Depends: debhelper (>= 8.0.0), python-all (>= 2.6)
 Build-Depends-Indep:
  python-amqplib,
  python-anyjson (>= 0.3.3),
+ python-babel,
  python-coverage,
  python-d2to1,
- python-eventlet,
+ python-eventlet (>= 0.12.0),
  python-fixtures,
  python-glanceclient,
- python-greenlet,
+ python-greenlet (>= 0.3.2),
  python-hp3parclient (>= 1.0.0),
  python-iso8601,
  python-keystoneclient (>= 1:0.2.3),
@@ -23,8 +24,9 @@ Build-Depends-Indep:
  python-mox,
  python-mysqldb,
  python-nose,
+ python-novaclient,
  python-oslo.config,
- python-paramiko,
+ python-paramiko (>= 1.8),
  python-paste,
  python-pastedeploy,
  python-pbr,
@@ -51,17 +53,17 @@ Architecture: all
 Depends:
  python-amqplib,
  python-anyjson (>= 0.3.3),
- python-eventlet,
+ python-eventlet (>= 0.12.0),
  python-glanceclient,
  python-keystoneclient (>= 1:0.2.3),
  python-oslo.config,
- python-greenlet,
+ python-greenlet (>= 0.3.2),
  python-iso8601,
  python-kombu (>= 2.5.12),
  python-lockfile,
  python-lxml,
  python-migrate,
- python-paramiko,
+ python-paramiko (>= 1.8),
  python-paste,
  python-pastedeploy,
  python-routes,
@@ -72,7 +74,7 @@ Depends:
  python-webob,
  ${misc:Depends},
  ${python:Depends}
-Suggests: python-hp3parclient
+Suggests: python-hp3parclient, python-ceph
 Description: Cinder Python libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -122,7 +124,6 @@ Depends:
  tgt,
  ${misc:Depends},
  ${python:Depends}
-Suggests: ceph-common
 Breaks: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
 Replaces: cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 )
 Description: Cinder storage service - Volume server
