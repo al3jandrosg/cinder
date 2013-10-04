@@ -1,9 +1,12 @@
+Abhijeet Malawade <Abhijeet.Malawade@nttdata.com>
 Abhinav Srivastava <abhiabhi.sr@gmail.com>
 Adalberto Medeiros <adalbas@linux.vnet.ibm.com>
 Adam Gandelman <adam.gandelman@canonical.com>
 Adam Gandelman <adamg@canonical.com>
 Alan Jiang <ajiang@us.ibm.com>
 Alessandro Pilotti <ap@pilotti.it>
+Alessandro Pilotti <apilotti@cloudbasesolutions.com>
+Alexander Gordeev <agordeev@mirantis.com>
 Alexander Gorodnev <agorodnev@mirantis.com>
 Andreas Jaeger <aj@suse.de>
 Andrew Forrest <forrest@research.att.com>
@@ -15,7 +18,10 @@ Ben Nemec <openstack@nemebean.com>
 Ben Swartzlander <bswartz@netapp.com>
 Bill Owen <billowen@us.ibm.com>
 Brian Waldon <brian.waldon@rackspace.com>
+Brianna Poulos <Brianna.Poulos@jhuapl.edu>
 Carlos Goncalves <cgoncalves@av.it.pt>
+Chang Bo Guo <guochbo@cn.ibm.com>
+Chet Burgess <cfb@metacloud.com>
 Chmouel Boudjnah <chmouel@chmouel.com>
 Chris Yeoh <cyeoh@au1.ibm.com>
 Christoph Kassen <c.kassen@telekom.de>
@@ -72,6 +78,7 @@ Josh Durgin <josh.durgin@inktank.com>
 Joshua Harlow <harlowja@yahoo-inc.com>
 Julia Varlamova <jvarlamova@mirantis.com>
 Julien Danjou <julien@danjou.info>
+KIYOHIRO ADACHI <adachi@mxs.nes.nec.co.jp>
 Kai Zhang <kyle@zelin.io>
 Kaitlin Farr <Kaitlin.Farr@jhuapl.edu>
 Kartik Bommepally <kbommepally@vmware.com>
@@ -141,6 +148,7 @@ Stephen Mulcahy <stephen.mulcahy@hp.com>
 Stuart McLaren <stuart.mclaren@hp.com>
 Subramanian Neelakantan <subramanian.neelakantan@gmail.com>
 Svetlana Shturm <sshturm@mirantis.com>
+Swapnil Kulkarni <swapnilkulkarni2608@gmail.com>
 Thierry Carrez <thierry@openstack.org>
 Thomas Bechtold <thomasbechtold@jpberlin.de>
 Tom Fifield <fifieldt@unimelb.edu.au>
@@ -157,6 +165,7 @@ Walter A. Boring IV <walter.boring@hp.com>
 Wenhao Xu <wenhao@zelin.io>
 Wenhao Xu <xuwenhao2008@gmail.com>
 Xavier Queralt <xqueralt@redhat.com>
+Xiao Chen <chenxiao@cn.ibm.com>
 Xing Yang <xing.yang@emc.com>
 XueChendi <chendi.xue@intel.com>
 Yaguang Tang <heut2008@gmail.com>
@@ -189,7 +198,9 @@ leseb <sebastien.han@enovance.com>
 liyingjun <liyingjun1988@gmail.com>
 lrqrun <lrqrun@gmail.com>
 mouad benchchaoui <m.benchchaoui@cloudbau.de>
+rackerjoe <breu@breu.org>
 sathish-nagappan <sathish.nagappan@nebula.com>
+saurabh <saurabh.chordiya@nectechnologies.in>
 scott-dangelo <scott.dangelo@hp.com>
 unicell <unicell@gmail.com>
 xiaoxi_chen <xiaoxi.chen@intel.com>

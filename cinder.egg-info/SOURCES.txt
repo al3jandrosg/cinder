@@ -106,6 +106,7 @@ cinder/api/v2/router.py
 cinder/api/v2/snapshot_metadata.py
 cinder/api/v2/snapshots.py
 cinder/api/v2/types.py
+cinder/api/v2/volume_metadata.py
 cinder/api/v2/volumes.py
 cinder/api/v2/views/__init__.py
 cinder/api/v2/views/volumes.py
@@ -126,6 +127,7 @@ cinder/backup/drivers/__init__.py
 cinder/backup/drivers/ceph.py
 cinder/backup/drivers/swift.py
 cinder/backup/drivers/tsm.py
+cinder/brick/README.txt
 cinder/brick/__init__.py
 cinder/brick/exception.py
 cinder/brick/executor.py
@@ -191,10 +193,12 @@ cinder/image/__init__.py
 cinder/image/glance.py
 cinder/image/image_utils.py
 cinder/keymgr/__init__.py
+cinder/keymgr/conf_key_mgr.py
 cinder/keymgr/key.py
 cinder/keymgr/key_mgr.py
 cinder/keymgr/not_implemented_key_mgr.py
 cinder/locale/cinder.pot
+cinder/locale/ar/LC_MESSAGES/cinder.po
 cinder/locale/bg_BG/LC_MESSAGES/cinder.po
 cinder/locale/bs/LC_MESSAGES/cinder.po
 cinder/locale/ca/LC_MESSAGES/cinder.po
@@ -205,7 +209,9 @@ cinder/locale/en_AU/LC_MESSAGES/cinder.po
 cinder/locale/en_GB/LC_MESSAGES/cinder.po
 cinder/locale/en_US/LC_MESSAGES/cinder.po
 cinder/locale/es/LC_MESSAGES/cinder.po
+cinder/locale/es_MX/LC_MESSAGES/cinder.po
 cinder/locale/fi_FI/LC_MESSAGES/cinder.po
+cinder/locale/fil/LC_MESSAGES/cinder.po
 cinder/locale/fr/LC_MESSAGES/cinder.po
 cinder/locale/hi/LC_MESSAGES/cinder.po
 cinder/locale/hr/LC_MESSAGES/cinder.po
@@ -215,10 +221,12 @@ cinder/locale/it/LC_MESSAGES/cinder.po
 cinder/locale/it_IT/LC_MESSAGES/cinder.po
 cinder/locale/ja/LC_MESSAGES/cinder.po
 cinder/locale/ka_GE/LC_MESSAGES/cinder.po
+cinder/locale/kn/LC_MESSAGES/cinder.po
 cinder/locale/ko/LC_MESSAGES/cinder.po
 cinder/locale/ko_KR/LC_MESSAGES/cinder.po
 cinder/locale/ms/LC_MESSAGES/cinder.po
 cinder/locale/nb/LC_MESSAGES/cinder.po
+cinder/locale/ne/LC_MESSAGES/cinder.po
 cinder/locale/nl_NL/LC_MESSAGES/cinder.po
 cinder/locale/pl_PL/LC_MESSAGES/cinder.po
 cinder/locale/pt/LC_MESSAGES/cinder.po
@@ -230,6 +238,7 @@ cinder/locale/sk/LC_MESSAGES/cinder.po
 cinder/locale/sl_SI/LC_MESSAGES/cinder.po
 cinder/locale/sw_KE/LC_MESSAGES/cinder.po
 cinder/locale/tl/LC_MESSAGES/cinder.po
+cinder/locale/tl_PH/LC_MESSAGES/cinder.po
 cinder/locale/tr/LC_MESSAGES/cinder.po
 cinder/locale/tr_TR/LC_MESSAGES/cinder.po
 cinder/locale/uk/LC_MESSAGES/cinder.po
@@ -348,6 +357,7 @@ cinder/tests/test_create_volume_flow.py
 cinder/tests/test_db_api.py
 cinder/tests/test_drivers_compatibility.py
 cinder/tests/test_emc.py
+cinder/tests/test_eqlx.py
 cinder/tests/test_exception.py
 cinder/tests/test_glusterfs.py
 cinder/tests/test_gpfs.py
@@ -444,6 +454,7 @@ cinder/tests/api/v2/test_limits.py
 cinder/tests/api/v2/test_snapshot_metadata.py
 cinder/tests/api/v2/test_snapshots.py
 cinder/tests/api/v2/test_types.py
+cinder/tests/api/v2/test_volume_metadata.py
 cinder/tests/api/v2/test_volumes.py
 cinder/tests/backup/__init__.py
 cinder/tests/backup/fake_rados.py
@@ -480,6 +491,7 @@ cinder/tests/integrated/api/client.py
 cinder/tests/keymgr/__init__.py
 cinder/tests/keymgr/fake.py
 cinder/tests/keymgr/mock_key_mgr.py
+cinder/tests/keymgr/test_conf_key_mgr.py
 cinder/tests/keymgr/test_key.py
 cinder/tests/keymgr/test_key_mgr.py
 cinder/tests/keymgr/test_mock_key_mgr.py
@@ -516,6 +528,7 @@ cinder/volume/volume_types.py
 cinder/volume/drivers/__init__.py
 cinder/volume/drivers/block_device.py
 cinder/volume/drivers/coraid.py
+cinder/volume/drivers/eqlx.py
 cinder/volume/drivers/glusterfs.py
 cinder/volume/drivers/gpfs.py
 cinder/volume/drivers/lvm.py

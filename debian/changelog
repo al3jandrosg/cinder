@@ -1,3 +1,23 @@
+cinder (1:2013.2~rc1-0ubuntu1) saucy; urgency=low
+
+  * New upstream release candidate.
+  * debian/patches/skip-sqlachemy-failures.patch: Dropped
+  * debian/patches/fix-sqlalchemy-requirements.patch: Refreshed.
+  * debian/patches/fix-babel-requirements.patch: Revert dependency requirement
+    for python-babel.
+  * debian/control:
+    - Dropped python-nose and python-setuptool-git.
+    - Added python-netaddr as a build-dependency. (LP: #1227153)
+    - Added python-six as a build-dependency.
+    - Added versioned dependencies to python-pbr, python-amqplib,
+      python-glanceclient, python-novaclient, and python-swiftclient,
+      python-lxml, python-webob, python-oslo.config, python-sqlalchemy,
+      python-fixtures, python-testtools, and python-fixtures
+    - Bumped versioned dependencies for python-eventlet, python-hp3parclient,
+      python-keystoneclient, and python-novaclient
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 04 Oct 2013 08:40:26 -0400
+
 cinder (1:2013.2~b3-0ubuntu1) saucy; urgency=low
 
   [ James Page ]

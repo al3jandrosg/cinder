@@ -1,12 +1,7 @@
-Description: Bump sqlalchemy to support 0.8.
-Author: Chuck Short <zulcss@ubuntu.com>
-Forwarded: No
-
-Index: cinder/requirements.txt
-===================================================================
---- cinder.orig/requirements.txt	2013-09-06 16:12:26.339562632 -0700
-+++ cinder/requirements.txt	2013-09-06 16:12:26.335562632 -0700
-@@ -19,7 +19,7 @@
+diff -Naurp cinder-2013.2.rc1.orig/requirements.txt cinder-2013.2.rc1/requirements.txt
+--- cinder-2013.2.rc1.orig/requirements.txt	2013-10-04 05:11:50.000000000 -0400
++++ cinder-2013.2.rc1/requirements.txt	2013-10-04 08:33:32.072164528 -0400
+@@ -20,7 +20,7 @@ python-novaclient>=2.15.0
  python-swiftclient>=1.5
  Routes>=1.12.3
  six
