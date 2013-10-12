@@ -1,3 +1,127 @@
+commit 2d8ad0d30d390624e0c24e1ce3db87219967390f
+Merge: 36c831f 3c7bfcd
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 10 22:57:52 2013 +0000
+
+    Merge "VMware: Disallow snapshot of attached volume" into milestone-proposed
+
+commit 36c831f109802706528140daf3626096189443cb
+Merge: 9fb4c73 de03181
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 10 22:05:05 2013 +0000
+
+    Merge "improves lvm version parsing for customised builds" into milestone-proposed
+
+commit 9fb4c7378eb7e7a7c47c2c0149ebea36a86f4a19
+Merge: 9c0b9e0 af092c5
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 10 22:02:53 2013 +0000
+
+    Merge "Support Huawei driver upgrade from grizzly to havana" into milestone-proposed
+
+commit 9c0b9e0b3892a2cf034a1bd7c5499473a74917d6
+Merge: 8a2a3d6 46afd20
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Oct 10 21:21:51 2013 +0000
+
+    Merge "VMware: Re-create session for RetrievePropertiesEx" into milestone-proposed
+
+commit de031813b90d4a29fc6011a53fefa6c19001022e
+Author: Giulio Fidente <gfidente@redhat.com>
+Date:   Thu Oct 10 14:59:44 2013 +0200
+
+    improves lvm version parsing for customised builds
+    
+    supports_thin_provisioning now uses a regexp to ensure parsing of
+    lvm version succeeds when the build is customised; also adds a test
+    for a customised string parsing
+    
+    Closes-Bug: #1237994
+    Change-Id: I49049a58bbdb5315b9d2d7c259a9324ca15d78cb
+    (cherry picked from commit 51fd5edb106e26d65696ce37a70eef6a4f75b1e2)
+
+commit 8a2a3d691fa54c07d14b3e32558641f43b69c040
+Author: Alan Jiang <ajiang@us.ibm.com>
+Date:   Thu Oct 3 17:03:09 2013 -0500
+
+    long flashcopy operation may block volume service
+    
+    Storwize family uses flashcopy for snapshot or volume clone. The
+    volume delete has to wait until flashcopy finishes or errors out.
+    The _delete_vdisk() will poll volume FlashCopy status in a loop.
+    This may block volume serivce heartheat since it is in the same
+    . The solution is to use openstack FixedIntervalLoopingCall
+    to run the FlashCopy status poll in a timer thread.
+    
+    The cinder volume mananger will resume delete operation for those
+    volumes that are in the deleting state during volume service startup.
+    Since Storwize volume delete may wait for a long time, this can cause
+    volume service to have long delay before it becomes available.
+    A greenpool is used to offload those volume delete operations.
+    
+    Change-Id: Ie01a441a327e1e318fa8da0040ae130731b7a686
+    Closes-Bug: #1203152
+    (cherry picked from commit 7aa4f65a8c17aa037deff0f5b534ed694c17e62a)
+
+commit af092c5401e6721df4ddfa5a93a0fe155fc8782d
+Author: zhangchao010 <zhangchao010@huawei.com>
+Date:   Wed Oct 9 15:37:49 2013 +0800
+
+    Support Huawei driver upgrade from grizzly to havana
+    
+    To make the driver upgrade from grizzly to higher versions, the patch
+    checks the old host name firstly when creating and deleting host in
+    Huawei storage system.
+    If the old host name exists:
+    *get and use it directly when adding host.
+    *delete it directly when deleting host.
+    
+    Closes-bug 1237189
+    
+    Change-Id: I82a9dbc1ef0bb0b91771afea4aadec5afe65eecf
+    (cherry picked from commit 0c9dc5d0e01576969f09edc0c9c72a2aa91b248a)
+
+commit 3c7bfcdb378ca7f59186822f4c905e1176e4722a
+Author: Kartik Bommepally <kbommepally@vmware.com>
+Date:   Tue Oct 8 06:33:33 2013 -0700
+
+    VMware: Disallow snapshot of attached volume
+    
+    The current implementation perform snapshot of attached volume.
+    This is invalid because when we take snapshot of the backing, the instance
+    continues pointing to the readonly delta and tries writing to it.
+    This patch will disallow snapshot creation of attached volume.
+    
+    We have similar issue with delete of snapshot, when deleted the instance will
+    point to an invalid disk file, since that will get merged with its parent.
+    Hence any writes by the instance will fail with disk not found error.
+    This patch will ignore delete snapshot of attached volume.
+    
+    Since we disallow snapshot of attached volume, we disallow linked clone of
+    attached source volume and also upload of attached volume.
+    
+    Fixes bug: 1236891
+    
+    Change-Id: I6a91eac8529836d1fe1de73bf6b28ec098aa7c54
+    (cherry picked from commit 2451a027bee50c834890f9e049fbaf4bfa911546)
+
+commit 46afd20ac76d5c947c33395eeff80b53e6493a98
+Author: Kartik Bommepally <kbommepally@vmware.com>
+Date:   Fri Oct 4 04:05:09 2013 -0700
+
+    VMware: Re-create session for RetrievePropertiesEx
+    
+    When RetrievePropertiesEx API is called after session timeout, the driver
+    does not re-create session automatically.
+    
+    This is a regression caused when moving from RetrieveProperties to
+    RetrievePropertiesEx API.
+    
+    Fixes bug: 1235187
+    
+    Change-Id: I8a1e2452dfb3029365d59eae7850d1a9363b25f0
+    (cherry picked from commit 2d4ea101252141486fa6fd61b100772fafd40102)
+
 commit f021629df31328324ca429c29a827efab832eee0
 Author: John Griffith <john.griffith@solidfire.com>
 Date:   Thu Oct 3 15:54:20 2013 -0600

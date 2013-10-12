@@ -1,3 +1,9 @@
+cinder (1:2013.2~rc2-0ubuntu1) saucy; urgency=low
+
+  * New upstream release candidate (LP: #1239156). 
+
+ -- James Page <james.page@ubuntu.com>  Sat, 12 Oct 2013 16:52:11 +0100
+
 cinder (1:2013.2~rc1-0ubuntu1) saucy; urgency=low
 
   * New upstream release candidate.
