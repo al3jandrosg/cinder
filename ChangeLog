@@ -1,3 +1,46 @@
+commit bdb5d982d069ac6464c8ef857a0f95dde02005de
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Oct 15 19:13:45 2013 -0600
+
+    Fix lvm.extend_volume to pass Gig suffix
+    
+    The extend function in the lvm driver was not converting
+    the cinder size value to Gigabytes before passing the call
+    to the vg module.  The result was that we would attempt to
+    extend a volume to "new size in Megabytes" which of course
+    is less than the current size since we do a Gigabyte string
+    conversion on create and everywhere else.
+    
+    This change makes sure we pass the integer change through
+    the sizestr method to get the G suffix needed to work properly.
+    
+    Change-Id: I070962a3aa7038f612e19a93ccaa60cbc13008f6
+    Closes-Bug: #1240287
+    (cherry picked from commit ec442e41d2d243003a42ed60ae862e96142a5cde)
+
+commit 5e489f475f4fe0529280f419b4708aa22c13ad39
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Tue Oct 15 13:57:48 2013 -0600
+
+    FK lookup failures during migration
+    
+    There are a couple of cases where migrations have failed
+    upgrading from Grizzly to Havana, this seems to be isolated
+    to a couple of migrations so far and the error message is a
+    failure to lookup/associate the volume-id FK dependency.
+    
+    It appears that this is caused by not setting the charset
+    in the migration, so the result is that the initial db setup
+    uses utf8 and the migrations are using the default latin1.
+    
+    This patch goes through all of the migrations in Havana that
+    specify InnoDB and explicitly sets the charset to utf8 to match
+    the volumes table (and the other original tables).
+    
+    Change-Id: I43b219ff5e4eea10a7391ad65ef68a80b7460370
+    Closes-Bug: #1233861
+    (cherry picked from commit 645a84f990c90e28548cf35b4b5f242eb0e0c286)
+
 commit 2d8ad0d30d390624e0c24e1ce3db87219967390f
 Merge: 36c831f 3c7bfcd
 Author: Jenkins <jenkins@review.openstack.org>
