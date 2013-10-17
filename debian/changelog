@@ -1,3 +1,9 @@
+cinder (1:2013.2-0ubuntu1) saucy; urgency=low
+
+  * New upstream release (LP: #1236462).
+
+ -- Chuck Short <zulcss@ubuntu.com>  Thu, 17 Oct 2013 10:00:43 -0400
+
 cinder (1:2013.2~rc3-0ubuntu1) saucy; urgency=low
 
   * New upstream release candidate (LP: #1240254).
