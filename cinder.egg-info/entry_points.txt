@@ -6,5 +6,6 @@ JsonFilter = cinder.openstack.common.scheduler.filters.json_filter:JsonFilter
 AvailabilityZoneFilter = cinder.openstack.common.scheduler.filters.availability_zone_filter:AvailabilityZoneFilter
 
 [cinder.scheduler.weights]
+ChanceWeigher = cinder.scheduler.weights.chance:ChanceWeigher
 CapacityWeigher = cinder.scheduler.weights.capacity:CapacityWeigher
 

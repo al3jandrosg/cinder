@@ -43,8 +43,8 @@ Build-Depends-Indep:
  testrepository (>= 0.0.17)
 Standards-Version: 3.9.4
 Homepage: http://launchpad.net/cinder
-Vcs-Browser: http://bazaar.launchpad.net/~ubuntu-server-dev/cinder/havana/files
-Vcs-Bzr: https://code.launchpad.net/~ubuntu-server-dev/cinder/havana
+Vcs-Browser: http://bazaar.launchpad.net/~ubuntu-server-dev/cinder/icehouse/files
+Vcs-Bzr: https://code.launchpad.net/~ubuntu-server-dev/cinder/icehouse
 XS-Testsuite: autopkgtest
 
 Package: python-cinder

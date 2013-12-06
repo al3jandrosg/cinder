@@ -25,6 +25,7 @@ bin/cinder-clear-rabbit-queues
 bin/cinder-manage
 bin/cinder-rootwrap
 bin/cinder-rpc-zmq-receiver
+bin/cinder-rtstool
 bin/cinder-scheduler
 bin/cinder-volume
 bin/cinder-volume-usage-audit
@@ -70,6 +71,7 @@ cinder/api/contrib/services.py
 cinder/api/contrib/snapshot_actions.py
 cinder/api/contrib/types_extra_specs.py
 cinder/api/contrib/types_manage.py
+cinder/api/contrib/used_limits.py
 cinder/api/contrib/volume_actions.py
 cinder/api/contrib/volume_encryption_metadata.py
 cinder/api/contrib/volume_host_attribute.py
@@ -138,8 +140,6 @@ cinder/brick/initiator/linuxfc.py
 cinder/brick/initiator/linuxscsi.py
 cinder/brick/iscsi/__init__.py
 cinder/brick/iscsi/iscsi.py
-cinder/brick/iser/__init__.py
-cinder/brick/iser/iser.py
 cinder/brick/local_dev/__init__.py
 cinder/brick/local_dev/lvm.py
 cinder/brick/remotefs/__init__.py
@@ -188,6 +188,7 @@ cinder/db/sqlalchemy/migrate_repo/versions/017_add_encryption_information.py
 cinder/db/sqlalchemy/migrate_repo/versions/018_add_qos_specs.py
 cinder/db/sqlalchemy/migrate_repo/versions/019_add_migration_status.py
 cinder/db/sqlalchemy/migrate_repo/versions/020_add_volume_admin_metadata_table.py
+cinder/db/sqlalchemy/migrate_repo/versions/021_add_default_quota_class.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/image/__init__.py
 cinder/image/glance.py
@@ -200,6 +201,7 @@ cinder/keymgr/not_implemented_key_mgr.py
 cinder/locale/cinder.pot
 cinder/locale/ar/LC_MESSAGES/cinder.po
 cinder/locale/bg_BG/LC_MESSAGES/cinder.po
+cinder/locale/bn_IN/LC_MESSAGES/cinder.po
 cinder/locale/bs/LC_MESSAGES/cinder.po
 cinder/locale/ca/LC_MESSAGES/cinder.po
 cinder/locale/cs/LC_MESSAGES/cinder.po
@@ -210,9 +212,13 @@ cinder/locale/en_GB/LC_MESSAGES/cinder.po
 cinder/locale/en_US/LC_MESSAGES/cinder.po
 cinder/locale/es/LC_MESSAGES/cinder.po
 cinder/locale/es_MX/LC_MESSAGES/cinder.po
+cinder/locale/eu/LC_MESSAGES/cinder.po
+cinder/locale/eu_ES/LC_MESSAGES/cinder.po
+cinder/locale/fa/LC_MESSAGES/cinder.po
 cinder/locale/fi_FI/LC_MESSAGES/cinder.po
 cinder/locale/fil/LC_MESSAGES/cinder.po
 cinder/locale/fr/LC_MESSAGES/cinder.po
+cinder/locale/gl/LC_MESSAGES/cinder.po
 cinder/locale/hi/LC_MESSAGES/cinder.po
 cinder/locale/hr/LC_MESSAGES/cinder.po
 cinder/locale/hu/LC_MESSAGES/cinder.po
@@ -221,9 +227,12 @@ cinder/locale/it/LC_MESSAGES/cinder.po
 cinder/locale/it_IT/LC_MESSAGES/cinder.po
 cinder/locale/ja/LC_MESSAGES/cinder.po
 cinder/locale/ka_GE/LC_MESSAGES/cinder.po
+cinder/locale/km/LC_MESSAGES/cinder.po
 cinder/locale/kn/LC_MESSAGES/cinder.po
 cinder/locale/ko/LC_MESSAGES/cinder.po
 cinder/locale/ko_KR/LC_MESSAGES/cinder.po
+cinder/locale/ml_IN/LC_MESSAGES/cinder.po
+cinder/locale/mr_IN/LC_MESSAGES/cinder.po
 cinder/locale/ms/LC_MESSAGES/cinder.po
 cinder/locale/nb/LC_MESSAGES/cinder.po
 cinder/locale/ne/LC_MESSAGES/cinder.po
@@ -236,12 +245,14 @@ cinder/locale/ru/LC_MESSAGES/cinder.po
 cinder/locale/ru_RU/LC_MESSAGES/cinder.po
 cinder/locale/sk/LC_MESSAGES/cinder.po
 cinder/locale/sl_SI/LC_MESSAGES/cinder.po
+cinder/locale/sv/LC_MESSAGES/cinder.po
 cinder/locale/sw_KE/LC_MESSAGES/cinder.po
 cinder/locale/tl/LC_MESSAGES/cinder.po
 cinder/locale/tl_PH/LC_MESSAGES/cinder.po
 cinder/locale/tr/LC_MESSAGES/cinder.po
 cinder/locale/tr_TR/LC_MESSAGES/cinder.po
 cinder/locale/uk/LC_MESSAGES/cinder.po
+cinder/locale/ur/LC_MESSAGES/cinder.po
 cinder/locale/vi_VN/LC_MESSAGES/cinder.po
 cinder/locale/zh_CN/LC_MESSAGES/cinder.po
 cinder/locale/zh_HK/LC_MESSAGES/cinder.po
@@ -254,6 +265,7 @@ cinder/openstack/common/eventlet_backdoor.py
 cinder/openstack/common/excutils.py
 cinder/openstack/common/fileutils.py
 cinder/openstack/common/gettextutils.py
+cinder/openstack/common/imageutils.py
 cinder/openstack/common/importutils.py
 cinder/openstack/common/jsonutils.py
 cinder/openstack/common/local.py
@@ -269,6 +281,8 @@ cinder/openstack/common/strutils.py
 cinder/openstack/common/threadgroup.py
 cinder/openstack/common/timeutils.py
 cinder/openstack/common/uuidutils.py
+cinder/openstack/common/crypto/__init__.py
+cinder/openstack/common/crypto/utils.py
 cinder/openstack/common/db/__init__.py
 cinder/openstack/common/db/api.py
 cinder/openstack/common/db/exception.py
@@ -324,6 +338,7 @@ cinder/scheduler/filters/capacity_filter.py
 cinder/scheduler/filters/retry_filter.py
 cinder/scheduler/weights/__init__.py
 cinder/scheduler/weights/capacity.py
+cinder/scheduler/weights/chance.py
 cinder/taskflow/__init__.py
 cinder/taskflow/decorators.py
 cinder/taskflow/exceptions.py
@@ -367,7 +382,6 @@ cinder/tests/test_huawei_hvs.py
 cinder/tests/test_huawei_t_dorado.py
 cinder/tests/test_image_utils.py
 cinder/tests/test_iscsi.py
-cinder/tests/test_iser.py
 cinder/tests/test_migrations.conf
 cinder/tests/test_migrations.py
 cinder/tests/test_misc.py
@@ -419,11 +433,13 @@ cinder/tests/api/contrib/test_extended_snapshot_attributes.py
 cinder/tests/api/contrib/test_hosts.py
 cinder/tests/api/contrib/test_qos_specs_manage.py
 cinder/tests/api/contrib/test_quotas.py
+cinder/tests/api/contrib/test_quotas_classes.py
 cinder/tests/api/contrib/test_scheduler_hints.py
 cinder/tests/api/contrib/test_services.py
 cinder/tests/api/contrib/test_snapshot_actions.py
 cinder/tests/api/contrib/test_types_extra_specs.py
 cinder/tests/api/contrib/test_types_manage.py
+cinder/tests/api/contrib/test_used_limits.py
 cinder/tests/api/contrib/test_volume_actions.py
 cinder/tests/api/contrib/test_volume_encryption_metadata.py
 cinder/tests/api/contrib/test_volume_host_attribute.py
@@ -502,6 +518,7 @@ cinder/tests/monkey_patch_example/example_b.py
 cinder/tests/scheduler/__init__.py
 cinder/tests/scheduler/fakes.py
 cinder/tests/scheduler/test_capacity_weigher.py
+cinder/tests/scheduler/test_chance_weigher.py
 cinder/tests/scheduler/test_filter_scheduler.py
 cinder/tests/scheduler/test_host_filters.py
 cinder/tests/scheduler/test_host_manager.py
@@ -550,6 +567,7 @@ cinder/volume/drivers/huawei/__init__.py
 cinder/volume/drivers/huawei/huawei_dorado.py
 cinder/volume/drivers/huawei/huawei_hvs.py
 cinder/volume/drivers/huawei/huawei_t.py
+cinder/volume/drivers/huawei/huawei_utils.py
 cinder/volume/drivers/huawei/rest_common.py
 cinder/volume/drivers/huawei/ssh_common.py
 cinder/volume/drivers/netapp/__init__.py
@@ -561,11 +579,11 @@ cinder/volume/drivers/netapp/options.py
 cinder/volume/drivers/netapp/ssc_utils.py
 cinder/volume/drivers/netapp/utils.py
 cinder/volume/drivers/nexenta/__init__.py
+cinder/volume/drivers/nexenta/iscsi.py
 cinder/volume/drivers/nexenta/jsonrpc.py
 cinder/volume/drivers/nexenta/nfs.py
 cinder/volume/drivers/nexenta/options.py
 cinder/volume/drivers/nexenta/utils.py
-cinder/volume/drivers/nexenta/volume.py
 cinder/volume/drivers/san/__init__.py
 cinder/volume/drivers/san/hp_lefthand.py
 cinder/volume/drivers/san/san.py
@@ -595,7 +613,6 @@ cinder/volume/flows/__init__.py
 cinder/volume/flows/base.py
 cinder/volume/flows/utils.py
 cinder/volume/flows/create_volume/__init__.py
-contrib/redhat-eventlet.patch
 doc/.gitignore
 doc/Makefile
 doc/README.rst
@@ -649,7 +666,6 @@ tools/install_venv.py
 tools/install_venv_common.py
 tools/lintstack.py
 tools/lintstack.sh
-tools/patch_tox_venv.py
 tools/with_venv.sh
 tools/conf/check_uptodate.sh
 tools/conf/extract_opts.py

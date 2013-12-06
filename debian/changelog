@@ -1,3 +1,21 @@
+cinder (1:2014.1~b1-0ubuntu1) trusty; urgency=low
+
+  [ Chuck Short ]
+  * New upstream release.
+  * debian/control:
+    - Open icehouse release.
+    - Add python-rtslib as a dependency.
+  * debian/patches/fix-sqlalchemy-requirements.patch: Dropped no longer needed.
+  * debian/patches/fix-babel-requirements.patch: Dropped no longer needed.
+  * debian/paches/fix-requirements.patch:  Fixed up requirements.txt for 
+    dependencies we have in Ubuntu.
+  * debian/cinder-common.install: Add "cinder-rtstool".
+
+  [ James Page ]
+  * debian/patches/*: Refresh.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Thu, 05 Dec 2013 21:30:40 -0500
+
 cinder (1:2013.2-0ubuntu1) saucy; urgency=low
 
   * New upstream release (LP: #1236462).

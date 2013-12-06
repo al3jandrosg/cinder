@@ -7,3 +7,4 @@ etc/cinder/rootwrap.conf etc/cinder
 usr/bin/cinder-manage
 usr/bin/cinder-rootwrap
 usr/bin/cinder-rpc-zmq-receiver
+usr/bin/cinder-rtstool
