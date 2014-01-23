@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 2014.1.b1
+Version: 2014.1.b2
 Summary: OpenStack Block Storage
 Home-page: http://www.openstack.org/
 Author: OpenStack
@@ -24,7 +24,7 @@ Description: The Choose Your Own Adventure README for Cinder
         
         To watch it: http://jenkins.openstack.org
         
-        To hack at it: read HACKING.rst
+        To hack at it: read `HACKING.rst <https://github.com/openstack/cinder/blob/master/HACKING.rst>`_
         
         
 Platform: UNKNOWN

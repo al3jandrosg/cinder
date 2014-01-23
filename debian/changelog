@@ -1,3 +1,16 @@
+cinder (1:2014.1~b2-0ubuntu1) trusty; urgency=low
+
+  [ James Page ]
+  * d/control: Add versioned dependency python-six >= 1.4.1 (LP: #1259203). 
+  * d/p/*: Refreshed.
+
+  [Chuck Short]
+  * New upstream release.
+  * debian/control: Add python-taskflow as a dependency.
+  * debian/control: Add python-oslo.rootwrap as a dependency.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Thu, 23 Jan 2014 12:41:54 -0500
+
 cinder (1:2014.1~b1-0ubuntu1) trusty; urgency=low
 
   [ Chuck Short ]

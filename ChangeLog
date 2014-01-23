@@ -1,9 +1,2534 @@
+commit 4325ccae288061ec9a834843c77a0febe6332494
+Merge: 57a76da 68ed1bc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 15:59:37 2014 +0000
+
+    Merge "Remove unused variable in restore_backup method"
+
+commit 57a76da0c0ef77a4c714e9004a3992e278998a39
+Merge: 60bc096 7035ef4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 05:45:16 2014 +0000
+
+    Merge "Use oslo.rootwrap library instead of local copy"
+
+commit 60bc096b5dbc041edb30c720fae988778a24f2e9
+Merge: 2a32aa0 8228379
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 05:33:49 2014 +0000
+
+    Merge "Fix UnboundLocalError in TgtAdm.update_iscsi_target"
+
+commit 2a32aa0aaf13f1aef809f77d2eb0b2128d8b7f8b
+Merge: f3f95bf d09b7c7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:45:42 2014 +0000
+
+    Merge "Allow user to specify audit period."
+
+commit f3f95bff2ad92f567f9feac8afc94372f13b9013
+Merge: 1636f61 ce889d9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:45:34 2014 +0000
+
+    Merge "Transfer creation doesn't support 'name' via xml"
+
+commit 1636f61b9ead21eb03ed444d40221ba53791c9b6
+Merge: 8232e16 79f63f9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:43:04 2014 +0000
+
+    Merge "Fix cross-import bug in cinder.db.sqlalchemy.api"
+
+commit 8232e16a269bd687bdb9bcfe58daa58656fd3053
+Merge: d18113f e71e596
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:41:49 2014 +0000
+
+    Merge "Add Backup Service to 'cinder-all' script"
+
+commit d18113f80df8138369868809407c7dc51d1138b3
+Merge: 6f2ef65 ed05bbe
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:38:33 2014 +0000
+
+    Merge "Ensure hostnames are converted to IP for comparison."
+
+commit 6f2ef657efa8735b9f3dc33a5e85c94bbd238e53
+Merge: ea5c148 5db9724
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 03:36:08 2014 +0000
+
+    Merge "Update host on driver retype"
+
+commit ea5c148be80fe618515b66ed6f5ea5caa5180921
+Merge: 76c83dd 9c1ad54
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 22 02:08:51 2014 +0000
+
+    Merge "Remove env from rootwrap filter"
+
+commit 76c83dd9b561b942f299a5e0f6120f2947f8d614
+Merge: f67050b f787460
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 21 22:00:58 2014 +0000
+
+    Merge "Remove unused variable in os-extend api"
+
+commit f67050b501c458f16953538dfb270f74d2fe49cb
+Merge: 3f2a6c3 edc9338
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 21 15:16:40 2014 +0000
+
+    Merge "Updates for version list to show correct references"
+
+commit 3f2a6c3c36f4c2e33153b8c6b590bfdc03f336d4
+Merge: d4c4f4c a9661fb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 21 10:07:49 2014 +0000
+
+    Merge "Use loopingcall from openstack-common"
+
+commit d4c4f4cd13a2c7c9bfe05fca78fa5e6d1e04d4c9
+Merge: 407301e 8ba08f0
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 21 08:36:07 2014 +0000
+
+    Merge "Pull latest scheduler change from Oslo"
+
+commit 407301e23b4558863999dfc49e82ae81de4f4c35
+Merge: c24e82d e4505f8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Jan 20 22:11:50 2014 +0000
+
+    Merge "Register EMC config options globally"
+
+commit 7035ef485ef733c43ca9d22f1327e0ee551642e1
+Author: Thierry Carrez <thierry@openstack.org>
+Date:   Fri Jan 17 11:28:17 2014 +0100
+
+    Use oslo.rootwrap library instead of local copy
+    
+    Remove rootwrap code copied from oslo-incubator, make
+    cinder-rootwrap a console_script entrypoint pointing in
+    oslo.rootwrap instead.
+    
+    Change-Id: I4e924bc9fccd7f5a8522ac38b7c6d29683990ea8
+    Implements: blueprint cinder-oslo-rootwrap
+
+commit 82283790b7c5ba6ae0e561ee3302d7fed7983267
+Author: Yuriy Taraday <yorik.sar@gmail.com>
+Date:   Sun Jan 19 23:08:06 2014 +0400
+
+    Fix UnboundLocalError in TgtAdm.update_iscsi_target
+    
+    Closes-Bug: #1270624
+    Change-Id: I74a057a9603c5d6aefaec6db62228352b739df56
+
+commit 5db972494a8e6b090e16b14f675226929d3244a7
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Sun Jan 12 15:41:31 2014 +0200
+
+    Update host on driver retype
+    
+    The volume's host was not updated on retype where the driver handled
+    the retype. Now update in all cases.
+    
+    Change-Id: I64b72ae5617d1dacad8f37c4246ce0f079e015bb
+    Closes-Bug: #1268305
+
+commit c24e82d046abb4e64f83cb7201d717b9cb403517
+Merge: 28fc82b 2f39c85
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 19 07:35:56 2014 +0000
+
+    Merge "Fix exception log msg in attach volume method"
+
+commit 28fc82bf6a58b69853dcf39069a17a0a6e9cbd30
+Merge: ea9c594 e86098c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 19 01:07:49 2014 +0000
+
+    Merge "Fix os.getlogin() problem with no tty"
+
+commit 68ed1bcec81e173648a4a86e5f4e21abc6dcf539
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Fri Jan 17 11:58:10 2014 +0800
+
+    Remove unused variable in restore_backup method
+    
+    Variable err in restore_backup method is not being used, so remove this
+    'err ' variable.
+    
+    Change-Id: I31f6da5fd55e025d6496aca76a1157ff5a167d9e
+    Closes-Bug: #1270034
+
+commit ed05bbe1e786e3eedfd94e7f6724ecb38f32f1e6
+Author: Bob Callaway <bob.callaway@netapp.com>
+Date:   Fri Jan 10 11:15:07 2014 -0500
+
+    Ensure hostnames are converted to IP for comparison.
+    
+    Also switch to using getaddrinfo for IPv6 compliance
+    vs gethostbyname.
+    
+    Change-Id: I1a194eae514a65bff56488571c05457bfa660c02
+    Closes-Bug: 1267667
+
+commit e71e59675034585a3d9e894ed13ebcf4b23ecd2a
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Sat Jan 18 02:02:19 2014 +0800
+
+    Add Backup Service to 'cinder-all' script
+    
+    Backup service is missing in 'cinder-all' script, this patch simply
+    add it so that this all-in-one script could launch all Cinder
+    Services.
+    
+    Change-Id: I29c7355baabddd18a14fe9f97b71f58d24a033dc
+
+commit 9c1ad54e7815d50d9561d88337724ad2042c92a2
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Jan 16 22:59:41 2014 +0100
+
+    Remove env from rootwrap filter
+    
+    Allowing 'env' as a CommandFilter is similar to
+    allowing '/bin/bash', which makes all of rootwrap pointless.
+    Use EnvFilter instead. Change corresponding commands
+    that use env for setting C locale and adjust rootwrap
+    filters accordingly.
+    
+    Several commands that output information that is
+    parsed as input by cinder change their behavior
+    based on the environment locale, which is depending
+    on local system settings. The code is however only
+    able to parse in C locale, so enforce that one.
+    
+    Closes-Bug: #1269958
+    
+    Change-Id: Ie1463e608c80204c7a8906efb95899a66aa733da
+
+commit ea9c59448e9f3d4652f8c7010965ffa25ca56804
+Merge: 35ecd8a 06999f6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 17 15:23:07 2014 +0000
+
+    Merge "GlusterFS: Synchronize additional operations"
+
+commit 35ecd8a97b9781c48d6a67b13dd423da61269314
+Merge: c6371f4 fce28fe
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 17 13:26:15 2014 +0000
+
+    Merge "Remove legacy config option 'connection_type'"
+
+commit c6371f47cc8c60ae7f72d10dd6a302c8393bcee4
+Merge: e2e0ed8 9206b54
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 17 13:26:06 2014 +0000
+
+    Merge "Use a *args pass-in instead of a list one"
+
+commit e2e0ed80799c1ba04b37278996a171fc74b6f9eb
+Merge: 5be4620 a926764
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 17 13:25:58 2014 +0000
+
+    Merge "LVM: update iscsi target on volume attach"
+
+commit d09b7c78b3c905badb1112434eb9c09c2c8ffb5a
+Author: Ollie Leahy <oliver.leahy@hp.com>
+Date:   Thu Dec 12 11:01:34 2013 +0000
+
+    Allow user to specify audit period.
+    
+    The script 'cinder-volume-usage-audit' is generally run by cron to
+    generate volume and snapshot exists audit notifications that can be
+    consumed by ceilometer or other auditing systems. In this mode it sends
+    notifications for volumes that existed in the 'last completed audit
+    period' as calculated by cinder.utils.last_completed_audit_period()
+    
+    However, it may sometimes be necessary to be able to send notifications
+    for audit periods other than than the last completed audit period. For
+    example if the host running the audit script was down for a period.
+    
+    This patch provides three optional command line parameters to the script
+    cinder-volume-usage-audit. If no parameters are provided then the
+    operation of the script is unchanged. If parameters are provided then
+    they have the following effects:
+    
+    --start_time specifies a date and time that is used in place of the
+    start of the last completed audit period.
+    
+    --end_time specifies a date and time that is used in place of the end of
+    the last completed audit period.
+    
+    --send_actions As well as sending exits notifications the script will
+    send any create or delete notifications that would have been sent during
+    the specified audit period.
+    
+    Closes-Bug: #1259147
+    
+    Change-Id: I0cfe963ea59d811ba4bac0bd3de31382a088b8c8
+
+commit 2f39c8523091c9a2e55254fb32900305524a6fff
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Fri Jan 17 10:49:58 2014 +0800
+
+    Fix exception log msg in attach volume method
+    
+    Attach volume happened when volume's status is attaching or available, but
+    the exception msg only contain info about "available". So fix it.
+    
+    Change-Id: I1caf83b94b3e4158eff88871a4187041a25e5d1c
+    Closes-Bug: #1270020
+
+commit e4505f8a617e7c9544bb142478d182ec9d37bdf9
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Wed Jan 15 18:23:40 2014 +0100
+
+    Register EMC config options globally
+    
+    The registration allows the oslo sample config generator
+    to detect the config options and extract automatically
+    a config template.
+    
+    Change-Id: Ib181d734dddbd9b6a664439286969b832d6536e7
+
+commit e86098cfc28f84505d4460108bbdfe019fe1efd0
+Author: Koert van der Veer <koert@cloudvps.com>
+Date:   Thu Jan 9 21:18:50 2014 +0100
+
+    Fix os.getlogin() problem with no tty
+    
+    Catch OSError(s) from  os.getlogin() and fall back to looking at
+    environment variables to figure out the user's name. The OSError
+    is thrown where there is no tty for the python process when
+    os.getlogin() is called.
+    
+    Related-Bug: #1221491
+    
+    Change-Id: I2bd735c9669ba9d25da108da44ea602f358b2dcc
+
+commit edc93383f7cd9d055d655a8e345a3efa81b7de5b
+Author: Swapnil Kulkarni <swapnilkulkarni2608@gmail.com>
+Date:   Thu Jan 16 13:28:31 2014 +0530
+
+    Updates for version list to show correct references
+    
+    Updated views to consider version while creating href.
+    Updated fakes to consider version while creating fake href.
+    Updated some test cases in v2 api which were using v1 as
+    expected output
+    
+    Change-Id: Ib05180041309ef75c3718924969bd2354d6d8b3a
+    Closes-Bug: #1261849
+
+commit 79f63f95fe81a6642f43c4ad2cb75f657e11ca3c
+Author: Dima Shulyak <dshulyak@mirantis.com>
+Date:   Wed Jan 15 14:44:19 2014 +0200
+
+    Fix cross-import bug in cinder.db.sqlalchemy.api
+    
+    Cross import in cinder.sqlalchemy.db.api module breaks
+    if lazy loading of db backend is removed
+    
+    In oslo.incubator db.api lazy loading was removed
+    Check this change for details https://review.openstack.org/#/c/55985/
+    
+    Change-Id: I6a75afd0b9b55097ef76ad24c53e84339b527196
+
+commit 8ba08f0aa61d42d618f7772f83c7129c671bde65
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Thu Jan 2 09:31:24 2014 +0800
+
+    Pull latest scheduler change from Oslo
+    
+    The RetryFilter is now part of Oslo, although it's been renamed to
+    IgnoreAttemptedFilter.  Thanks to entry_point, we are able to maintain
+    backwards compatibility after pulling that commit from Oslo.
+    
+    Commits in this change:
+    * 66fe978 2013-12-10 | Change IgnoreAttemptedHostFilter to expect 'retry' key (attempt-retry)
+    * 135dd00 2013-12-10 | Remove start index 0 in range()
+    * 45658e2 2013-12-09 | Fix violations of H302:import only modules
+    * 70004c6 2013-12-04 | Add IgnoreAttemptedHostsFilter to oslo
+    * 880acf7 2013-11-14 | Change capabilities filters to use resource type (capfilter_message)
+    * 06e9d98 2013-11-10 | Add some log messages to capabilities_filter.py
+    * 3970d46 2013-11-02 | Fix typos in oslo
+    * 8718763 2013-08-19 | Replace list with dict in AvailabilityZoneFilter.host_passes
+    * c0d052a 2013-07-12 | python3: Add basic compatibility support.
+    * e3545f8 2013-06-02 | Enable hacking H402 test
+    * 484a1df 2013-05-30 | Enable hacking H403 test
+    * 35660da 2013-05-30 | Enable hacking H401 test
+    * 5dcc43b 2013-05-05 | Break out common functionality for filters and weights
+    * 1f2aba5 2013-05-03 | Renames filter to base_filter and weight to base_weight
+    
+    Change-Id: Ibeb685ef60e44cb6388fc460ee6a78255ed3dbae
+
+commit a9661fba21d7e5dd3fb5d29f77266993e3adc460
+Author: Eric Harney <eharney@redhat.com>
+Date:   Fri Jan 3 17:24:47 2014 -0500
+
+    Use loopingcall from openstack-common
+    
+    This removes cinder.utils.LoopingCall and uses the copy in
+    openstack-common instead.
+    
+    Change-Id: Id76b89797dffcc65fbf37fd1442f221ff5bb4668
+
+commit 9206b54f8b3f92f948a891240d06b673a2eba332
+Author: Joshua Harlow <harlowja@yahoo-inc.com>
+Date:   Tue Jan 14 10:57:32 2014 -0800
+
+    Use a *args pass-in instead of a list one
+    
+    Change-Id: Ieef972f413dcf444d26c15a02d1993acf7cbb079
+
+commit f78746062f942b30d73f2575c41dee26b3619f2f
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Thu Jan 9 18:49:53 2014 +0800
+
+    Remove unused variable in os-extend api
+    
+    Temp variable _val in _extend method is not being used, so remove this
+    '_val' variable.
+    
+    Change-Id: I4a3f5e28d1882698a3efd116044c4fddff86c474
+    Closes-Bug: #1267423
+
+commit 06999f610afc3a123f7a54895e39d690301a8eba
+Author: Eric Harney <eharney@redhat.com>
+Date:   Fri Jan 10 14:20:41 2014 -0500
+
+    GlusterFS: Synchronize additional operations
+    
+    create_cloned_volume() and copy_volume_to_image() should also be
+    locked against other driver operations to prevent collisions
+    from concurrent updates of snapshot metadata or volume file data.
+    
+    Closes-Bug: #1267983
+    
+    Change-Id: Idd6158bfbe4dc049c33fa58b40d3d570fc244d01
+
+commit 5be4620ae5bb50c8436de0e11269c85a095ed40b
+Author: Flavio Percoco <flaper87@gmail.com>
+Date:   Tue Dec 10 12:31:50 2013 +0100
+
+    Move driver initialization check into the method
+    
+    Volumes and backups managers' methods are decorated with
+    `require_initialized_driver` which checks whether the driver has been
+    initialized or not. The decorator fails with a `DriverNotInitialized`
+    exception if the driver hasn't been initialized.
+    
+    This early failure leaves volumes and backups in a wrong status which is
+    not just confusing for the user but it also makes it difficult to do
+    anything with the resources after they've been left in a 'bogus' status.
+    
+    For example, when a volume creation is requested, the volume is first
+    created in the database and its status is set to 'creating'. Then the
+    scheduler will pick an available volume node and send the task to it. If
+    the driver has not been initialized, the volume status will be left as
+    'creating' instead of 'error'.
+    
+    This patch fixes that issue by moving the driver initialization check
+    into the various manager's methods. In some cases this check is done at
+    the very beginning of the method, in some others - either to avoid code
+    duplication or because the lines above the check made sense to be
+    executed first - this check is done later in the method.
+    
+    Change-Id: I2610be6ba1aa7df417f1a1f7bb27af30273e4814
+    Closes-bug: #1242942
+
+commit 6f1e6f473c84657b33dde094cb4b047fbdaf7c45
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Jan 13 12:19:12 2014 -0500
+
+    Update cinder.conf.sample for keystoneclient change
+    
+    A new version of python-keystoneclient adds the
+    "include_service_catalog" option, so the sample conf needs to be
+    updated.
+    
+    Closes-Bug: #1268614
+    
+    Change-Id: Ie6913e481caf61ee517c1c101565401fe33c60d6
+
+commit ce889d99f61aecd0b4002d44866bbfff8ff6a2c3
+Author: wingwj <wingwj@gmail.com>
+Date:   Sat Dec 14 20:00:08 2013 +0800
+
+    Transfer creation doesn't support 'name' via xml
+    
+    Change the transfer create XML deserializer to use 'name' rather than
+    'display_name'. This is in line with cinderclient and the json code.
+    
+    Change-Id: I97ba0c4411fe4a151261ed2f657465951bcb9d7b
+    Closes-Bug: #1243613
+
+commit dc79d39b03643531c559dd9352c621d95c5c6057
+Merge: 77ee831 783e324
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Jan 13 12:20:17 2014 +0000
+
+    Merge "Switch to Oslo's config generator"
+
+commit 77ee831fbef4d8405fe2e9e8930b975cedd027f1
+Merge: 45f31ef 671cd61
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 21:24:51 2014 +0000
+
+    Merge "Print driver exception on retype"
+
+commit 45f31ef1c39273a9e1e257da4e0ca0c8dd649ed8
+Merge: 87189a9 1d9927d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 14:40:34 2014 +0000
+
+    Merge "Fix Brick LVM test command parsing"
+
+commit 87189a91ccd603206a7c70519f7ef8545c93c73e
+Merge: 8d1fd9e cea7fe2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 13:51:25 2014 +0000
+
+    Merge "Drop Chance/SimpleScheduler Implementation"
+
+commit 671cd61704551a5d1fd753bb890650edd6dcd152
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Sun Jan 12 15:43:34 2014 +0200
+
+    Print driver exception on retype
+    
+    If the driver raises an exception, make sure it is printed. Also change
+    the logging level from info to error because an exception should not be
+    thrown under normal conditions.
+    
+    Change-Id: I003959c3f7c7667124ef61911587012fd4e1d667
+    Closes-Bug: #1268294
+
+commit 8d1fd9eef3fec6ec1efdda54cf3f2b5764fb7c9a
+Merge: 3bce48e 2a7b119
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 12:28:40 2014 +0000
+
+    Merge "Add bool_type dictionary to test_migrations"
+
+commit 3bce48e2b3895c8ab4fcc2e968075234ad233aea
+Merge: b061ed7 d64478f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 12:17:01 2014 +0000
+
+    Merge "Hiding postgresql password in connection string"
+
+commit b061ed77811bab83877c3974ebd77a81c44089b0
+Merge: 8aba794 ae7fcda
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 12 09:51:59 2014 +0000
+
+    Merge "Remove unused message from iogrp_data setup"
+
+commit 8aba79498d2c43dfd974ee4b4ab30ce72916e625
+Merge: 5147e79 3e4f554
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 11 17:21:10 2014 +0000
+
+    Merge "Fixed a problem in iSCSI multipath"
+
+commit 5147e79800960a1eda15cb8dd4222767af26f741
+Merge: 0ea8085 9834639
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 11 14:13:40 2014 +0000
+
+    Merge "3PAR: Raise Ex when del snapshot with depend vol"
+
+commit 0ea80857eed9e9456d2f15eb76620a67676d98ce
+Merge: 7268c4d aa1ba1f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 10 20:17:57 2014 +0000
+
+    Merge "Raise max header size to accommodate large tokens."
+
+commit 7268c4d091a360ea4ccd7b5fb8e691dea350e0f8
+Merge: d402fbf b85cc49
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 10 09:26:04 2014 +0000
+
+    Merge "VMDK:Using host mount info for datastore selection"
+
+commit d402fbfcc29769a4185ed945f2234ba03a751286
+Merge: 41a4ade dfefeda
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 10 06:06:37 2014 +0000
+
+    Merge "Fix sheepdog copy_image_to_volume method"
+
+commit 41a4aded3c5b11e8de9b5927c7f0b80de86bda60
+Merge: 21ebf28 d017dba
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 10 04:25:31 2014 +0000
+
+    Merge "Fix sqlalchemy bug in transfer_get_all_by_project"
+
+commit cea7fe21cecfcd28ede3ba411b8ab8b36c9a7c15
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Thu Jan 2 15:44:30 2014 +0800
+
+    Drop Chance/SimpleScheduler Implementation
+    
+    This patch removes the implementation of ChanceScheduler and SimpleScheduler
+    as previous changes have made sure they are internally replaced by
+    FilterScheduler.
+    
+    The "max_gigabytes" config option is deprecated and will leave it like that
+    for one more release before we can remove it.
+    
+    DocImpact: "ChanceScheduler and SimpleScheduler have been deprecated and
+    their implementation have been removed from Cinder."
+    
+    Implement bp: deprecate-chance-and-simple-schedulers
+    
+    Change-Id: Ifb1cb25e3bb4cdf26fa3283336b83fce5c97141e
+
+commit d017dbacc89233ec0f786f5af5d760b02b67a7cb
+Author: Ollie Leahy <oliver.leahy@hp.com>
+Date:   Thu Dec 19 16:11:29 2013 +0000
+
+    Fix sqlalchemy bug in transfer_get_all_by_project
+    
+    Because of incorrect use of the sqlalchemy methods joinedload and filter,
+    incorrect lists of volume transfers were being returned by
+    transfer_get_all_by_project().
+    
+    Change-Id: I378a512611591eec896edd5f217e75f9ff0f8ad3
+    Closes-Bug: 1262432
+
+commit dfefeda9cf87a8a4109c3f4e35feb5ee1d9eedff
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Wed Jan 8 16:21:41 2014 -0700
+
+    Fix sheepdog copy_image_to_volume method
+    
+    The sheepdog driver fails when trying to
+    create volume from image due to a bug in
+    SheepdogDriver.copy_image_to_volume.
+    
+    The utils.convert method is being passed the
+    tempfile object, but should only be passed
+    the name of the tempfile.
+    
+    Change-Id: I6b261d29895bf9c2c30b2d95d74e5be58b8e9b10
+    Closes-Bug: 1261941
+
+commit 21ebf2898e2f5fc8127b7a3bdc9743c49933f952
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Dec 9 15:34:39 2013 -0500
+
+    NFS/GlusterFS: Skip incorrectly formatted shares
+    
+    Shares should always be of the form address:/volume.  If they are
+    not (i.e., are missing the '/'), then skip them and issue a warning
+    message.  This will prevent us from sending incorrect connection_info
+    dicts to Nova.
+    
+    Closes-Bug: #1267253
+    
+    Change-Id: Ic40cd0cdc862b44b0a7d3e5b1d7c4fee8ea1b28d
+
+commit da2caad4b952a19b183beacc9670aff1fbe2415d
+Merge: 40a7da8 5b74ecb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 8 18:06:53 2014 +0000
+
+    Merge "Modify default prefix for solidfire account"
+
+commit ae7fcdab7813dbb2e682b00b817e796a9c30a3f8
+Author: Lynxzh <jmzhang@cn.ibm.com>
+Date:   Mon Jan 6 11:45:33 2014 +0800
+
+    Remove unused message from iogrp_data setup
+    
+    The iogrp_data is initialized during do_setup loaded.
+    The vdisk_count is originally used but later removed.
+    In ValueException raised, the variable is no longer required.
+    Remove this will give a clearer message when
+    ValueException raised.
+    
+    Change-Id: Ib7b6c6a870ddd7932e8da1436d615f9ee458bd93
+    Closes-Bug: #1266321
+
+commit fce28fe9ce246fa9f2e1fc9946efacf207485260
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Wed Jan 8 11:22:25 2014 +0800
+
+    Remove legacy config option 'connection_type'
+    
+    'connection_type' is a legacy config option originated from Nova.
+    Nova used this option to specify underlying virtualization type for
+    compute service and had deprecated it (with 'compute_driver') in
+    Folsom and had it removed in later release.  In Cinder Folsom release,
+    the XenSMDriver in Cinder used this config option to verify the target
+    hypervisor but in Grizzly XenSMDriver has been renamed and refactored
+    and no longer used this config.  Therefore, this option is dead for
+    a long time, and should be removed.
+    
+    Change-Id: I4d72f31302fa813df42e71224151148a9c4a76c7
+
+commit 40a7da8c3f6f0d53e9fe1e5d29c0ddfe07208dee
+Merge: 92e28b3 1babca0
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 8 06:16:47 2014 +0000
+
+    Merge "Fix downgrade in 002_quota_class.py for MySQL"
+
+commit 92e28b375b50f228a89975c38033e9e4af8f8383
+Merge: 575a417 534ce5d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 8 06:11:22 2014 +0000
+
+    Merge "Fix the invalid argument of webob.exc.HTTPBadRequest"
+
+commit 575a4176b7f80f44b123684e7b9950a378831f93
+Merge: d07a305 724c077
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 8 06:11:19 2014 +0000
+
+    Merge "Removed deprecated config option hp3par_domain"
+
+commit d07a305e28110bc9903ac4298bb761f0ede0b7a4
+Merge: bf00664 3fd7857
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Jan 8 05:03:29 2014 +0000
+
+    Merge "Add ability to modify volume type"
+
+commit 5b74ecbcce2916213086226c36bf935260dfc23f
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Tue Dec 31 09:04:05 2013 -0700
+
+    Modify default prefix for solidfire account
+    
+    The SolidFire driver creates a unique account at volume
+    creation composed of <cinderhost-tenantID>.This is fine
+    until one tries to implement HA Cinder or moves their
+    Cinder node to another machine.
+    
+    This patch changes the default setting to be an empty string
+    (ie no prefix), but still allows backward compatability by setting
+    the config option to 'hostname'.
+    
+    DocImpact: Changes default for account-prefix, for backwards compatability
+    use the non-default 'hostname'
+    
+    Change-Id: I500ea14c1b4e9e3efd51c035cc3c4e6232da9dd6
+    Closes-Bug: 1265208
+
+commit bf00664cf4a857698ced2b9f590df9d704349e89
+Merge: 86f6fde ed19770
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 7 21:11:33 2014 +0000
+
+    Merge "Adding helpful URL links to README.rst and HACKING.rst"
+
+commit 9834639454103ee2ba980628f0bc67ad0baa94ff
+Author: Ramy Asselin <ramy.asselin@hp.com>
+Date:   Mon Jan 6 15:26:07 2014 -0800
+
+    3PAR: Raise Ex when del snapshot with depend vol
+    
+    Deleting a 3PAR snapshot can result in an HTTP Conflict error message,
+    such as when a volume is dependent on it.
+    Previously, this exception was not caught, and the state was set
+    to "Error_Deleting" with no recovery path.
+    The code was updated to catch this exception and raise a
+    SnapShotIsBusy exception with an appropriate error message.
+    The state reverts back to 'Available' allowing the user to try again
+    after removing the dependency.
+    
+    Change-Id: Ibe8c5d581af10c85397c37993c49f8fc3bce8620
+    Closes-Bug: #1250249
+
+commit 2a7b11922bd9389287915c45de92ca5eed3d448e
+Author: Jay S. Bryant <jsbryant@us.ibm.com>
+Date:   Mon Jan 6 14:45:34 2014 -0600
+
+    Add bool_type dictionary to test_migrations
+    
+    A number of MySQL migration tests fail because the test case
+    is verifying that an sqlalchemy.types.BOOLEAN column was created.
+    When the column type is checked, however, mysql reports the type as
+    sqlalchemy.dialects.mysql.TINYINT.  The mismatch causes numerous
+    test cases to fail for MySQL.
+    
+    This creates a dictionary for each engine being tested to handle the
+    different boolean types.
+    
+    postgresql and DB2 encounter similar issues.  Subsequent patches
+    will make the appropriate changes for those databases.
+    
+    Change-Id: I81cb3c6feeacf887f1f473ec54414e0e215d2c24
+    Closes-bug: 1260126
+
+commit d64478fd35a7024f46fa8dbf54103a7a0e30be5a
+Author: galstrom21 <jshepher@rackspace.com>
+Date:   Tue Jan 7 10:38:06 2014 -0600
+
+    Hiding postgresql password in connection string
+    
+    Closes-Bug: #1266804
+    Change-Id: Iafc820d6201acf5b563b62bd9f20a715901f1ab4
+
+commit 86f6fde84ee1987c1ec2dad377e2596612aa97e4
+Merge: 24d7e24 c32302c
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Jan 7 04:37:46 2014 +0000
+
+    Merge "Update V2 API to return detailed volume information on create"
+
+commit 3e4f554f614c8cb6d5f014c72f3c635184a4dec2
+Author: Xing Yang <xing.yang@emc.com>
+Date:   Mon Jan 6 17:16:05 2014 -0500
+
+    Fixed a problem in iSCSI multipath
+    
+    Multipathing during copy image to volume and copy volume to image
+    operations doesn't work properly if there are different targets
+    associated with different portals for a mulitpath device.
+    
+    Change-Id: I65c93f3788020c944db0d3a55063a6415554ff11
+    Closes-Bug: #1266048
+
+commit 534ce5dde117a61abbab49e8b1bc34b5fcbfc095
+Author: KIYOHIRO ADACHI <adachi@mxs.nes.nec.co.jp>
+Date:   Thu Dec 26 16:09:01 2013 +0900
+
+    Fix the invalid argument of webob.exc.HTTPBadRequest
+    
+    webob.exc.HTTPBadRequest() does not have a parameter 'reason'.
+    
+    Change-Id: I65103ce72849e921150c4d098993fa523f53fe3a
+    Closes-Bug: #1264223
+
+commit 3fd7857a36f90cc28f3869139511ec4e82b50d92
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Tue Sep 3 16:06:27 2013 +0300
+
+    Add ability to modify volume type
+    
+    This patch adds the volume retype operation, which allows a user to
+    change a given volume's type.
+    
+    When retyping, the scheduler checks if the volume's current host can
+    accept the new type (i.e., it checks if the host passes the filters when
+    using the new type). If the current host is suitable, its manager is
+    called which calls upon the driver to change the volume's type.
+    
+    There are two cases where a retype operation may require migrating the
+    volume:
+    1. The volume's current host cannot accept the new type
+    2. The volume's driver cannot perform the retype operation
+    
+    In case of a migration, a volume with the new type is created, and the
+    data is migrated to it.
+    
+    Volume migrations resulting from retype can be controlled by passing a
+    policy, which can be either:
+    1. 'never': Never migrate (the retype fails if migration is required)
+       (default)
+    2. 'on-demand': Migrate when necessary
+    
+    This version will cause retype operations to fail if the current and
+    new volume types have different:
+    1. QoS settings that are enforced by the front-end for in-use volumes.
+    2. encryption settings.
+    
+    Subsequent patches can address these cases.
+    
+    DocImpact
+    
+    Change-Id: I2dc99b4fa64d611d2bb936fc3890ca334e08bb55
+    Implements: blueprint volume-retype
+
+commit 1babca0b8ffc86918729f2d4ad604c32f0b8deeb
+Author: Jay S. Bryant <jsbryant@us.ibm.com>
+Date:   Mon Jan 6 12:44:26 2014 -0600
+
+    Fix downgrade in 002_quota_class.py for MySQL
+    
+    Downgrade in the script 002_quota_class.py is failing for MySQL
+    because there is an attempt to delete the quota_classes table
+    while the reservations table still has a foreign key defined.
+    The foreign key causes the delete of the quota_classes table to fail.
+    
+    This change is based upon commit 8328fc46d783f4ec9286eededafa91afae89cba0
+    which makes a similar change to 018_add_qos_specs.py .
+    
+    Change-Id: I81844a2da4fb3b831f1f9dead3634e82f54e559e
+    Closes-bug: 1265944
+
+commit 724c077fa62e93fdb4c2e43ae5521448d389d36e
+Author: Kurt Martin <kurt.f.martin@hp.com>
+Date:   Mon Jan 6 09:06:18 2014 -0800
+
+    Removed deprecated config option hp3par_domain
+    
+    The hp3par_domain config option was deprecated in the Havana release.
+    This just removes it from the code, test and config sample file
+    for the Icehouse release.
+    
+    DocImpact
+    
+    Change-Id: Ib3820cfc1b0db8a8b5755ac59d30691ce832fcea
+
+commit 24d7e244133ddb46fc3de79b8222424db21672d1
+Merge: 7a958ce 289f639
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Jan 6 02:06:17 2014 +0000
+
+    Merge "Replace Simple/Chance Scheduler with FilterScheduler"
+
+commit 7a958ce1ff87a37df0a68693e05716d417c3bb89
+Merge: 9062dff 3c876c6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 5 00:07:59 2014 +0000
+
+    Merge "removed unused context in check_*** methods"
+
+commit 9062dffb87cc7c4a3250c6d6a53ae676f2cd295c
+Merge: 2aa6499 04e333f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Jan 5 00:04:43 2014 +0000
+
+    Merge "add 'force' verification in _volume_upload_image"
+
+commit 2aa649965e769247c827dd3a51fb31ea9d5111ec
+Merge: d23be9c 404a9fb
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 4 23:24:24 2014 +0000
+
+    Merge "LVM: Fix "intialized" typo in warning msg"
+
+commit 1d9927dacfc2d11e65f3392d8db465613b3843da
+Author: Eric Harney <eharney@redhat.com>
+Date:   Fri Jan 3 12:44:33 2014 -0500
+
+    Fix Brick LVM test command parsing
+    
+    The case reporting only one fake-volumes VG was never hit, which also
+    caused us to not test the lvcreate -T path.
+    
+    Change-Id: If43d6aff5f90d6eca24b3df790d8ad3a86bfc8f3
+
+commit c32302c5d5f35df39b49d32fcba47a4d36b3783a
+Author: Swapnil Kulkarni <swapnilkulkarni2608@gmail.com>
+Date:   Sat Jan 4 12:54:13 2014 +0530
+
+    Update V2 API to return detailed volume information on create
+    
+    Current implementation returns only summary information, so
+    cinderclient requires additional GET call to get details.
+    Updated the api to return the details by default so the GET in
+    cinderclient can be removed.
+    
+    Closes-Bug: #1265893
+    
+    Change-Id: I56d4d79c4a942d8bf53318e46737674dc0bf9b56
+
+commit 404a9fbfa289cf80256b7dbbf7185875f7c897d7
+Author: Eric Harney <eharney@redhat.com>
+Date:   Sat Jan 4 09:22:43 2014 -0500
+
+    LVM: Fix "intialized" typo in warning msg
+    
+    Change-Id: I3b07b30840835a46c165fc360522b268229f5e50
+
+commit d23be9c0577e815fb217dd0ef971f181c3deca0a
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Sat Jan 4 06:13:42 2014 +0000
+
+    Imported Translations from Transifex
+    
+    Change-Id: I6aef6484cc40f233cfce2c6cd36c7e16039e1903
+
+commit 01cc78d9ec86953417d742bf0b3defc4803d02e7
+Merge: 3167f45 1862217
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 4 06:07:28 2014 +0000
+
+    Merge "GlusterFS: Use correct base argument when deleting attached snaps"
+
+commit 3167f458515443e81339743a29985bba2e7e7692
+Merge: bc3b8ef a80914e
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 4 03:45:38 2014 +0000
+
+    Merge "Removed copyright from empty files"
+
+commit bc3b8ef618f667669d45ff79933b58fd03c7f115
+Merge: 1aa01b3 303858b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Jan 4 02:32:55 2014 +0000
+
+    Merge "Remove unused fake_flags"
+
+commit 3c876c67eb32ecffb58a2234c828e5cfee70ec90
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Fri Jan 3 16:51:50 2014 +0800
+
+    removed unused context in check_*** methods
+    
+    Input parameter 'context' of Check_*** methods(check_attach,
+    check_detach, _check_metadata_properties, _check_volume_availability)
+    in cinder/volume/api.py are not being used, so remove this 'context'
+    parameter.
+    
+    Change-Id: I314f662f2fe54a6b073181ff5c0f0214e9ef822a
+    Closes-bug: #1265725
+
+commit 1aa01b3b79847ebeecc0b39e3af6cb09b8ea6e19
+Merge: bb52be9 a4c750f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 3 09:09:11 2014 +0000
+
+    Merge "Reduce the redundant variable declarations"
+
+commit 04e333f78ec8f22cdc0f0ab8701ae6a277bacbd5
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Fri Jan 3 15:56:05 2014 +0800
+
+    add 'force' verification in _volume_upload_image
+    
+    _volume_upload_image API should only support to upload 'in-use' volume to
+    image when assign 'force' parameter as true value. Now
+    _volume_upload_image API does not do verification for 'force' parameter,
+    so we can upload 'in-use' volume to image when assign 'force' parameter
+    with string value 'false' or 'false111'. This patch add verification for
+    'force' parameter.
+    
+    Change-Id: I9e1d0e517d0ff97c136903dd6e50a305e18651f3
+    Closes-Bug: #1265718
+
+commit aa1ba1f0176af286506e4188628e5acbb8f7f0e6
+Author: Shao Kai Li <lshaokai@cn.ibm.com>
+Date:   Thu Jan 2 00:51:41 2014 -0500
+
+    Raise max header size to accommodate large tokens.
+    
+    The max header is exceeded in the following scenario
+    - Auth tokens built with a keystone v3 API catalog
+    - A catalog with approximately 8 or more endpoints defined
+    
+    An equivalent fix will be required for all projects which use
+    eventlet.wsgi.
+    
+    Copied from https://review.openstack.org/#/c/33362/
+    
+    Closes-Bug: 1190149
+    
+    Change-Id: I3fcb196b25a7a477b799c8dfa2ff5115977ca06d
+
+commit bb52be971deea9e2374b5cef1b1f208e4354276e
+Merge: 6ccc654 dd9536a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Jan 3 00:42:14 2014 +0000
+
+    Merge "Add additional metadata as key-value pairs in 3PAR"
+
+commit a9267644ee09591e2d642d6c1204d94a9fdd8c82
+Author: Jon Bernard <jobernar@redhat.com>
+Date:   Thu Jan 2 16:28:59 2014 -0500
+
+    LVM: update iscsi target on volume attach
+    
+    This patch updates the existing iSCSI target for a LVM volume during
+    attach.  This is necessary in the event that a user extended the volume
+    after creation so that the correct size is visible to the host.
+    
+    This adds support only for tgtadm.  Other changes may be needed for
+    ietadm/lioadm to provide the same functionality.
+    
+    Change-Id: I185a90ffc4d50dd9f91381df07289476fa792043
+    Closes-Bug: #1248415
+
+commit 6ccc654a0509c4e308713f9e6fd95266cd112c9d
+Author: Eric Harney <eharney@redhat.com>
+Date:   Fri Dec 13 10:39:09 2013 -0500
+
+    LVM: Activate Thin Pool LV upon initialization
+    
+    If the LVM thin pool is not active, space calculation fails,
+    as data_percent is not known.  Activate the pool upon initialization,
+    since we intend to use it anyway.
+    
+    Slightly refactors _get_thin_pool_free_space so that it is clear
+    which missing/unexpected value is breaking things if a similar error
+    occurs for some other reason.
+    
+    Closes-Bug: #1260773
+    
+    Change-Id: I7cb187746c1ac297b82254c6efa37ba1c5fbb3e1
+
+commit 186221779a92002ff9fa13c254710c0abb3803be
+Author: Eric Harney <eharney@redhat.com>
+Date:   Wed Dec 18 19:11:44 2013 -0500
+
+    GlusterFS: Use correct base argument when deleting attached snaps
+    
+    When deleting the most recent snapshot, the 'file_to_merge' field
+    which translates into the base= field for libvirt's blockRebase
+    call in Nova must be set depending on whether other snapshots exist.
+    
+    If there are no other snapshots, base = None, which results in
+    libvirt clearing the qcow2 backing file pointer for the active
+    disk image.
+    
+    If there are other snapshots, pass the parent of the file being
+    deleted as the new base file.  The snapshot info pointer for the
+    prior base file must also be updated in this case.
+    
+    Closes-Bug: #1262880
+    Change-Id: If7bc8259b031d0406346caafb8f688e65a38dba6
+
+commit 783e3243f98a90550a8b7ec8ce279709ab8db372
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Dec 12 14:22:49 2013 +0100
+
+    Switch to Oslo's config generator
+    
+    This fixes the sample configuration to contain proper
+    config groups alongway.
+    
+    Regenerate sample config with oslo's config generator.
+    
+    DocImpact: Removes the deprecated memcached_server
+    option from DEFAULT (now in keystone_authtoken group)
+    
+    Closes-Bug: #1206650
+    Closes-Bug: #1260322
+    
+    Change-Id: I170715bfe6ec7dad9f7317e7bb56cbb68034c4ec
+
+commit a80914ecacda361473ae70d6185ec9664eae00ab
+Author: Matt Fischer <matt@mattfischer.com>
+Date:   Wed Jan 1 19:31:20 2014 -0700
+
+    Removed copyright from empty files
+    
+    According to policy change in HACKING:
+    http://docs.openstack.org/developer/hacking/#openstack-licensing
+    empty files should no longer contain copyright notices.
+    
+    Change-Id: I031098958938e2301986949ad4659c5a7eb41561
+    Partial-Bug: #1262424
+
+commit 303858b473fc62c7c47e5d4b022c970fbccd5640
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Thu Jan 2 09:17:32 2014 +0800
+
+    Remove unused fake_flags
+    
+    fake_flags.py should have been removed in change
+    I3424d0a401b3ef7a3254d3e913263554361a52ff but somehow it's left
+    untouched in that change.  This module has been replaced by
+    cinder/tests/conf_fixture.py, and shouldn't be around anymore.
+    
+    Change-Id: Ied840b95253d998c1b3326c1dde9d469fa783c85
+
+commit f52cb1b1c44c20d034bbb72e2ae98dbadc8e2495
+Merge: 7b04653 fe03c20
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 31 20:14:05 2013 +0000
+
+    Merge "Only reverify backing lun when create backing lun"
+
+commit 7b04653595cc56a6072c5f113e48ff9fb698a7cd
+Merge: fd73c5b 8014017
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 31 20:13:57 2013 +0000
+
+    Merge "Output Strings of bin/*.py should support i18n"
+
+commit fd73c5bf3d0da700dc94823401b17473746a2452
+Merge: 21cd934 254e37a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 31 19:59:03 2013 +0000
+
+    Merge "Add AllocatedCapacityWeigher"
+
+commit 21cd93431515c2ec27b06a7bad5c331df80f668a
+Merge: 5b2dbd4 9fbb0b1
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 31 16:31:24 2013 +0000
+
+    Merge "Remove dynamic default on sf_account_prefix"
+
+commit 5b2dbd4711830ea0d3ee223e78a2437acceede4e
+Merge: 6b9ebeb ff3f2e5
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 31 16:31:21 2013 +0000
+
+    Merge "Remove vim header"
+
+commit 289f63934459baccae1e7c547890cc5f4e9f26b3
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Tue Dec 31 15:00:52 2013 +0800
+
+    Replace Simple/Chance Scheduler with FilterScheduler
+    
+    This patch replaces SimpleScheduler and ChanceScheduler with
+    FilterScheduler. Scheduler manager is changed so that when it
+    detects 'scheduler_driver' is set to SimpleScheduler or
+    ChanceScheduler, it changes underlying scheduler driver to
+    FilterScheduler, and then host manager will use a pre-defined
+    combination of filters & weighers to keep scheduler behavior *MOSTLY*
+    the same as its old counterparts.
+    
+    To simulate ChanceScheduler/SimpleScheduler, 'AvailabilityZoneFilter',
+    'CapacityFilter' and 'CapabilitiesFilter' are chosen to filter
+    out hosts that isn't in the target AZ, doesn't have sufficient
+    capacity and doesn't support needed capabilities. And newly
+    added 'ChanceWeigher' will randomly pick a host from hosts
+    that passes above filters - just like ChanceScheduler does;
+    for SimpleScheduler, 'AllocatedCapacityWeigher' will sort hosts
+    with their 'allocated_capacity' - the one allocates the least
+    is the winner by default.
+    
+    So the two new weigher, 'ChanceWeigher' and 'AllocatedCapacityWeigher'
+    are the key FilterScheduler to act identical when choosing
+    back-ends to serve requests. The 3 filters on the other hand,
+    are essential to make sure this 'new' Simple/Chance Scheduler can
+    support volume types, encryption and QoS.
+    
+    Partially implements bp: deprecate-chance-and-simple-schedulers
+    
+    Change-Id: I0538b9692a23af6457ed463447fea8e564570848
+
+commit a4c750f3027977551c1fdab430040689a620edb0
+Author: ls1175 <liusheng@huawei.com>
+Date:   Tue Dec 31 15:54:17 2013 +0800
+
+    Reduce the redundant variable declarations
+    
+    The method create() in /cinder/api/v2/volumes.py has two redundant
+    variable declarations: image_href = None image_uuid = None
+    These should be reduced
+    
+    Change-Id: If3798d4bd96998707d7a5f87ece95ed8c93cc042
+    Closes-bug: #1265148
+
+commit 6b9ebeb8c0ecdaa8bb872f42f9ae9aed0795cb91
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Tue Dec 31 06:13:49 2013 +0000
+
+    Imported Translations from Transifex
+    
+    Change-Id: I7b845f52864b6764f518edba463086cee195d7fd
+
+commit ff3f2e5735f0d486b72b6881b05ace94d6d34d03
+Author: DennyZhang <denny@unitedstack.com>
+Date:   Tue Dec 24 22:37:04 2013 -0600
+
+    Remove vim header
+    
+    No need to set tabstop tons of times, this can be set in your vimrc
+    file instead.
+    
+    More disucssion:
+    http://openstack.10931.n7.nabble.com/Remove-vim-modelines-td21780.html
+    
+    Partial-Bug: #1229324
+    Change-Id: Ib3a31c8819ee1950d72f7da5627593623d351560
+
+commit 07e0a120f3dc4473cf3be37dbe8abc6d0cc1b866
+Merge: a75eb8c 5fe07c1
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 30 20:18:20 2013 +0000
+
+    Merge "Redundant size check in volume restore api"
+
+commit a75eb8ceef6573b171ed79c56804b6c00757583b
+Merge: 2d6a903 c0f5f9d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 30 20:18:11 2013 +0000
+
+    Merge "Empty files shouldn't contain copyright nor license"
+
+commit 5fe07c1be34a73c457bd8e6b8a86bfc6e53567d5
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Wed Dec 25 16:03:27 2013 +0800
+
+    Redundant size check in volume restore api
+    
+    In cinder volume restore api, we do twice size check when restore volume
+    with a given volume uuid. It's necessary to remove the redundant check.
+    
+    Change-Id: I8f240b2c0d1014d212ff56c2c9b5e193f9d552bd
+    Closes-Bug: #1264053
+
+commit 254e37ab3c995f6514084d38f2f797da9cf5e5a9
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Wed Dec 11 21:46:38 2013 +0800
+
+    Add AllocatedCapacityWeigher
+    
+    AllocatedCapacityWeigher is a weigher that weigh hosts by their
+    allocated capacity. The main purpose of this weigher is to simulate
+    the SimpleScheduler's behavior, which sorts hosts by the size of
+    all volumes on them.  So by allocated capacity, it equals to the
+    sum of size of all volumes on target host.
+    
+    In order to keep track of 'allocated' capacity, host state is updated
+    to add a 'allocated_capacity_gb' attribute to record the value, which
+    means each back-end must report one extra stats to scheduler.
+    Fortunately, the 'allocated' capacity we are interested in here is
+    pure Cinder level capacity, the volume manager can take all the burden
+    to calculate this value without having to query back-ends. The volume
+    manager does the initial calculation in init_host() by the time when it
+    has to query all existing volumes from DB for ensure_export(). After
+    initial calculation, volume manager/scheduler will keep track of every
+    new request that changes 'allocated_capacity' and make sure this value
+    is up to date.
+    
+    !DriverImpact! Cinder driver developers, please read on:
+    
+    This patch contains a change that might IMPACT volume drivers: volume
+    manager now uses 'stats' attribute to save 'allocated_capacity_gb'.
+    And this information will be merged with those stats drivers provide
+    as a whole for scheduler to consume.  If you plan to report any form
+    of allocated space other than the apparent Cinder level value, (e.g.
+    actual capacity allocated), Please choose a key name other than
+    'allocated_capacity_gb', otherwise it will *OVERWRITE* the value volume
+    manager has calculated and confuse scheduler.
+    
+    Partially implements bp: deprecate-chance-and-simple-schedulers
+    
+    Change-Id: I306230b8973c2d1ad77bcab14ccde68e997ea816
+
+commit 2d6a90382310541e056372727697e2480fee614a
+Merge: 5bc87a9 1e73e64
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Dec 29 09:38:37 2013 +0000
+
+    Merge "Handle terminate_connection() exception in volume manager"
+
+commit 5bc87a9c33838b7cbd80b22e4e2206fd964da69b
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Sat Dec 28 06:14:19 2013 +0000
+
+    Imported Translations from Transifex
+    
+    Change-Id: Ic024fd0bef15147662612ed49b28133019d68aed
+
+commit ed1977084483e5bfca39daf1cc4a3bd471e4ea29
+Author: chadlung <chad.lung@gmail.com>
+Date:   Fri Dec 27 19:29:17 2013 -0600
+
+    Adding helpful URL links to README.rst and HACKING.rst
+    
+    Change-Id: Id9d3606616993c50bf6ab29880efa495999b9ce4
+
+commit 1e73e64e7407294dc68af9c09323e2b396335c4a
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Tue Dec 24 11:45:16 2013 +0800
+
+    Handle terminate_connection() exception in volume manager
+    
+    Due to the fact that we sometimes need to manually terminate a volume's
+    connection through volume api, it's possile that these backend drivers
+    throw exceptions while doing that. Currently exceptions are bubbled up to
+    volume API not being handled. This patch logs exception in volume manager
+    and then raises VolumeBackendAPIException to caller.
+    
+    Change-Id: If809f97998f52516af09ec21b3052b67d3a62f36
+    Closes-bug: #1263820
+
+commit c0f5f9d7afb513b977a9c7147684bc93f9431b7e
+Author: DennyZhang <denny@unitedstack.com>
+Date:   Tue Dec 24 22:36:15 2013 -0600
+
+    Empty files shouldn't contain copyright nor license
+    
+    http://docs.openstack.org/developer/hacking/#openstack-licensing
+    
+    Partial-Bug: #1262424
+    Change-Id: Ib4d35e85ed23581f4a27a1daca8664180751f6f1
+
+commit 8328fc46d783f4ec9286eededafa91afae89cba0
+Author: Alan Meadows <alan.meadows@gmail.com>
+Date:   Thu Dec 26 11:12:37 2013 -0800
+
+    Bugfix missing foreign key removal for mysql
+    
+    Downgrading the cinder schema fails when running 018_add_qos_specs.py
+    under MySQL. The upgrade path of this schema patch adds the foreign
+    key volume_types_ibfk_1 on table volume_types, and the downgrade does
+    not correspondingly remove it before attempting to drop the
+    qos_specs_id column.  This update removes the foreign key when
+    the engine is mysql prior to dropping the column.
+    
+    Change-Id: Ibd3b35ad3b0bd41ad04ab7aeeb28c3ba7e5d255d
+    Closes-Bug: #1264360
+
+commit f10e1db7a58d4243d1566377b59e09897439fe49
+Merge: 848d072 690d386
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Thu Dec 26 18:14:52 2013 +0000
+
+    Merge "Imported Translations from Transifex"
+
+commit 848d072e59400f084e5e25255241c178c5af9706
+Merge: 96c5cba f14dcb7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 26 17:52:58 2013 +0000
+
+    Merge "Add qos_specs support to solidfire driver"
+
+commit 96c5cba1a924a736bbc1d597b1a34d82ac35367c
+Merge: 6ad52ee 17e556a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 26 17:48:52 2013 +0000
+
+    Merge "Handle initialize_connection() exception in volume manager"
+
+commit 6ad52ee016b5aef2993d819142435e26b0be27a9
+Merge: 8a5ce96 9c7f5c9
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 26 17:44:26 2013 +0000
+
+    Merge "Fix spelling errors"
+
+commit 9c7f5c9c64690b68377ad860c805f90a17237b65
+Author: skudriashev <skudriashev@griddynamics.com>
+Date:   Sun Dec 22 01:04:28 2013 +0200
+
+    Fix spelling errors
+    
+    Spelling errors fixed in comments and log messages.
+    
+    Change-Id: I8ce4899fbb22136ce6d03e1796fc01d929f35562
+
+commit 690d3866b07b7daebf83257c45c9907c988363ce
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Thu Dec 26 06:13:45 2013 +0000
+
+    Imported Translations from Transifex
+    
+    Change-Id: I8f2b51a5c5c58fa8c64899091e726139f93967d1
+
+commit dd9536ac6e6df0e1ae6754e580b99cfbfd05eb77
+Author: Sivaramakrishna Garimella <sivaramakrishna.garimella@hp.com>
+Date:   Mon Dec 9 11:11:13 2013 +0530
+
+    Add additional metadata as key-value pairs in 3PAR
+    
+    Track status of openstack volumes on 3PAR through
+    additional metadata added as key-value pairs. During volume attach
+    and detach, corresponding instance metadata is updated onto the
+    cinder volumes.
+    
+    Change-Id: Iea8d2f26555e6be60001bf73755cae42446afec6
+    Closes-Bug: #1258033
+
+commit 8a5ce963dc9b96f485536ab851ef0e2a1d0e8313
+Merge: 3364034 5654992
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 23 18:46:36 2013 +0000
+
+    Merge "Set volume_dd_blocksize configurable on per-driver basis"
+
+commit 17e556acf5c33583dcb6ed34bfd5a5fd9c148c9e
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Mon Dec 2 17:05:08 2013 +0800
+
+    Handle initialize_connection() exception in volume manager
+    
+    Due to the fact that several drivers require backend communication to fetch
+    connection information for a volume, it's possile that these driver throw
+    exceptions while doing that.  Currently exceptions can bubble up to volume
+    API not being handled.  This patch logs exception in volume manager and
+    then raises VolumeBackendAPIException to caller.
+    
+    Change-Id: Ib3cc152e04ba029dd835a64b0cfb0a77b8a6828e
+    Closes-bug: 1256804
+
+commit 3364034235727254eb4070f36b81a7edc1ea73a2
+Merge: e58f1f3 a0895f0
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 23 15:51:15 2013 +0000
+
+    Merge "Service launcher method docstring corrected"
+
+commit 801401787b674dc6fac3f6bf2bae9267ee708ed1
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Wed Dec 4 15:22:57 2013 +0800
+
+    Output Strings of bin/*.py should support i18n
+    
+    Many more output strings in cinder/bin/*.py don't support i18n,
+    which should be fixed as visible message.
+    
+    Change-Id: I863c09a0a398b99360e5a080091e320b594d4024
+    Closes-Bug: #1257613
+
+commit e58f1f31c54057b58fd1de1ae38d9a18f3082906
+Merge: e40dafd 2de87b8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 23 08:16:41 2013 +0000
+
+    Merge "Fix and enable gating on F401"
+
+commit f14dcb79c8767a4a17c19db4adbab44bb55f2218
+Author: John Griffith <john.griffith@solidfire.com>
+Date:   Fri Dec 20 17:33:23 2013 -0700
+
+    Add qos_specs support to solidfire driver
+    
+    We've added a new qos_specs object to Cinder that allows creation
+    and management of qos settings separate from volume-types.
+    Now instead of embedding the qos info in the extra-specs of the
+    volume-type we associate the desired qos-spec to a volume-type.
+    
+    This change implements the capability of the SolidFire driver to
+    take advantage of that feature.
+    
+    Change-Id: I215bd0cff0c0a91c106de27eea9ec2b91689a46e
+    Implements: blueprint add-qosspecs-support-to-solidfire-driver
+
+commit a0895f0030f6a95f7415b35b92fde871f54668b9
+Author: skudriashev <skudriashev@griddynamics.com>
+Date:   Sat Dec 21 00:02:09 2013 +0200
+
+    Service launcher method docstring corrected
+    
+    * Launcher run_server method parameter in docstring
+      renamed to match actual argument name.
+    
+    Change-Id: Ic7934dd540a026141f525ea8ea6f976f959c7ea2
+
+commit e40dafd54411f0e4648fc051ef4d9c806f337f9d
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Wed Dec 11 23:56:14 2013 +0800
+
+    Fix QoS information in initialize_connection() result
+    
+    Currently the entire QoS information (if any) is included in the result of
+    initialize_connection() even if the consumer of the QoS is 'back-end'. Also
+    the format for QoS specs also is changed so that front-end (Nova) can
+    parse correctly. Add unit test to cover initialize_connection().
+    
+    Closes-bug: 1259957
+    
+    DocImpact
+    
+    Change-Id: Ibc5e92cc1ddf6404e5b234ef524698feae282eec
+
+commit 2de87b883ec0a8d7ceb2b67096423c8cb3e5d88b
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Fri Dec 13 13:29:12 2013 +0100
+
+    Fix and enable gating on F401
+    
+    Do not allow unused imports in modules, and remove those
+    that are currently unused.
+    
+    Change-Id: I7600b1cce22eaef87633f98a89db2086a3ec2b55
+
+commit fe03c20ea35486ef0b4bb5eea6be7ff2c8564b7a
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Fri Dec 20 10:55:18 2013 +0800
+
+    Only reverify backing lun when create backing lun
+    
+    In TgtAdm, we alway do twice _verify_backing_lun whether backing lun
+    exists or not.
+    If backing lun exists, it doesn't need to call _verify_backing_lun
+    function again.
+    It only needs reverify whether backing lun exists or not when recreate
+    backing lun.
+    
+    Change-Id: Ic11d778362540df307056a1adcba932e571b7d20
+    Closes-Bug: #1262958
+
+commit 5654992881ffef83c3c6c775e956f40ae80a2a5a
+Author: Ann Kamyshnikova <akamyshnikova@mirantis.com>
+Date:   Thu Oct 10 16:37:16 2013 +0400
+
+    Set volume_dd_blocksize configurable on per-driver basis
+    
+    Allow volume_dd_blocksize config option to be configurable on a
+    per-driver basis.
+    This allows drivers used in multi-backend configurations
+    to define their own values. We port this to the LVM and block_device
+    drivers here but it can easily be ported to others as and when
+    needed.
+    
+    DocImpact
+    
+    partially implement bp: per-driver-config-for-utils-functions
+    
+    Change-Id: Ice9e815f18e5ebf3727aab7d3a221acacb710cd4
+
+commit 2c76803a63dd9486678c893f2c697c6e9826d6ac
+Merge: 25eff9e 61786a8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 18 07:19:23 2013 +0000
+
+    Merge "Add exception logging if flow creation fails"
+
+commit 25eff9e3a9b498d38a4feeaf721a1f230fc01d5c
+Merge: 0b59fd7 e066158
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 18 00:39:23 2013 +0000
+
+    Merge "Do not clone non-raw images in rbd backend"
+
+commit 0b59fd73ef19b440471c3bfb2f5c5adbf786783b
+Merge: 54b7842 582abea
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 18 00:21:24 2013 +0000
+
+    Merge "Fix and enable gating on H402"
+
+commit 61786a8924fe984ec50c3159dc216bb7533e0f56
+Author: Joshua Harlow <harlowja@yahoo-inc.com>
+Date:   Tue Dec 17 15:20:02 2013 -0800
+
+    Add exception logging if flow creation fails
+    
+    If the create_XYZ_flow fails in being created
+    its useful to log exactly what the error was in
+    detail (instead of trapping it and only raising
+    a generic error). The more detailed error shows
+    what the real problem was during the flows
+    construction (which usually is some larger
+    problem).
+    
+    Change-Id: I9cd6b8e2c6298d8791ba3063be78f9b4c4a7c5d0
+
+commit 54b7842b8edc83c8d677e8effba5a281fb18dae2
+Merge: 4a09146 99f3ce3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 17:12:16 2013 +0000
+
+    Merge "make delete recovery messages debug level"
+
+commit 9fbb0b19b145099a8275e19f2bcf89c220bb9c6e
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Dec 12 18:05:31 2013 +0100
+
+    Remove dynamic default on sf_account_prefix
+    
+    A dynamic default makes it difficult to generate
+    a proper cinder.conf.sample template. Make it
+    default to the hostname when the option is unset
+    or left at default.
+    
+    DocImpact: default of sf_account_prefix changed to "None", which
+    however preserves behavior of a previously unset option: use
+    the current hostname.
+    
+    Change-Id: Ic90305bd93ae0156c37e32012cdc32848192de07
+
+commit 4a09146e18ef18f21a847ee1b9e00818bda6a28b
+Merge: df60b65 92e058d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 13:15:02 2013 +0000
+
+    Merge "Fix KeyError while generating a WSGI response"
+
+commit 99f3ce38e9ad1e272a4a04858ff1acc709e7c9cb
+Author: Sean Dague <sean.dague@samsung.com>
+Date:   Tue Dec 17 07:29:46 2013 -0500
+
+    make delete recovery messages debug level
+    
+    lvm.delete has recovery logic within it to do a second attempt
+    if it should fail the first time. It is currently however logging
+    those second attempts at error and warn levels. However, as this
+    is normal flow these should be debug level instead.
+    
+    This is currently causing a few resets in the gate because this
+    is a non whitelisted error.
+    
+    Change-Id: Ie684331d9d97c089ec23569d06981e90eb7f6a67
+    Closes-Bug: #1261731
+
+commit df60b655a16a8d6e5a630555d71197af3ac44038
+Merge: f55e36a 53c49d0
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 08:45:49 2013 +0000
+
+    Merge "Remove unused code from volume manager (reset_stats)"
+
+commit f55e36afff359871f158b5e7f009463e551caa1d
+Merge: 531a98c 4545f1b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 08:33:28 2013 +0000
+
+    Merge "Pylint fixes for Brick iSCSI/LVM"
+
+commit 531a98cc786fb6df6389fae546391494adb195ba
+Merge: ecbd5f8 8904259
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 08:33:25 2013 +0000
+
+    Merge "Pylint fixes for GlusterFS driver"
+
+commit ecbd5f8b7004f9fce19444457446cec63552ff59
+Merge: 57a7422 fee7a4e
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Tue Dec 17 05:02:38 2013 +0000
+
+    Merge "Imported Translations from Transifex"
+
+commit 57a7422c2e831e530813c1b93cbbd6beec824470
+Merge: b4fdafc 96ef263
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 04:41:14 2013 +0000
+
+    Merge "3PAR FC: add ability to add WWNs to host"
+
+commit b4fdafc5a3e1bba3c6af1b39dc2e08d51f15e43c
+Merge: b7e974f 051aa36
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 03:58:29 2013 +0000
+
+    Merge "Use mock for scheduler tests"
+
+commit b7e974f4ed673337c7f2d5316f950458bc0a41f1
+Merge: 4edc155 d7b66d2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 03:47:42 2013 +0000
+
+    Merge "[Netapp/Nexenta] Move registration of config options"
+
+commit 4edc155c0aa6999a67ba7016b57da489c8c079cf
+Merge: f02b2dc 6976c03
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 17 00:39:52 2013 +0000
+
+    Merge "Adds unit tests for drivers.rbd.RBDImageIOWrapper"
+
+commit 53c49d08ad33afeae46e50f261171d0032670b12
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Dec 16 17:50:49 2013 -0500
+
+    Remove unused code from volume manager (reset_stats)
+    
+    self._last_volume_stats appears to be unused, now that we don't
+    use _volume_stats_changed().  This means reset_stats() also does
+    nothing.
+    
+    This triggered a pylint 'attribute-defined-outside-init' warning.
+    
+    Change-Id: I4c4f7497e72f726f3430f90df61188bf2f1073c1
+
+commit 8904259b94481ca9e177c988f50ecabdecd117a4
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Dec 16 17:44:02 2013 -0500
+
+    Pylint fixes for GlusterFS driver
+    
+    Remove unused 're' import
+    Remove unused parameter for _create_snapshot()
+    
+    Change-Id: I40411b6206d282ae07c905faa44dcccecb45c120
+
+commit 4545f1b99e7202f50666bd74d94aa99a8adaa615
+Author: Eric Harney <eharney@redhat.com>
+Date:   Mon Dec 16 17:29:32 2013 -0500
+
+    Pylint fixes for Brick iSCSI/LVM
+    
+    Fixes a few of the more straightforward pylint errors
+    in these files.  (anomalous-backslash-in-string,
+    attribute-defined-outside-init, and bad-indentation)
+    
+    Change-Id: Ic131717a83fe182fe578b63eccf364d300a8989c
+
+commit 96ef263f61385f486402c50f3f3abc7e614a8b49
+Author: Jim Branen <james.branen@hp.com>
+Date:   Fri Dec 6 15:32:53 2013 -0800
+
+    3PAR FC: add ability to add WWNs to host
+    
+    When a host is created on the HP 3PAR array,
+    at initialize connection time, the host is
+    created with all WWNs provided in the connector
+    structure. However, the driver did not have
+    the ability to add new WWNs after a host is created.
+    
+    This patch adds the ability to add WWNs to a
+    host, at initialize connection time, if a new
+    WWN is provided in the connector structure.
+    
+    Change-Id: I6fd8a5511f83d5460da30ff5558a3e95964a95f5
+    Closes-bug: 1258229
+
+commit fee7a4e5074d6b132473e23a732a8a4a3de99129
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Mon Dec 16 06:14:18 2013 +0000
+
+    Imported Translations from Transifex
+    
+    Change-Id: I2554bd4a076f855c8f2026d98ecb649b35edcbf8
+
+commit f02b2dc71f86b0ae9bdcc83944c926a779f950de
+Author: Jay Lau <liugya@cn.ibm.com>
+Date:   Sat Dec 14 10:54:16 2013 -0500
+
+    Adjust import order according to PEP8 imports rule
+    
+    This patch just adjust import order to follow PEP8 imports rule.
+    See http://www.python.org/dev/peps/pep-0008/#imports
+    
+    Imports should be grouped in the following order:
+    1) Standard library imports
+    2) Related third party imports
+    3) Local application/library specific imports
+    
+    Change-Id: Ifa3f219207b02d60e757e17c42dae1fef2f628fe
+
+commit e066158b5235a3879fe90fa3bd813fc3363c01f5
+Author: Dmitry Borodaenko <angdraug@gmail.com>
+Date:   Wed Nov 27 14:33:00 2013 -0800
+
+    Do not clone non-raw images in rbd backend
+    
+    RBD backend only supports booting from images in raw format. A volume
+    that was cloned from an image in any other format is not bootable. The
+    RBD driver will consider non-raw images to be uncloneable to trigger
+    automatic conversion to raw format.
+    
+    Includes conversion of the corresponding unit test to use mock (instead
+    of mox) and expanded comments and error messages based on change #58893
+    by Edward Hope-Morley.
+    
+    Change-Id: I5725d2f7576bc1b3e9b874ba944ad17d33a6e2cb
+    Closes-Bug: #1246219
+    Closes-Bug: #1247998
+
+commit 6976c038b8676543c33f549ed682de8286edde3a
+Author: Edward Hope-Morley <edward.hope-morley@canonical.com>
+Date:   Sat Dec 14 22:52:52 2013 +0000
+
+    Adds unit tests for drivers.rbd.RBDImageIOWrapper
+    
+    Change-Id: Id256ec6ed20c1f52eb67cf5a807f67b01a641962
+    Closes-bug: 1238614
+
+commit 1622b284c6f59a6b9e12f84ee0173e330d895071
+Merge: 62e4c0c d8a1116
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Dec 15 08:38:17 2013 +0000
+
+    Merge "GlusterFS: Complete snapshot_delete when info doesn't exist"
+
+commit 62e4c0cd769c74c1f8671d27b4b6bf590213d535
+Merge: 91841ef b38ece6
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Dec 15 08:38:12 2013 +0000
+
+    Merge "Remove test that was no longer used for long"
+
+commit 91841ef3c71c970644b0103b825b430cff5a90ad
+Merge: 7b87e07 486f684
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 14 14:47:48 2013 +0000
+
+    Merge "Add disabled_reason field to services table"
+
+commit d7b66d21966dc99ca062193552eaec81455da852
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Dec 12 14:17:43 2013 +0100
+
+    [Netapp/Nexenta] Move registration of config options
+    
+    This doesn't really make a difference in practice, but
+    makes it possible for the sample config generator to figure
+    out the config group relationship when options are in one
+    file.
+    
+    Change-Id: I3bc6ab5bcc85a8c11c9261b0d8c520fb846a7864
+
+commit 582abea303c1aa4656aac284062e68208e033d83
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Sat Dec 14 12:33:24 2013 +0100
+
+    Fix and enable gating on H402
+    
+    Summary docstrings should end with punctuation.
+    Also changed it to command-style in a few places.
+    
+    Change-Id: Id94fe995aa05356106ad09899b0ada27d608ff21
+
+commit 7b87e07e02809f18b6466684802343d40ed53abb
+Merge: 9d09987 d3cf754
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 14 08:32:27 2013 +0000
+
+    Merge "make help text more meaningful for cinder docs"
+
+commit 9d0998791a0b08700d780504471dce276606911c
+Merge: ecfbec5 ebd52f2
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 14 05:55:24 2013 +0000
+
+    Merge "Switch create volume commands to Taskflow 0.1.1"
+
+commit ecfbec563e5f1c49ebac784794b54beb105e8cd2
+Merge: 7a85523 18b1420
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sat Dec 14 03:22:17 2013 +0000
+
+    Merge "Make sure report_interval is less than service_down_time"
+
+commit 7a85523d125a2cb3928039a10fa725bfcd1627b4
+Merge: e3ce1ca 32d4f14
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 13 19:30:50 2013 +0000
+
+    Merge "Remove LANG=C from rootwrap invocations"
+
+commit b38ece6ccf048c85b7a76c7f80f072ed58fd5c83
+Author: Zhiteng Huang <zhithuang@ebaysf.com>
+Date:   Fri Dec 13 22:20:47 2013 +0800
+
+    Remove test that was no longer used for long
+    
+    test_too_big_volume() case in test_volume.py was legacy from nova-
+    volume, it was never actually testing anything.  This change removes
+    this case for good.
+    
+    Change-Id: I66e0eb80326f039ddc580dec0409fd4090ba5102
+
+commit e3ce1ca32c758f71fb801e605a8ff0326223f69b
+Merge: 7a77a22 3badd1f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 13 14:09:00 2013 +0000
+
+    Merge "Lazy log the fixed_key warnings"
+
+commit d3cf7544a549bc75b0cb6870788f33b6f5ff8526
+Author: Bob Callaway <bob.callaway@netapp.com>
+Date:   Thu Dec 12 10:39:39 2013 -0500
+
+    make help text more meaningful for cinder docs
+    
+    Change-Id: I5ccb7801a6df8039c59c7a2f2aacd72907a076a4
+    Closes-Bug: 1260373
+
+commit 7a77a222f19b5e20e7857de9e832fca051ebd3d9
+Merge: 097072d a83506d
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 12 18:24:42 2013 +0000
+
+    Merge "Add the driver name to get stats log output"
+
+commit ebd52f2e6de96b965878f0fd5e56f089ceb1ff93
+Author: anastasia-karpinska <akarpinska@griddynamics.com>
+Date:   Tue Dec 10 23:12:31 2013 +0200
+
+    Switch create volume commands to Taskflow 0.1.1
+    
+    - Old TaskFlow code was removed from Cinder.
+    
+    - TaskFlow 0.1.1 was added to Cinder requirements.
+    
+    - Create volume flows for volume.api, volume.manager and
+      scheduler.manager were updated to use taskFlow 0.1.1
+    
+    Partially implements: blueprint create-volume-flow
+    Change-Id: Idbac8d001436f02978b366fbb3205ce84c847267
+
+commit 051aa362ff1f52926b1725ab24b3b21bfb5e5e21
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Tue Dec 10 10:43:07 2013 +0200
+
+    Use mock for scheduler tests
+    
+    In our effort to move from mox to mock, this patch will convert the
+    scheduler unit tests to use mock exclusively.  Also fixed some pylint
+    errors along the way.
+    
+    Change-Id: If5a94838981a04a38c2797ced07f23abfafbedb7
+
+commit 32d4f14c9ecaf56767a4a4c3fd7fba2e85935d98
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Dec 12 00:49:27 2013 +0100
+
+    Remove LANG=C from rootwrap invocations
+    
+    For more than a decade already, systems support LC_ALL=C,
+    which overwrites LANG=C, so setting both is only confusing.
+    
+    Change-Id: I5640b9cb747892162a856315ea7331cfea7cba5a
+
+commit a83506d170e90b111b7e63fab9f585883971f316
+Author: Walter A. Boring IV <walter.boring@hp.com>
+Date:   Mon Dec 9 11:58:40 2013 -0800
+
+    Add the driver name to get stats log output
+    
+    When the manager call tries to update the driver
+    stats, it checks to ensure the driver is initialized.
+    When the driver hasn't been initialized, it logs
+    a warning without the driver name.  This is confusing
+    for multiple backends.   This patch adds the driver
+    name, version and the config group name, to the log output,
+    so the admin can see which driver is failing.
+    
+    Change-Id: I82e8aa969e7baa55db9c8dddc1c08db2a1a41091
+    Closes-Bug: #1259279
+
+commit 097072de724cf1f17cf6153afc47ee898710fae3
+Author: Dirk Mueller <dirk@dmllr.de>
+Date:   Thu Dec 12 00:02:30 2013 +0100
+
+    Remove hashbang (#!) at beginning of python modules
+    
+    Change-Id: I8f138f82952938fcfaa0e9fc150cb97471febb31
+
+commit 92e058d6800e1cb33a0359cdc5c079b55612525c
+Author: huangtianhua <huangtianhua@huawei.com>
+Date:   Wed Dec 11 17:35:13 2013 +0800
+
+    Fix KeyError while generating a WSGI response
+    
+    The KeyError exception raised while generating a WSGI response based on
+    the 413 exception. Because there may be no "Retry-After" attribute in the
+    exception headers.
+    
+    Change-Id: I89eb1878acc2195775be17fbcba8088f2e00bac1
+    Closes-Bug: #1259867
+
+commit 1e14e6a42c8eb9df5ee2da11da66f8ec9da8e84d
+Author: OpenStack Jenkins <jenkins@openstack.org>
+Date:   Tue Dec 10 00:16:34 2013 +0000
+
+    Updated from global requirements
+    
+    Change-Id: I2d8f240009d2f847b321baa011880f753783be83
+
+commit 3badd1ffbe8796d27b924f882ed05b8d3f4f0f11
+Author: Dan Prince <dprince@redhat.com>
+Date:   Tue Dec 10 14:51:32 2013 -0500
+
+    Lazy log the fixed_key warnings
+    
+    Cinder currently spews quite a bit of WARNINGs like this with
+    the default settings:
+    
+    WARNING cinder.keymgr.conf_key_mgr [-] config option keymgr.fixed_key
+    has not been defined: some operations may fail unexpectedly
+    
+    Many users may not be using features that require key manager...
+    so logging the WARNING message a bit more lazily seems reasonable.
+    
+    Change-Id: I5ab72285c7d4bc2ec3196dd94fabf977b3a4ebaf
+    Closes-bug: 1252512
+
+commit 5cb91b70b96b9eb8f22f8c596c0853b0468af268
+Merge: d1b55c8 a347b99
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 10 05:58:10 2013 +0000
+
+    Merge "delete.start/delete.end notification for hostless"
+
+commit d1b55c8ee3dff21a47451907f9223e6b9226859f
+Merge: 7aca005 e997f8b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 10 05:46:55 2013 +0000
+
+    Merge "GlusterFS: Remove glusterfs_disk_util option"
+
+commit 7aca0052932009903fd121728aee9eff21b54205
+Merge: 05f87fb bc16517
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 10 05:46:47 2013 +0000
+
+    Merge "Catch TypeError when new_size is None on extend"
+
+commit 05f87fb86947327c475a0c93e6f5f118197f7868
+Merge: ac72d86 118e253
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 10 04:23:57 2013 +0000
+
+    Merge "Sync matchmaker_ring.py from oslo-incubator"
+
+commit 486f6847a97f02de5de0d4c9be15c84998afcfb8
+Author: Jay Lau <liugya@cn.ibm.com>
+Date:   Tue Dec 10 08:45:30 2013 +0800
+
+    Add disabled_reason field to services table
+    
+    Add a column (String 255) in the services table to store
+    disabled_reason field.
+    
+    Change-Id: I3cc03029831bdf6a52e9b65c673794430807aeee
+    Implements part of bp record-reason-for-disabling-service
+
+commit ac72d868dcdb33d116f1217335628a451b9962a5
+Merge: 0f24cf9 49f96f8
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Tue Dec 10 00:16:03 2013 +0000
+
+    Merge "Add RBD test for volume not existing during delete"
+
+commit bc16517ac7351b715d0202f7beb5a5e0d7ff8f97
+Author: john-griffith <john.griffith@solidfire.com>
+Date:   Mon Dec 9 16:00:20 2013 -0700
+
+    Catch TypeError when new_size is None on extend
+    
+    The volume_actions extend method does not catch/handle TypeError
+    exceptions.  The tempest volume_actions test includes a negative
+    test that doesn't pass in a new-size so the result is we get an
+    unhandled exception/trace in the log files for these runs.
+    
+    Change-Id: I8b699a28e06e62126da02c3318d3129412dffa6b
+    Closes-Bug: #1259336
+
+commit 0f24cf91e1a0ea3b99a46da501d0195456dc0b88
+Merge: 45fb1b0 17912f4
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 22:15:45 2013 +0000
+
+    Merge "LVM migration: Check if name is equal to dest_vg"
+
+commit 118e2530c445b2bd0199699ae2e79159f77e1a88
+Author: Paul Mathews <pmathews@bluehost.com>
+Date:   Tue Dec 3 15:35:18 2013 -0700
+
+    Sync matchmaker_ring.py from oslo-incubator
+    
+    Cinder does not currently include the matchmaker driver, which is the
+    preferred configuration with ZeroMQ.
+    
+    Change-Id: I8514f1780e6492f9d37134d282a5196709347bd8
+    Partial-Bug: #1185690
+
+commit 45fb1b01b5e4d152f5630d3936e44b9d1fd84207
+Merge: c48720e 174ebde
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 18:24:01 2013 +0000
+
+    Merge "Brick LVM: Set C locale when gathering PV info"
+
+commit c48720e24fe4100759adb811158d24ffa1788f46
+Merge: 4ea2f91 4f6e5fc
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 18:19:11 2013 +0000
+
+    Merge "Adds lock for create from vol/snap to avoid race conditions"
+
+commit 4ea2f910921e982848b73b3285b023bf18f7ce1e
+Merge: e53d108 cbd7acf
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 18:12:49 2013 +0000
+
+    Merge "Sync rpc fix from oslo-incubator"
+
+commit e53d10801fe370cbeeab0315091d15b431237cbb
+Merge: dbac700 1679acd
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 16:26:04 2013 +0000
+
+    Merge "Returns thin pool free space calculated from actual usage"
+
+commit dbac7001439914a0c941ebf0fc2fed1058ea7aba
+Merge: 78c7d1d b91e6e3
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 07:17:28 2013 +0000
+
+    Merge "Fixes case insensitive for resp body"
+
+commit 78c7d1d88f2b4afd1d669fd84668fe60a93b577a
+Merge: 7689ff9 1dff304
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Mon Dec 9 07:07:40 2013 +0000
+
+    Merge "Convert lvm_mirrors to int"
+
+commit 7689ff9a01b695658a76ad2cb8bfcd84a992b3d2
+Merge: bd75f2e 69ce114
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Sun Dec 8 08:03:07 2013 +0000
+
+    Merge "LVM migrate: Use keywords for the brick instance"
+
+commit 49f96f80dbeaa561ac98d174139a567d1f610988
+Author: Mike Perez <thingee@gmail.com>
+Date:   Fri Dec 6 11:13:09 2013 -0800
+
+    Add RBD test for volume not existing during delete
+    
+    For cases when the volume does not exist in the backend, but Cinder
+    still knows about it, we just return from the rbd driver and let Cinder
+    do its thing.
+    
+    Change-Id: I6150756bdd48259ec8d550fa7a5dc7a9f882ca22
+
+commit bd75f2e72c59d03cc7222ddb1c71b124c6f75898
+Merge: 916bc20 d72914f
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 6 19:12:59 2013 +0000
+
+    Merge "LVM: Create thin pools of adequate size"
+
+commit cbd7acfc294c4bf2ae0014bcf04646382bed469d
+Author: Flavio Percoco <flaper87@gmail.com>
+Date:   Fri Dec 6 11:06:09 2013 +0100
+
+    Sync rpc fix from oslo-incubator
+    
+    Sync the following fixes from oslo-incubator:
+    
+    ef406a2 Create a shared queue for QPID topic consumers
+    e227c0e Properly reconnect subscribing clients when QPID broker restarts
+    
+    Change-Id: I934a6ea6e9eb510513640870750ea37e6f076df9
+    Closes-bug: #1251757
+    Closes-bug: #1257293
+
+commit 1679acd53d1f0c330edf583afe8b347a7304499c
+Author: Giulio Fidente <gfidente@redhat.com>
+Date:   Tue Dec 3 13:44:20 2013 +0100
+
+    Returns thin pool free space calculated from actual usage
+    
+    This change adds a hidden method which calculates the thin
+    pool free space from the data_percent LVM options and reports it
+    accordingly in _update_volume_stats()
+    
+    Change-Id: Id6a69644505ca10811db458ea90ed10f643054b2
+    Closes-Bug: 1249782
+
+commit 916bc20bdd22fc1a6d2a0493e83f0e2640eef259
+Merge: 62617e6 f31d62a
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Fri Dec 6 00:00:42 2013 +0000
+
+    Merge "Catch ImageBusy exception when deleting rbd volume"
+
+commit 174ebde8e6a8cddc2db615b127d7d0066dabaa31
+Author: Eric Harney <eharney@redhat.com>
+Date:   Thu Dec 5 18:12:33 2013 -0500
+
+    Brick LVM: Set C locale when gathering PV info
+    
+    Some locales use commas as decimal separators, which means
+    that code breaks when someone expects to be able to use the
+    PV size as a float.
+    
+    Change-Id: Idceb405e021ea8a0f44e19be43bad1307fbbb51c
+    Related-Bug: 1219963
+
+commit 17912f4c4fba270a15cab47bb68d9e30c34a69b0
+Author: Flavio Percoco <flaper87@gmail.com>
+Date:   Thu Dec 5 17:05:33 2013 +0100
+
+    LVM migration: Check if name is equal to dest_vg
+    
+    The existence check of the destination volume group is wrong. It
+    currently checks if there's a VG with a name equal to the source's vg
+    name instead of checking if it's equal to the dest_vg.
+    
+    Closes-bug: #1258203
+    Change-Id: Ia5d4acb24b94c6aa832107c7eb4b6996985af97f
+
+commit 1dff30492f0ce1df3ef01ccc21353248a7207709
+Author: Flavio Percoco <flaper87@gmail.com>
+Date:   Thu Dec 5 16:14:39 2013 +0100
+
+    Convert lvm_mirrors to int
+    
+    When the location_info is parsed and `lvm_mirrors` extracted, it is not
+    being converted to int. This causes some boolean checks to return True
+    even when there are not mirrors enabled because of the u'0'.
+    
+    Closes-bug: #1258133
+    Change-Id: I67c463d9f139fe326bbcab4d193c45459129b514
+
+commit 69ce114232f9102220b45c8242eda3e78872a3e6
+Author: Flavio Percoco <flaper87@gmail.com>
+Date:   Thu Dec 5 13:48:24 2013 +0100
+
+    LVM migrate: Use keywords for the brick instance
+    
+    In the `migrate_volume` method a new instance is created when the
+    dest_vg is not equal to the source vg. This new brick instance is
+    created using positional arguments instead of keywords. However, some of
+    those arguments are passed in the wrong positions.
+    
+    This patch uses keywords for the misplaced arguments.
+    
+    The patch also changes `test_lvm_migrate_volume_proceed` in order to
+    fully test the happy path and catch things like this.
+    
+    Closes-bug: #1258128
+    Change-Id: I75cf91171709554053fd5b52a4aae4e176e8364e
+
+commit d72914f739b1467ad849dd47fddd321965fed928
+Author: Jon Bernard <jobernar@redhat.com>
+Date:   Thu Nov 21 17:58:13 2013 -0500
+
+    LVM: Create thin pools of adequate size
+    
+    Thin pools in LVM are quite different from volume groups or logical
+    volumes and their differences must be taken into account when providing
+    thin LVM support in Cinder.
+    
+    When you create a thin pool, LVM actually creates 4 block devices.  You
+    can see this after thin pool creation with the following command:
+    
+        $ dmsetup ls
+    
+        volumes--1-volumes--1--pool       (253:4)
+        volumes--1-volumes--1--pool-tpool (253:3)
+        volumes--1-volumes--1--pool_tdata (253:2)
+        volumes--1-volumes--1--pool_tmeta (253:1)
+    
+    In the above command, a thin pool named 'volumes-1-pool' was created in
+    the 'volumes-1' volume group.  Despite this, the 'lvs' command will only
+    show one logical volume for the thin pool, which can be misleading if
+    you aren't aware of how thin pools are implemented.
+    
+    When you create a thin pool, you specify on the command line a size for
+    the pool.  LVM will interpret this size as the amount of space requested
+    to store data blocks only.  In order to allow volume sharing and
+    snapshots, some amount of metadata must be reserved in addition to the
+    data request.  This amount is calculated by LVM internally and varies
+    depending on volume size and chunksize.  This is why one cannot simply
+    allocate 100% of a volume group to a thin pool - there must be some
+    remaining space for metadata or you will not be able to create volumes
+    and snapshots that are pool-backed.
+    
+    This patch allocates 95% of a volume group's free space to the thin
+    pool.  By doing this, we allow LVM to successfully allocate a region for
+    metadata.  Additionally, any free space remaining will by dynamically
+    used by either data or metadata if capacity should become scarce.
+    
+    The 95/5 split seems like a sane default.  This split can easily (and
+    probably should) be made user-configurable in the future if the user
+    expects an abnormal amount of volume sharing.
+    
+    Change-Id: Id461445780c1574db316ede0c0194736e71640d0
+    Closes-Bug: #1245909
+
+commit e997f8b06ecd4ed0a13c557d621db69eb68f2f3d
+Author: Eric Harney <eharney@redhat.com>
+Date:   Thu Dec 5 13:45:46 2013 -0500
+
+    GlusterFS: Remove glusterfs_disk_util option
+    
+    The glusterfs_disk_util option lets one choose whether to
+    use df or du to calculate space usage.  This serves no real
+    useful purpose.  Should remove this option to simplify things.
+    
+    Since this does not meaningfully impact behavior, removal of
+    this option shouldn't require any special deprecation efforts.
+    
+    (This same change was made for the NFS driver in 5bf7b9be.)
+    
+    DocImpact: Remove config option
+    
+    Change-Id: I302692454b43de15688d65873a72a3dada0c67cb
+
+commit f31d62a178a370ae9d736c09a3186ea9a3c92ee3
+Author: Edward Hope-Morley <edward.hope-morley@canonical.com>
+Date:   Wed Dec 4 18:13:06 2013 +0000
+
+    Catch ImageBusy exception when deleting rbd volume
+    
+    If we try to delete an rbd volume that has 'watchers' on it
+    i.e. client connections that have not yet been closed
+    possibly because a client crashed, the remove() will throw an
+    ImageBusy exception. We now catch this exception and raise
+    VolumeIsBusy with a useful message.
+    
+    If the volume delete fails in this way it will now stay as
+    'available' instead of going to 'error_deleting' so that the
+    delete can be retried (since it is expected to work on a
+    retry after waiting for the connection to timeout).
+    
+    Change-Id: I5bc9a5f71bdb0f9c5d12b5577e68377e66561f5b
+    Closes-bug: 1256259
+
+commit 4f6e5fcc252799e2b9207b6ef2b58b52a7a93563
+Author: Edward Hope-Morley <edward.hope-morley@canonical.com>
+Date:   Thu Nov 14 19:00:00 2013 +0000
+
+    Adds lock for create from vol/snap to avoid race conditions
+    
+    This patch protects create from volume/snapshot by using a
+    lockfile to protect the operation from concurrent deletes of
+    the volume/snapshot used in the create operation.
+    
+    Currently, if a volume/snapshot is deleted while a volume is
+    being created from it that delete may complete during the
+    create operation thus leaving the new volume in error or stuck
+    state. This lock will ensure that:
+    
+    (a) if a create of VolA from snap/volB is in progress, any
+        delete requests for snap/volB will wait until the create
+        is complete.
+    
+    (b) if a delete of snap/volA is in progress, any create from
+        snap/volA will wait until snap/volA delete is complete.
+    
+    Co-authored-by: Takashi Natsume <natsume.takashi@lab.ntt.co.jp>
+    Closes-Bug: 1251334
+    Change-Id: Ie4bc0af789ab232593f55aa2f6b34345eb9b9929
+
+commit 62617e656fe5895de30ce55971b07680f7b0a6b2
+Author: huangtianhua <huangtianhua@huawei.com>
+Date:   Thu Dec 5 10:14:16 2013 +0800
+
+    Fix docstring for snapshot_metadata controller
+    
+    Change-Id: I8227c79c35688da03f5b850daec3215d7c79b2a6
+    Closes-Bug: #1258000
+
+commit e99cd785d8ddbffcd1d741cf336b2e929c6cb28f
+Merge: dd7fea0 20667f7
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 5 08:36:19 2013 +0000
+
+    Merge "NetApp fix for vsadmin role failure for ssc"
+
+commit dd7fea0d6d786fc28236a748eb49657d72129bac
+Merge: a99c0c1 aa45357
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 5 08:36:11 2013 +0000
+
+    Merge "Update hacking to hacking>=0.8.0,<0.9"
+
+commit b91e6e31ece12d5b1204680aa0a912e3b9569f3b
+Author: huangtianhua <huangtianhua@huawei.com>
+Date:   Thu Dec 5 11:15:11 2013 +0800
+
+    Fixes case insensitive for resp body
+    
+    Create metadata for a volume with key-value set, which key in uppercase
+    and lowercase(e.g.{"key": "v1", "KEY": "V1"), the server accept the
+    request and return the key-value set {"key": "v1", "KEY": "V1"}. But the
+    server just add one metadata because the server is not case sensitive.
+    
+    The patch will modify the resp body with the one which the server added.
+    
+    update_all has the same ploblem.
+    
+    Fixes errors on v2 unittest without difficulty.
+    
+    DocImpact
+    Closes-Bug: #1258004
+    
+    Change-Id: Ic337c0a351ac234493e1d73b86ba87520f32289a
+
+commit b85cc49588c9f40e091801af33da8c7575058ec0
+Author: Vipin Balachandran <vbala@vmware.com>
+Date:   Wed Nov 13 20:33:39 2013 +0530
+
+    VMDK:Using host mount info for datastore selection
+    
+    Currently the VMDK driver picks a datastore for volume creation based
+    on space utilization. The shadow VM corresponding to the volume is
+    migrated to a different host and datastore if the volume is attached
+    to an instance created in a host which cannot access the volume's
+    current datastore. To reduce these migrations, this fix selects a
+    datastore which is connected to maximum number of hosts, provided
+    there is enough space to accommodate the volume. Ties are broken
+    based on space utilization; datastore with low space utilization
+    is preferred.
+    
+    Closes-Bug: #1250816
+    Change-Id: I5ecf22d782857fca0889799229465c49afe188a0
+
+commit a99c0c14e646cc1a0fa93540b98e4b56741f7db2
+Merge: 05cb719 3b2842b
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Thu Dec 5 03:53:43 2013 +0000
+
+    Merge "All API controllers inherit from wsgi.Controller"
+
+commit 05cb71956841d89770e919a1a94de5769d69b984
+Merge: 81ce121 b625f55
+Author: Jenkins <jenkins@review.openstack.org>
+Date:   Wed Dec 4 22:16:17 2013 +0000
+
+    Merge "Fixes case insensitive for resp body"
+
+commit b625f558862465184dd28da7215f34c77ec1ece6
+Author: huangtianhua <huangtianhua@huawei.com>
+Date:   Fri Nov 29 16:56:35 2013 +0800
+
+    Fixes case insensitive for resp body
+    
+    Create metadata for a snapshot with key-value set, which key in uppercase
+    and lowercase(e.g.{"key": "v1", "KEY": "V1"), the server accept the
+    request and return the key-value set {"key": "v1", "KEY": "V1"}. But the
+    server just add one metadata because the server is not case sensitive.
+    
+    The patch will modify the resp body with the one which the server added.
+    
+    update_all has the same ploblem.
+    
+    DocImpact
+    Change-Id: I684049412a4aa84f593e970c87157c74fffdfffe
+    Closes-Bug: #1255917
+
 commit 81ce121d782f9d419ff3eaa6f29f8b3df990e0c4
 Merge: e128cff 44a66bb
 Author: Jenkins <jenkins@review.openstack.org>
 Date:   Wed Dec 4 07:05:13 2013 +0000
 
     Merge "Change method name to test_get_volume_stats"
+
+commit 3b2842bf2df46daf4e4d26695c06963499968181
+Author: ling-yun <zengyunling@huawei.com>
+Date:   Tue Dec 3 16:19:17 2013 +0800
+
+    All API controllers inherit from wsgi.Controller
+    
+    Most of the Cinder Public API Controllers inherit from wsgi.Controller,
+    but still some Cinder Public APIs controllers directly inherit from
+    object. So it's necessary to unify all the Cinder Public API Controllers
+    inherit from wsgi.Controller.
+    1. For code cleanup.
+    2. When we try to do body valid check in api's put/post method later, we
+    can use the helper function is_valid_body instead of using try...catch
+    block.
+    
+    Change-Id: I88812224e0b182939cfccce63982cb8f95792891
+    Closes-Bug: #1257198
+
+commit a347b99c261dc1c761a8bc51c2aee99d20161ca6
+Author: Jay S. Bryant <jsbryant@us.ibm.com>
+Date:   Tue Dec 3 21:31:17 2013 -0600
+
+    delete.start/delete.end notification for hostless
+    
+    Third party GUIs may rely on notifications to track the
+    progress of volume creation and deletion.  In the case that
+    a volume is being deleted after a failed attempt to create
+    (the volume is listed in the database but is not actually
+    resident in a backing store) the path that is taken in
+    volume.api.delete() makes no notifications of deletion
+    occurring.
+    
+    This patch adds a volume_utils.notify_about_volume_usage
+    call to the beginning and end of the delete with a
+    delete.start and delete.end respectively.  The notifications
+    serve as triggers for GUIs to refresh the state of the
+    volume.  This change makes the hostless delete path's
+    functionality more consistent with the other paths through
+    the delete code.
+    
+    Change-Id: I091b9d277834b341105569d41a48ef5c1fc105ce
+    Closes-Bug: 1257053
 
 commit e128cffb9c5f4b8e76491664204db2b548307cf4
 Merge: f57ff3d 598bc3a
@@ -67,6 +2592,24 @@ Date:   Tue Dec 3 22:49:12 2013 +0800
     so they are left alone.
     
     Change-Id: I4badda869521659b541d018727a6f71f518e2ee0
+
+commit aa453576ff13c97c63dcb3cd5941675ffdc93360
+Author: Avishay Traeger <avishay@il.ibm.com>
+Date:   Tue Dec 3 09:44:35 2013 +0200
+
+    Update hacking to hacking>=0.8.0,<0.9
+    
+    Update hacking version to match version specified in requirements repo.
+    
+    Fixed the following issues, which the newer version checks for:
+    print "" -> print("")
+    self.assertEquals -> self.assertEqual
+    self.assertNotEquals -> self.assertNotEqual
+    
+    Change-Id: Ic4b70fd8f565cda28e23fe6b1da0e278f949373c
+    Closes-Bug: #1256738
+    Closes-Bug: #1256737
+    Closes-Bug: #1257274
 
 commit fea9ebc68ffa60e732201e36eca84ea26b2e0910
 Author: Avishay Traeger <avishay@il.ibm.com>
@@ -181,6 +2724,25 @@ Date:   Mon Dec 2 14:58:57 2013 -0500
     Closes-Bug: 1257049
     Related-Bug: 1232177
     Change-Id: Ic6bc89ef3f15dbbc971fdd8c91117cccb5c2801b
+
+commit d8a11168c908fe6c6a07fbb30a5bc88a6df6e939
+Author: Eric Harney <eharney@redhat.com>
+Date:   Tue Nov 19 16:25:47 2013 -0500
+
+    GlusterFS: Complete snapshot_delete when info doesn't exist
+    
+    The snapshot_delete operation will fail if the snapshot info file
+    doesn't contain a record for the snapshot, or does not exist.
+    This happens in cases such as when snapshot_create fails to commit
+    anything to disk.
+    
+    The driver should allow the manager to delete the snapshot
+    in this case, as there is no action required for the driver
+    to delete anything.
+    
+    Closes-Bug: #1252864
+    
+    Change-Id: I8686a1be09dbb7984072538bff6c026bb84eeb52
 
 commit d3a6d29aef60bdc90c8762875fdf20ecbdfb4bb4
 Merge: f9d3f6a 4fdc1df
@@ -738,6 +3300,24 @@ Date:   Mon Nov 25 02:32:52 2013 +0000
 
     Merge "Ensure 'status' in update_snapshot_status"
 
+commit 18b14203d8b30c9792d8c819f7993961b2ec8fc5
+Author: liyingjun <liyingjun1988@gmail.com>
+Date:   Sat Nov 23 22:06:19 2013 +0800
+
+    Make sure report_interval is less than service_down_time
+    
+    If service_down_time is less than report_interval, services will
+    routinely be considered down, because they report in too rarely.
+    Add check for service_down_time vs report_interval, if report_interval
+    is larger than service_down_time, automatically change
+    service_down_time to be report_interval * 2.5
+    
+    DocImpact
+    
+    Closes bug #1255685
+    
+    Change-Id: I9b291669ea201321b03a48d2a132810f3bace2dc
+
 commit b6e1677a6d750d14e23c161b9ed77f64d774602a
 Merge: 3de7da1 45489f9
 Author: Jenkins <jenkins@review.openstack.org>
@@ -1164,6 +3744,22 @@ Date:   Wed Nov 20 10:39:44 2013 +0900
     
     Change-Id: Ib79772039d663f0eb4fc8994cc8edc5154d75a02
     Closes-Bug: #1252915
+
+commit 20667f7d49eed88ddd528be73293a624b3af1ba0
+Author: Navneet Singh <singn@netapp.com>
+Date:   Mon Nov 18 04:46:31 2013 +0530
+
+    NetApp fix for vsadmin role failure for ssc
+    
+    The ssc feature does not work with vserver admin
+    role. If the user is a vsadmin then he does cannot
+    use the ssc feature fully. This fix checks the access
+    and issues apis appropriately and also handles error
+    conditions.
+    
+    Closes-Bug: #1253657
+    
+    Change-Id: Ibc4409e5d5e6e36bba41e5f59dd94c05b87b1cde
 
 commit 381e717b4cdebb75f90dc4c62120e8d607f2a98c
 Author: huangtianhua <huangtianhua@huawei.com>

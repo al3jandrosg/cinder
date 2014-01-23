@@ -1,6 +1,6 @@
 [cinder.scheduler.filters]
 CapabilitiesFilter = cinder.openstack.common.scheduler.filters.capabilities_filter:CapabilitiesFilter
-RetryFilter = cinder.scheduler.filters.retry_filter:RetryFilter
+RetryFilter = cinder.openstack.common.scheduler.filters.ignore_attempted_hosts_filter:IgnoreAttemptedHostsFilter
 CapacityFilter = cinder.scheduler.filters.capacity_filter:CapacityFilter
 JsonFilter = cinder.openstack.common.scheduler.filters.json_filter:JsonFilter
 AvailabilityZoneFilter = cinder.openstack.common.scheduler.filters.availability_zone_filter:AvailabilityZoneFilter
@@ -8,4 +8,8 @@ AvailabilityZoneFilter = cinder.openstack.common.scheduler.filters.availability_
 [cinder.scheduler.weights]
 ChanceWeigher = cinder.scheduler.weights.chance:ChanceWeigher
 CapacityWeigher = cinder.scheduler.weights.capacity:CapacityWeigher
+AllocatedCapacityWeigher = cinder.scheduler.weights.capacity:AllocatedCapacityWeigher
+
+[console_scripts]
+cinder-rootwrap = oslo.rootwrap.cmd:main
 
