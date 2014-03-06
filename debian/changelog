@@ -1,3 +1,23 @@
+cinder (1:2014.1~b3-0ubuntu1) trusty; urgency=medium
+
+  [ Chuck Short ]
+  * debian/patches/fix-requirements.patch: Refreshed. 
+  * debian/control: Bump python-keystoneclient to 0.4.2.
+  * debian/patches/skip-tests.patch: Temporarily skip
+    testlefthand tests since the needed python library hasnt been 
+    packaged yet.
+
+  [ James Page ]
+  * d/p/fix-requirements.patch: Refreshed.
+  * d/control,d/p/series/skip-tests.patch: Add BD on python-hplefthandclient,
+    bump version requirement on python-hp3parclient to >= 3.0.0 and drop
+    patch that skips hplefthandclient tests.
+
+  [ Corey Bryant ]
+  * New upstream release.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 06 Mar 2014 13:16:02 -0500
+
 cinder (1:2014.1~b2-0ubuntu1) trusty; urgency=low
 
   [ James Page ]
