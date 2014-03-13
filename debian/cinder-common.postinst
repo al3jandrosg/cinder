@@ -1,11 +1,11 @@
 #!/bin/sh -e
 
 if [ "$1" = "configure" ]; then
-    if ! getenv group cinder > /dev/null 2>&1; then
+    if ! getent group cinder > /dev/null 2>&1; then
         addgroup --system cinder >/dev/null
     fi
 
-    if ! getenv passwd cinder > /dev/null 2>&1; then
+    if ! getent passwd cinder > /dev/null 2>&1; then
         adduser --system --home /var/lib/cinder --ingroup cinder --no-create-home \
             --shell /bin/false cinder
     fi
@@ -19,7 +19,8 @@ if [ "$1" = "configure" ]; then
     chmod 0755 /etc/cinder/rootwrap.d
     chown root:root /etc/cinder/rootwrap.conf
 
-    if ! grep -q sql_connection /etc/cinder/cinder.conf
+    if ! grep -qE "^(sql_)?connection.*" /etc/cinder/cinder.conf || \
+         grep -qE "^(sql_)?connection.*sqlite.*" /etc/cinder/cinder.conf
     then
         su -s /bin/sh -c 'cinder-manage db sync' cinder
     fi

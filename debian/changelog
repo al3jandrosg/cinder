@@ -1,3 +1,11 @@
+cinder (1:2014.1~b3-0ubuntu2) trusty; urgency=medium
+
+  * d/cinder-common.postinst: Correct use of getent (LP: #1224275). 
+  * d/cinder-common.postinst: Tidy detection of local sqlite database use
+    for db sync operations (LP: #1290423).
+
+ -- James Page <james.page@ubuntu.com>  Thu, 13 Mar 2014 10:11:20 +0000
+
 cinder (1:2014.1~b3-0ubuntu1) trusty; urgency=medium
 
   [ Chuck Short ]
