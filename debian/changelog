@@ -1,3 +1,13 @@
+cinder (1:2014.1~b3-0ubuntu3) trusty; urgency=medium
+
+  * d/p/fixup-rbd-str-handling.patch: Cherry pick fix from upstream
+    Gerrit to resolve issue deleting Ceph volumes and snapshots
+    (LP: #1292433).
+  * d/control,rules: Use upstream run_tests.sh wrapper to execute unit tests,
+    add subunit to BD's to ensure output is correctly formatted.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 14 Mar 2014 11:19:16 +0000
+
 cinder (1:2014.1~b3-0ubuntu2) trusty; urgency=medium
 
   * d/cinder-common.postinst: Correct use of getent (LP: #1224275). 

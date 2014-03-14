@@ -43,6 +43,7 @@ Build-Depends-Indep:
  python-taskflow,
  python-testtools (>= 0.9.32),
  python-webob (>= 1.2.3),
+ subunit,
  testrepository (>= 0.0.17)
 Standards-Version: 3.9.4
 Homepage: http://launchpad.net/cinder
