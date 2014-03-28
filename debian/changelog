@@ -1,3 +1,12 @@
+cinder (1:2014.1~rc1-0ubuntu1) trusty; urgency=medium
+
+  * New upstream release (LP: #1299010).
+  * debian/patches/fixup-rbd-str-handling.patch: Dropped no longer needed. 
+  * debian/patches/fix-requirements.patch: Rediffed. 
+  * debian/control: Add python-oslo.messaging.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 28 Mar 2014 09:48:21 -0400
+
 cinder (1:2014.1~b3-0ubuntu3) trusty; urgency=medium
 
   * d/p/fixup-rbd-str-handling.patch: Cherry pick fix from upstream

@@ -1,6 +1,73 @@
 CHANGES
 =======
 
+2014.1.rc1
+----------
+
+* Imported Translations from Transifex
+* Changes to correct name of missing NetApp license
+* NetApp cmode nfs: Fix QOS extra spec
+* NetApp cmode iscsi: Fix QOS extra spec
+* Fixes a problem in attach volume in EMC driver
+* Update config generator from OSLO
+* Pass the mirrorlog option as two arguments
+* Netapp iscsi: allow snapshots with unspecified block range
+* Serialize the notification payload
+* Updated from global requirements
+* Adds xiv_chap to xiv/ds8k driver configuration
+* vmware: Use SessionIsActive to find stale session
+* init_host should be called before RPC consumer is created
+* Add RequestContextSerializer for rpc notifications
+* Allow NetApp iSCSI driver to sub-clone large volumes
+* Can't force-create snapshot by an non-exist error volume
+* Simplify test force delete snapshot unit test
+* resolve KeyError for IBM Storwize/SVC driver
+* Remove unused method from NetApp iscsi driver
+* vmware: Remove pbm_default_policy config option
+* VMware: Implement vmdk extend_volume
+* Fix create_export/remove_export in driver.py
+* Imported Translations from Transifex
+* Ensure name is utf-8 when deleting rbd vol or snap
+* Use six.moves.urllib.parse instead of urlparse
+* Use the error_out_volume from flow common instead
+* Revert "Re-enable lazy translation"
+* Sync latest Oslo code for imageutils
+* Don't send untextified exc to webob
+* Imported Translations from Transifex
+* Updated from global requirements
+* Use debug level logging during unit tests
+* Sync log.py from oslo-incubator
+* Fixed some FCZM unit tests hacking issues
+* Add missing config values for vmwware_vmdk test
+* cinder-rtstool imports a not existing module
+* get volumes with limit and filters does not work
+* Fixes cinder-volume service startup on Windows
+* Fixed nova VM live migration issue with 3PAR
+* Adding domain to context
+* Switch over to oslosphinx
+* Add libffi-dev to list of packages to install in dev env
+* VMware: Take the volume size from the user input
+* Fix exception message of CoraidESMConfigureError
+* vmware: Mark VMware ESX vmdk driver as deprecated
+* Fixes ssh-injection error while using chap authentication
+* Generate config samples for oslo.messaging
+* Add conversion types in some strings
+* Port to oslo.messaging
+* Updated from global requirements
+* get volumes API does not handle limit=0
+* EMC SMI-S delete snapshot unit test takes too long
+* 3PAR: Support extend volume based on snapshot
+* Fixed spelling error - accomodate to accommodate
+* GPFS unit tests: increased coverage, uses mock
+* Clean Up EMC VNX Direct Driver in Cinder
+* gpfs driver: fix logging problems
+* Convert cinder utils tests to use mock
+* Include next link when default limit is reached
+* Re-enable lazy translation
+* Sync latest Oslo config code for i18n
+* Fix HP LeftHand Performance issue with AO
+* NetApp implementation for copy offload in clustered nfs driver
+
 2014.1.b3
 ---------
 
@@ -14,6 +81,10 @@ CHANGES
 * Updated from global requirements
 * Fix docstring ordering
 * Typo corrections for test files in cinder
+* vmware: PBM wsdl file configuration
+* vmware: default global pbm policy configuration
+* vmware: check datastore availability during create
+* vmware: Storage policy based volume placement
 * Add EMC VNX Direct Driver in Cinder
 * gpfs volume driver backup file access fixes
 * Check if snapshot is deleted cleanly
@@ -55,8 +126,10 @@ CHANGES
 * Fix race in test_delete_backup
 * Driver for IBM SONAS and Storwize V7000 Unified
 * Fix webob.exc.HTTPForbidden parameter miss
+* Add snapshot related data to limits api
 * Storwize/SVC: Change volume copy task to async
 * Fix FC connection handling in the storwize driver
+* Sync log.py from oslo
 * Replace httplib.HTTPSConnection in unittests
 * Add support for FC zone lifecycle management
 * Give a way to save why a service has been disabled
@@ -75,9 +148,11 @@ CHANGES
 * IBM XIV and DS8000 Driver reorganizing (IBM dir)
 * Sync oslo imageutils, strutils to cinder
 * GPFS: Implement volume backup and restore
+* Fix missing package dependency for requests
 * test_volume unittest fails if ran only this module
 * Fix invalid facilities documented in rootwrap.conf
 * Use six.moves cStringIO instead of cStringIO
+* NetApp api fix structure conversion methods
 * Add support for backing up volume metadata
 * Imported Translations from Transifex
 * Replace assertEqual(None, *) with assertIsNone in tests
