@@ -1,6 +1,20 @@
 CHANGES
 =======
 
+2014.1.rc2
+----------
+
+* Updated from global requirements
+* Append nas_opts to IBMNAS_NFSDriver configuration
+* Change iogrp property when retyping for Storwize/SVC
+* Adds ionice command permutations to rootwrap filters
+* _translate_from_glance() can cause an unnecessary HTTP request
+* Allow deprecated volume update keys in v2
+* GlusterFS: Delete volume-<uuid>.info file when volume is deleted
+* Fixes cinder volume delete on Windows
+* Fix Jenkins translation jobs
+* Fixes cinder volume attach on Windows
+
 2014.1.rc1
 ----------
 
