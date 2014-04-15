@@ -1,3 +1,9 @@
+cinder (1:2014.1~rc3-0ubuntu1) trusty; urgency=medium
+
+  * New release candidate (LP: #1299010).
+
+ -- Chuck Short <zulcss@ubuntu.com>  Tue, 15 Apr 2014 09:02:40 -0400
+
 cinder (1:2014.1~rc2-0ubuntu1) trusty; urgency=medium
 
   * New upstream release (LP: #1299010).

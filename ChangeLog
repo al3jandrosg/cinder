@@ -1,6 +1,12 @@
 CHANGES
 =======
 
+2014.1.rc3
+----------
+
+* driver.create/remove_export() require elevated ctx
+* Check for silent failure of tgtadm remove
+
 2014.1.rc2
 ----------
 
