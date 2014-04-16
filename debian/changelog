@@ -1,3 +1,9 @@
+cinder (1:2014.1-0ubuntu1) trusty; urgency=medium
+
+  * New upstream release (LP: #1299055).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 16 Apr 2014 13:06:37 -0400
+
 cinder (1:2014.1~rc3-0ubuntu1) trusty; urgency=medium
 
   * New release candidate (LP: #1299010).
