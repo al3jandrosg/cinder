@@ -28,6 +28,7 @@ from cinder import compute
 from cinder import db
 from cinder import exception
 from cinder.image import image_utils
+from cinder.openstack.common import fileutils
 from cinder.openstack.common import log as logging
 from cinder.openstack.common import processutils
 from cinder import units
@@ -293,13 +294,14 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
 
         self._ensure_share_mounted(volume['provider_location'])
 
-        mounted_path = self.local_path(volume)
+        volume_dir = self._local_volume_dir(volume)
+        mounted_path = os.path.join(volume_dir,
+                                    self.get_active_image_from_info(volume))
 
         self._execute('rm', '-f', mounted_path, run_as_root=True)
 
-        info_path = mounted_path + '.info'
-        if os.path.exists(info_path):
-            os.remove(info_path)
+        info_path = self._local_path_volume_info(volume)
+        fileutils.delete_if_exists(info_path)
 
     @utils.synchronized('glusterfs', external=False)
     def create_snapshot(self, snapshot):
@@ -1038,7 +1040,7 @@ class GlusterfsDriver(nfs.RemoteFsDriver):
                 self._ensure_share_mounted(share)
                 self._mounted_shares.append(share)
             except Exception as exc:
-                LOG.warning(_('Exception during mounting %s') % (exc,))
+                LOG.error(_('Exception during mounting %s') % (exc,))
 
         LOG.debug(_('Available shares: %s') % self._mounted_shares)
 

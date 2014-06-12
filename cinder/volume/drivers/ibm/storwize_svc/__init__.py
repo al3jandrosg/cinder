@@ -207,7 +207,7 @@ class StorwizeSVCDriver(san.SanDriver):
 
         # if vdiskcopy exists in database, start the looping call
         if len(self._vdiskcopyops) >= 1:
-            self._vdiskcopyops_loop = loopingcall.LoopingCall(
+            self._vdiskcopyops_loop = loopingcall.FixedIntervalLoopingCall(
                 self._check_volume_copy_ops)
             self._vdiskcopyops_loop.start(interval=self.VDISKCOPYOPS_INTERVAL)
 
@@ -409,9 +409,21 @@ class StorwizeSVCDriver(san.SanDriver):
                     LOG.error(msg)
                     raise exception.VolumeBackendAPIException(data=msg)
                 if not vol_opts['multipath']:
-                    if preferred_node_entry['WWPN'] in conn_wwpns:
-                        properties['target_wwn'] = preferred_node_entry['WWPN']
+                    # preferred_node_entry can have a list of WWPNs while only
+                    # one WWPN may be available on the storage host.  Here we
+                    # walk through the nodes until we find one that works,
+                    # default to the first WWPN otherwise.
+                    for WWPN in preferred_node_entry['WWPN']:
+                        if WWPN in conn_wwpns:
+                            properties['target_wwn'] = WWPN
+                            break
                     else:
+                        LOG.warning(_('Unable to find a preferred node match '
+                                    'for node %(node)s in the list of '
+                                    'available WWPNs on %(host)s. '
+                                    'Using first available.') %
+                                    {'node': preferred_node,
+                                     'host': host_name})
                         properties['target_wwn'] = conn_wwpns[0]
                 else:
                     properties['target_wwn'] = conn_wwpns
@@ -419,6 +431,10 @@ class StorwizeSVCDriver(san.SanDriver):
                 i_t_map = self._make_initiator_target_map(connector['wwpns'],
                                                           conn_wwpns)
                 properties['initiator_target_map'] = i_t_map
+
+                # specific for z/VM, refer to cinder bug 1323993
+                if "zvm_fcp" in connector:
+                    properties['zvm_fcp'] = connector['zvm_fcp']
         except Exception:
             with excutils.save_and_reraise_exception():
                 self.terminate_connection(volume, connector)
@@ -459,6 +475,16 @@ class StorwizeSVCDriver(san.SanDriver):
 
         vol_name = volume['name']
         if 'host' in connector:
+            # maybe two hosts on the storage, one is for FC and the other for
+            # iSCSI, so get host according to protocol
+            vol_opts = self._get_vdisk_params(volume['volume_type_id'])
+            connector = connector.copy()
+            if vol_opts['protocol'] == 'FC':
+                connector.pop('initiator', None)
+            elif vol_opts['protocol'] == 'iSCSI':
+                connector.pop('wwnns', None)
+                connector.pop('wwpns', None)
+
             host_name = self._helpers.get_host_from_connector(connector)
             if host_name is None:
                 msg = (_('terminate_connection: Failed to get host name from'
@@ -492,6 +518,13 @@ class StorwizeSVCDriver(san.SanDriver):
 
     def delete_volume(self, volume):
         self._helpers.delete_vdisk(volume['name'], False)
+
+        if volume['id'] in self._vdiskcopyops:
+            del self._vdiskcopyops[volume['id']]
+
+            if not len(self._vdiskcopyops):
+                self._vdiskcopyops_loop.stop()
+                self._vdiskcopyops_loop = None
 
     def create_snapshot(self, snapshot):
         ctxt = context.get_admin_context()
@@ -567,7 +600,7 @@ class StorwizeSVCDriver(san.SanDriver):
 
         # We added the first copy operation, so start the looping call
         if len(self._vdiskcopyops) == 1:
-            self._vdiskcopyops_loop = loopingcall.LoopingCall(
+            self._vdiskcopyops_loop = loopingcall.FixedIntervalLoopingCall(
                 self._check_volume_copy_ops)
             self._vdiskcopyops_loop.start(interval=self.VDISKCOPYOPS_INTERVAL)
 
@@ -628,7 +661,16 @@ class StorwizeSVCDriver(san.SanDriver):
         ctxt = context.get_admin_context()
         copy_items = self._vdiskcopyops.items()
         for vol_id, copy_ops in copy_items:
-            volume = self.db.volume_get(ctxt, vol_id)
+            try:
+                volume = self.db.volume_get(ctxt, vol_id)
+            except Exception:
+                LOG.warn(_('Volume %s does not exist.'), vol_id)
+                del self._vdiskcopyops[vol_id]
+                if not len(self._vdiskcopyops):
+                    self._vdiskcopyops_loop.stop()
+                    self._vdiskcopyops_loop = None
+                continue
+
             for copy_op in copy_ops:
                 try:
                     synced = self._helpers.is_vdisk_copy_synced(volume['name'],
@@ -675,6 +717,7 @@ class StorwizeSVCDriver(san.SanDriver):
         else:
             vol_type = None
 
+        self._check_volume_copy_ops()
         new_op = self._helpers.add_vdisk_copy(volume['name'], dest_pool,
                                               vol_type, self._state,
                                               self.configuration)
@@ -696,6 +739,11 @@ class StorwizeSVCDriver(san.SanDriver):
                      host['host'] is its name, and host['capabilities'] is a
                      dictionary of its reported capabilities.
         """
+        def retype_iogrp_property(volume, new, old):
+            if new != old:
+                self._helpers.change_vdisk_iogrp(volume['name'],
+                                                 self._state, (new, old))
+
         LOG.debug(_('enter: retype: id=%(id)s, new_type=%(new_type)s,'
                     'diff=%(diff)s, host=%(host)s') % {'id': volume['id'],
                                                        'new_type': new_type,
@@ -725,24 +773,27 @@ class StorwizeSVCDriver(san.SanDriver):
             need_copy = True
 
         if need_copy:
+            self._check_volume_copy_ops()
             dest_pool = self._helpers.can_migrate_to_host(host, self._state)
             if dest_pool is None:
                 return False
 
-            if old_opts['iogrp'] != new_opts['iogrp']:
-                self._helpers.change_vdisk_iogrp(volume['name'], self._state,
-                                                 (new_opts['iogrp'],
-                                                  old_opts['iogrp']))
-
-            new_op = self._helpers.add_vdisk_copy(volume['name'], dest_pool,
-                                                  new_type, self._state,
-                                                  self.configuration)
-            self._add_vdisk_copy_op(ctxt, volume, new_op)
+            retype_iogrp_property(volume, new_opts['iogrp'], old_opts['iogrp'])
+            try:
+                new = self._helpers.add_vdisk_copy(volume['name'], dest_pool,
+                                                   new_type, self._state,
+                                                   self.configuration)
+                self._add_vdisk_copy_op(ctxt, volume, new)
+            except exception.VolumeDriverException:
+                # roll back changing iogrp property
+                retype_iogrp_property(volume, old_opts['iogrp'],
+                                      new_opts['iogrp'])
+                msg = (_('Unable to retype:  A copy of volume %s exists. '
+                         'Retyping would exceed the limit of 2 copies.'),
+                       volume['id'])
+                raise exception.VolumeDriverException(message=msg)
         else:
-            if old_opts['iogrp'] != new_opts['iogrp']:
-                self._helpers.change_vdisk_iogrp(volume['name'], self._state,
-                                                 (new_opts['iogrp'],
-                                                  old_opts['iogrp']))
+            retype_iogrp_property(volume, new_opts['iogrp'], old_opts['iogrp'])
 
             self._helpers.change_vdisk_options(volume['name'], vdisk_changes,
                                                new_opts, self._state)

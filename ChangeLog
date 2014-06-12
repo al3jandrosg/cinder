@@ -1,25 +1,110 @@
 CHANGES
 =======
 
-2014.1
-------
+2014.2.b1
+---------
 
-* driver.create/remove_export() require elevated ctx
-* Check for silent failure of tgtadm remove
-
-2014.1.rc2
-----------
-
+* Delete image on upload-to-image failure
+* Ensure flushing of IO prior to removing FC device
+* Fixed the comment spelling error - voumes to volumes
+* Remove Quota Exception Stack Traces from Cinder Logs
+* Use os.urandom in volume transfer
+* Make begin_detaching fail if volume not "in-use"
+* 3PAR volume detach with host in a host set
+* Update cinder.conf
+* Fix a message format error in migration cleanup
+* Add support for z/VM driver
+* Handle volumes no longer existing in resume delete
+* Fix ISER scan retry option
+* Only create volume with an active image
 * Updated from global requirements
-* Append nas_opts to IBMNAS_NFSDriver configuration
+* Ensure metadata is saved before updating volume status
+* Use error instead of warning to log mount exc
+* Allow host config to be overriden in backend
+* Remove all mostly untranslated PO files
+* Updated from global requirements
+* Remove create_from* functor jump table
+* SSHPool in utils should allow customized host key missing policy
+* Check whether O_DIRECT is supported to iflag and oflag separately
+* Set volume usage audit period to not NoneType
+* BrcdFCSanLookupService should allow customize host key and policy
+* NetApp fix eseries concurrent vol map failure
+* NetApp fix attach fail for already mapped volume
+* Imported Translations from Transifex
+* Convert SolidFire Capacity response to GiB
+* eliminate the need for hplefthandclient in tests
+* Fix solaris_execute in SolarisISCSIDriver
+* Fix for solidfire driver to use reserved_percentage
+* Fix retyping volume that has volume type None
+* eliminate the need for hp3parclient in tests
+* Add missing methods to FakeISCSIDriver
+* Add mailmap entry
+* Fix wrong exception reference
+* Properly initialize rpc in cinder-volume-usage-audit
+* Add exception handling for copy_volume_to_image()
+* NetApp NFS: Do not reference dst_img_local before assignment
+* Remove explicit dependency on amqplib
+* Fixes an issue with 3PAR attach
+* Ensure that lun_id is an int
+* Implement validate_connector in FibreChannelDriver
+* Fix broken version responses
+* Fix double "the" in Cinder quota warning
+* Fixed 3PAR driver issue finding correct vlun
+* Storwize/SVC driver detach volume failed
+* Add disabled kwarg to service_get_all_by_topic
+* Add rally job
+* Improve consistency of help strings
+* Remove unused volume instance_uuid methods
+* Cinder list does not filter admin metadata
+* Specify lld in tgt config backends
+* Replace tearDown with addCleanup - Part 2
+* Keep volume available if retype fails due to quota
+* Remove unused 3PAR driver method
+* Fix bad indentation in tests
+* Add set-bootable command
+* Fix handling multiple WWPNs on preferred FC node
+* Fallback to None on missing Glance image attrs
+* Remove old driver mappings from Havana
+* Adjust sample config for keystoneclient 0.8.0 release
+* Remove unused reservation methods from db.api
+* Re-raise exceptions in upload-to-image
+* Update Cinder dev doc
+* vmware: Fix problems with VIM API retry logic
+* Create volume fail when image id is ""
+* Use cached db object in volume_mig_status ext
+* Add exception catch if Storwize/SVC driver failed when retyping
+* Replace tearDown with addCleanup - Part 5
+* Replace tearDown with addCleanup - Part 4
+* Enable flake8 H303,H304 checking
+* Storwize/SVC driver crashes when check volume copy status
+* Switch over to FixedIntervalLoopingCall
+* Correct metadata ordering issue in tests
+* driver.create/remove_export() require elevated context
+* Inform about instance_uuid in volume usage notification
+* Check for silent failure of tgtadm remove
+* GlusterFS: Delete active snapshot file on volume delete
+* Fixes HP LeftHand driver with Paramiko 1.13.0
+* Fixes cinder error state volume delete on Windows
+* Added unit test cases for _is_share_eligible in NFS driver
+* Log initialize_connection error before remove_export
+* Force detach should only be an admin api
+* Updated from global requirements
 * Change iogrp property when retyping for Storwize/SVC
-* Adds ionice command permutations to rootwrap filters
-* _translate_from_glance() can cause an unnecessary HTTP request
+* Check that all po/pot files are valid
 * Allow deprecated volume update keys in v2
+* _translate_from_glance() can cause an unnecessary HTTP request
+* Adds ionice command permutations to rootwrap filters
+* Append nas_opts to IBMNAS_NFSDriver configuration
+* Enable flake8 F841 checking
+* GET details REST API next link missing 'details'
 * GlusterFS: Delete volume-<uuid>.info file when volume is deleted
-* Fixes cinder volume delete on Windows
 * Fix Jenkins translation jobs
+* Fixes HostTestCase failures due to slow test run
+* Imported Translations from Transifex
+* Updated from global requirements
+* Fixes cinder volume delete on Windows
 * Fixes cinder volume attach on Windows
+* Open Juno development
 
 2014.1.rc1
 ----------
@@ -31,9 +116,12 @@ CHANGES
 * Fixes a problem in attach volume in EMC driver
 * Update config generator from OSLO
 * Pass the mirrorlog option as two arguments
+* Import request_id middleware bug fix from oslo
 * Netapp iscsi: allow snapshots with unspecified block range
 * Serialize the notification payload
+* Disable oslo.messaging debug logs
 * Updated from global requirements
+* Update tests to use CONF.set_override
 * Adds xiv_chap to xiv/ds8k driver configuration
 * vmware: Use SessionIsActive to find stale session
 * init_host should be called before RPC consumer is created
@@ -41,7 +129,9 @@ CHANGES
 * Allow NetApp iSCSI driver to sub-clone large volumes
 * Can't force-create snapshot by an non-exist error volume
 * Simplify test force delete snapshot unit test
+* ceph backup driver: improve log messages
 * resolve KeyError for IBM Storwize/SVC driver
+* vmware: Remove deprecation warning from VC driver
 * Remove unused method from NetApp iscsi driver
 * vmware: Remove pbm_default_policy config option
 * VMware: Implement vmdk extend_volume
