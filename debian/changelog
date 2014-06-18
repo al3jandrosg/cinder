@@ -1,3 +1,11 @@
+cinder (1:2014.2~b1-0ubuntu2) utopic; urgency=medium
+
+  * SECURITY UPDATE: specify /etc/nova/rootwrap.conf for use with
+    nova-rootwrap
+    - CVE-2013-1068 (LP: #1185019) 
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 18 Jun 2014 11:37:45 -0400
+
 cinder (1:2014.2~b1-0ubuntu1) utopic; urgency=medium
 
   * New upstream release.
