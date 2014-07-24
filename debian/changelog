@@ -1,3 +1,15 @@
+cinder (1:2014.2~b2-0ubuntu1) utopic; urgency=medium
+
+  * New upstream release.
+  * Clean up dependencies:
+    - debian/control: Dropped python-d2to1, python-hp3parclient,
+      python-hplefthandclient, python-lockfile, python-amqplib
+    - debian/control: Add python-oslosphinx, python-requests,
+      python-hacking, python-oslo.db.
+  * debian/patches/fix-requirements.patch: Refreshed.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Thu, 24 Jul 2014 13:44:04 -0400
+
 cinder (1:2014.2~b1-0ubuntu2) utopic; urgency=medium
 
   * SECURITY UPDATE: specify /etc/nova/rootwrap.conf for use with

@@ -1,13 +1,15 @@
 diff --git a/requirements.txt b/requirements.txt
-index f7ccf57..8cd4d25 100644
+index 9a94145..93dfd5a 100644
 --- a/requirements.txt
 +++ b/requirements.txt
-@@ -21,7 +21,6 @@ python-swiftclient>=2.0.2
+@@ -22,7 +22,6 @@ python-swiftclient>=2.0.2
  requests>=1.1
- Routes>=1.12.3
- taskflow>=0.1.3,<0.3
+ Routes>=1.12.3,!=2.0
+ taskflow>=0.3,<0.4
 -rtslib-fb>=2.1.39
- six>=1.6.0
- SQLAlchemy>=0.7.8,<=0.9.99
+ six>=1.7.0
+ SQLAlchemy>=0.8.4,!=0.9.5,<=0.9.99
  sqlalchemy-migrate>=0.9.1
+-- 
+2.0.1
 

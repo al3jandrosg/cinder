@@ -1,17 +1,138 @@
 CHANGES
 =======
 
+2014.2.b2
+---------
+
+* Implements new 'bootable' option for manage existing volume
+* Fixes Cinder volume upload to image on windows
+* Add explicit import of _ to hp_3par_fc and iscsi
+* Switch to use oslo.db
+* Add additional explicit imports of _ where needed
+* Fix failure of source volume deletion in migrate_volume_completion
+* Remove hard coded reference from gettextutils.py
+* Enable lazy translation for Cinder
+* Explicitly import _() in Cinder code
+* Fix performance issues with brocade zone driver
+* Don't leave snapshots on the floor
+* Add some log info for NoValidHost
+* Use immutable default values for args
+* Update cinder generate_sample script
+* XIV volume manage/unmanage support
+* Add affinity/anti-affinity filters
+* Mock out time.sleep in storwize unit tests
+* Fix the section name in CONTRIBUTING.rst
+* Cinder-api service throws error on SIGHUP signal
+* Clean up base Volume Driver
+* Fixes EqualLogic volume live migration
+* Correct misspelled word
+* Remove definition of Python Source Code Encodings
+* Fixed some typos in the cinder codebase
+* Sync gettextutils.py from oslo-incubator
+* Use PyCrypto to generate randomness passwords
+* Remove $sqlite_db from default database connection
+* Sync processutils and log from oslo
+* Configure write cache option of tgtd iscsi driver
+* Enhance docstring for iscsi_helper
+* Updated from global requirements
+* Ensure FC ZoneManager is called
+* Remove cinder.context warning logging
+* sync periodic_task fix from incubator
+* Slow down Storwize driver initialization
+* Updated from global requirements
+* Imported Translations from Transifex
+* Imported Translations from Transifex
+* volume_image_metadata missing from volume list
+* Correct lvm_mirrors help message
+* Ceph rbd volume manage/unmanage support
+* Enable E121,E122,E123,E126,E128 hacking rules
+* Replace tearDown with addCleanup - Part 3
+* Fix begin_detach logic
+* Use (# of CPUs) osapi_volume_workers by default
+* Restore osapi_volume_workers config option
+* Fix host option isn't set when using multiple backend
+* Add optional_args to fix Volume Import failure
+* 3PAR Only remove FC Zone on last volume detach
+* Ensure rbd connect exception is properly caught
+* Add cinder-manage cmd to update host column
+* Add cinder volume driver support for Nimble Storage
+* Sync processutils from oslo with deps
+* Synced jsonutils from oslo-incubator
+* Enable hacking rule E111,E112,E113
+* Bump minimum hacking version to 0.9.2
+* Only warn about deprecation warnings once
+* Fix dropped exception for create_export in vol manager
+* Misuse of i18n log translation to output error message
+* Support Volume Num Weighter
+* Fix docstring for snapshots API
+* Don't use ModelBase.save() inside of transaction
+* Fix unsaved exception in backup/drivers
+* 3PAR volume manage/unmanage support
+* Add cgroups related commands to rootwrap filters
+* Use a task subclass instead of a functor + task wrapper
+* Fix BrcdFCSANlookupService to iterate multiple switches
+* GlusterFS: Handle deletion of snapshot with no backing file
+* Fixed data copy issue of volume/driver.py
+* Make rbd driver string encoding checks consistent
+* Remove check_volume_az_zone functor and associated passing
+* Minor cleanups in test_volume
+* Fix retyping attached volumes requiring migration
+* Update _resize_volume_file() to support appropriate permissions
+* test_storwize_vdisk_copy_ops fails if green thread context switch
+* VMware:Fix params for copy-image-to-volume
+* VMware: Optional create backing parameters
+* Fixes cinder volume from snapshot on Windows
+* Fixes cinder volume create on Windows Server 2012 R2
+* Fixes cinder volume from image on Windows
+* Use oslo-incubator module units
+* Attach log listeners to other engines
+* Adding filter options to backup list
+* Remove global conf settings from iscsi helper
+* Add genconfig tox job for sample config file generation
+* Fix nfs_shares config file parsing of spaces
+* GlusterFS: Various unit test improvements
+* vmware: Force chunked transfer for upload-to-image
+* Sync the latest common db code from oslo
+* Fix order dependency of admin metadata
+* GlusterFS tests: Mock out compute, don't load novaclient
+* Updated from global requirements
+* debug level logs should not be translated
+* Implement extend volume in NFS driver
+* Fixes an issue with 'dd' bug from Illumos repo
+* Handle the case where az is disabled/removed
+* I/O rate limit for volume copy with qemu-img convert
+* I/O rate limit for volume copy with dd
+* glusterfs: Honor mount options when restarting cinder service
+* Add keyword argument missing at some exc.HTTPError subclass
+* Made provision for providing optional arguments
+* Removes unecessary call to rbd.Image
+* Add task/flow listener support around the volume api flow
+* Retry lvremove with ignore_suspended_devices
+* Allow reset-state on attach and migration fields
+* Implements HDS-Cinder HNAS Drivers
+* vmware: Fixes VMDK volume incompatibility issue
+* Remove unused oslo module and adjust opentstack-common.conf
+
 2014.2.b1
 ---------
 
+* Copy custom properties to image from volume
+* Add strip size support to rbd driver
+* Fix log capturing fixture
+* Fix Brocade FC driver's use of the fc_fabric_names
+* LIO: Don't add ACL for local initiator name
 * Delete image on upload-to-image failure
 * Ensure flushing of IO prior to removing FC device
 * Fixed the comment spelling error - voumes to volumes
 * Remove Quota Exception Stack Traces from Cinder Logs
 * Use os.urandom in volume transfer
+* Remove check_{attach,detach} from volumes API
 * Make begin_detaching fail if volume not "in-use"
+* hp_lefthand_rest_proxy no handler for logger during tests
 * 3PAR volume detach with host in a host set
 * Update cinder.conf
+* Sync periodic_task from oslo-incubator
+* Remove second get call to list/show volumes
 * Fix a message format error in migration cleanup
 * Add support for z/VM driver
 * Handle volumes no longer existing in resume delete
@@ -19,6 +140,7 @@ CHANGES
 * Only create volume with an active image
 * Updated from global requirements
 * Ensure metadata is saved before updating volume status
+* Add XML deserializer for qos_manage delete_keys API
 * Use error instead of warning to log mount exc
 * Allow host config to be overriden in backend
 * Remove all mostly untranslated PO files
@@ -40,6 +162,8 @@ CHANGES
 * Add missing methods to FakeISCSIDriver
 * Add mailmap entry
 * Fix wrong exception reference
+* Limit formatting routes when adding resources
+* Use oslo network utils function to set tcp_keepalive
 * Properly initialize rpc in cinder-volume-usage-audit
 * Add exception handling for copy_volume_to_image()
 * NetApp NFS: Do not reference dst_img_local before assignment
@@ -49,6 +173,7 @@ CHANGES
 * Implement validate_connector in FibreChannelDriver
 * Fix broken version responses
 * Fix double "the" in Cinder quota warning
+* CinderException args to strings when exceptions
 * Fixed 3PAR driver issue finding correct vlun
 * Storwize/SVC driver detach volume failed
 * Add disabled kwarg to service_get_all_by_topic
@@ -128,6 +253,7 @@ CHANGES
 * Add RequestContextSerializer for rpc notifications
 * Allow NetApp iSCSI driver to sub-clone large volumes
 * Can't force-create snapshot by an non-exist error volume
+* Remove rootwrap module
 * Simplify test force delete snapshot unit test
 * ceph backup driver: improve log messages
 * resolve KeyError for IBM Storwize/SVC driver
@@ -137,6 +263,7 @@ CHANGES
 * VMware: Implement vmdk extend_volume
 * Fix create_export/remove_export in driver.py
 * Imported Translations from Transifex
+* vmware:Ignore inaccessible/inMaintenance datastore
 * Ensure name is utf-8 when deleting rbd vol or snap
 * Use six.moves.urllib.parse instead of urlparse
 * Use the error_out_volume from flow common instead
