@@ -1,3 +1,16 @@
+cinder (1:2014.2~b3-0ubuntu1) utopic; urgency=medium
+
+  * New upstream version (LP: #1366146)
+  * debian/cinder-common.install: Removed cinder-rpc-zmq-receiver.
+  * debian/cinder-volume.install: Removed cinder-clear-rabbit-queues.
+  * debian/control: Add python-oslo.i18n.
+  * debian/control: Add python-osprofiler.
+  * debian/patches/no-barbican.patch: Dont use python-barbican because its
+    not in the archive yet.
+  * debian/rules: Temporarily disable tests.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 05 Sep 2014 15:23:13 -0400
+
 cinder (1:2014.2~b2-0ubuntu1) utopic; urgency=medium
 
   * New upstream release.

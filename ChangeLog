@@ -1,12 +1,149 @@
 CHANGES
 =======
 
+2014.2.b3
+---------
+
+* Fixed typo from 'the the' to 'the'
+* Support Volume Backup Quota
+* Volume Replication implementation for IBM Storwize/SVC
+* Add Fujitsu ETERNUS DX support
+* Pool-aware Scheduler Support
+* Add QoS support to IBM Storwize driver
+* Driver for Fusion-io ioControl Hybrid array
+* Add Cisco FC Zoning plugin to the FC ZoneManager
+* Typo
+* Ignore pylint error 'hashlib' has no shaxxx member
+* Update oslo policy and its dependencies
+* Introduce Hitachi storage volume driver
+* XtremIO cinder iSCSI & FC volume drivers for Juno
+* Consistency Groups
+* Add retype method to xiv/ds8k driver interface
+* Fixes terminate_connection live migration issue
+* Fixing 3PAR excessive FC port usage
+* Sync latest processutils from oslo-incubator
+* Sync latest strutils from oslo-incubator
+* Mock processutils.execute properly in test_ibmnas
+* VMware: Disable suds caching
+* Adds volume replication methods to xiv/ds8k driver interface
+* Pass an empty context to the notifier
+* Add Oracle ZFS Storage Appliance ISCSI Driver
+* Add support in Cinder for volume replication - driver approach
+* EMC VMAX Driver Juno Update
+* Fix duplicate teardown to allow tox upgrade
+* Revert test_rootwrap_filter to avoid python2.6 test failure
+* Allow backup-to-swift to take swift URL from service catalogue
+* Integrate OSprofiler and Cinder
+* Fix variable name in api/v<n>/snapshot.py
+* Honor volume:get policy
+* Extending IBMNAS driver to support NFS based GPFS storage system
+* GlusterFS: Use image_utils for tempfile creation
+* Modify error code compatible with Mac OS
+* Cache snapshots in request for extension
+* Remove redundant temporary_chown from IetAdm
+* Failed to initialize connection
+* Mock out image source file in image_utils tests
+* Provide a quick way to run flake8
+* Ignore No value passed for parameter 'dml' message
+* Create RemoteFSSnapDriver class
+* VMware: Handle exceptions raised by image update
+* Adds barbican keymgr wrapper
+* Imported Translations from Transifex
+* Catch vol not found in SolidFire transfer
+* Fix LOG string formatting in image_utils
+* Change the froce delete volume flage to True
+* Update ref used for notifications
+* HP 3PAR manage_existing with volume-type support
+* Add iSCSI Target objects as independent objects
+* Rewrite ionice command filter using ChainingRegExpFilter
+* Use abstract class for the backup driver interface
+* Put result in quotes
+* Fix exception handling in PureISCSIDriver
+* Catch DBDuplicateEntry instead of IntegrityError
+* Enable import group hacking rule
+* Actually encode the SolidFire json dump result
+* Sync latest oslo-incubator log for debug fixes
+* Enable F402 checks and fix violations
+* Prevent tenant viewing volumes owed by another
+* VMware: Check snapshot and rename backing
+* Fix bad indentation in netapp and san.hp volume drivers
+* Ignore HTTP_PROXY during test requests
+* Issue one SQL statement per execute() call
+* Add ProphetStor DPL Storage server volume driver for Cinder
+* Add timer info for copy operations
+* Make manage.py usable
+* Enable H104, F841 hacking rule and fix violations
+* Enable Swift backup driver for auth 2.0
+* Updated HACKING.rst so that it is accurate
+* Update help strings
+* Add hacking check for use of LOG.audit
+* Imported Translations from Transifex
+* Use oslo.i18n
+* Add CHAP support for 3PAR ISCSI
+* EMC: Fix minor issue in VNX driver and unit tests
+* Do not translate debug messages
+* Fixing LeftHand live migration error
+* Improve regex for _ import hacking check
+* General cleanup of unused objects
+* RPC client lazy initialization
+* Fix snapshot id for snapshot_destroy
+* Use auth_token from keystonemiddleware
+* Fixes wrong usage of mock.assert_not_called()
+* Fix error log level in restore-backup routine
+* Add retry_on_deadlock to db update methods
+* Fix unit test test_import_record_with_verify
+* Change the exception type for Storwize/SVC driver
+* VMware: Update default task_poll_interval value
+* Change logging level AUDIT to INFO
+* Fix solidfire accept_transfer
+* VMware: Volume from non-streamOptimized image
+* Enable checks for E711, E712 and E713
+* Add note that some checks are disabled on purpose
+* VMware:Disk type conversion during clone backing
+* VMware:Support for attaching disk to backing
+* Change 3PAR delete message when volume is busy
+* Move generate_password into volume utils
+* Move SSHPool into ssh_utils.py
+* Fixes migrate_volume_completion
+* Change corrupted spelling mistakes
+* EMC VNX Direct Driver Update for Juno
+* Storwize/SVC can not get the right host
+* Skip incompatible test on OSX
+* Have task/flow logging go to a separate log file
+* fix atom link in XML Version API
+* Update ref used for notifications
+* Fix glance metadata SQL query performance
+* Add return of updated object on update from DB
+* fixing the iSER transport protocol when using LVMISERDriver
+* Add hacking check for vim headers
+* Get updated model info on volume transfer
+* Introduce iSCSI driver for Pure Storage FlashArray
+* Further cleanup of reservations index
+* Sync log from oslo-incubator for isEnabledFor fix
+* Modify the index migration slightly for backport
+* Remove cinder-clear-rabbit-queues
+* Remove cinder-rpc-zmq-receiver
+* Remove reattach function in cinder-manage
+* Set python hash seed to 0 in tox.ini
+* HP 3PAR retype implementation
+* Add index for reservations on (deleted, expire)
+* Remove Hyper-V dependency in the Windows Cinder Volume Driver
+* Fix no handlers could be found issue
+* Add storageHost content to volume messages
+* Add hacking check for explicit import of _
+* Make manage/unmanage admin only
+* Avoid OSError in get_blkdev_major_minor with network filesystems
+* VMware:Support for create disk and disk descriptor
+* Implement import/export for SolidFire Driver
+
 2014.2.b2
 ---------
 
 * Implements new 'bootable' option for manage existing volume
+* Add hacking test
 * Fixes Cinder volume upload to image on windows
 * Add explicit import of _ to hp_3par_fc and iscsi
+* Adds storwize_svc_npiv_compatibility_mode flag to Storwize/SVC driver
 * Switch to use oslo.db
 * Add additional explicit imports of _ where needed
 * Fix failure of source volume deletion in migrate_volume_completion
@@ -20,6 +157,7 @@ CHANGES
 * Update cinder generate_sample script
 * XIV volume manage/unmanage support
 * Add affinity/anti-affinity filters
+* Bump oslo.rootwrap to 1.3.0.0a1 for Cinder
 * Mock out time.sleep in storwize unit tests
 * Fix the section name in CONTRIBUTING.rst
 * Cinder-api service throws error on SIGHUP signal
