@@ -1,3 +1,17 @@
+cinder (1:2014.2~b3-0ubuntu2) utopic; urgency=medium
+
+  [ Chuck Short ]
+  * d/control: Add python-barbicanclient as a dependency.
+  * d/p/no-barbican.patch: Dropped.
+
+  [ James Page ]
+  * d/rules: Re-enable test suite.
+  * d/control: Align versioned dependencies to Juno b3.
+  * d/p/fix-glance-tests.patch: Cherry pick fix from upstream VCS to
+    resolve unit test failures with glance v2 client.
+
+ -- James Page <james.page@ubuntu.com>  Thu, 18 Sep 2014 16:45:51 +0100
+
 cinder (1:2014.2~b3-0ubuntu1) utopic; urgency=medium
 
   * New upstream version (LP: #1366146)
