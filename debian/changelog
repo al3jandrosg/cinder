@@ -1,3 +1,18 @@
+cinder (1:2014.2~rc1-0ubuntu1) utopic; urgency=medium
+
+  [ Chuck Short ]
+  * debian/patches/debian/patches/fix-requirements.patch: Rediffed.
+
+  [ James Page ]
+  * New upstream release candidate:
+    - d/p/fix-glance-tests.patch: Dropped, included upstream.
+    - d/control: Align dependency versions with upstream release.
+  * d/watch: Use tarballs.openstack.org for releases.
+  * d/rules: Run testr directly rather than through run_tests.sh.
+  * d/control: Update maintainer.
+
+ -- James Page <james.page@ubuntu.com>  Wed, 01 Oct 2014 10:00:19 +0100
+
 cinder (1:2014.2~b3-0ubuntu2) utopic; urgency=medium
 
   [ Chuck Short ]

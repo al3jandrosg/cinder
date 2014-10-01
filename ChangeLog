@@ -1,20 +1,108 @@
 CHANGES
 =======
 
+2014.2.rc1
+----------
+
+* Fix race condition in ISCSIConnector disconnect_volume
+* Adds openSUSE support for developer documentation
+* VMware:Unquote folder name for folder exists check
+* VMware: cinder-volume create_session fail at retry
+* Fixing format for log messages
+* Update /etc/cinder/cinder.conf.sample for memcache
+* VMware: Relocate volume to compliant datastore
+* Failed to re-detach volume when volume detached
+* Imported Translations from Transifex
+* IBM Storwize:Failed to retype from non-type to replication enable
+* Fix unnecessary WSGI worker warning at API startup
+* Remove XenAPI driver
+* Add required spaces in log messages
+* Fix ssh_host_key_file default in help and config.sample.conf
+* Downgrade 'infinite' and 'unknown' capacity in weigher
+* Remove unused py33 tox env
+* Add unit test to cinder cgsnapshot api
+* DB migration 25->24 failed when dropping column
+* Allow scheduler pool information to be retrieved
+* Increase the 3PAR hostname length
+* Timeout triggers failures running tempest for ZFSSA driver
+* HP 3PAR drivers should not claim to have 'infinite' space
+* Add tests for consistency groups DB migration
+* Verify requested size in volume.api create
+* Typo "asscoiated" should be "associated"
+* Updated from global requirements
+* Set socket options in correct way
+* HP 3PAR: Allow retype when the old snapshot CPG (3PAR pool) is None
+* NetApp fix for controller preferred path
+* VMware: Add storage profile related unit tests
+* Check replication status failed for non-replication
+* VMware: Implement retype for VMDK driver
+* VMware: Improve datastore selection logic
+* Sync latest strutils from oslo-incubator for mask_password fix
+* Remove executable bits on various files
+* Fix a problem with 'volume list' when 'all_tenants=0'
+* IBMNAS: Remove call to set r/w permissions to all
+* Updated from global requirements
+* Getting iscsi_ip_address from cinder.conf
+* Handle config file with newlines and whitespaces
+* Volume types need to be specified when creating CG
+* Stop using intersphinx
+* Netapp drivers support for pool-aware scheduling
+* coraid: fix snapshot deletion
+* Add reset-state function for backups
+* Add test case for volume_types.py
+* Block sqlalchemy-migrate 0.9.2
+* Destroy Datera export target after detach
+* EMC VNX Direct Driver Consistency Group support
+* Update oslo.config and oslo.messaging requirements
+* Fixes Windows Volume Driver upload volume fails
+* Log an error on nfs mount failure
+* Sync service.py and its dependencies to Cinder
+* HP 3PAR configurable ssh-host-key-policy
+* Fix confusing exception message in NetApp iscsi driver
+* Delete consistency group failed
+* Fixing leaking sessions in 3PAR on attach/detach
+* Add Windows SMB Volume Driver
+* Netapp: fix multiple copies of cinder-volume
+* Add SMB Volume Driver
+* Fix possible race condition for accept transfer
+* Imported Translations from Transifex
+* Mock glance client object in version unit tests
+* Revert iSCSI Target objects as independent objects
+* Use right body for test_create_missing_specs_name
+* remove object in wsgi LOG.info
+* Don't clear _mounted_shares list in remoteFS while updating
+* Some tcp configuration paramters are ignored
+* Add filter to volume transfer REST api
+* Fix help for running specified unit tests
+* Deprecate the V1 API
+* Set default pool value to system in gpfs driver
+* Fixes Cinder fails to upload volume to vhd image
+* Unit test for restore with different hosts
+
 2014.2.b3
 ---------
 
+* During a restore send the restore request to the right host
+* Add Datera driver for Cinder
+* warn against sorting requirements
+* VMware: Remove redundant extend disk API call
+* VMware: Implement backup/restore for VMDK driver
+* Update the HP 3PAR default persona
+* Fixed Typo - from hypens to hyphens
 * Fixed typo from 'the the' to 'the'
+* Fix running unit tests with coverage
 * Support Volume Backup Quota
 * Volume Replication implementation for IBM Storwize/SVC
 * Add Fujitsu ETERNUS DX support
 * Pool-aware Scheduler Support
 * Add QoS support to IBM Storwize driver
 * Driver for Fusion-io ioControl Hybrid array
+* Make ssh-host-key-policy configurable
 * Add Cisco FC Zoning plugin to the FC ZoneManager
 * Typo
 * Ignore pylint error 'hashlib' has no shaxxx member
 * Update oslo policy and its dependencies
+* Avoid using the disk cache on volume initialisation
 * Introduce Hitachi storage volume driver
 * XtremIO cinder iSCSI & FC volume drivers for Juno
 * Consistency Groups
@@ -73,6 +161,7 @@ CHANGES
 * Add timer info for copy operations
 * Make manage.py usable
 * Enable H104, F841 hacking rule and fix violations
+* Adds CA cert file path option for glance connections
 * Enable Swift backup driver for auth 2.0
 * Updated HACKING.rst so that it is accurate
 * Update help strings
@@ -81,6 +170,7 @@ CHANGES
 * Use oslo.i18n
 * Add CHAP support for 3PAR ISCSI
 * EMC: Fix minor issue in VNX driver and unit tests
+* fix a small typo in development.environment.rst
 * Do not translate debug messages
 * Fixing LeftHand live migration error
 * Improve regex for _ import hacking check
