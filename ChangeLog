@@ -1,6 +1,23 @@
 CHANGES
 =======
 
+2014.2.rc2
+----------
+
+* Updated translations
+* NetApp fix eseries unit test mock clean
+* Make sure device support Direct before setting
+* ZFSSA iSCSI vol create fails with vol type option
+* Handle eqlx SSH connection close on abort
+* ZFSSA iSCSI driver cannot add multple initiators to a group
+* Fix race condition in ISCSIConnector _disconnect_volume_multipath_iscsi
+* Deprecate / obsolete NetApp volume extra specs
+* IBM Storwize driver: Retype the volume with correct empty QoS
+* Sync latest processutils from oslo-incubator
+* Updated from global requirements
+* Windows SMBFS: Handle volume_name in _qemu_img_info
+* Refuse invalid qcow2 backing files
+
 2014.2.rc1
 ----------
 
