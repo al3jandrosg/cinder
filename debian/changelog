@@ -1,3 +1,12 @@
+cinder (1:2014.2~rc2-0ubuntu2) utopic; urgency=medium
+
+  * d/control: Add missing Depends on qemu-utils to cinder-volume
+    (LP: #1381395).
+  * d/cinder_sudoers: Add missing trailing *, resolving issues running
+    commands using rootwrap (LP: #1380425).
+
+ -- James Page <james.page@ubuntu.com>  Wed, 15 Oct 2014 10:15:38 +0100
+
 cinder (1:2014.2~rc2-0ubuntu1) utopic; urgency=medium
 
   [ Corey Bryant ]
