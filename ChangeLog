@@ -1,6 +1,13 @@
 CHANGES
 =======
 
+2014.2
+------
+
+* Fix LVM iSCSI driver tgtadm CHAP authentication
+* Export cinder volumes only if the status is 'in-use'
+* Revert "Relocate volume to compliant datastore"
+
 2014.2.rc2
 ----------
 

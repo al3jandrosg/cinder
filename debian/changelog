@@ -1,3 +1,10 @@
+cinder (1:2014.2-0ubuntu1) utopic; urgency=medium
+
+  * New upstream release.
+  * d/watch: Only match versions starting with digits.
+
+ -- James Page <james.page@ubuntu.com>  Thu, 16 Oct 2014 15:44:32 +0100
+
 cinder (1:2014.2~rc2-0ubuntu2) utopic; urgency=medium
 
   * d/control: Add missing Depends on qemu-utils to cinder-volume
