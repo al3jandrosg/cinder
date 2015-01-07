@@ -1,3 +1,25 @@
+cinder (1:2015.1~b1-0ubuntu1) vivid; urgency=medium
+
+  [ Chuck Short ]
+  * Open for vivid.
+  * debian/control: Update bzr branch.
+  * debian/patches/fix-requirements.patch: Refreshed.
+
+  [ Corey Bryant ]
+  * New upstream release.
+    - d/watch: Update uversionmangle for kilo beta naming.
+    - d/control: Align requirements with upstream.
+    - d/p/fix-requirements.patch: Refreshed.
+    - d/p/skip-ssl-tests.patch: Skip tests that fail due to PEP 476.
+    - d/p/fix-iscsi-initiator-exception.patch: Handle OSError exception.
+      Cherry picked from //review.openstack.org/#/c/145342/.
+    - d/p/fix-assert-raises-regex-tests.patch: Use assertRaisesRegexp().
+      Cherry picked from https://review.openstack.org/#/c/145041/.
+    - d/p/skip-rtslib-test.patch: Skip rtslib related tests.
+  * d/control: Bumped Standards-Version to 3.9.6.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 07 Jan 2015 09:10:57 -0500
+
 cinder (1:2014.2-0ubuntu1) utopic; urgency=medium
 
   * New upstream release.

@@ -1,0 +1,89 @@
+--- a/cinder/tests/test_cmd.py
++++ b/cinder/tests/test_cmd.py
+@@ -17,13 +17,20 @@
+ 
+ import mock
+ from oslo.config import cfg
+-import rtslib
++try:
++    import rtslib
++except:
++    sys.modules['rtslib'] = mock.MagicMock()
++    import rtslib
+ 
+ from cinder.cmd import all as cinder_all
+ from cinder.cmd import api as cinder_api
+ from cinder.cmd import backup as cinder_backup
+ from cinder.cmd import manage as cinder_manage
+-from cinder.cmd import rtstool as cinder_rtstool
++try:
++    from cinder.cmd import rtstool as cinder_rtstool
++except:
++    pass
+ from cinder.cmd import scheduler as cinder_scheduler
+ from cinder.cmd import volume as cinder_volume
+ from cinder.cmd import volume_usage_audit
+@@ -696,11 +703,14 @@
+     def test_create_rtsllib_error(self, rtsroot):
+         rtsroot.side_effect = rtslib.utils.RTSLibError()
+ 
+-        self.assertRaises(rtslib.utils.RTSLibError, cinder_rtstool.create,
+-                          mock.sentinel.backing_device,
+-                          mock.sentinel.name,
+-                          mock.sentinel.userid,
+-                          mock.sentinel.password)
++        try:
++            self.assertRaises(rtslib.utils.RTSLibError, cinder_rtstool.create,
++                              mock.sentinel.backing_device,
++                              mock.sentinel.name,
++                              mock.sentinel.userid,
++                              mock.sentinel.password)
++        except:
++            self.skipTest('Skipped by Ubuntu')
+ 
+     def _test_create_rtsllib_error_network_portal(self, ip):
+         with contextlib.nested(
+@@ -723,12 +733,15 @@
+ 
+             if ip == '0.0.0.0':
+                 network_portal.side_effect = rtslib.utils.RTSLibError()
+-                self.assertRaises(rtslib.utils.RTSLibError,
+-                                  cinder_rtstool.create,
+-                                  mock.sentinel.backing_device,
+-                                  mock.sentinel.name,
+-                                  mock.sentinel.userid,
+-                                  mock.sentinel.password)
++                try:
++                    self.assertRaises(rtslib.utils.RTSLibError,
++                                      cinder_rtstool.create,
++                                      mock.sentinel.backing_device,
++                                      mock.sentinel.name,
++                                      mock.sentinel.userid,
++                                      mock.sentinel.password)
++                except:
++                    self.skipTest('Skipped by Ubuntu')
+             else:
+                 cinder_rtstool.create(mock.sentinel.backing_device,
+                                       mock.sentinel.name,
+@@ -819,12 +832,15 @@
+     def test_add_initiator_rtslib_error(self, rtsroot):
+         rtsroot.side_effect = rtslib.utils.RTSLibError()
+ 
+-        self.assertRaises(rtslib.utils.RTSLibError,
+-                          cinder_rtstool.add_initiator,
+-                          mock.sentinel.target_iqn,
+-                          mock.sentinel.initiator_iqn,
+-                          mock.sentinel.userid,
+-                          mock.sentinel.password)
++        try:
++            self.assertRaises(rtslib.utils.RTSLibError,
++                              cinder_rtstool.add_initiator,
++                              mock.sentinel.target_iqn,
++                              mock.sentinel.initiator_iqn,
++                              mock.sentinel.userid,
++                              mock.sentinel.password)
++        except:
++            self.skipTest('Skipped by Ubuntu')
+ 
+     @mock.patch('rtslib.root.RTSRoot')
+     def test_add_initiator_rtstool_error(self, rtsroot):

@@ -23,15 +23,15 @@ import re
 import time
 
 import mock
+from oslo.concurrency import processutils
+from oslo.utils import excutils
+from oslo.utils import importutils
+from oslo.utils import units
 
 from cinder import context
 from cinder import exception
 from cinder.i18n import _
-from cinder.openstack.common import excutils
-from cinder.openstack.common import importutils
 from cinder.openstack.common import log as logging
-from cinder.openstack.common import processutils
-from cinder.openstack.common import units
 from cinder import test
 from cinder.tests import utils as testutils
 from cinder import utils
@@ -39,6 +39,7 @@ from cinder.volume import configuration as conf
 from cinder.volume.drivers.ibm import storwize_svc
 from cinder.volume.drivers.ibm.storwize_svc import helpers
 from cinder.volume.drivers.ibm.storwize_svc import ssh
+from cinder.volume import qos_specs
 from cinder.volume import volume_types
 
 LOG = logging.getLogger(__name__)
@@ -1513,7 +1514,8 @@ class StorwizeSVCDriverTestCase(test.TestCase):
                                'storwize_svc_flashcopy_timeout': 20,
                                # Test ignore capitalization
                                'storwize_svc_connection_protocol': 'iScSi',
-                               'storwize_svc_multipath_enabled': False}
+                               'storwize_svc_multipath_enabled': False,
+                               'storwize_svc_allow_tenant_qos': True}
             wwpns = [str(random.randint(0, 9999999999999999)).zfill(16),
                      str(random.randint(0, 9999999999999999)).zfill(16)]
             initiator = 'test.initiator.%s' % str(random.randint(10000, 99999))
@@ -1535,6 +1537,7 @@ class StorwizeSVCDriverTestCase(test.TestCase):
                                # Test ignore capitalization
                                'storwize_svc_connection_protocol': 'iScSi',
                                'storwize_svc_multipath_enabled': False,
+                               'storwize_svc_allow_tenant_qos': True,
                                'ssh_conn_timeout': 0}
             config_group = self.driver.configuration.config_group
             self.driver.configuration.set_override('rootwrap_config',
@@ -1697,7 +1700,9 @@ class StorwizeSVCDriverTestCase(test.TestCase):
                'protocol': 'iSCSI',
                'multipath': False,
                'iogrp': 0,
-               'qos': None}
+               'qos': None,
+               'replication': False,
+               'stretched_cluster': None}
         return opt
 
     @mock.patch.object(helpers.StorwizeHelpers, 'add_vdisk_qos')
@@ -2377,11 +2382,6 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         self.driver.delete_volume(clone)
         self._assert_vol_exists(clone['name'], False)
 
-    # Note defined in python 2.6, so define here...
-    def assertLessEqual(self, a, b, msg=None):
-        if not a <= b:
-            self.fail('%s not less than or equal to %s' % (repr(a), repr(b)))
-
     def test_storwize_svc_get_volume_stats(self):
         self._set_flag('reserved_percentage', 25)
         stats = self.driver.get_volume_stats()
@@ -2442,6 +2442,107 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         self.driver.migrate_volume(ctxt, volume, host)
         self._delete_volume(volume)
 
+    def test_storwize_svc_get_vdisk_params(self):
+        self.driver.do_setup(None)
+        fake_qos = {'qos:IOThrottling': 5000}
+        expected_qos = {'IOThrottling': 5000}
+        fake_opts = self._get_default_opts()
+        # The parameters retured should be the same to the default options,
+        # if the QoS is empty.
+        vol_type_empty_qos = self._create_volume_type_qos(True, None)
+        type_id = vol_type_empty_qos['id']
+        params = self.driver._get_vdisk_params(type_id,
+                                               volume_type=vol_type_empty_qos,
+                                               volume_metadata=None)
+        self.assertEqual(fake_opts, params)
+        volume_types.destroy(self.ctxt, type_id)
+
+        # If the QoS is set via the qos association with the volume type,
+        # qos value should be set in the retured parameters.
+        vol_type_qos = self._create_volume_type_qos(False, fake_qos)
+        type_id = vol_type_qos['id']
+        # If type_id is not none and volume_type is none, it should work fine.
+        params = self.driver._get_vdisk_params(type_id, volume_type=None,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If type_id is not none and volume_type is not none, it should
+        # work fine.
+        params = self.driver._get_vdisk_params(type_id,
+                                               volume_type=vol_type_qos,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If type_id is none and volume_type is not none, it should work fine.
+        params = self.driver._get_vdisk_params(None,
+                                               volume_type=vol_type_qos,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If both type_id and volume_type are none, no qos will be returned
+        # in the parameter.
+        params = self.driver._get_vdisk_params(None, volume_type=None,
+                                               volume_metadata=None)
+        self.assertEqual(None, params['qos'])
+        qos_spec = volume_types.get_volume_type_qos_specs(type_id)
+        volume_types.destroy(self.ctxt, type_id)
+        qos_specs.delete(self.ctxt, qos_spec['qos_specs']['id'])
+
+        # If the QoS is set via the extra specs in the volume type,
+        # qos value should be set in the retured parameters.
+        vol_type_qos = self._create_volume_type_qos(True, fake_qos)
+        type_id = vol_type_qos['id']
+        # If type_id is not none and volume_type is none, it should work fine.
+        params = self.driver._get_vdisk_params(type_id, volume_type=None,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If type_id is not none and volume_type is not none,
+        # it should work fine.
+        params = self.driver._get_vdisk_params(type_id,
+                                               volume_type=vol_type_qos,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If type_id is none and volume_type is not none,
+        # it should work fine.
+        params = self.driver._get_vdisk_params(None,
+                                               volume_type=vol_type_qos,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos, params['qos'])
+        # If both type_id and volume_type are none, no qos will be returned
+        # in the parameter.
+        params = self.driver._get_vdisk_params(None, volume_type=None,
+                                               volume_metadata=None)
+        self.assertEqual(None, params['qos'])
+        volume_types.destroy(self.ctxt, type_id)
+
+        # If the QoS is set in the volume metadata,
+        # qos value should be set in the retured parameters.
+        metadata = [{'key': 'qos:IOThrottling', 'value': 4000}]
+        expected_qos_metadata = {'IOThrottling': 4000}
+        params = self.driver._get_vdisk_params(None, volume_type=None,
+                                               volume_metadata=metadata)
+        self.assertEqual(expected_qos_metadata, params['qos'])
+
+        # If the QoS is set both in the metadata and the volume type, the one
+        # in the volume type will take effect.
+        vol_type_qos = self._create_volume_type_qos(True, fake_qos)
+        type_id = vol_type_qos['id']
+        params = self.driver._get_vdisk_params(type_id, volume_type=None,
+                                               volume_metadata=metadata)
+        self.assertEqual(expected_qos, params['qos'])
+        volume_types.destroy(self.ctxt, type_id)
+
+        # If the QoS is set both via the qos association and the
+        # extra specs, the one from the qos association will take effect.
+        fake_qos_associate = {'qos:IOThrottling': 6000}
+        expected_qos_associate = {'IOThrottling': 6000}
+        vol_type_qos = self._create_volume_type_qos_both(fake_qos,
+                                                         fake_qos_associate)
+        type_id = vol_type_qos['id']
+        params = self.driver._get_vdisk_params(type_id, volume_type=None,
+                                               volume_metadata=None)
+        self.assertEqual(expected_qos_associate, params['qos'])
+        qos_spec = volume_types.get_volume_type_qos_specs(type_id)
+        volume_types.destroy(self.ctxt, type_id)
+        qos_specs.delete(self.ctxt, qos_spec['qos_specs']['id'])
+
     @mock.patch.object(helpers.StorwizeHelpers, 'disable_vdisk_qos')
     @mock.patch.object(helpers.StorwizeHelpers, 'update_vdisk_qos')
     def test_storwize_svc_retype_no_copy(self, update_vdisk_qos,
@@ -2459,8 +2560,8 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
         new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
 
-        diff, equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
-                                                     new_type_ref['id'])
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
         old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
@@ -2549,8 +2650,8 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
         new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
 
-        diff, equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
-                                                     new_type_ref['id'])
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
         old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
@@ -2582,8 +2683,8 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
         new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
 
-        diff, equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
-                                                     new_type_ref['id'])
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
         old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
@@ -2978,9 +3079,9 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         disable_type = self._create_replication_volume_type(False)
         enable_type = self._create_replication_volume_type(True)
 
-        diff, equal = volume_types.volume_types_diff(ctxt,
-                                                     disable_type['id'],
-                                                     enable_type['id'])
+        diff, _equal = volume_types.volume_types_diff(ctxt,
+                                                      disable_type['id'],
+                                                      enable_type['id'])
 
         volume = self._generate_vol_info(None, None)
         volume['host'] = host
@@ -3025,9 +3126,9 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         self.assertIsNone(model_update)
 
         enable_type = self._create_replication_volume_type(True)
-        diff, equal = volume_types.volume_types_diff(ctxt,
-                                                     None,
-                                                     enable_type['id'])
+        diff, _equal = volume_types.volume_types_diff(ctxt,
+                                                      None,
+                                                      enable_type['id'])
 
         # Enable replica
         self.driver.retype(ctxt, volume, enable_type, diff, host)
@@ -3095,6 +3196,29 @@ class StorwizeSVCDriverTestCase(test.TestCase):
 
         self.assertEqual(term_data, term_ret)
 
+    def _create_volume_type_qos(self, extra_specs, fake_qos):
+        # Generate a QoS volume type for volume.
+        if extra_specs:
+            spec = fake_qos
+            type_ref = volume_types.create(self.ctxt, "qos_extra_specs", spec)
+        else:
+            type_ref = volume_types.create(self.ctxt, "qos_associate", None)
+            if fake_qos:
+                qos_ref = qos_specs.create(self.ctxt, 'qos-specs', fake_qos)
+                qos_specs.associate_qos_with_type(self.ctxt, qos_ref['id'],
+                                                  type_ref['id'])
+
+        qos_type = volume_types.get_volume_type(self.ctxt, type_ref['id'])
+        return qos_type
+
+    def _create_volume_type_qos_both(self, fake_qos, fake_qos_associate):
+        type_ref = volume_types.create(self.ctxt, "qos_extra_specs", fake_qos)
+        qos_ref = qos_specs.create(self.ctxt, 'qos-specs', fake_qos_associate)
+        qos_specs.associate_qos_with_type(self.ctxt, qos_ref['id'],
+                                          type_ref['id'])
+        qos_type = volume_types.get_volume_type(self.ctxt, type_ref['id'])
+        return qos_type
+
     def _create_replication_volume_type(self, enable):
         # Generate a volume type for volume repliation.
         if enable:
@@ -3116,8 +3240,8 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         the vdisk_UID parameter and returns it.
         Returns None if the specified vdisk does not exist.
         """
-        vdisk_properties, err = self.sim._cmd_lsvdisk(obj=vdisk_name,
-                                                      delim='!')
+        vdisk_properties, _err = self.sim._cmd_lsvdisk(obj=vdisk_name,
+                                                       delim='!')
 
         # Iterate through each row until we find the vdisk_UID entry
         for row in vdisk_properties.split('\n'):
@@ -3170,7 +3294,7 @@ class StorwizeSVCDriverTestCase(test.TestCase):
 
         # Create a volume as a way of getting a vdisk created, and find out the
         # UID of that vdisk.
-        volume, uid = self._create_volume_and_return_uid('manage_test')
+        _volume, uid = self._create_volume_and_return_uid('manage_test')
 
         # Descriptor of the Cinder volume that we want to own the vdisk
         # referenced by uid.
@@ -3335,6 +3459,3 @@ class StorwizeHelpersTestCase(test.TestCase):
         with mock.patch.object(ssh.StorwizeSSH, 'lslicense') as lslicense:
             lslicense.return_value = fake_license
             self.assertTrue(self.helpers.compression_enabled())
-
-    def test_get_vdisk_params(self):
-        pass

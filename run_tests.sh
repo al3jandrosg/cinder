@@ -190,7 +190,7 @@ function warn_on_flake8_without_venv {
 function run_pep8 {
   echo "Running flake8 ..."
   warn_on_flake8_without_venv
-  bash -c "${wrapper} flake8 cinder* bin/*"
+  bash -c "${wrapper} flake8"
 }
 
 
@@ -233,7 +233,6 @@ fi
 
 if [ $just_pep8 -eq 1 ]; then
     run_pep8
-    ${wrapper}   bash ./tools/config/check_uptodate.sh
     exit
 fi
 
@@ -264,6 +263,5 @@ run_tests
 if [ -z "$testrargs" ]; then
   if [ $no_pep8 -eq 0 ]; then
     run_pep8
-    ${wrapper} bash ./tools/config/check_uptodate.sh
   fi
 fi

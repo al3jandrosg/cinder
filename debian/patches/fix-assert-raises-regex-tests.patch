@@ -1,0 +1,40 @@
+From 4478224d1d97e8936af3f679f65b791ee6375f46 Mon Sep 17 00:00:00 2001
+From: Corey Bryant <corey.bryant@canonical.com>
+Date: Mon, 5 Jan 2015 14:53:48 -0500
+Subject: [PATCH] Use assertRaisesRegexp() in test_srb.py.
+
+Python >= 2.7 should be using assertRaisesRegexp()
+rather than assertRaisesRegex().
+
+Change-Id: I033b88d50cf90503e1123a9871c1bc252d914c06
+Closes-Bug: 1407781
+---
+ cinder/tests/test_srb.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/cinder/tests/test_srb.py b/cinder/tests/test_srb.py
+index 91783fa..b084c26 100644
+--- a/cinder/tests/test_srb.py
++++ b/cinder/tests/test_srb.py
+@@ -211,7 +211,8 @@ class TestHandleProcessExecutionError(test.TestCase):
+                     message='', info_message='', reraise=True):
+                 raise processutils.ProcessExecutionError(description='Oops')
+ 
+-        self.assertRaisesRegex(processutils.ProcessExecutionError, r'^Oops', f)
++        self.assertRaisesRegexp(processutils.ProcessExecutionError,
++                                r'^Oops', f)
+ 
+     def test_reraise_false(self):
+         with srb.handle_process_execution_error(
+@@ -224,7 +225,7 @@ class TestHandleProcessExecutionError(test.TestCase):
+                     message='', info_message='', reraise=RuntimeError('Oops')):
+                 raise processutils.ProcessExecutionError
+ 
+-        self.assertRaisesRegex(RuntimeError, r'^Oops', f)
++        self.assertRaisesRegexp(RuntimeError, r'^Oops', f)
+ 
+ 
+ class SRBDriverTestCase(test.TestCase):
+-- 
+2.1.0
+

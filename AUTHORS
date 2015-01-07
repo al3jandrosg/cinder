@@ -5,6 +5,8 @@ Adalberto Medeiros <adalbas@linux.vnet.ibm.com>
 Adam Gandelman <adam.gandelman@canonical.com>
 Adam Gandelman <adamg@canonical.com>
 Adelina Tuvenie <atuvenie@cloudbasesolutions.com>
+Adrien Vergé <adrien.verge@numergy.com>
+Ajaya Agrawal <ajku.agr@gmail.com>
 Alan Jiang <ajiang@us.ibm.com>
 Alan Meadows <alan.meadows@gmail.com>
 Alberto Planas <aplanas@gmail.com>
@@ -24,12 +26,14 @@ Andrei V. Ostapenko <aostapenko@mirantis.com>
 Andres Buraschi <andres.buraschi@intel.com>
 Andrew Forrest <forrest@research.att.com>
 Andrew Kerr <andrew.kerr@netapp.com>
+Andy Grover <agrover@redhat.com>
 Angela Smith <aallen@brocade.com>
 Angus Lees <gus@inodes.org>
 Ankit Agrawal <ankit11.agrawal@nttdata.com>
 Ann Kamyshnikova <akamyshnikova@mirantis.com>
 Anthony Lee <anthony.mic.lee@hp.com>
 Anthony Young <sleepsonthefloor@gmail.com>
+Anton Arefiev <aarefiev@mirantis.com>
 Anton Frolov <anfrolov@mirantis.com>
 ArkadyKanevsky <arkady_kanevsky@dell.com>
 Arne Wiebalck <Arne.Wiebalck@cern.ch>
@@ -37,12 +41,15 @@ Aswad Rangnekar <aswad.rangnekar@nttdata.com>
 Attila Fazekas <afazekas@redhat.com>
 Avishay Traeger <avishay@gmail.com>
 Avishay Traeger <avishay@il.ibm.com>
+Bala Gopal Raj <balagopalraj@techpatron.co.in>
 Ben Nemec <openstack@nemebean.com>
 Ben Swartzlander <bswartz@netapp.com>
 Bertrand Lallau <bertrand.lallau@gmail.com>
+Bharat Kumar Kobagana <bkobagan@redhat.com>
 Bill Owen <billowen@us.ibm.com>
 Bob Ball <bob.ball@citrix.com>
 Bob Callaway <bob.callaway@netapp.com>
+Bob-OpenStack <295988511@qq.com>
 Boris Pavlovic <boris@pavlovic.me>
 Brant Knudson <bknudson@us.ibm.com>
 Brian Waldon <brian.waldon@rackspace.com>
@@ -71,9 +78,11 @@ Csaba Henk <chenk@redhat.com>
 Dan Prince <dprince@redhat.com>
 Dan Radez <dradez@redhat.com>
 Daniel Gollub <d.gollub@telekom.de>
+Daniel Wilson <daniel.wilson@purestorage.com>
 Danny Al-Gaaf <danny.al-gaaf@bisect.de>
 Darren Birkett <darren.birkett@gmail.com>
 Davanum Srinivas <dims@linux.vnet.ibm.com>
+David Pineau <dav.pineau@gmail.com>
 David Ripton <dripton@redhat.com>
 Deepak C Shetty <deepakcs@redhat.com>
 DennyZhang <denny@unitedstack.com>
@@ -90,7 +99,9 @@ Doug Hellmann <doug.hellmann@dreamhost.com>
 Duncan Thomas <duncan.thomas@gmail.com>
 Duncan Thomas <duncan.thomas@hp.com>
 Ed Balduf <ebalduf@fusionio.com>
+Eduardo Costa <eduardo.costa@tvglobo.com.br>
 Edward Hope-Morley <edward.hope-morley@canonical.com>
+Edwin Wang <edwin.wang@cn.ibm.com>
 Eiichi Aikawa <aikawa@mxk.nes.nec.co.jp>
 Elena Ezhova <eezhova@mirantis.com>
 Emilien Macchi <emilien.macchi@enovance.com>
@@ -100,6 +111,7 @@ Eric Harney <eharney@redhat.com>
 Eric Windisch <eric@cloudscaling.com>
 Erik Zaadi <erikz@il.ibm.com>
 Erlon Cruz <erlon.cruz@fit-tecnologia.org.br>
+Erlon R. Cruz <erlon.cruz@fit-tecnologia.org.br>
 Fei Long Wang <flwang@cn.ibm.com>
 Fengqian Gao <fengqian.gao@intel.com>
 Flaper Fesp <flaper87@gmail.com>
@@ -107,12 +119,14 @@ Flavio Percoco <flaper87@gmail.com>
 Florent Flament <florent.flament-ext@cloudwatt.com>
 Florian Haas <florian@hastexo.com>
 Frederic Lepied <frederic.lepied@enovance.com>
+Gary W. Smith <gary.w.smith@hp.com>
 Gauvain Pocentek <gauvain.pocentek@objectif-libre.com>
 Geraint North <geraint.north@uk.ibm.com>
 Gerard Garcia <nouboh@gmail.com>
 Ghe Rivero <ghe@debian.org>
 Giulio Fidente <gfidente@redhat.com>
 Glenn M. Gobeli <Glenn.Gobeli@netapp.com>
+Gloria Gu <gloria.gu@hp.com>
 Haiwei Xu <xu-haiwei@mxw.nes.nec.co.jp>
 Haomai Wang <haomai@unitedstack.com>
 Haruka Tanizawa <h-tanizawa@intellilink.co.jp>
@@ -150,6 +164,7 @@ John Griffith <john.griffith@solidfire.com>
 John McDonough <jomcdono@cisco.com>
 Johnson Koil Raj <johnson.raj@hp.com>
 Jon Bernard <jobernar@redhat.com>
+JordanP <jordan.pittier@scality.com>
 Joseph Glanville <joseph@cloudscaling.com>
 Josh Durgin <josh.durgin@inktank.com>
 Joshua Harlow <harlowja@yahoo-inc.com>
@@ -177,10 +192,12 @@ Lin Hua Cheng <lin-hua.cheng@hp.com>
 LiuSheng <liusheng@huawei.com>
 Lucas Alvares Gomes <lucasagomes@gmail.com>
 Lucian Petrut <lpetrut@cloudbasesolutions.com>
+Lucian Petrut <petrutlucian94@gmail.com>
 Luis A. Garcia <luis@linux.vnet.ibm.com>
 Lynxzh <jmzhang@cn.ibm.com>
 MORITA Kazutaka <morita.kazutaka@gmail.com>
 Mandell Degerness <mdegerne@gmail.com>
+Manojkiran <manojkiran@localhost.localdomain>
 Manojkiran <manojkiran@manojkiran.(none)>
 Marc Koderer <m.koderer@telekom.de>
 Marc Koderer <marc@koderer.com>
@@ -190,13 +207,17 @@ Mate Lakat <mate.lakat@citrix.com>
 Mathieu Gagné <mgagne@iweb.com>
 Matt Fischer <matt@mattfischer.com>
 Matt Riedemann <mriedem@us.ibm.com>
+Matthew Edmonds <edmondsw@us.ibm.com>
 Matthew Treinish <treinish@linux.vnet.ibm.com>
 Mehdi Abaakouk <mehdi.abaakouk@enovance.com>
+Mehdi Abaakouk <sileht@sileht.net>
 Michael Basnight <mbasnight@gmail.com>
 Michael Berlin <mberlin@quobyte.com>
 Michael J Fork <mjfork@us.ibm.com>
 Michael Kerrin <michael.kerrin@hp.com>
 Michael Still <mikal@stillhq.com>
+Midun Kumar <mneelame@cisco.com>
+Mike Mason <mikemason010@gmail.com>
 Mike Perez <thingee@gmail.com>
 Mikhail Khodos <hodosmb@gmail.com>
 Mikhail Khodos <mikhail.khodos@nexenta.com>
@@ -204,7 +225,9 @@ Mitsuhiro Tanino <mitsuhiro.tanino@hds.com>
 Monty Taylor <mordred@inaugust.com>
 Morgan Fainberg <morgan.fainberg@gmail.com>
 MotoKen <motokentsai@gmail.com>
+Mudassir Latif <mudassir.latif@purestorage.com>
 Mukul Patel <mukul18@gmail.com>
+Navneet Singh <navsinghnitd@gmail.com>
 Navneet Singh <singn@netapp.com>
 Nikola Dipanov <ndipanov@redhat.com>
 Nikolaj Starodubtsev <nstarodubtsev@mirantis.com>
@@ -214,11 +237,13 @@ Nirmal Ranganathan <rnirmal@gmail.com>
 Olga Kopylova <olkonami@gmail.com>
 Olivier Pilotte <opilotte@iweb.com>
 Ollie Leahy <oliver.leahy@hp.com>
+Pascal Wehrle <p.wehrle@oodrive.com>
 Patrick East <patrick.east@purestorage.com>
 Paul Mathews <pmathews@bluehost.com>
 Paul McMillan <paul.mcmillan@nebula.com>
 Pavel Kirpichyov <pavel.kirpichyov@gmail.com>
 Pedro Navarro Perez <pednape@gmail.com>
+Peter Pentchev <openstack-dev@storpool.com>
 Pranali Deore <pranali.deore@nttdata.com>
 PranaliDeore <pranali.deore@nttdata.com>
 Pádraig Brady <pbrady@redhat.com>
@@ -229,6 +254,7 @@ Rafi Khardalian <rafi@metacloud.com>
 Rahul Verma <rahul.verma@hp.com>
 Ramy Asselin <ramy.asselin@hp.com>
 Ray Chen <oldsharp@163.com>
+Richard Hedlind <richard.hedlind@x-io.com>
 Rick Chen <rick.chen@prophetstor.com>
 Rick Harris <rconradharris@gmail.com>
 Rob Crittenden <rcritten@redhat.com>
@@ -242,7 +268,9 @@ Rongze Zhu <rongze@unitedstack.com>
 Rongze Zhu <zrzhit@gmail.com>
 RongzeZhu <zrzhit@gmail.com>
 Rushi Agrawal <rushi.agr@gmail.com>
+Rushil Chugh <rushil@netapp.com>
 Russell Bryant <rbryant@redhat.com>
+Ryan Lucio <rlucio@vmem.com>
 Ryan McNair <rdmcnair@us.ibm.com>
 Sam Morrison <sorrison@gmail.com>
 Santhoshkumar Kolathur <skolathu@brocade.com>
@@ -267,6 +295,7 @@ Shao Kai Li <lshaokai@cn.ibm.com>
 Shay Halsband <shay.halsband@emc.com>
 Shlomi Sasson <shlomis@mellanox.com>
 Shuangtai Tian <shuangtai.tian@intel.com>
+Silvan Kaiser <silvan@quobyte.com>
 Simon Lorenz <simon.lorenz@de.ibm.com>
 Sivaramakrishna Garimella <sivaramakrishna.garimella@hp.com>
 Stephen Mulcahy <stephen.mulcahy@hp.com>
@@ -288,11 +317,14 @@ Thierry Carrez <thierry@openstack.org>
 Thomas Bechtold <thomasbechtold@jpberlin.de>
 Timothy Okwii <tokwii@cisco.com>
 Tom Barron <tbarron@netapp.com>
+Tom Barron <tpb@dyncloud.net>
 Tom Cammann <tom.cammann@hp.com>
 Tom Fifield <fifieldt@unimelb.edu.au>
 Tom Fifield <tom@openstack.org>
+Tom Swanson <tom_swanson@dell.com>
 Tomoki Sekiyama <tomoki.sekiyama@hds.com>
 Tristan Cacqueray <tristan.cacqueray@enovance.com>
+Trung Trinh <trung.t.trinh@dektech.com.au>
 Unmesh Gurjar <unmesh.gurjar@hp.com>
 Unmesh Gurjar <unmesh.gurjar@vertex.co.in>
 Vahid Hashemian <vahidhashemian@us.ibm.com>
@@ -319,6 +351,7 @@ XueChendi <chendi.xue@intel.com>
 Yaguang Tang <heut2008@gmail.com>
 Yaguang Tang <yaguang.tang@canonical.com>
 Yang Yu <yuyangbj@cn.ibm.com>
+YangLei <yanglyy@cn.ibm.com>
 Yejia Xu <yejia@unitedstack.com>
 Yi Chun, Huang <hychuang@cn.ibm.com>
 Yosef Berman <yosef@cloudscaling.com>
@@ -331,6 +364,7 @@ Zhengguang--reset-author <zhengguangou@gmail.com>
 Zhenguo Niu <zhenguo@unitedstack.com>
 Zhi Kun Liu <zhikunli@cn.ibm.com>
 Zhi Yan Liu <zhiyanl@cn.ibm.com>
+ZhiQiang Fan <aji.zqfan@gmail.com>
 Zhiteng Huang <zhiteng.huang@intel.com>
 Zhiteng Huang <zhithuang@ebay.com>
 Zhiteng Huang <zhithuang@ebaysf.com>
@@ -340,6 +374,7 @@ ZhuRongze <zrzhit@gmail.com>
 Zoltan Arnold Nagy <nag@zurich.ibm.com>
 abhishekkekane <abhishek.kekane@nttdata.com>
 alonma <alonma@il.ibm.com>
+amoturi <abhiram.moturi@oracle.com>
 anastasia-karpinska <akarpinska@griddynamics.com>
 annegentle <anne@openstack.org>
 chadlung <chad.lung@gmail.com>
@@ -362,6 +397,7 @@ kshimamu <kshimamu@cisco.com>
 leseb <sebastien.han@enovance.com>
 ling-yun <zengyunling@huawei.com>
 lirenke <lvhancy@163.com>
+liu-sheng <liusheng@huawei.com>
 liudong <liudong78@huawei.com>
 liuqing <jing.liuqing@99cloud.net>
 liyingjun <liyingjun1988@gmail.com>
@@ -374,8 +410,10 @@ pran1990 <praneshpg@gmail.com>
 rackerjoe <breu@breu.org>
 rajinir <rajini_ram@dell.com>
 ramakris <rama.kri.b@hp.com>
+rick.chen <rick.chen@prophetstor.com>
 ruichen <kiwik.chenrui@huawei.com>
 sanuptpm <sanuptpm@gmail.com>
+sarat inuguri <saratkumar_ivn@symantec.com>
 sathish-nagappan <sathish.nagappan@nebula.com>
 saurabh <saurabh.chordiya@nectechnologies.in>
 scott-dangelo <scott.dangelo@hp.com>
@@ -387,8 +425,12 @@ vitas.yuzhou <vitas.yuzhou@huawei.com>
 wanghong <w.wanghong@huawei.com>
 wingwj <wingwj@gmail.com>
 xiaoxi_chen <xiaoxi.chen@intel.com>
+yatin karel <yatin.karel@nectechnologies.in>
 yehia-beyh <yehia.beyh@hp.com>
+yoan desbordes <desbor_y@etna-alternance.net>
 zhangchao010 <zhangchao010@huawei.com>
+zhangchunlong1@huawei.com <zhangchunlong1@huawei.com>
+zhangni <zhangni@huawei.com>
 zhangyanzi <zhangyanzi@huawei.com>
 zhaoqin <chaochin@gmail.com>
 zhuzhubj <zhuzhubj@cn.ibm.com>

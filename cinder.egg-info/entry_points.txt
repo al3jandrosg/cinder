@@ -1,3 +1,6 @@
+[cinder.database.migration_backend]
+sqlalchemy = oslo.db.sqlalchemy.migration
+
 [cinder.scheduler.filters]
 AvailabilityZoneFilter = cinder.openstack.common.scheduler.filters.availability_zone_filter:AvailabilityZoneFilter
 CapabilitiesFilter = cinder.openstack.common.scheduler.filters.capabilities_filter:CapabilitiesFilter
@@ -14,7 +17,15 @@ ChanceWeigher = cinder.scheduler.weights.chance:ChanceWeigher
 VolumeNumberWeigher = cinder.scheduler.weights.volume_number:VolumeNumberWeigher
 
 [console_scripts]
+cinder-all = cinder.cmd.all:main
+cinder-api = cinder.cmd.api:main
+cinder-backup = cinder.cmd.backup:main
+cinder-manage = cinder.cmd.manage:main
 cinder-rootwrap = oslo.rootwrap.cmd:main
+cinder-rtstool = cinder.cmd.rtstool:main
+cinder-scheduler = cinder.cmd.scheduler:main
+cinder-volume = cinder.cmd.volume:main
+cinder-volume-usage-audit = cinder.cmd.volume_usage_audit:main
 
 [oslo.messaging.notify.drivers]
 cinder.openstack.common.notifier.log_notifier = oslo.messaging.notify._impl_log:LogDriver
