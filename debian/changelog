@@ -1,3 +1,12 @@
+cinder (1:2015.1~b1-0ubuntu3) vivid; urgency=medium
+
+  * d/p/fix-iscsi-initiator-exception.patch: Dropped. Abandoned upstream.
+  * d/p/skip-huaweistorac-delete-snapshot-success-test.patch: Handle OSError
+    exception.
+  * d/cinder-common.logrotate: Apply to all cinder log files.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 08 Jan 2015 10:53:04 -0500
+
 cinder (1:2015.1~b1-0ubuntu2) vivid; urgency=medium
 
   * Systemd enablement:

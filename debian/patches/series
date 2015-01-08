@@ -1,5 +1,5 @@
+skip-huaweistorac-delete-snapshot-success-test.patch
 fix-assert-raises-regex-tests.patch
-fix-iscsi-initiator-exception.patch
 skip-rtslib-test.patch
 skip-ssl-tests.patch
 fix-requirements.patch
