@@ -1,3 +1,17 @@
+cinder (1:2015.1~b1-0ubuntu2) vivid; urgency=medium
+
+  * Systemd enablement:
+    - d/control: Add dh-systemd and openstack-pkg-tools to BD's.
+    - d/rules: Enable use of pkgos, tidyup generated init files.
+    - d/*.init.in: Cherry pick pkgos template configurations from
+      Debian cinder package (thanks Thomas).
+    - d/*.upstart: Drop in preference to generated files.
+  * d/control,compat: Bump debhelper compat level to 9.
+  * d/*.logrotate,cinder-common.logrotate: Move to single logrotate
+    configuration.
+
+ -- James Page <james.page@ubuntu.com>  Thu, 08 Jan 2015 14:18:18 +0000
+
 cinder (1:2015.1~b1-0ubuntu1) vivid; urgency=medium
 
   [ Chuck Short ]
