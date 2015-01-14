@@ -6,7 +6,7 @@ XSBC-Original-Maintainer: Chuck Short <zulcss@ubuntu.com>
 Build-Depends:
  debhelper (>= 9~),
  dh-systemd,
- openstack-pkg-tools (>= 21~),
+ openstack-pkg-tools (>= 21ubuntu5~),
  python-all (>= 2.6)
 Build-Depends-Indep:
  python-anyjson (>= 0.3.3),

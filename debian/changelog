@@ -1,3 +1,10 @@
+cinder (1:2015.1~b1-0ubuntu4) vivid; urgency=medium
+
+  * Rebuild to pick up pkgos upstart generation fix.
+    - d/control: Bump openstack-pkg-tools to ensure upstart fix inclusion.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 14 Jan 2015 10:40:32 -0500
+
 cinder (1:2015.1~b1-0ubuntu3) vivid; urgency=medium
 
   * d/p/fix-iscsi-initiator-exception.patch: Dropped. Abandoned upstream.
