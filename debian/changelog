@@ -1,3 +1,12 @@
+cinder (1:2015.1~b1-0ubuntu5) vivid; urgency=medium
+
+  * d/p/remove-private-_lazy-import.patch: Cherry picked from master and
+    adapted. Fixes tests that were importing internal i18n._lazy module.
+  * d/p/pep-0476.patch: Deal with PEP-0476 certificate chain checking.
+  * d/p/skip-ssl-tests.patch: Dropped in favor of pep-0476.patch.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 15 Jan 2015 08:06:53 +0000
+
 cinder (1:2015.1~b1-0ubuntu4) vivid; urgency=medium
 
   * Rebuild to pick up pkgos upstart generation fix.
