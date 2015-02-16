@@ -1,6 +1,3 @@
-pep-0476.patch
-remove-private-_lazy-import.patch
 skip-huaweistorac-delete-snapshot-success-test.patch
-fix-assert-raises-regex-tests.patch
 skip-rtslib-test.patch
 fix-requirements.patch

@@ -11,9 +11,9 @@ Forwarded: No
  import os
  import re
  import tempfile
-@@ -412,7 +413,11 @@
-             mock__attach_volume.return_value = None
+@@ -416,7 +417,11 @@
              mock__detach_volume.return_value = None
+             mock__get_connector_properties.return_value = {}
  
 -            self.driver.delete_snapshot(test_snap)
 +            try:

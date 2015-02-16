@@ -1,9 +1,184 @@
 CHANGES
 =======
 
+2015.1.0b2
+----------
+
+* Lefthand driver fails to attach a cloned volume
+* Purge deleted rows
+* EMC VNX Cinder Driver Update
+* Fixes the EQL driver CI tests AttributeError
+* Add manage/unmanage methods for Hitachi Block Storage Driver
+* Tests: Don't sleep for looping calls (eqlx)
+* Roll back if VMAX masking view not created
+* Tests: Don't sleep for looping calls
+* Remove the solaris volume driver
+* Fix SSHPoolTestCase to work in parallel
+* Fixes attribute content checking
+* Imported Translations from Transifex
+* Support iSER driver within the ISCSITarget flow
+* HP3Par: Set snapCPG when managing existing volumes
+* Adds unit tests for HNAS backend
+* Failed to discovery when iscsi multipath and CHAP both enabled
+* Add retry for tgtadm update when tgt exists
+* Add completion logging for snapshots and volumes
+* Fix configratuion of rally jobs
+* Updated from global requirements
+* IBM Storwize driver Consistency Group Implementation
+* Use get_my_ipv4 from oslo.utils
+* TgtAdm: Fix _recreate_backing_lun logging
+* Revert "Create SolidFire Template account on init"
+* HP 3PAR modules have bad log messages
+* Remove useless and unused request_utils
+* Create SolidFire Template account on init
+* Fetch_to_volume_format calls copy_volume using wrong parameter
+* Changed pvs separator from ':' to '|' to support names with ':'
+* Raise correct exception when validate_connector failed
+* Add provisioned_capacity
+* Move 3 Fujitsu ETERNUS DX related file
+* Add retry to lvm snapshot create
+* Add a generic retry decorator to cinder/utils
+* Use uuidutils from oslo.utils
+* Remove unnecessary method: _ensure_iscsi_targets() in tgt.py
+* Raise correct exception if deleting of LIO iSCSI target is failed
+* Cleanup unused DB APIs, part I
+* Remove argparse from requirements
+* Update tests for Quobyte Cinder drv from mox->mock
+* Fixes a small issue in find_autodoc_modules.sh
+* Fix the eqlx driver to retry on ssh timeout
+* Add retrying lib from global requirements
+* Remove usage of taskflow 'utils.misc' module
+* Move oslo.serialization to oslo_serialization namespace
+* HP 3PAR modules do not follow coding guidelines
+* Improve debug logging of Dell Storage Center driver
+* Fix _usage_from_snapshot in volume.utils
+* VMware:Fix error creating vCenter inventory folder
+* Fix cinder-manage shell ipython
+* Shrink down customized logging listener
+* Prevent deleting volumes in a consistency group
+* Fix bug in rbd driver: the cloned volume size is wrong
+* Fix HNAS driver confusing error message (iSCSI driver)
+* Updated from global requirements
+* Ensure lazy translation is disabled properly
+* DRBD: remove a wrong comma, it creates a tuple
+* Move oslo.utils to oslo_utils namespace
+* Make test_create_delete_snapshot more robust
+* Add policy_dirs conf fixture
+* DRBD: Log an error if libraries can't be loaded
+* Fix the iSER legacy usage in the new targets flow
+* Move oslo.config to oslo_config namespace
+* Add support for manage/unmanage volume commands to PureISCSIDriver
+* Scality: Lock around SOFS mount to avoid a race
+* Set 'driver_volume_type' to 'gpfs'
+* Verify the instance's existance in the VMAX driver
+* Updated from global requirements
+* Switch the PureISCSIDriver over to using the purestorage pypi module
+* Fix zfssa driver volume attach to work with latest zfssa software
+* Updated from global requirements
+* Move oslo.db to oslo_db namespace
+* Fix eqlx endless loop when server closes the connection
+* Increase unit test coverage in hacking test
+* Fixed server name being retained after detach in LeftHand
+* Fixes misspelled words in Cinder
+* Imported Translations from Transifex
+* Add mock for cinder-rtstool call in tests.targets.test_lio_driver
+* Skip LIO target unit tests until mocked
+* Fix LOG formatting in api initialize_connection
+* TgtAdm: Don't change CHAP username/password on live migration
+* Deal with PEP-0476 certificate chaining checking
+* Add hacking check for oslo namespace usage
+* Remove locks from LeftHand driver
+* Fix bug in tgt conf for volume
+* Use is_valid_ipv6 from oslo.utils
+* Use lockutils.set_defaults to set lock_path in test
+* Fix bug in sheepdog driver: the wrong volume size
+* Add loopingcalls for Huawei storage system driver
+* Implement clone_image caching on SolidFire
+* Add migration tests for PostgreSQL
+* Garbage Remains when Attached Volume is Migrated with NFS Driver
+* Update README.rst to current state
+* Remove unused variables from ensure_export()
+* Fix incorrect usage of get_flow in volume.manager
+* Fix iscsi_write_cache setting for iscsi targets
+* Add debug messaging for tgt already exists
+* Clean up QoSSpecManageApiTest setup
+* Add more rally benchmarks related to Cinder
+* Use cinder.utils.execute directly
+* Deal with tgt already exists errors
+* Fix drbd driver to load without 3'rd party libs
+* i18n fixes for PureISCSIDriver
+* cinder-rtstool: should use acl.node_wwn
+* LVM: Add terminate_connection call for Target Objects
+* Add an instance-locality filter
+* Adds cinder iscsi driver for CloudByte storage
+* Add driver filter and evaluator for scheduler
+* Remove import of private _lazy module
+* Fix the continuation line indent to pass flake8
+* Capitalize the first letter in log messages
+* Fix argument order in assertEqual: tests/test_glusterfs.py
+* Use assertRaisesRegexp() in test_srb.py
+* The DRBD(manage) Cinder volume driver
+* Make ProphetStor drivers compliant with logging standards
+* Transition LVM Driver to use Target Objects
+* Replace oslo-incubator with oslo_context
+* Create proxy volume driver
+* Fix handling of serialized data in filtering of volumes
+* Convert mox to mock: tests/test_glusterfs.py
+* Remove check on db_exc.DBError
+* Add specific docs build option to tox
+* Imported Translations from Transifex
+* Add a privileged user for OpenStack services
+* Add support to PureISCSIDriver for Consistency Groups
+* Expand the description of extra_capabilities
+* Fix broken StorPool driver
+* Brick LVM: Remove self.lv_list
+* Revert "Outputs the message about failing to bind
+* Replace the NetApp driver proxy layer with a proper factory
+* Quobyte Driver Exception Cleanup
+* Handle the volume not found case in the VMAX driver
+* Fix format errors in brick/iscsi LOG messages
+* Add unit tests for NetApp do_setup methods
+* Outputs the message about failing to bind to IPv6
+* NetApp E-series: Do not log passwords in requests
+* Set iet_conf to nonexistent file in unit test
+* Fix issue with passing lists in filters
+* Rename oslo.concurrency to oslo_concurrency
+* Add a provider_id column to Volumes and Snapshots
+* Mock leaked _execute() calls in driver tests
+* Sync request_utils module from oslo-incubator
+* Sync periodic_task module from oslo-incubator
+* Persist volume uuid on VMAX array
+* Fixed a problem in terminate_connection in VMAX driver
+* Sync the latest middleware module from oslo-incubator
+* LVM: Volume is deleted unexpectedly during volume migration
+* RBD: use image_conversion_dir for image operations
+* Sync the latest loopingcall module from oslo-incubator
+* Sync install_venv_common from oslo-incubator
+* Sync latest imageutils from oslo-incubator
+* rtstool on Ubuntu installs in /usr/local/bin
+* encryption_id needs to be non-nullable
+* Mock calls to rpm and dpkg from NetApp unit tests
+* Fix files in Cinder with execute bit set
+* Add error handling to _connect function in PureISCSIDriver
+* Fix typo that escaped review in connector.py
+* Fix 3PAR host persona mapping to match WSAPI
+* Punctuation and Copyright changes
+* Make 3PAR drivers compliant with logging standards
+* Fixing 3PAR connection name cache error
+* Remove redundant args for clone_image method
+* Add Oracle ZFSSA NFS Cinder Driver Support
+* Fix HNAS driver initialization
+
 2015.1.0b1
 ----------
 
+* Make GPFS driver compliant with logging standards
+* Updated from global requirements
+* Fixed wait for job completion in VMAX driver
+* Logging updates to properly use ',' instead of '%'
+* Add support for Purity Protection Groups to PureISCSIDriver
+* Catch ImageNotFound exception when deleting rbd volume
+* Isolate Cinder Attach and Connect in Base Driver
 * Uncouple scheduler stats from volume creation
 * Fibrechannel and iSCSI for Violin Memory 6000 Series Arrays
 * Add Scality SRB driver
@@ -31,9 +206,12 @@ CHANGES
 * First version of Cinder driver for Quobyte USP
 * Fix use of invalid variable in tgt exists check
 * Remove an unused variable in volume/manager.py
+* Brick: fix bug in tgt conf for volume
+* Convert test_image_utils tests to mock
 * Report better capacity info for a limitless 3par cpg
 * VMware: Fix datastore selection with single host
 * Add support for backup encryption metadata
+* Improve use of temporary_file and temporary_dir
 * RemoteFS: Move Nova snapshot code into RemoteFSSnapDriver
 * Implementing the use of _L’x’/i18n markers
 * Fixes intermittent NFS driver mount failure
@@ -147,6 +325,7 @@ CHANGES
 * Stop stacktracing on QuotaErrors
 * Stop stacktracing on InvalidInput exceptions
 * Add automatic creation and deletion of Purity hosts for PureISCSIDriver
+* Mox -> Mock for test_block_device.py
 * Fix Brocade FC SAN lookup MITM vulnerability
 * Implementing the use of _L’x’/i18n markers
 * Imported Translations from Transifex

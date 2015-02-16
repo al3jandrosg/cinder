@@ -1,3 +1,21 @@
+cinder (1:2015.1~b2-0ubuntu1) vivid; urgency=medium
+
+  [ Corey Bryant ]
+  * New upstream release.
+    - d/control: Align with upstream dependencies.
+    - d/p/fix-assert-raises-regex-tests.patch: Dropped. Fixed upstream.
+    - d/p/remove-private-_lazy-import.patch: Dropped. Fixed upstream.
+    - d/p/pep-0476.patch: Dropped. Fixed upstream.
+    - d/p/skip-rtslib-test.patch: Rebased.
+    - d/p/fix-requirements.patch: Rebased.
+    - d/p/skip-huaweistorac-delete-snapshot-success-test.patch: Rebased.
+
+  [ James Page ]
+  * d/control: Transition to new non-namespaced oslo packages.
+  * d/p/skip-rtslib-test.patch: Rewrite to be a little more elegant. 
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 16 Feb 2015 10:39:55 +0000
+
 cinder (1:2015.1~b1-0ubuntu5) vivid; urgency=medium
 
   * d/p/remove-private-_lazy-import.patch: Cherry picked from master and
