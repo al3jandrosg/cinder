@@ -21,7 +21,7 @@ from cinder.db.sqlalchemy import api
 import cinder.exception
 import cinder.test
 from cinder.volume import configuration as conf
-from cinder.volume.drivers.block_device import BlockDeviceDriver
+from cinder.volume.drivers import block_device
 from cinder.volume import utils as volutils
 
 
@@ -35,8 +35,9 @@ class TestBlockDeviceDriver(cinder.test.TestCase):
         self.host = 'localhost'
         self.configuration.iscsi_port = 3260
         self.configuration.volume_dd_blocksize = 1234
-        self.drv = BlockDeviceDriver(configuration=self.configuration,
-                                     host='localhost')
+        self.drv = block_device.BlockDeviceDriver(
+            configuration=self.configuration,
+            host='localhost')
 
     def test_initialize_connection(self):
         TEST_VOLUME1 = {'host': 'localhost1',
@@ -109,8 +110,8 @@ class TestBlockDeviceDriver(cinder.test.TestCase):
                 lp_mocked.assert_called_once_with(TEST_VOLUME1)
                 gds_mocked.assert_called_once_with('/dev/loop1')
 
-        _exists.assert_called_anytime()
-        _clear_volume.assert_called_anytime()
+        self.assertTrue(_exists.called)
+        self.assertTrue(_clear_volume.called)
 
     def test_delete_path_is_not_in_list_of_available_devices(self):
         TEST_VOLUME2 = {'provider_location': '1 2 3 /dev/loop0'}
@@ -208,7 +209,7 @@ class TestBlockDeviceDriver(cinder.test.TestCase):
                                               TEST_IMAGE_SERVICE,
                                               TEST_IMAGE_META)
 
-                _local_path.assert_called()
+                self.assertTrue(_local_path.called)
                 _upload_volume.assert_called_once_with(context,
                                                        TEST_IMAGE_SERVICE,
                                                        TEST_IMAGE_META,

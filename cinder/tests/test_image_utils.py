@@ -24,6 +24,7 @@ from oslo_utils import units
 from cinder import exception
 from cinder.image import image_utils
 from cinder import test
+from cinder.volume import throttling
 
 
 class TestQemuImgInfo(test.TestCase):
@@ -68,27 +69,69 @@ class TestQemuImgInfo(test.TestCase):
                                           run_as_root=True)
         self.assertEqual(mock_info.return_value, output)
 
+    @mock.patch('cinder.utils.execute')
+    def test_get_qemu_img_version(self, mock_exec):
+        mock_out = "qemu-img version 2.0.0"
+        mock_err = mock.sentinel.err
+        mock_exec.return_value = (mock_out, mock_err)
+
+        expected_version = [2, 0, 0]
+        version = image_utils.get_qemu_img_version()
+
+        mock_exec.assert_called_once_with('qemu-img', '--help',
+                                          check_exit_code=False)
+        self.assertEqual(expected_version, version)
+
+    @mock.patch.object(image_utils, 'get_qemu_img_version')
+    def test_validate_qemu_img_version(self, mock_get_qemu_img_version):
+        fake_current_version = [1, 8]
+        mock_get_qemu_img_version.return_value = fake_current_version
+        minimum_version = '1.8'
+
+        image_utils.check_qemu_img_version(minimum_version)
+
+        mock_get_qemu_img_version.assert_called_once_with()
+
+    @mock.patch.object(image_utils, 'get_qemu_img_version')
+    def _test_validate_unsupported_qemu_img_version(self,
+                                                    mock_get_qemu_img_version,
+                                                    current_version=None):
+        mock_get_qemu_img_version.return_value = current_version
+        minimum_version = '2.0'
+
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          image_utils.check_qemu_img_version,
+                          minimum_version)
+
+        mock_get_qemu_img_version.assert_called_once_with()
+
+    def test_validate_qemu_img_version_not_installed(self):
+        self._test_validate_unsupported_qemu_img_version()
+
+    def test_validate_older_qemu_img_version(self):
+        self._test_validate_unsupported_qemu_img_version(
+            current_version=[1, 8])
+
 
 class TestConvertImage(test.TestCase):
     @mock.patch('cinder.image.image_utils.os.stat')
     @mock.patch('cinder.utils.execute')
-    @mock.patch('cinder.volume.utils.setup_blkio_cgroup',
-                return_value=(mock.sentinel.cgcmd, ))
     @mock.patch('cinder.utils.is_blk_device', return_value=True)
-    def test_defaults_block_dev(self, mock_isblk, mock_cgroup, mock_exec,
+    def test_defaults_block_dev(self, mock_isblk, mock_exec,
                                 mock_stat):
         source = mock.sentinel.source
         dest = mock.sentinel.dest
         out_format = mock.sentinel.out_format
-        cgcmd = mock.sentinel.cgcmd
         mock_stat.return_value.st_size = 1048576
+        throttle = throttling.Throttle(prefix=['cgcmd'])
 
         with mock.patch('cinder.volume.utils.check_for_odirect_support',
                         return_value=True):
-            output = image_utils.convert_image(source, dest, out_format)
+            output = image_utils.convert_image(source, dest, out_format,
+                                               throttle=throttle)
 
             self.assertIsNone(output)
-            mock_exec.assert_called_once_with(cgcmd, 'qemu-img', 'convert',
+            mock_exec.assert_called_once_with('cgcmd', 'qemu-img', 'convert',
                                               '-t', 'none', '-O', out_format,
                                               source, dest, run_as_root=True)
 
@@ -99,7 +142,7 @@ class TestConvertImage(test.TestCase):
             output = image_utils.convert_image(source, dest, out_format)
 
             self.assertIsNone(output)
-            mock_exec.assert_called_once_with(cgcmd, 'qemu-img', 'convert',
+            mock_exec.assert_called_once_with('qemu-img', 'convert',
                                               '-O', out_format, source, dest,
                                               run_as_root=True)
 
@@ -107,21 +150,18 @@ class TestConvertImage(test.TestCase):
                 return_value=True)
     @mock.patch('cinder.image.image_utils.os.stat')
     @mock.patch('cinder.utils.execute')
-    @mock.patch('cinder.volume.utils.setup_blkio_cgroup',
-                return_value=(mock.sentinel.cgcmd, ))
     @mock.patch('cinder.utils.is_blk_device', return_value=False)
-    def test_defaults_not_block_dev(self, mock_isblk, mock_cgroup, mock_exec,
+    def test_defaults_not_block_dev(self, mock_isblk, mock_exec,
                                     mock_stat, mock_odirect):
         source = mock.sentinel.source
         dest = mock.sentinel.dest
         out_format = mock.sentinel.out_format
-        cgcmd = mock.sentinel.cgcmd
         mock_stat.return_value.st_size = 1048576
 
         output = image_utils.convert_image(source, dest, out_format)
 
         self.assertIsNone(output)
-        mock_exec.assert_called_once_with(cgcmd, 'qemu-img', 'convert', '-O',
+        mock_exec.assert_called_once_with('qemu-img', 'convert', '-O',
                                           out_format, source, dest,
                                           run_as_root=True)
 
@@ -339,7 +379,6 @@ class TestUploadVolume(test.TestCase):
                       'disk_format': mock.sentinel.disk_format}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'posix'
-        mock_conf.volume_copy_bps_limit = mock.sentinel.bps_limit
         data = mock_info.return_value
         data.file_format = mock.sentinel.disk_format
         temp_file = mock_temp.return_value.__enter__.return_value
@@ -351,7 +390,6 @@ class TestUploadVolume(test.TestCase):
         mock_convert.assert_called_once_with(volume_path,
                                              temp_file,
                                              mock.sentinel.disk_format,
-                                             bps_limit=mock.sentinel.bps_limit,
                                              run_as_root=True)
         mock_info.assert_called_once_with(temp_file, run_as_root=True)
         mock_open.assert_called_once_with(temp_file, 'rb')
@@ -430,7 +468,6 @@ class TestUploadVolume(test.TestCase):
                       'disk_format': mock.sentinel.disk_format}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'posix'
-        mock_conf.volume_copy_bps_limit = mock.sentinel.bps_limit
         data = mock_info.return_value
         data.file_format = mock.sentinel.other_disk_format
         temp_file = mock_temp.return_value.__enter__.return_value
@@ -441,7 +478,6 @@ class TestUploadVolume(test.TestCase):
         mock_convert.assert_called_once_with(volume_path,
                                              temp_file,
                                              mock.sentinel.disk_format,
-                                             bps_limit=mock.sentinel.bps_limit,
                                              run_as_root=True)
         mock_info.assert_called_once_with(temp_file, run_as_root=True)
         self.assertFalse(image_service.update.called)
@@ -544,8 +580,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         volume_format = mock.sentinel.volume_format
         blocksize = mock.sentinel.blocksize
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = volume_format
         data.backing_file = None
@@ -568,7 +602,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
-                                             bps_limit=bps_limit,
                                              run_as_root=True)
 
     @mock.patch('cinder.image.image_utils.convert_image')
@@ -594,8 +627,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = volume_format
         data.backing_file = None
@@ -619,7 +650,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
-                                             bps_limit=bps_limit,
                                              run_as_root=run_as_root)
 
     @mock.patch('cinder.image.image_utils.convert_image')
@@ -647,8 +677,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         tmp = mock_temp.return_value.__enter__.return_value
         image_service.show.return_value = {'disk_format': 'raw',
                                            'size': 41126400}
@@ -695,8 +723,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         tmp = mock_temp.return_value.__enter__.return_value
         image_service.show.return_value = {'disk_format': 'not_raw'}
 
@@ -740,8 +766,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         tmp = mock_temp.return_value.__enter__.return_value
         image_service.show.return_value = None
 
@@ -783,8 +807,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 1234
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = volume_format
         data.backing_file = None
@@ -833,8 +855,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = None
         data.backing_file = None
@@ -883,8 +903,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = volume_format
         data.backing_file = mock.sentinel.backing_file
@@ -933,8 +951,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = mock.sentinel.file_format
         data.backing_file = None
@@ -959,7 +975,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
-                                             bps_limit=bps_limit,
                                              run_as_root=run_as_root)
 
     @mock.patch('cinder.image.image_utils.convert_image')
@@ -986,8 +1001,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         size = 4321
         run_as_root = mock.sentinel.run_as_root
 
-        bps_limit = mock.sentinel.bps_limit
-        mock_conf.volume_copy_bps_limit = bps_limit
         data = mock_info.return_value
         data.file_format = volume_format
         data.backing_file = None
@@ -1011,7 +1024,6 @@ class TestFetchToVolumeFormat(test.TestCase):
         mock_repl_xen.assert_called_once_with(tmp)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
-                                             bps_limit=bps_limit,
                                              run_as_root=run_as_root)
 
 

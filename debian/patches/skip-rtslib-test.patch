@@ -1,6 +1,6 @@
 --- a/cinder/tests/test_cmd.py
 +++ b/cinder/tests/test_cmd.py
-@@ -17,13 +17,20 @@ import sys
+@@ -16,13 +16,20 @@ import sys
  
  import mock
  from oslo_config import cfg
@@ -23,7 +23,7 @@
  from cinder.cmd import scheduler as cinder_scheduler
  from cinder.cmd import volume as cinder_volume
  from cinder.cmd import volume_usage_audit
-@@ -684,6 +691,7 @@ class TestCinderManageCmd(test.TestCase)
+@@ -685,6 +692,7 @@ class TestCinderManageCmd(test.TestCase)
  
  class TestCinderRtstoolCmd(test.TestCase):
  

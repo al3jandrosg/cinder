@@ -18,13 +18,13 @@ Unified driver for NetApp storage systems.
 Supports multiple storage systems of different families and protocols.
 """
 
+from oslo_log import log as logging
 from oslo_utils import importutils
 
 from cinder import exception
 from cinder.i18n import _, _LI
-from cinder.openstack.common import log as logging
 from cinder.volume import driver
-from cinder.volume.drivers.netapp.options import netapp_proxy_opts
+from cinder.volume.drivers.netapp import options
 from cinder.volume.drivers.netapp import utils as na_utils
 
 
@@ -39,13 +39,11 @@ NETAPP_UNIFIED_DRIVER_REGISTRY = {
     {
         'iscsi': DATAONTAP_PATH + '.iscsi_cmode.NetAppCmodeISCSIDriver',
         'nfs': DATAONTAP_PATH + '.nfs_cmode.NetAppCmodeNfsDriver',
-        'fc': DATAONTAP_PATH + '.fc_cmode.NetAppCmodeFibreChannelDriver'
     },
     'ontap_7mode':
     {
         'iscsi': DATAONTAP_PATH + '.iscsi_7mode.NetApp7modeISCSIDriver',
         'nfs': DATAONTAP_PATH + '.nfs_7mode.NetApp7modeNfsDriver',
-        'fc': DATAONTAP_PATH + '.fc_7mode.NetApp7modeFibreChannelDriver'
     },
     'eseries':
     {
@@ -69,7 +67,7 @@ class NetAppDriver(driver.ProxyVD):
             raise exception.InvalidInput(
                 reason=_('Required configuration not found'))
 
-        config.append_config_values(netapp_proxy_opts)
+        config.append_config_values(options.netapp_proxy_opts)
         na_utils.check_flags(NetAppDriver.REQUIRED_FLAGS, config)
 
         app_version = na_utils.OpenStackInfo().info()

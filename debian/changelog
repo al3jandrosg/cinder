@@ -1,3 +1,23 @@
+cinder (1:2015.1~b3-0ubuntu1) vivid; urgency=medium
+
+  [ James Page ]
+  * d/pydist-overrides: Add overrides for oslo packages.
+
+  [ Corey Bryant ]
+  * New upstream milestone release for OpenStack Kilo:
+    - d/control: Align with upstream dependencies.
+    - d/p/skip-huaweistorac-delete-snapshot-success-test.patch: Dropped.
+      Patched test has been removed.
+
+  [ James Page ]
+  * d/control: Add missing BD on python-testresources.
+  * d/p/fix-long-casting.patch: Workaround some problematic type casting between
+    int/long (LP: #1435242).
+  * d/p/fix-assert-raises-regex-tests.patch: Patchup incorrect usage of
+    assertUsesRegex{p} in unit tests.
+
+ -- James Page <james.page@ubuntu.com>  Mon, 30 Mar 2015 11:07:20 +0100
+
 cinder (1:2015.1~b2-0ubuntu1) vivid; urgency=medium
 
   [ Corey Bryant ]

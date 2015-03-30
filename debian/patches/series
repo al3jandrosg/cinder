@@ -1,3 +1,4 @@
-skip-huaweistorac-delete-snapshot-success-test.patch
 skip-rtslib-test.patch
 fix-requirements.patch
+fix-long-casting.patch
+fix-assert-raises-regex-tests.patch

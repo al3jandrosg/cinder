@@ -24,6 +24,7 @@ import time
 
 import mock
 from oslo_concurrency import processutils
+from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import importutils
 from oslo_utils import units
@@ -31,7 +32,6 @@ from oslo_utils import units
 from cinder import context
 from cinder import exception
 from cinder.i18n import _
-from cinder.openstack.common import log as logging
 from cinder import test
 from cinder.tests import utils as testutils
 from cinder import utils
@@ -386,11 +386,15 @@ class StorwizeSVCManagementSimulator:
         if 'obj' not in kwargs:
             return self._print_info_cmd(rows=rows, **kwargs)
         else:
-            if kwargs['obj'] == self._flags['storwize_svc_volpool_name']:
+            pool_name = kwargs['obj'].strip('\'\"')
+            if pool_name == kwargs['obj']:
+                raise exception.InvalidInput(
+                    reason=_('obj missing quotes %s') % kwargs['obj'])
+            elif pool_name == self._flags['storwize_svc_volpool_name']:
                 row = rows[1]
-            elif kwargs['obj'] == 'openstack2':
+            elif pool_name == 'openstack2':
                 row = rows[2]
-            elif kwargs['obj'] == 'openstack3':
+            elif pool_name == 'openstack3':
                 row = rows[3]
             else:
                 return self._errors['CMMVC5754E']
@@ -624,6 +628,11 @@ port_speed!N/A
                   'easy_tier': volume_info['easy_tier'],
                   'compressed_copy': volume_info['compressed_copy']}
         volume_info['copies'] = {'0': vol_cp}
+
+        mdiskgrp = kwargs['mdiskgrp'].strip('\'\"')
+        if mdiskgrp == kwargs['mdiskgrp']:
+            raise exception.InvalidInput(
+                reason=_('mdiskgrp missing quotes %s') % kwargs['mdiskgrp'])
 
         if volume_info['name'] in self._volumes_list:
             return self._errors['CMMVC6035E']
@@ -1433,6 +1442,9 @@ port_speed!N/A
         if 'mdiskgrp' not in kwargs:
             return self._errors['CMMVC5707E']
         mdiskgrp = kwargs['mdiskgrp'].strip('\'\"')
+        if mdiskgrp == kwargs['mdiskgrp']:
+            raise exception.InvalidInput(
+                reason=_('mdiskgrp missing quotes %s') % kwargs['mdiskgrp'])
 
         copy_info = {}
         copy_info['id'] = self._find_unused_id(vol['copies'])
@@ -3032,7 +3044,7 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         # Make sure that the volumes have been created
         self._assert_vol_exists(volume['name'], True)
 
-        #Set up one WWPN that won't match and one that will.
+        # Set up one WWPN that won't match and one that will.
         self.driver._state['storage_nodes']['1']['WWPN'] = ['123456789ABCDEF0',
                                                             'AABBCCDDEEFF0010']
 
@@ -3066,7 +3078,7 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         # Make sure that the volumes have been created
         self._assert_vol_exists(volume['name'], True)
 
-        #Set up WWPNs that will not match what is available.
+        # Set up WWPNs that will not match what is available.
         self.driver._state['storage_nodes']['1']['WWPN'] = ['123456789ABCDEF0',
                                                             '123456789ABCDEF1']
 
@@ -3100,7 +3112,7 @@ class StorwizeSVCDriverTestCase(test.TestCase):
         # Make sure that the volumes have been created
         self._assert_vol_exists(volume['name'], True)
 
-        #Set up one WWPN.
+        # Set up one WWPN.
         self.driver._state['storage_nodes']['1']['WWPN'] = ['AABBCCDDEEFF0012']
 
         wwpns = ['ff00000000000000', 'ff00000000000001']

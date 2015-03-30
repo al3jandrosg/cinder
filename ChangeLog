@@ -1,19 +1,244 @@
 CHANGES
 =======
 
+2015.1.0b3
+----------
+
+* Removing Windows drivers for no reported CI
+* Removing Zadara driver for no reported CI
+* Removing Huawei drivers for no reported CI
+* Removing Netapp FC drivers for no reported CI
+* Removing Fujitsu driver for no reported CI
+* Removing DRBD driver for no reported CI
+* Removing FusionIO driver for no reported CI
+* Removing Nexenta driver for no reported CI
+* Removing Symantec NFS driver for no reported CI
+* Removing StorPool driver for no reported CI
+* Removing ZFSSA driver for no reported CI
+* Make the 3PAR drivers honor the pool in create
+* Removing HP MSA driver for no reported CI
+* Removing Coraid driver for no reported CI
+* Add retry to create resource in Datera driver
+* Change datetime.now() to timeutils.utcnow() from oslo_utils
+* Remove error messages from multipath command output before parsing
+* Return updated volume object to the caller of _attach_volume()
+* Fix SAN generic driver ssh whitespaced commands
+* EMC: Fix use of "_" as variable name
+* Reduce configured file size for nfs backup unit tests
+* tests: remove useless variable
+* Revert "Datera's export to avoid deprecated keys"
+* Don't override extra specs with config in VMAX
+* Check license before clone in VMAX driver
+* Fixing mount when state_path is configured with a final '/'
+* Update Violin REST client library name
+* Remove the reference of volume['instance_uuid']in VNX driver
+* Increase LeftHand driver minimum client version
+* Decrement remaining retries after failed REST call
+* VMware: Fail immediately for images in a container
+* Make unused iscsi_num_targets, iser_num_targets configs as deprecated
+* Raise exception for invalid mock assert calls
+* Mocked utils.execute for broken tests
+* Huawei driver check before associating LUN to a LUN group
+* Fix typos in LVMVolumeDriver
+* Add minimum qemu-img version check functions
+* Implement IET target driver
+* Fix unit tests for multiattach patch
+* Fixed a concurrency issue in VMAX driver
+* Fix LVM thin pool creation race
+* Fix ArgsAlreadyParsedError in emc_vnx_cli.py
+* Fix typo in log message
+* Fix a typo in sf_template_account_name help
+* Move to the oslo.middleware library
+* Remove use of contextlib.nested
+* Remove strutils from oslo-incubator
+* Add waiting for the driver to SchedulerManager
+* Fix retype return value in volume driver base class
+* Fix retype arguments in volume driver base class
+* Fix sqlalchemy reuse in multi-backend children
+* Fix Cinder logs to show authentication error in RBD driver
+* Update hacking check for oslo_log
+* Add is_ready method to scheduler driver
+* Datera driver looks for lun-0 instead lun-1 now
+* Use oslo.log instead of oslo-incubator
+* Remove the useless next link for volumes, transfers and backups
+* Unset auth token before trying to login to Datera
+* NFS backup driver
+* Sort snapshots in create CG from CG snapshot
+* Add multiattach capabilities injection
+* Tests: Harden fake_notifier asserts
+* Error trying to delete snapshots on Hitachi driver
+* Remove global mocking from test_pure.py
+* Allow scheduler to receive volume stats when starting service
+* Adjust Cinder to support FCP on System z systems
+* Refactor Swift backup driver and introduce chunking driver
+* Namespace updates for _i18n and imageutils & fileutils
+* Dell FC driver inheritance order causing failures
+* Add volume multi attach support
+* Fixes VNX NotImplementedError of unmanage
+* Replace assertEqual(True, *) -> assertTrue(*)
+* Update Datera's export to avoid deprecated keys
+* Improve error handling in refactored Tgt driver
+* Adds pool aware scheduling for HNAS drivers
+* PureISCSIDriver consistency group updates
+* HP lefthand driver filter and evalautor function
+* Add consistency group support for XIV/DS8K cinder driver proxy
+* Don't fail target_delete if ACL's don't exist
+* Change log level for no object attribute found
+* Add Manage/Unmanage support to NetApp NFS drivers
+* Use snapshot object in create_volume flow
+* Fix "rtsllib" -> "rtslib" typos
+* Fix some issues with pool name sent to SVC
+* Fix allocated_capacity tracking when rescheduling
+* HP 3par driver filter and evaluator function
+* Add support to incremental backups in cinder
+* Fixed the order of mock decorators in VMAX driver
+* Adds SSH communication to HNAS drivers
+* Add CHAP support to PureISCSIDriver
+* Make objects behave more like our old dictionaries
+* Two choices for iscsi_helper is missing
+* Update Datera's Authentication method
+* CG Modification Support in EMC VNX Cinder Driver
+* Dell SC API change fails snapshot creation
+* Adding manage/unmanage support for LeftHand driver
+* More validation logic for VNX CG creation
+* Change default value of gpfs_images_share_mode to None
+* Add DB table for driver specific data
+* Move oslo.messaging to the oslo_messaging namespace
+* Create Consistency Group from CG Snapshot API
+* Modify Consistency Group API
+* Remove useless storage_availability_zone import
+* Failover to alternative iSCSI portals on login failure
+* Update volume type name for volume type API
+* Add config option to override url for versions
+* Snapshot and volume objects
+* Cinder objects base
+* Dell Storage Center Driver API bug
+* Password config options should be marked secret
+* Clear migration_status from a destination volume if migration fails
+* RBD: Query volume features from ceph.conf
+* i18n Compatibility in VMAX driver
+* Correct a few changes in the VMAX driver
+* Fix HNAS driver parsing errors
+* RBD: remove non-layering support for antiquated versions
+* Fixed errors in docstrings in the VMAX driver
+* SMBFS: Fix retrieving the volume path and format
+* More validation logic for VNX CG creation
+* Add flash cache policy to 3PAR driver
+* Update v1 deprecation warnings
+* Fixes the import for Lefthand driver
+* NetApp eseries implementation for manage/unmanage
+* Replication status periodic task optimization
+* XtreamIO version 4.0 support
+* Change max_over_subscription_ratio default value
+* Use Unique SCST Group names in SCST cinder helper driver
+* Add CHAP persistence to SCST target helper
+* Fix for infinity capacity reporting in EQL driver
+* Import only modules: H302
+* Revert "Remove retry_deactivation directive on lvremove"
+* Over subscription for Pure Storage iSCSI driver
+* Use oslo_config choices support
+* Custom zone name prefix not being used by brcd driver
+* cinder-manage man update
+* GET volumes API sorting REST/volume/DB updates
+* GET volumes API sorting enhancements common utilities
+* FCZM fix reading of cinder config entries
+* Sync scheduler.filters module from oslo-incubator
+* Limit volume copy bandwidth per backend
+* Generic filter support for volume queries
+* Remove warnings for long vgs and lvs calls
+* Use subunit-trace to enable output during unit test runs
+* VMware: Relocate volume to compliant datastore
+* VMware:Use datastore selection logic in new module
+* VMware: Refactor initialize_connection unit tests
+* Fix exceptions logging in TgtAdm
+* Sync 'versionutils' module from oslo-incubator
+* Sync 'threadgroup' from oslo-incubator
+* Update 'systemd' module from oslo-incubator
+* Sync 'service' module from oslo-incubator
+* Sync 'loopingcall' module from oslo-incubator
+* Sync the 'fileutils' module from oslo-incubator
+* Sync 'eventlet_backdoor' module from oslo-incubator
+* Remove unused 'test' module from oslo-incubator
+* IBM GPFS Consistency Group Implementation
+* Fixed 3PAR driver load balancing during migration
+* NetApp E-series: Allow scheduling by disk
+* Make Interval and Retries Configurable for VMAX
+* Pass region name to Nova client
+* Remove retry_deactivation directive on lvremove
+* Manage/unmanage impl for NetApp ONTAP iscsi driver
+* Fix some message nits in the ZoneManager
+* Implement refresh as kwargs in get_volume_stats
+* Dell sc driver iscsi multipath enhancement
+* Tests: Fix cxt target tests opening files
+* LVM: Fix thin provisioning and mirrors stats reporting
+* Fix exception error on HNAS drivers
+* Fix comments style according to the Hacking Rules
+* Passing privileged user to create nova assisted snapshots
+* Fix return value inconsistency in VNX Driver
+* Fixed typo
+* Pool-aware scheduler support in EMC VNX Cinder driver
+* Fix extraneous comma that breaks docbook generation
+* Sync policy module from oslo-incubator
+* Dell Storage Center: Add retries to API calls
+* EQLX: Consolidate CHAP config options
+* Add support for chiscsi iscsi helper
+* Fix logging guideline violations in volume/api.py
+* Remove useless requirement on wsgiref
+* Snapshot of bootable volume goes in error state
+* Sync periodic_task module from oslo-incubator
+* Tests: Don't require binding to port 4444
+* Tests: Remove TestWSGIService.test_reset_pool_size_to_default
+* Tests: Remove randomness from NFS mount tests
+* Change exception message in volume api
+* Refactoring for export functions in Target object
+* Add iSCSI SCST Target support to cinder
+* EMC VMAX driver Kilo update
+* Fix Scality SRB driver security concerns
+* Fixes total_capacity_gb value in CloudByte driver
+* EMC VNX Cinder Driver iSCSI multipath enhancement
+* Add dedup provisioning to 3PAR drivers
+* Provided requirements are meant to be immutable
+* Remove optional parameter from lun mapping call
+* quobyte: remove dependency to xattr
+* Don't fail target_delete if target doesn't exist
+* Remove custom lazy loading
+* DRBD: Use correct function object after DBus disconnect
+* Split volume driver into ABC classes
+* Mock out the wait routine in the VMAX driver
+* Limit ram and disk used by ceph backup tests
+* Fix detach volume from host problem in VMAX driver
+* fix typo in config.py
+* Update hacking ignore list
+* VMware: Delay string interpolation in log messages
+* VMware: Integrate VMDK driver with oslo.vmware
+* Enhance iSCSI multipath support
+* Dell Storage Center Unit Test Updates for Kilo
+* Updated from global requirements
+* Update eqlx driver help text
+* Add extra library oslo.concurrency to oslo.config.generator.rc
+
 2015.1.0b2
 ----------
 
+* Support over subscription in thin provisioning
+* Change oslo.* to oslo_*
 * Lefthand driver fails to attach a cloned volume
 * Purge deleted rows
+* Make PureISCSIDriver iSCSI port discovery more flexible
 * EMC VNX Cinder Driver Update
+* Make storwize debug log more readable
 * Fixes the EQL driver CI tests AttributeError
 * Add manage/unmanage methods for Hitachi Block Storage Driver
+* RemoteFS: Use nas_ip and nas_share_path options
 * Tests: Don't sleep for looping calls (eqlx)
+* Enable use of an /etc/cinder/lvm.conf file
 * Roll back if VMAX masking view not created
 * Tests: Don't sleep for looping calls
+* Windows iSCSI driver: Fixes copy disk method exception handling
+* Revert "Implement Huawei SDSHypervisor driver"
 * Remove the solaris volume driver
 * Fix SSHPoolTestCase to work in parallel
+* Drop deprecated namespace for oslo.rootwrap
 * Fixes attribute content checking
 * Imported Translations from Transifex
 * Support iSER driver within the ISCSITarget flow
@@ -23,7 +248,9 @@ CHANGES
 * Add retry for tgtadm update when tgt exists
 * Add completion logging for snapshots and volumes
 * Fix configratuion of rally jobs
+* Create SolidFire Template account on init
 * Updated from global requirements
+* Add debug message for lvremove after udev settle
 * IBM Storwize driver Consistency Group Implementation
 * Use get_my_ipv4 from oslo.utils
 * TgtAdm: Fix _recreate_backing_lun logging
@@ -53,6 +280,7 @@ CHANGES
 * Improve debug logging of Dell Storage Center driver
 * Fix _usage_from_snapshot in volume.utils
 * VMware:Fix error creating vCenter inventory folder
+* New Cinder volume driver for openvstorage
 * Fix cinder-manage shell ipython
 * Shrink down customized logging listener
 * Prevent deleting volumes in a consistency group
@@ -113,6 +341,7 @@ CHANGES
 * Adds cinder iscsi driver for CloudByte storage
 * Add driver filter and evaluator for scheduler
 * Remove import of private _lazy module
+* Fix argument order in assertEqual: tests/test_nfs.py
 * Fix the continuation line indent to pass flake8
 * Capitalize the first letter in log messages
 * Fix argument order in assertEqual: tests/test_glusterfs.py
@@ -202,6 +431,7 @@ CHANGES
 * DB migration tests
 * Convert mox to mock: tests/compute/test_nova.py
 * Correct default service_name for nova_catalog*_info config option
+* FlashSystem Code Cleanup
 * FibreChannel drivers for NetApp Data ONTAP storage controllers
 * First version of Cinder driver for Quobyte USP
 * Fix use of invalid variable in tgt exists check
