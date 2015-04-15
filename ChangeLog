@@ -1,10 +1,82 @@
 CHANGES
 =======
 
+2015.1.0rc1
+-----------
+
+* GlusterFS: Returning provider location of volume from snapshot
+* Delete the temporary volume if migration fails
+* Revert "Removing Windows drivers"
+* Correct cinder hacking check numbering
+* Add hacking check for print() statements
+* Rbd update volume stats in wrong way
+* Add missing copy_volume_to_image method to Sheepdog driver
+* Partial Revert "Removing Huawei drivers"
+* Create initiator id if not exist in VMAX driver
+* Fixed encrypted property for 3PAR FC and iSCSI drivers
+* Partial Revert "Removing ZFSSA driver"
+* Mock wait_for_volume_removal in test_brick_connector
+* Dell SC driver has insufficient iscsi logging
+* VMware: Skip vSAN for preallocated image download
+* Enable H238 hacking rule
+* Use six.text_type instead of unicode
+* Fix ISCSIDriver initialized connection volume type
+* Fix multipath device discovery when UFN is enabled
+* Fix missing clone_image API support for sheepdog driver
+* More error handling on EMC VNX migration failure
+* Set volume_attachment to [] for the temporary volume creation
+* Only use operational LIFs for iscsi target details
+* Revert "Removing Netapp FC drivers for no reported CI"
+* Catch more general exception in manager's create_volume
+* Fix broken fetch_to_volume_format log message
+* Tests: Fix v6000 test failure with random hash seed
+* Check volume status in detach db api
+* Fix wrong command for _rescan_multipath
+* Storwize: Replication status still active when primary copy is offline
+* VMware: Fix instance_uuid access in volume retype
+* Logging not using oslo.i18n guidelines
+* Remove LP bug ref in remove_iscsi_device
+* Fix potential access to missing key
+* Brick: Fix race in removing iSCSI device
+* Fix the format of the system name in VMAX driver
+* Hitachi: Fix access to volume instance_uuid
+* VMware: Fix ImageNotAuthorized during copy volume
+* Fix: Boot from image with HNAS iSCSI
+* SMBFS: Fix missing volume provider location
+* Enhance VNX Cinder volume creation logic
+* Properly use obj_extra_fields in objects
+* Create unit tests for volume objects
+* Fix incorrect invocation of _add_to_threadpool
+* VMware: Fixed usage of volume instance_uuid
+* Change volume and snapshot stuck creating to error
+* Imported Translations from Transifex
+* Fixed access to instance_uuid in retype
+* Eager load volume extra specs
+* Be safe with getting attachment
+* Added the missing attachment to detach_volume
+* Make lio iSCSI changes persistent to avoid lost
+* Sort list of cinder_object.changes
+* Move to hacking 0.10
+* Syncing versionutils from oslo-incubator
+* Properly remove host object from ISE
+* Dell Storage Center API change fails init_conn
+* Windows iSCSI: fix volume clone
+* Enable request-id in cinder API logs
+* Use cached values for stats on query failures for vmem drivers
+* The value of netapp_storage_protocol should default to none
+* Change leftover oslo.* to oslo_*
+* Updated from global requirements
+* Fix: Synchronise Quobyte Share mounting
+* Fix typo in cinder/cinder/volume/drivers/emc_vmax
+* Update file doc string for pure.py
+* update oslo policy to remove policy.d log spam
+
 2015.1.0b3
 ----------
 
+* Remove chap secret DEBUG logging in PureISCSIDriver
 * Removing Windows drivers for no reported CI
+* Fix logging mistake in swift backup driver
 * Removing Zadara driver for no reported CI
 * Removing Huawei drivers for no reported CI
 * Removing Netapp FC drivers for no reported CI
@@ -19,7 +91,11 @@ CHANGES
 * Removing HP MSA driver for no reported CI
 * Removing Coraid driver for no reported CI
 * Add retry to create resource in Datera driver
+* Logging not using oslo.i18n guidelines
+* Tests: Fix az test failure when PYTHONHASHSEED != 0
 * Change datetime.now() to timeutils.utcnow() from oslo_utils
+* Fixes nits in check_no_contextlib_nested
+* Fix logging to catch original exceptions and tracebacks
 * Remove error messages from multipath command output before parsing
 * Return updated volume object to the caller of _attach_volume()
 * Fix SAN generic driver ssh whitespaced commands
@@ -39,12 +115,14 @@ CHANGES
 * Raise exception for invalid mock assert calls
 * Mocked utils.execute for broken tests
 * Huawei driver check before associating LUN to a LUN group
+* Windows: Fixes wintypes import issue in vhdutils
 * Fix typos in LVMVolumeDriver
 * Add minimum qemu-img version check functions
 * Implement IET target driver
 * Fix unit tests for multiattach patch
 * Fixed a concurrency issue in VMAX driver
 * Fix LVM thin pool creation race
+* Added provider_id to volume and snapshot object
 * Fix ArgsAlreadyParsedError in emc_vnx_cli.py
 * Fix typo in log message
 * Fix a typo in sf_template_account_name help
@@ -58,6 +136,8 @@ CHANGES
 * Fix Cinder logs to show authentication error in RBD driver
 * Update hacking check for oslo_log
 * Add is_ready method to scheduler driver
+* Fix for inconsistent cinder-services state change
+* Fix HNAS iSCSI driver error on LUN creation
 * Datera driver looks for lun-0 instead lun-1 now
 * Use oslo.log instead of oslo-incubator
 * Remove the useless next link for volumes, transfers and backups
@@ -69,11 +149,13 @@ CHANGES
 * Error trying to delete snapshots on Hitachi driver
 * Remove global mocking from test_pure.py
 * Allow scheduler to receive volume stats when starting service
+* VMware: Fix exception logging
 * Adjust Cinder to support FCP on System z systems
 * Refactor Swift backup driver and introduce chunking driver
 * Namespace updates for _i18n and imageutils & fileutils
 * Dell FC driver inheritance order causing failures
 * Add volume multi attach support
+* Add project_id to barbican keymgr wrapper
 * Fixes VNX NotImplementedError of unmanage
 * Replace assertEqual(True, *) -> assertTrue(*)
 * Update Datera's export to avoid deprecated keys
@@ -81,6 +163,7 @@ CHANGES
 * Adds pool aware scheduling for HNAS drivers
 * PureISCSIDriver consistency group updates
 * HP lefthand driver filter and evalautor function
+* Fix the unicode encode error when create volume
 * Add consistency group support for XIV/DS8K cinder driver proxy
 * Don't fail target_delete if ACL's don't exist
 * Change log level for no object attribute found
@@ -91,12 +174,14 @@ CHANGES
 * Fix allocated_capacity tracking when rescheduling
 * HP 3par driver filter and evaluator function
 * Add support to incremental backups in cinder
+* Convert all eqlx tests from mox to mock
 * Fixed the order of mock decorators in VMAX driver
 * Adds SSH communication to HNAS drivers
 * Add CHAP support to PureISCSIDriver
 * Make objects behave more like our old dictionaries
 * Two choices for iscsi_helper is missing
 * Update Datera's Authentication method
+* Simplify cxt test_create_export() unit test
 * CG Modification Support in EMC VNX Cinder Driver
 * Dell SC API change fails snapshot creation
 * Adding manage/unmanage support for LeftHand driver
@@ -166,6 +251,7 @@ CHANGES
 * Pass region name to Nova client
 * Remove retry_deactivation directive on lvremove
 * Manage/unmanage impl for NetApp ONTAP iscsi driver
+* Fix argument order in assertEqual: tests/test_service.py
 * Fix some message nits in the ZoneManager
 * Implement refresh as kwargs in get_volume_stats
 * Dell sc driver iscsi multipath enhancement
@@ -230,6 +316,7 @@ CHANGES
 * Fixes the EQL driver CI tests AttributeError
 * Add manage/unmanage methods for Hitachi Block Storage Driver
 * RemoteFS: Use nas_ip and nas_share_path options
+* Scality SOFS : Use ensure_tree from fileutils
 * Tests: Don't sleep for looping calls (eqlx)
 * Enable use of an /etc/cinder/lvm.conf file
 * Roll back if VMAX masking view not created

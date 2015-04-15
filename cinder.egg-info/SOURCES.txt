@@ -224,6 +224,7 @@ cinder/db/sqlalchemy/migrate_repo/versions/038_add_driver_initiator_data_table.p
 cinder/db/sqlalchemy/migrate_repo/versions/039_add_parent_id_to_backups.py
 cinder/db/sqlalchemy/migrate_repo/versions/040_add_volume_attachment.py
 cinder/db/sqlalchemy/migrate_repo/versions/040_sqlite_downgrade.sql
+cinder/db/sqlalchemy/migrate_repo/versions/041_add_modified_at_column_to_service.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/hacking/__init__.py
 cinder/hacking/checks.py
@@ -241,7 +242,6 @@ cinder/locale/cinder-log-error.pot
 cinder/locale/cinder-log-info.pot
 cinder/locale/cinder-log-warning.pot
 cinder/locale/cinder.pot
-cinder/locale/de/LC_MESSAGES/cinder-log-info.po
 cinder/objects/__init__.py
 cinder/objects/base.py
 cinder/objects/fields.py
@@ -255,7 +255,6 @@ cinder/openstack/common/eventlet_backdoor.py
 cinder/openstack/common/fileutils.py
 cinder/openstack/common/gettextutils.py
 cinder/openstack/common/imageutils.py
-cinder/openstack/common/local.py
 cinder/openstack/common/loopingcall.py
 cinder/openstack/common/periodic_task.py
 cinder/openstack/common/policy.py
@@ -354,6 +353,8 @@ cinder/tests/test_hitachi_hbsd_snm2_fc.py
 cinder/tests/test_hitachi_hbsd_snm2_iscsi.py
 cinder/tests/test_hp3par.py
 cinder/tests/test_hplefthand.py
+cinder/tests/test_huawei_18000.py
+cinder/tests/test_huawei_drivers_compatibility.py
 cinder/tests/test_ibm_flashsystem.py
 cinder/tests/test_ibm_xiv_ds8k.py
 cinder/tests/test_ibmnas.py
@@ -403,6 +404,7 @@ cinder/tests/test_volume_types_extra_specs.py
 cinder/tests/test_volume_utils.py
 cinder/tests/test_wsgi.py
 cinder/tests/test_xio.py
+cinder/tests/test_zfssa.py
 cinder/tests/utils.py
 cinder/tests/api/__init__.py
 cinder/tests/api/common.py
@@ -519,6 +521,7 @@ cinder/tests/objects/__init__.py
 cinder/tests/objects/test_fields.py
 cinder/tests/objects/test_objects.py
 cinder/tests/objects/test_snapshot.py
+cinder/tests/objects/test_volume.py
 cinder/tests/scheduler/__init__.py
 cinder/tests/scheduler/fakes.py
 cinder/tests/scheduler/test_allocated_capacity_weigher.py
@@ -558,6 +561,7 @@ cinder/tests/volume/drivers/netapp/dataontap/test_block_cmode.py
 cinder/tests/volume/drivers/netapp/dataontap/test_nfs_base.py
 cinder/tests/volume/drivers/netapp/dataontap/test_nfs_cmode.py
 cinder/tests/volume/drivers/netapp/dataontap/client/__init__.py
+cinder/tests/volume/drivers/netapp/dataontap/client/fakes.py
 cinder/tests/volume/drivers/netapp/dataontap/client/test_api.py
 cinder/tests/volume/drivers/netapp/dataontap/client/test_client_7mode.py
 cinder/tests/volume/drivers/netapp/dataontap/client/test_client_base.py
@@ -568,8 +572,10 @@ cinder/tests/volume/drivers/netapp/eseries/test_iscsi.py
 cinder/tests/volume/drivers/netapp/eseries/test_utils.py
 cinder/tests/windows/__init__.py
 cinder/tests/windows/db_fakes.py
+cinder/tests/windows/test_smbfs.py
 cinder/tests/windows/test_vhdutils.py
 cinder/tests/windows/test_windows.py
+cinder/tests/windows/test_windows_remotefs.py
 cinder/tests/windows/test_windows_utils.py
 cinder/tests/xenapi/__init__.py
 cinder/tests/zonemanager/__init__.py
@@ -649,6 +655,10 @@ cinder/volume/drivers/hitachi/hbsd_fc.py
 cinder/volume/drivers/hitachi/hbsd_horcm.py
 cinder/volume/drivers/hitachi/hbsd_iscsi.py
 cinder/volume/drivers/hitachi/hbsd_snm2.py
+cinder/volume/drivers/huawei/__init__.py
+cinder/volume/drivers/huawei/huawei_18000.py
+cinder/volume/drivers/huawei/huawei_utils.py
+cinder/volume/drivers/huawei/rest_common.py
 cinder/volume/drivers/ibm/__init__.py
 cinder/volume/drivers/ibm/flashsystem.py
 cinder/volume/drivers/ibm/gpfs.py
@@ -666,6 +676,8 @@ cinder/volume/drivers/netapp/dataontap/__init__.py
 cinder/volume/drivers/netapp/dataontap/block_7mode.py
 cinder/volume/drivers/netapp/dataontap/block_base.py
 cinder/volume/drivers/netapp/dataontap/block_cmode.py
+cinder/volume/drivers/netapp/dataontap/fc_7mode.py
+cinder/volume/drivers/netapp/dataontap/fc_cmode.py
 cinder/volume/drivers/netapp/dataontap/iscsi_7mode.py
 cinder/volume/drivers/netapp/dataontap/iscsi_cmode.py
 cinder/volume/drivers/netapp/dataontap/nfs_7mode.py
@@ -706,9 +718,16 @@ cinder/volume/drivers/vmware/vmdk.py
 cinder/volume/drivers/vmware/volumeops.py
 cinder/volume/drivers/windows/__init__.py
 cinder/volume/drivers/windows/constants.py
+cinder/volume/drivers/windows/remotefs.py
+cinder/volume/drivers/windows/smbfs.py
 cinder/volume/drivers/windows/vhdutils.py
 cinder/volume/drivers/windows/windows.py
 cinder/volume/drivers/windows/windows_utils.py
+cinder/volume/drivers/zfssa/__init__.py
+cinder/volume/drivers/zfssa/restclient.py
+cinder/volume/drivers/zfssa/webdavclient.py
+cinder/volume/drivers/zfssa/zfssanfs.py
+cinder/volume/drivers/zfssa/zfssarest.py
 cinder/volume/flows/__init__.py
 cinder/volume/flows/common.py
 cinder/volume/flows/api/__init__.py
