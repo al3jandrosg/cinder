@@ -1,6 +1,20 @@
 CHANGES
 =======
 
+2015.1.0
+--------
+
+* Add external genconfig calls
+* service child process normal SIGTERM exit
+* Windows SMBFS: fix volume extend
+* Fix a wrong argument of create method
+* Release Import of Translations from Transifex
+* update .gitreview for stable/kilo
+* Updated from global requirements
+* Verify all quotas before updating the database
+* Add locking to PureISCSIDriver around creating Purity Host objects
+* Include boot properties from glance v2 images
+
 2015.1.0rc1
 -----------
 
