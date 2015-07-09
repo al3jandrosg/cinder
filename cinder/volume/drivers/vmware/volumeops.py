@@ -17,12 +17,12 @@
 Implements operations on volumes residing on VMware datastores.
 """
 
-import urllib
 
 from oslo_log import log as logging
 from oslo_utils import units
 from oslo_vmware import exceptions
 from oslo_vmware import vim_util
+from six.moves import urllib
 
 from cinder.i18n import _, _LE, _LI
 from cinder.volume.drivers.vmware import exceptions as vmdk_exceptions
@@ -514,6 +514,26 @@ class VMwareVolumeOps(object):
                                         self._session.vim, datacenter,
                                         'vmFolder')
 
+    def _get_child_folder(self, parent_folder, child_folder_name):
+        # Get list of child entities for the parent folder
+        prop_val = self._session.invoke_api(vim_util, 'get_object_property',
+                                            self._session.vim, parent_folder,
+                                            'childEntity')
+
+        if prop_val and hasattr(prop_val, 'ManagedObjectReference'):
+            child_entities = prop_val.ManagedObjectReference
+
+            # Return if the child folder with input name is already present
+            for child_entity in child_entities:
+                if child_entity._type != 'Folder':
+                    continue
+                child_entity_name = self.get_entity_name(child_entity)
+                if (child_entity_name
+                    and (urllib.parse.unquote(child_entity_name)
+                         == child_folder_name)):
+                    LOG.debug("Child folder: %s exists.", child_folder_name)
+                    return child_entity
+
     def create_folder(self, parent_folder, child_folder_name):
         """Creates child folder with given name under the given parent folder.
 
@@ -531,30 +551,20 @@ class VMwareVolumeOps(object):
                   {'child_folder_name': child_folder_name,
                    'parent_folder': parent_folder})
 
-        # Get list of child entities for the parent folder
-        prop_val = self._session.invoke_api(vim_util, 'get_object_property',
-                                            self._session.vim, parent_folder,
-                                            'childEntity')
-
-        if prop_val and hasattr(prop_val, 'ManagedObjectReference'):
-            child_entities = prop_val.ManagedObjectReference
-
-            # Return if the child folder with input name is already present
-            for child_entity in child_entities:
-                if child_entity._type != 'Folder':
-                    continue
-                child_entity_name = self.get_entity_name(child_entity)
-                if child_entity_name and (urllib.unquote(child_entity_name) ==
-                                          child_folder_name):
-                    LOG.debug("Child folder: %s already present.",
-                              child_folder_name)
-                    return child_entity
-
-        # Need to create the child folder
-        child_folder = self._session.invoke_api(self._session.vim,
-                                                'CreateFolder', parent_folder,
-                                                name=child_folder_name)
-        LOG.debug("Created child folder: %s.", child_folder)
+        child_folder = self._get_child_folder(parent_folder, child_folder_name)
+        if not child_folder:
+            # Need to create the child folder.
+            try:
+                child_folder = self._session.invoke_api(self._session.vim,
+                                                        'CreateFolder',
+                                                        parent_folder,
+                                                        name=child_folder_name)
+                LOG.debug("Created child folder: %s.", child_folder)
+            except exceptions.DuplicateName:
+                # Another thread is trying to create the same folder, ignore
+                # the exception.
+                child_folder = self._get_child_folder(parent_folder,
+                                                      child_folder_name)
         return child_folder
 
     def extend_virtual_disk(self, requested_size_in_gb, name, dc_ref,
@@ -1012,7 +1022,7 @@ class VMwareVolumeOps(object):
         return self._get_parent(backing, 'Folder')
 
     def _get_clone_spec(self, datastore, disk_move_type, snapshot, backing,
-                        disk_type, host=None):
+                        disk_type, host=None, resource_pool=None):
         """Get the clone spec.
 
         :param datastore: Reference to datastore
@@ -1021,6 +1031,7 @@ class VMwareVolumeOps(object):
         :param backing: Source backing VM
         :param disk_type: Disk type of clone
         :param host: Target host
+        :param resource_pool: Target resource pool
         :return: Clone spec
         """
         if disk_type is not None:
@@ -1028,7 +1039,7 @@ class VMwareVolumeOps(object):
         else:
             disk_device = None
 
-        relocate_spec = self._get_relocate_spec(datastore, None, host,
+        relocate_spec = self._get_relocate_spec(datastore, resource_pool, host,
                                                 disk_move_type, disk_type,
                                                 disk_device)
         cf = self._session.vim.client.factory
@@ -1042,7 +1053,7 @@ class VMwareVolumeOps(object):
         return clone_spec
 
     def clone_backing(self, name, backing, snapshot, clone_type, datastore,
-                      disk_type=None, host=None):
+                      disk_type=None, host=None, resource_pool=None):
         """Clone backing.
 
         If the clone_type is 'full', then a full clone of the source volume
@@ -1056,21 +1067,23 @@ class VMwareVolumeOps(object):
         :param datastore: Reference to the datastore entity
         :param disk_type: Disk type of the clone
         :param host: Target host
+        :param resource_pool: Target resource pool
         """
         LOG.debug("Creating a clone of backing: %(back)s, named: %(name)s, "
                   "clone type: %(type)s from snapshot: %(snap)s on "
-                  "host: %(host)s, datastore: %(ds)s with disk type: "
-                  "%(disk_type)s.",
+                  "resource pool: %(resource_pool)s, host: %(host)s, "
+                  "datastore: %(ds)s with disk type: %(disk_type)s.",
                   {'back': backing, 'name': name, 'type': clone_type,
                    'snap': snapshot, 'ds': datastore, 'disk_type': disk_type,
-                   'host': host})
+                   'host': host, 'resource_pool': resource_pool})
         folder = self._get_folder(backing)
         if clone_type == LINKED_CLONE_TYPE:
             disk_move_type = 'createNewChildDiskBacking'
         else:
             disk_move_type = 'moveAllDiskBackingsAndDisallowSharing'
         clone_spec = self._get_clone_spec(datastore, disk_move_type, snapshot,
-                                          backing, disk_type, host)
+                                          backing, disk_type, host,
+                                          resource_pool)
         task = self._session.invoke_api(self._session.vim, 'CloneVM_Task',
                                         backing, folder=folder, name=name,
                                         spec=clone_spec)

@@ -1,3 +1,10 @@
+cinder (2:7.0.0~b1-0ubuntu1) wily; urgency=medium
+
+  * New upstream milestone for OpenStack Liberty.
+  * Align (Build-)Depends with upstream.
+
+ -- James Page <james.page@ubuntu.com>  Thu, 09 Jul 2015 09:28:33 +0100
+
 cinder (1:2015.1.0-0ubuntu1) vivid; urgency=medium
 
   [ Chuck Short ]

@@ -317,13 +317,23 @@ def fetch_to_volume_format(context, image_service,
                       run_as_root=run_as_root)
 
         data = qemu_img_info(dest, run_as_root=run_as_root)
-        if data.file_format != volume_format:
+
+        if not _validate_file_format(data, volume_format):
             raise exception.ImageUnacceptable(
                 image_id=image_id,
                 reason=_("Converted to %(vol_format)s, but format is "
                          "now %(file_format)s") % {'vol_format': volume_format,
                                                    'file_format': data.
                                                    file_format})
+
+
+def _validate_file_format(image_data, expected_format):
+    if image_data.file_format == expected_format:
+        return True
+    elif image_data.file_format == 'vpc' and expected_format == 'vhd':
+        # qemu-img still uses the legacy 'vpc' name for the vhd format.
+        return True
+    return False
 
 
 def upload_volume(context, image_service, image_meta, volume_path,
@@ -344,6 +354,20 @@ def upload_volume(context, image_service, image_meta, volume_path,
     with temporary_file() as tmp:
         LOG.debug("%s was %s, converting to %s",
                   image_id, volume_format, image_meta['disk_format'])
+
+        data = qemu_img_info(volume_path, run_as_root=run_as_root)
+        backing_file = data.backing_file
+        fmt = data.file_format
+        if backing_file is not None:
+            # Disallow backing files as a security measure.
+            # This prevents a user from writing an image header into a raw
+            # volume with a backing file pointing to data they wish to
+            # access.
+            raise exception.ImageUnacceptable(
+                image_id=image_id,
+                reason=_("fmt=%(fmt)s backed by:%(backing_file)s")
+                % {'fmt': fmt, 'backing_file': backing_file})
+
         convert_image(volume_path, tmp, image_meta['disk_format'],
                       run_as_root=run_as_root)
 

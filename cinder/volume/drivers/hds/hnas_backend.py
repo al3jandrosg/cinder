@@ -182,7 +182,7 @@ class HnasBackend(object):
 
         newout = ""
         for line in lines:
-            if 'Not mounted' in line:
+            if 'Not mounted' in line or 'Not determined' in line:
                 continue
             if 'not' not in line and 'EVS' in line:
                 single_evs = False
@@ -482,7 +482,7 @@ class HnasBackend(object):
                 if lunline[0].isdigit():
                     # see if already mounted
                     if vol[:29] == lun[:29]:
-                        LOG.info(_LI('lun: %(lun)s already mounted (lline)%s'),
+                        LOG.info(_LI('lun: %(lun)s already mounted %(lline)s'),
                                  {'lun': lun, 'lline': lunline})
                         conn = (int(lunline), lun, initiator, hlun, fulliqn,
                                 hlun, hdp, port)
