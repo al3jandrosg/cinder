@@ -1,3 +1,11 @@
+cinder (2:7.0.0~b1-0ubuntu2) wily; urgency=medium
+
+  * d/p/skip-failing-tests.patch: Skip single failing test in Ubuntu
+    buildd environment due to limit egress network access, resolving
+    FTBFS. 
+
+ -- James Page <james.page@ubuntu.com>  Fri, 24 Jul 2015 09:39:28 +0100
+
 cinder (2:7.0.0~b1-0ubuntu1) wily; urgency=medium
 
   * New upstream milestone for OpenStack Liberty.
