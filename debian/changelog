@@ -1,3 +1,10 @@
+cinder (2:7.0.0~b1-0ubuntu3) wily; urgency=medium
+
+  * d/pydist-overrides: Ignore dependency on suds-jurko (provided by
+    suds in distro).
+
+ -- James Page <james.page@ubuntu.com>  Wed, 05 Aug 2015 10:48:34 +0200
+
 cinder (2:7.0.0~b1-0ubuntu2) wily; urgency=medium
 
   * d/p/skip-failing-tests.patch: Skip single failing test in Ubuntu
