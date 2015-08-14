@@ -1,3 +1,14 @@
+cinder (2:7.0.0~b2-0ubuntu1) wily; urgency=medium
+
+  * New upstream milestone for OpenStack Liberty.
+  * d/control: Align (build-)depends with upstream.
+  * d/p/fix-requirements.patch: Dropped. dh_python2 no longer guesses
+    dependencies.
+  * d/p/skip-failing-tests.patch: Rebased.
+  * d/rules: Remove .eggs directory in override_dh_auto_clean.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 14 Aug 2015 15:24:17 -0400
+
 cinder (2:7.0.0~b1-0ubuntu3) wily; urgency=medium
 
   * d/pydist-overrides: Ignore dependency on suds-jurko (provided by
