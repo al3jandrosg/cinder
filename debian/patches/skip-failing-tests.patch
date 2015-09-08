@@ -13,9 +13,9 @@ Bug: https://bugs.launchpad.net/cinder/+bug/1477887
  
  from cinder import exception
  from cinder import test
-@@ -336,6 +337,7 @@
-         """Makes a mock query to the backend to collect
-            stats on all physical devices.
+@@ -338,6 +339,7 @@
+         Makes a mock query to the backend to collect stats on all physical
+         devices.
          """
 +        self.skipTest('Disabled on Ubuntu - herror: [Errno 1] Unknown host')
  

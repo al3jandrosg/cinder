@@ -1,4 +1,4 @@
-# Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2014, 2015, Oracle and/or its affiliates. All rights reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -16,17 +16,24 @@ ZFS Storage Appliance Cinder Volume Driver
 """
 import ast
 import base64
+import math
 
 from oslo_config import cfg
 from oslo_log import log
 from oslo_utils import units
+import six
 
 from cinder import exception
+from cinder import utils
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume.drivers.zfssa import zfssarest
 from cinder.volume import volume_types
+
+import taskflow.engines
+from taskflow.patterns import linear_flow as lf
+from taskflow import task
 
 CONF = cfg.CONF
 LOG = log.getLogger(__name__)
@@ -69,7 +76,14 @@ ZFSSA_OPTS = [
     cfg.StrOpt('zfssa_target_interfaces',
                help='Network interfaces of iSCSI targets. (comma separated)'),
     cfg.IntOpt('zfssa_rest_timeout',
-               help='REST connection timeout. (seconds)')
+               help='REST connection timeout. (seconds)'),
+    cfg.StrOpt('zfssa_replication_ip', default='',
+               help='IP address used for replication data. (maybe the same as '
+                    'data ip)'),
+    cfg.BoolOpt('zfssa_enable_local_cache', default=True,
+                help='Flag to enable local caching: True, False.'),
+    cfg.StrOpt('zfssa_cache_project', default='os-cinder-cache',
+               help='Name of ZFSSA project where cache volumes are stored.')
 
 ]
 
@@ -88,9 +102,14 @@ def factory_zfssa():
 
 
 class ZFSSAISCSIDriver(driver.ISCSIDriver):
-    """ZFSSA Cinder iSCSI volume driver."""
+    """ZFSSA Cinder iSCSI volume driver.
 
-    VERSION = '1.0.0'
+    Version history:
+    1.0.1:
+        Backend enabled volume migration.
+        Local cache feature.
+    """
+    VERSION = '1.0.1'
     protocol = 'iSCSI'
 
     def __init__(self, *args, **kwargs):
@@ -98,6 +117,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         self.configuration.append_config_values(ZFSSA_OPTS)
         self.configuration.append_config_values(san.san_opts)
         self.zfssa = None
+        self.tgt_zfssa = None
         self._stats = None
         self.tgtiqn = None
 
@@ -113,14 +133,30 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         lcfg = self.configuration
         LOG.info(_LI('Connecting to host: %s.'), lcfg.san_ip)
         self.zfssa = factory_zfssa()
+        self.tgt_zfssa = factory_zfssa()
         self.zfssa.set_host(lcfg.san_ip, timeout=lcfg.zfssa_rest_timeout)
         auth_str = base64.encodestring('%s:%s' %
                                        (lcfg.san_login,
                                         lcfg.san_password))[:-1]
         self.zfssa.login(auth_str)
+
         self.zfssa.create_project(lcfg.zfssa_pool, lcfg.zfssa_project,
                                   compression=lcfg.zfssa_lun_compression,
                                   logbias=lcfg.zfssa_lun_logbias)
+
+        if lcfg.zfssa_enable_local_cache:
+            self.zfssa.create_project(lcfg.zfssa_pool,
+                                      lcfg.zfssa_cache_project,
+                                      compression=lcfg.zfssa_lun_compression,
+                                      logbias=lcfg.zfssa_lun_logbias)
+            schemas = [
+                {'property': 'image_id',
+                 'description': 'OpenStack image ID',
+                 'type': 'String'},
+                {'property': 'updated_at',
+                 'description': 'Most recent updated time of image',
+                 'type': 'String'}]
+            self.zfssa.create_schemas(schemas)
 
         if (lcfg.zfssa_initiator_config != ''):
             initiator_config = ast.literal_eval(lcfg.zfssa_initiator_config)
@@ -207,9 +243,14 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
     def _get_provider_info(self, volume, lun=None):
         """Return provider information."""
         lcfg = self.configuration
+        project = lcfg.zfssa_project
+        if ((lcfg.zfssa_enable_local_cache is True) and
+                (volume['name'].startswith('os-cache-vol-'))):
+            project = lcfg.zfssa_cache_project
+
         if lun is None:
             lun = self.zfssa.get_lun(lcfg.zfssa_pool,
-                                     lcfg.zfssa_project,
+                                     project,
                                      volume['name'])
 
         if isinstance(lun['number'], list):
@@ -281,6 +322,10 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                               project=lcfg.zfssa_project,
                               lun=volume['name'])
 
+        if ('origin' in lun2del and
+                lun2del['origin']['project'] == lcfg.zfssa_cache_project):
+                self._check_origin(lun2del, volume['name'])
+
     def create_snapshot(self, snapshot):
         """Creates a snapshot of a volume.
 
@@ -298,11 +343,11 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         """Deletes a snapshot."""
         LOG.debug('zfssa.delete_snapshot: snapshot=%s', snapshot['name'])
         lcfg = self.configuration
-        has_clones = self.zfssa.has_clones(lcfg.zfssa_pool,
-                                           lcfg.zfssa_project,
-                                           snapshot['volume_name'],
-                                           snapshot['name'])
-        if has_clones:
+        numclones = self.zfssa.num_clones(lcfg.zfssa_pool,
+                                          lcfg.zfssa_project,
+                                          snapshot['volume_name'],
+                                          snapshot['name'])
+        if numclones > 0:
             LOG.error(_LE('Snapshot %s: has clones'), snapshot['name'])
             raise exception.SnapshotIsBusy(snapshot_name=snapshot['name'])
 
@@ -333,6 +378,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                                   lcfg.zfssa_project,
                                   snapshot['volume_name'],
                                   snapshot['name'],
+                                  lcfg.zfssa_project,
                                   volume['name'])
 
     def _update_volume_status(self):
@@ -351,6 +397,20 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         if avail is None or total is None:
             return
 
+        host = lcfg.san_ip
+        pool = lcfg.zfssa_pool
+        project = lcfg.zfssa_project
+        auth_str = base64.encodestring('%s:%s' %
+                                       (lcfg.san_login,
+                                        lcfg.san_password))[:-1]
+        zfssa_tgt_group = lcfg.zfssa_target_group
+        repl_ip = lcfg.zfssa_replication_ip
+
+        data['location_info'] = "%s:%s:%s:%s:%s:%s" % (host, auth_str, pool,
+                                                       project,
+                                                       zfssa_tgt_group,
+                                                       repl_ip)
+
         data['total_capacity_gb'] = int(total) / units.Gi
         data['free_capacity_gb'] = int(avail) / units.Gi
         data['reserved_percentage'] = 0
@@ -366,7 +426,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             self._update_volume_status()
         return self._stats
 
-    def create_export(self, context, volume):
+    def create_export(self, context, volume, connector):
         pass
 
     def remove_export(self, context, volume):
@@ -400,6 +460,206 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             # Cleanup snapshot
             self.delete_snapshot(zfssa_snapshot)
 
+    def clone_image(self, context, volume,
+                    image_location, image_meta,
+                    image_service):
+        """Create a volume efficiently from an existing image.
+
+        Verify the image ID being used:
+
+        (1) If there is no existing cache volume, create one and transfer
+        image data to it. Take a snapshot.
+
+        (2) If a cache volume already exists, verify if it is either alternated
+        or updated. If so try to remove it, raise exception if removal fails.
+        Create a new cache volume as in (1).
+
+        Clone a volume from the cache volume and returns it to Cinder.
+        """
+        LOG.debug('Cloning image %(image)s to volume %(volume)s',
+                  {'image': image_meta['id'], 'volume': volume['name']})
+        lcfg = self.configuration
+        if not lcfg.zfssa_enable_local_cache:
+            return None, False
+
+        # virtual_size is the image's actual size when stored in a volume
+        # virtual_size is expected to be updated manually through glance
+        try:
+            virtual_size = int(image_meta['properties'].get('virtual_size'))
+        except Exception:
+            LOG.error(_LE('virtual_size property is not set for the image.'))
+            return None, False
+        cachevol_size = int(math.ceil(float(virtual_size) / units.Gi))
+        if cachevol_size > volume['size']:
+            exception_msg = (_LE('Image size %(img_size)dGB is larger '
+                                 'than volume size %(vol_size)dGB.'),
+                             {'img_size': cachevol_size,
+                              'vol_size': volume['size']})
+            LOG.error(exception_msg)
+            return None, False
+
+        specs = self._get_voltype_specs(volume)
+        cachevol_props = {'size': cachevol_size}
+
+        try:
+            cache_vol, cache_snap = self._verify_cache_volume(context,
+                                                              image_meta,
+                                                              image_service,
+                                                              specs,
+                                                              cachevol_props)
+            # A cache volume and a snapshot should be ready by now
+            # Create a clone from the cache volume
+            self.zfssa.clone_snapshot(lcfg.zfssa_pool,
+                                      lcfg.zfssa_cache_project,
+                                      cache_vol,
+                                      cache_snap,
+                                      lcfg.zfssa_project,
+                                      volume['name'])
+            if cachevol_size < volume['size']:
+                self.extend_volume(volume, volume['size'])
+        except exception.VolumeBackendAPIException as exc:
+            exception_msg = (_LE('Cannot clone image %(image)s to '
+                                 'volume %(volume)s. Error: %(error)s.'),
+                             {'volume': volume['name'],
+                              'image': image_meta['id'],
+                              'error': exc.message})
+            LOG.error(exception_msg)
+            return None, False
+
+        return None, True
+
+    @utils.synchronized('zfssaiscsi', external=True)
+    def _verify_cache_volume(self, context, img_meta,
+                             img_service, specs, cachevol_props):
+        """Verify if we have a cache volume that we want.
+
+        If we don't, create one.
+        If we do, check if it's been updated:
+          * If so, delete it and recreate a new volume
+          * If not, we are good.
+
+        If it's out of date, delete it and create a new one.
+        After the function returns, there should be a cache volume available,
+        ready for cloning.
+
+        There needs to be a file lock here, otherwise subsequent clone_image
+        requests will fail if the first request is still pending.
+        """
+        lcfg = self.configuration
+        cachevol_name = 'os-cache-vol-%s' % img_meta['id']
+        cachesnap_name = 'image-%s' % img_meta['id']
+        cachevol_meta = {
+            'cache_name': cachevol_name,
+            'snap_name': cachesnap_name,
+        }
+        cachevol_props.update(cachevol_meta)
+        cache_vol, cache_snap = None, None
+        updated_at = six.text_type(img_meta['updated_at'].isoformat())
+        LOG.debug('Verifying cache volume %s:', cachevol_name)
+
+        try:
+            cache_vol = self.zfssa.get_lun(lcfg.zfssa_pool,
+                                           lcfg.zfssa_cache_project,
+                                           cachevol_name)
+            cache_snap = self.zfssa.get_lun_snapshot(lcfg.zfssa_pool,
+                                                     lcfg.zfssa_cache_project,
+                                                     cachevol_name,
+                                                     cachesnap_name)
+        except exception.VolumeNotFound:
+            # There is no existing cache volume, create one:
+            return self._create_cache_volume(context,
+                                             img_meta,
+                                             img_service,
+                                             specs,
+                                             cachevol_props)
+        except exception.SnapshotNotFound:
+            exception_msg = (_('Cache volume %(cache_vol)s'
+                               'does not have snapshot %(cache_snap)s.'),
+                             {'cache_vol': cachevol_name,
+                              'cache_snap': cachesnap_name})
+            LOG.error(exception_msg)
+            raise exception.VolumeBackendAPIException(data=exception_msg)
+
+        # A cache volume does exist, check if it's updated:
+        if ((cache_vol['updated_at'] != updated_at) or
+                (cache_vol['image_id'] != img_meta['id'])):
+            # The cache volume is updated, but has clones:
+            if cache_snap['numclones'] > 0:
+                exception_msg = (_('Cannot delete '
+                                   'cache volume: %(cachevol_name)s. '
+                                   'It was updated at %(updated_at)s '
+                                   'and currently has %(numclones)s '
+                                   'volume instances.'),
+                                 {'cachevol_name': cachevol_name,
+                                  'updated_at': updated_at,
+                                  'numclones': cache_snap['numclones']})
+                LOG.error(exception_msg)
+                raise exception.VolumeBackendAPIException(data=exception_msg)
+
+            # The cache volume is updated, but has no clone, so we delete it
+            # and re-create a new one:
+            self.zfssa.delete_lun(lcfg.zfssa_pool,
+                                  lcfg.zfssa_cache_project,
+                                  cachevol_name)
+            return self._create_cache_volume(context,
+                                             img_meta,
+                                             img_service,
+                                             specs,
+                                             cachevol_props)
+
+        return cachevol_name, cachesnap_name
+
+    def _create_cache_volume(self, context, img_meta,
+                             img_service, specs, cachevol_props):
+        """Create a cache volume from an image.
+
+        Returns names of the cache volume and its snapshot.
+        """
+        lcfg = self.configuration
+        cachevol_size = int(cachevol_props['size'])
+        lunsize = "%sg" % six.text_type(cachevol_size)
+        lun_props = {
+            'custom:image_id': img_meta['id'],
+            'custom:updated_at': (
+                six.text_type(img_meta['updated_at'].isoformat())),
+        }
+        lun_props.update(specs)
+
+        cache_vol = {
+            'name': cachevol_props['cache_name'],
+            'id': img_meta['id'],
+            'size': cachevol_size,
+        }
+        LOG.debug('Creating cache volume %s.', cache_vol['name'])
+
+        try:
+            self.zfssa.create_lun(lcfg.zfssa_pool,
+                                  lcfg.zfssa_cache_project,
+                                  cache_vol['name'],
+                                  lunsize,
+                                  lcfg.zfssa_target_group,
+                                  lun_props)
+            super(ZFSSAISCSIDriver, self).copy_image_to_volume(context,
+                                                               cache_vol,
+                                                               img_service,
+                                                               img_meta['id'])
+            self.zfssa.create_snapshot(lcfg.zfssa_pool,
+                                       lcfg.zfssa_cache_project,
+                                       cache_vol['name'],
+                                       cachevol_props['snap_name'])
+        except Exception as exc:
+            exc_msg = (_('Fail to create cache volume %(volume)s. '
+                         'Error: %(err)s'),
+                       {'volume': cache_vol['name'],
+                        'err': six.text_type(exc)})
+            LOG.error(exc_msg)
+            self.zfssa.delete_lun(lcfg.zfssa_pool,
+                                  lcfg.zfssa_cache_project,
+                                  cache_vol['name'])
+            raise exception.VolumeBackendAPIException(data=exc_msg)
+
+        return cachevol_props['cache_name'], cachevol_props['snap_name']
+
     def local_path(self, volume):
         """Not implemented."""
         pass
@@ -424,9 +684,15 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         lcfg = self.configuration
         init_groups = self.zfssa.get_initiator_initiatorgroup(
             connector['initiator'])
+        if ((lcfg.zfssa_enable_local_cache is True) and
+                (volume['name'].startswith('os-cache-vol-'))):
+            project = lcfg.zfssa_cache_project
+        else:
+            project = lcfg.zfssa_project
+
         for initiator_group in init_groups:
             self.zfssa.set_lun_initiatorgroup(lcfg.zfssa_pool,
-                                              lcfg.zfssa_project,
+                                              project,
                                               volume['name'],
                                               initiator_group)
         iscsi_properties = {}
@@ -455,8 +721,12 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         """Driver entry point to terminate a connection for a volume."""
         LOG.debug('terminate_connection: volume name: %s.', volume['name'])
         lcfg = self.configuration
+        project = lcfg.zfssa_project
+        if ((lcfg.zfssa_enable_local_cache is True) and
+                (volume['name'].startswith('os-cache-vol-'))):
+            project = lcfg.zfssa_cache_project
         self.zfssa.set_lun_initiatorgroup(lcfg.zfssa_pool,
-                                          lcfg.zfssa_project,
+                                          project,
                                           volume['name'],
                                           '')
 
@@ -486,3 +756,280 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                 result.update({prop: val})
 
         return result
+
+    def migrate_volume(self, ctxt, volume, host):
+        LOG.debug('Attempting ZFSSA enabled volume migration. volume: %(id)s, '
+                  'host: %(host)s, status=%(status)s.',
+                  {'id': volume['id'],
+                   'host': host,
+                   'status': volume['status']})
+
+        lcfg = self.configuration
+        default_ret = (False, None)
+
+        if volume['status'] != "available":
+            LOG.debug('Only available volumes can be migrated using backend '
+                      'assisted migration. Defaulting to generic migration.')
+            return default_ret
+
+        if (host['capabilities']['vendor_name'] != 'Oracle' or
+                host['capabilities']['storage_protocol'] != self.protocol):
+            LOG.debug('Source and destination drivers need to be Oracle iSCSI '
+                      'to use backend assisted migration. Defaulting to '
+                      'generic migration.')
+            return default_ret
+
+        if 'location_info' not in host['capabilities']:
+            LOG.debug('Could not find location_info in capabilities reported '
+                      'by the destination driver. Defaulting to generic '
+                      'migration.')
+            return default_ret
+
+        loc_info = host['capabilities']['location_info']
+
+        try:
+            (tgt_host, auth_str, tgt_pool, tgt_project, tgt_tgtgroup,
+             tgt_repl_ip) = loc_info.split(':')
+        except ValueError:
+            LOG.error(_LE("Location info needed for backend enabled volume "
+                          "migration not in correct format: %s. Continuing "
+                          "with generic volume migration."), loc_info)
+            return default_ret
+
+        if tgt_repl_ip == '':
+            msg = _LE("zfssa_replication_ip not set in cinder.conf. "
+                      "zfssa_replication_ip is needed for backend enabled "
+                      "volume migration. Continuing with generic volume "
+                      "migration.")
+            LOG.error(msg)
+            return default_ret
+
+        src_pool = lcfg.zfssa_pool
+        src_project = lcfg.zfssa_project
+
+        try:
+            LOG.info(_LI('Connecting to target host: %s for backend enabled '
+                         'migration.'), tgt_host)
+            self.tgt_zfssa.set_host(tgt_host)
+            self.tgt_zfssa.login(auth_str)
+
+            # Verify that the replication service is online
+            try:
+                self.zfssa.verify_service('replication')
+                self.tgt_zfssa.verify_service('replication')
+            except exception.VolumeBackendAPIException:
+                return default_ret
+
+            # ensure that a target group by the same name exists on the target
+            # system also, if not, use default migration.
+            lun = self.zfssa.get_lun(src_pool, src_project, volume['name'])
+
+            if lun['targetgroup'] != tgt_tgtgroup:
+                return default_ret
+
+            tgt_asn = self.tgt_zfssa.get_asn()
+            src_asn = self.zfssa.get_asn()
+
+            # verify on the source system that the destination has been
+            # registered as a replication target
+            tgts = self.zfssa.get_replication_targets()
+            targets = []
+            for target in tgts['targets']:
+                if target['asn'] == tgt_asn:
+                    targets.append(target)
+
+            if targets == []:
+                LOG.debug('Target host: %(host)s for volume migration '
+                          'not configured as a replication target '
+                          'for volume: %(vol)s.',
+                          {'host': tgt_repl_ip,
+                           'vol': volume['name']})
+                return default_ret
+
+            # Multiple ips from the same appliance may be configured
+            # as different targets
+            for target in targets:
+                if target['address'] == tgt_repl_ip + ':216':
+                    break
+
+            if target['address'] != tgt_repl_ip + ':216':
+                LOG.debug('Target with replication ip: %s not configured on '
+                          'the source appliance for backend enabled volume '
+                          'migration. Proceeding with default migration.',
+                          tgt_repl_ip)
+                return default_ret
+
+            flow = lf.Flow('zfssa_volume_migration').add(
+                MigrateVolumeInit(),
+                MigrateVolumeCreateAction(provides='action_id'),
+                MigrateVolumeSendReplUpdate(),
+                MigrateVolumeSeverRepl(),
+                MigrateVolumeMoveVol(),
+                MigrateVolumeCleanUp()
+            )
+            taskflow.engines.run(flow,
+                                 store={'driver': self,
+                                        'tgt_zfssa': self.tgt_zfssa,
+                                        'tgt_pool': tgt_pool,
+                                        'tgt_project': tgt_project,
+                                        'volume': volume, 'tgt_asn': tgt_asn,
+                                        'src_zfssa': self.zfssa,
+                                        'src_asn': src_asn,
+                                        'src_pool': src_pool,
+                                        'src_project': src_project,
+                                        'target': target})
+
+            return(True, None)
+
+        except Exception:
+            LOG.error(_LE("Error migrating volume: %s"), volume['name'])
+            raise
+
+    def update_migrated_volume(self, ctxt, volume, new_volume,
+                               original_volume_status):
+        """Return model update for migrated volume.
+
+        :param volume: The original volume that was migrated to this backend
+        :param new_volume: The migration volume object that was created on
+                           this backend as part of the migration process
+        :param original_volume_status: The status of the original volume
+        :return model_update to update DB with any needed changes
+        """
+
+        lcfg = self.configuration
+        original_name = CONF.volume_name_template % volume['id']
+        current_name = CONF.volume_name_template % new_volume['id']
+
+        LOG.debug('Renaming migrated volume: %(cur)s to %(org)s',
+                  {'cur': current_name,
+                   'org': original_name})
+        self.zfssa.set_lun_props(lcfg.zfssa_pool, lcfg.zfssa_project,
+                                 current_name, name=original_name)
+        return {'_name_id': None}
+
+    @utils.synchronized('zfssaiscsi', external=True)
+    def _check_origin(self, lun, volname):
+        """Verify the cache volume of a bootable volume.
+
+        If the cache no longer has clone, it will be deleted.
+        There is a small lag between the time a clone is deleted and the number
+        of clones being updated accordingly. There is also a race condition
+        when multiple volumes (clones of a cache volume) are deleted at once,
+        leading to the number of clones reported incorrectly. The file lock is
+        here to avoid such issues.
+        """
+        lcfg = self.configuration
+        cache = lun['origin']
+        numclones = -1
+        if (cache['snapshot'].startswith('image-') and
+                cache['share'].startswith('os-cache-vol')):
+            try:
+                numclones = self.zfssa.num_clones(lcfg.zfssa_pool,
+                                                  lcfg.zfssa_cache_project,
+                                                  cache['share'],
+                                                  cache['snapshot'])
+            except Exception:
+                LOG.debug('Cache volume is already deleted.')
+                return
+
+            LOG.debug('Checking cache volume %(name)s, numclones = %(clones)d',
+                      {'name': cache['share'], 'clones': numclones})
+
+        # Sometimes numclones still hold old values even when all clones
+        # have been deleted. So we handle this situation separately here:
+        if numclones == 1:
+            try:
+                self.zfssa.get_lun(lcfg.zfssa_pool,
+                                   lcfg.zfssa_project,
+                                   volname)
+                # The volume does exist, so return
+                return
+            except exception.VolumeNotFound:
+                # The volume is already deleted
+                numclones = 0
+
+        if numclones == 0:
+            self.zfssa.delete_lun(lcfg.zfssa_pool,
+                                  lcfg.zfssa_cache_project,
+                                  cache['share'])
+
+
+class MigrateVolumeInit(task.Task):
+    def execute(self, src_zfssa, volume, src_pool, src_project):
+        LOG.debug('Setting inherit flag on source backend to False.')
+        src_zfssa.edit_inherit_replication_flag(src_pool, src_project,
+                                                volume['name'], set=False)
+
+    def revert(self, src_zfssa, volume, src_pool, src_project, **kwargs):
+        LOG.debug('Rollback: Setting inherit flag on source appliance to '
+                  'True.')
+        src_zfssa.edit_inherit_replication_flag(src_pool, src_project,
+                                                volume['name'], set=True)
+
+
+class MigrateVolumeCreateAction(task.Task):
+    def execute(self, src_zfssa, volume, src_pool, src_project, target,
+                tgt_pool):
+        LOG.debug('Creating replication action on source appliance.')
+        action_id = src_zfssa.create_replication_action(src_pool,
+                                                        src_project,
+                                                        target['label'],
+                                                        tgt_pool,
+                                                        volume['name'])
+
+        self._action_id = action_id
+        return action_id
+
+    def revert(self, src_zfssa, **kwargs):
+        if hasattr(self, '_action_id'):
+            LOG.debug('Rollback: deleting replication action on source '
+                      'appliance.')
+            src_zfssa.delete_replication_action(self._action_id)
+
+
+class MigrateVolumeSendReplUpdate(task.Task):
+    def execute(self, src_zfssa, action_id):
+        LOG.debug('Sending replication update from source appliance.')
+        src_zfssa.send_repl_update(action_id)
+        LOG.debug('Deleting replication action on source appliance.')
+        src_zfssa.delete_replication_action(action_id)
+        self._action_deleted = True
+
+
+class MigrateVolumeSeverRepl(task.Task):
+    def execute(self, tgt_zfssa, src_asn, action_id, driver):
+        source = tgt_zfssa.get_replication_source(src_asn)
+        if not source:
+            err = (_('Source with host ip/name: %s not found on the '
+                     'target appliance for backend enabled volume '
+                     'migration, procedding with default migration.'),
+                   driver.configuration.san_ip)
+            LOG.error(err)
+            raise exception.VolumeBackendAPIException(data=err)
+        LOG.debug('Severing replication package on destination appliance.')
+        tgt_zfssa.sever_replication(action_id, source['name'],
+                                    project=action_id)
+
+
+class MigrateVolumeMoveVol(task.Task):
+    def execute(self, tgt_zfssa, tgt_pool, tgt_project, action_id, volume):
+        LOG.debug('Moving LUN to destination project on destination '
+                  'appliance.')
+        tgt_zfssa.move_volume(tgt_pool, action_id, volume['name'], tgt_project)
+        LOG.debug('Deleting temporary project on destination appliance.')
+        tgt_zfssa.delete_project(tgt_pool, action_id)
+        self._project_deleted = True
+
+    def revert(self, tgt_zfssa, tgt_pool, tgt_project, action_id, volume,
+               **kwargs):
+        if not hasattr(self, '_project_deleted'):
+            LOG.debug('Rollback: deleting temporary project on destination '
+                      'appliance.')
+            tgt_zfssa.delete_project(tgt_pool, action_id)
+
+
+class MigrateVolumeCleanUp(task.Task):
+    def execute(self, driver, volume, tgt_zfssa):
+        LOG.debug('Finally, delete source volume on source appliance.')
+        driver.delete_volume(volume)
+        tgt_zfssa.logout()
