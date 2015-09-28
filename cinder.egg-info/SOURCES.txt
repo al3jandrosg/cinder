@@ -158,6 +158,8 @@ cinder/common/config.py
 cinder/common/sqlalchemyutils.py
 cinder/compute/__init__.py
 cinder/compute/nova.py
+cinder/config/cinder-config-generator.conf
+cinder/config/generate_cinder_opts.py
 cinder/consistencygroup/__init__.py
 cinder/consistencygroup/api.py
 cinder/db/__init__.py
@@ -254,7 +256,10 @@ cinder/locale/cinder-log-error.pot
 cinder/locale/cinder-log-info.pot
 cinder/locale/cinder-log-warning.pot
 cinder/locale/cinder.pot
+cinder/locale/tr_TR/LC_MESSAGES/cinder-log-error.po
+cinder/locale/tr_TR/LC_MESSAGES/cinder-log-info.po
 cinder/locale/tr_TR/LC_MESSAGES/cinder-log-warning.po
+cinder/locale/tr_TR/LC_MESSAGES/cinder.po
 cinder/objects/__init__.py
 cinder/objects/backup.py
 cinder/objects/base.py
@@ -909,6 +914,7 @@ rally-jobs/extra/README.rst
 rally-jobs/plugins/README.rst
 rally-jobs/plugins/__init__.py
 tools/bandit.yaml
+tools/check_exec.py
 tools/colorizer.py
 tools/enable-pre-commit-hook.sh
 tools/generate_driver_list.py
@@ -919,4 +925,3 @@ tools/lintstack.sh
 tools/with_venv.sh
 tools/config/check_uptodate.sh
 tools/config/generate_sample.sh
-tools/config/oslo.config.generator.rc

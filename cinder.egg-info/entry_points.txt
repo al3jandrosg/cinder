@@ -30,6 +30,13 @@ cinder-scheduler = cinder.cmd.scheduler:main
 cinder-volume = cinder.cmd.volume:main
 cinder-volume-usage-audit = cinder.cmd.volume_usage_audit:main
 
+[oslo.config.opts]
+cinder = cinder.opts:list_opts
+keystonemiddleware = keystonemiddleware.auth_token:list_opts
+oslo.db.concurrency = oslo.db.concurrency:list_opts
+oslo.messaging = oslo_messaging.opts:list_opts
+oslo_concurrency = oslo_concurrency.opts:list_opts
+
 [oslo_messaging.notify.drivers]
 cinder.openstack.common.notifier.log_notifier = oslo_messaging.notify._impl_log:LogDriver
 cinder.openstack.common.notifier.no_op_notifier = oslo_messaging.notify._impl_noop:NoOpDriver

@@ -1,3 +1,11 @@
+cinder (2:7.0.0~rc1-0ubuntu1) wily; urgency=medium
+
+  * d/watch: Update for upstream rc versioning.
+  * New upstream milestone for OpenStack Liberty.
+  * d/control: Align (build-)depends with upstream.
+
+ -- James Page <james.page@ubuntu.com>  Mon, 28 Sep 2015 11:31:25 +0100
+
 cinder (2:7.0.0~b3-0ubuntu1) wily; urgency=medium
 
   * New upstream milestone for OpenStack Liberty.

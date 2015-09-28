@@ -1,6 +1,88 @@
 CHANGES
 =======
 
+7.0.0.0rc1
+----------
+
+* Fix URL format in Huawei driver
+* Allow c-vol backends to start when some backends fail to load
+* Fix use of wrong storage pools for NetApp Drivers
+* Make rpc_client method private for VolumeCommands
+* Ignore Forbidden error on quotas-get for nested projects
+* Change ignore-errors to ignore_errors
+* NetApp volume/snapshot delete performance fix
+* Replace soft_delete in volume_type_access_remove
+* Fix way of getting LUN id in Huawei driver
+* Fixing create CG from Cgsnapshot bug in VNX driver
+* Dynamically create cinder.conf.sample
+* Updated from global requirements
+* Fix MITM vulnerability for Brocade FC SAN lookup
+* Imported Translations from Zanata
+* Fix cinder-all binary
+* NetApp: Fix volume extend with E-Series
+* Fix netapp_enable_multiattach default for E-Series
+* Check for None on service's updated_at
+* Fix issue of volume after host-assisted migration
+* Attaching enhancement for EMC VNX driver
+* Tests: Split VolumeTestCase into separate classes
+* Local img-cache files ignored for image transfers
+* Snapmirror targets should not be reported as pools
+* Change check method for 'all_tenants'
+* Enable certificate verification during image copy
+* Fix NetApp clone from glance failure
+* Storwize: Fix format string
+* Fix usage of novaclient
+* Check for empty attributes on SF volume
+* Fix volume lookups in SolidFire template caching
+* Don't rely on provider_id for resource deletion
+* Fix Pure get pgroup volume snapshot name
+* Dothill fix options access
+* HPMSA fix access to common options
+* Lenovo driver fix access to common opts
+* Fixed missing log variable types
+* VMware: Fix invalid product name
+* Retrieve volume in update_migrated_volume
+* Swap the decorator order for PureFCDriver methods
+* Add ScaleIO Cinder driver commands
+* SolidFire provider_id for snapshots on init
+* LeftHand Add update_migrated_volume to drivers
+* Huawei: fix multi REST-URLs bug
+* LVM: add the exception handling to volume copy
+* Fix NetApp loop in clone of NFS backed images
+* Hacking log format arg check
+* backup init_host cleanup exception handling
+* Making opt names consistent
+* Fix QoS keys not being available to scheduler
+* Add ConsistencyGroup object entries to linstack.py
+* Pass in snapshot refs for host on provider_update
+* Filter hosts with pool in snapshot_get_by_host
+* Fix typos in comments
+* Filter scheduler: Fix KeyError on invalid create request
+* Updated from global requirements
+* Return a tuple from SolidFire update_provider_info
+* Add unmanage default implementation to VolumeDriver
+* Correctly report multiattach in Pure drivers
+* Add migrate_volume to BaseVD
+* Update update_migrated_volume in VNX driver
+* 3PAR Disable generic image volume cache
+* Add os-brick's scsi_id command to Cinder rootwrap
+* Fix order of arguments in assertEqual
+* Updated from global requirements
+* Error message in update_migrated_volume was incorrect
+* Remove empty rules from policies for API access
+* Fix HDS HNAS driver logging password as plain text
+* Add mechanism to update snapshot provider_id
+* VMware: Remove global patching of open
+* VMware: Skip ESX hosts in maintenance mode
+* 3PAR Add update_migrated_volume to drivers
+* Updated from global requirements
+* Switch SVC driver to use lsportfc to determine FC target WWPNS
+* Use consolidated update for failover_replication
+* VMware: Fix exception messages
+* Adds allow_availability_zone_fallback option to Cinder
+* NetApp E-Series over-subscription support
+* ZFSSA driver to return project 'available' space
+
 7.0.0.0b3
 ---------
 
@@ -8,6 +90,10 @@ CHANGES
 * Fix problem of efficient volume copy for migration
 * Generic image-volume cache
 * Implement thin provisioning support for E-Series
+* Remove useless response checks in SolidFire driver
+* Fix the virtual port support in VNX driver
+* DotHill driver fix create_cloned_volume parent id
+* 3PAR Fix create_cloned_volume source volume id
 * Cloudbyte fix create_cloned_volume parent id
 * Scheduler-based over-subscription for NFS drivers
 * ScaleIO driver should use os-brick connector
@@ -15,8 +101,10 @@ CHANGES
 * Sync volume versionedobject to ORM
 * Check before add lun to QoS in Huawei driver
 * Fix backup metadata import missing fields
+* Remove the unnecassary volume_api.get(context, volume_id)
 * Service object
 * Allow specified backend capabilities to be retrieved
+* Remove deprecated options
 * Add cinder.conf.sample to gitignore
 * Add delete_snapshot and update_snapshot rules
 * Fix a merge problem in VMAX driver
@@ -25,6 +113,7 @@ CHANGES
 * Enhance FC zone support for Huawei driver
 * Add support for file I/O volume migration
 * Add debug logging before attaching volume in driver
+* Detect addition of executable files
 * Remove executable bits on files
 * NetApp DOT block driver over-subscription support
 * Cleanup for SnapshotObject
@@ -39,6 +128,7 @@ CHANGES
 * Clean up line continuation in Storwize driver
 * LeftHand: Adding Consistency Group Support
 * 3PAR update driver to store stats
+* Remove driver.set_execute()
 * Skip intermittent VMDK tests
 * Rework Scality SOFS driver to use RemoteFS class
 * Adds framework for get_capabilities() feature
@@ -49,6 +139,7 @@ CHANGES
 * Validate filters in snapshot*, backup* in db.api
 * Fix volume copy for 'virtual' volumes in DotHill
 * Imported Translations from Transifex
+* Use version convert methods from oslo.utils
 * Implement manage/unmanage snapshot in Pure drivers
 * Reduce runtime of E-Series iSCSI tests
 * Cinder Nested Quota Driver
@@ -75,6 +166,7 @@ CHANGES
 * adds user_id to check_is_admin
 * Fix backup list all_tenants=0 filtering for admin
 * Add Cinder API wsgi application
+* Add consistency group tests to test_volume_rpcapi
 * Cinder replication V2
 * force_detach terminate_connection needs connector
 * Assisted volume migration for Oracle ZFSSA drivers
@@ -83,6 +175,7 @@ CHANGES
 * Add volume retype support for Huawei driver
 * Fix URLs to admin-guide-cloud
 * Nested Quota Driver: Get Project Hierarchy
+* Fix description for "Barbarism of editting a file"
 * Dell SC: Added logging for the find_wwns functions
 * Add missing space to logged error in create volume
 * Cleaning up CONF.register_opts() in compute/__init__.py
@@ -103,6 +196,8 @@ CHANGES
 * Port test_nfs to Python 3
 * Corrects the order of AssertEquals params in Quobyte tests
 * Adds the random option to cinder retry function
+* Extra specs may not be in volume types
+* VMware: Fix re-attach volume error for VC 5.1
 * Remove duplicate keys from dictionary
 * LeftHand driver is ignoring reserved_percentage
 * Update devref unit tests doc
@@ -110,6 +205,7 @@ CHANGES
 * Test whether sample config generation works
 * Revert "mark oslo.vmware as optional dependency"
 * Register the volume_opts config options in remotefs.py
+* Create CG needs extra specs
 * Configure space reservation on NetApp Data ONTAP
 * Dell SC: Fix error causing missed log message
 * Rename free_virtual in capacity filter
@@ -190,6 +286,7 @@ CHANGES
 * Snap copy feature for EMC VNX Cinder driver
 * Tests: Fix os.path.exists mock (emc_vnxdirect)
 * Add connector object to create_export
+* Correct usage of assertEqual for boolean values
 * Remove unit test migration logging
 * Add support '--all-tenants' for cinder backup-list
 * Corrected order of parameters in docstring
@@ -333,6 +430,7 @@ CHANGES
 * Add ability to override OpenStack privileged user auth url
 * VMEM v6000: Fix export verify routines
 * Port Tintri driver to ABC driver model
+* Fix block_device driver to behave as documented
 * NetApp E-Series: Add debug tracing
 * Set encrypted key in connection_info during initialize
 * Nested Quota: Set default values to subproject
@@ -383,6 +481,7 @@ CHANGES
 * Port huawei driver to Python 3
 * XtremIO driver fix array snapshot problem
 * Fix cinder.conf.sample generation
+* Handle attachment of second volume
 * VMware: Create volume backing in specific clusters
 * Use versionutils from oslo.log
 * Correct overquota error message
