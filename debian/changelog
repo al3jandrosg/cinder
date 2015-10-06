@@ -1,3 +1,9 @@
+cinder (2:7.0.0~rc2-0ubuntu1) wily; urgency=medium
+
+  * New upstream release candidate for OpenStack Liberty.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 06 Oct 2015 11:16:42 -0400
+
 cinder (2:7.0.0~rc1-0ubuntu1) wily; urgency=medium
 
   * d/watch: Update for upstream rc versioning.

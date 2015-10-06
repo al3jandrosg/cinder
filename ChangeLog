@@ -1,6 +1,18 @@
 CHANGES
 =======
 
+7.0.0.0rc2
+----------
+
+* Fix VMAX live migration problem
+* Imported Translations from Zanata
+* Dell SC: cgsnapshot-delete doesn't actually delete
+* Huawei driver add check before use a QoS
+* Report *real* free capacity in Huawei driver
+* Revert use of netapp_lib from NetApp Drivers
+* Add placholder for migration backports in Liberty
+* Cleanup of Translations
+
 7.0.0.0rc1
 ----------
 

@@ -238,6 +238,11 @@ cinder/db/sqlalchemy/migrate_repo/versions/052_add_provider_auth_column_to_snaps
 cinder/db/sqlalchemy/migrate_repo/versions/053_add_version_columns_to_service.py
 cinder/db/sqlalchemy/migrate_repo/versions/054_add_has_dependent_backups_column_to_backups.py
 cinder/db/sqlalchemy/migrate_repo/versions/055_add_image_volume_cache_table.py
+cinder/db/sqlalchemy/migrate_repo/versions/056_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/057_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/058_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/059_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/060_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/hacking/__init__.py
 cinder/hacking/checks.py
@@ -251,7 +256,6 @@ cinder/keymgr/conf_key_mgr.py
 cinder/keymgr/key.py
 cinder/keymgr/key_mgr.py
 cinder/keymgr/not_implemented_key_mgr.py
-cinder/locale/cinder-log-critical.pot
 cinder/locale/cinder-log-error.pot
 cinder/locale/cinder-log-info.pot
 cinder/locale/cinder-log-warning.pot
@@ -601,8 +605,8 @@ cinder/tests/unit/volume/drivers/netapp/dataontap/test_nfs_7mode.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/test_nfs_base.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/test_nfs_cmode.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/client/__init__.py
-cinder/tests/unit/volume/drivers/netapp/dataontap/client/fake_api.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/client/fakes.py
+cinder/tests/unit/volume/drivers/netapp/dataontap/client/test_api.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/client/test_client_7mode.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/client/test_client_base.py
 cinder/tests/unit/volume/drivers/netapp/dataontap/client/test_client_cmode.py
@@ -759,6 +763,7 @@ cinder/volume/drivers/netapp/dataontap/nfs_base.py
 cinder/volume/drivers/netapp/dataontap/nfs_cmode.py
 cinder/volume/drivers/netapp/dataontap/ssc_cmode.py
 cinder/volume/drivers/netapp/dataontap/client/__init__.py
+cinder/volume/drivers/netapp/dataontap/client/api.py
 cinder/volume/drivers/netapp/dataontap/client/client_7mode.py
 cinder/volume/drivers/netapp/dataontap/client/client_base.py
 cinder/volume/drivers/netapp/dataontap/client/client_cmode.py
