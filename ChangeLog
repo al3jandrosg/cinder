@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-7.0.0.0rc3
-----------
+7.0.0
+-----
 
 * Squashed commit of WebOb 1.5 and oslo.db fixes
 
