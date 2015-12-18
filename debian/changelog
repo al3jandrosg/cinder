@@ -1,3 +1,11 @@
+cinder (2:8.0.0~b1-0ubuntu1) xenial; urgency=medium
+
+  * New upstream milestone for OpenStack Mitaka: 
+    - d/control: Align dependencies with upstream.
+    - d/cinder-common.install: Adding new wsgi binary entrypoint. 
+
+ -- David Della Vecchia <ddv@canonical.com>  Fri, 18 Dec 2015 08:06:32 -0500
+
 cinder (2:7.0.0-0ubuntu1) wily; urgency=medium
 
   * New upstream release for OpenStack Liberty.

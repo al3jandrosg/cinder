@@ -1,29 +1,332 @@
 CHANGES
 =======
 
+8.0.0.0b1
+---------
+
+* Fix dictionary key error
+* Imported Translations from Zanata
+* Delete unused codes in rbd.retype
+* Add Mitaka-1 release notes
+* xio: fix regression in authentication
+* Add some missing fields to Volume object
+* Imported Translations from Zanata
+* Add retype in lvm driver
+* Take into consideration races in XtremIOClient3
+* Optimize "open" method with context manager
+* Updated from global requirements
+* Sheepdog: Optimization of error handling
+* Fix the bug of can't get the desired image info
+* Cleanup orphaned code in sqlalchemy API
+* Cleanup orphaned code from ceph backup driver
+* Force releasenotes warnings to be treated as errors
+* Remove db access in VNX driver
+* Fix quotas issue during volume transfer
+* Declare multiattach is True in Dell Eqlx driver
+* Nexenta Edge iSCSI backend driver
+* RBD: Make snapshot_delete more robust
+* Hacking Checks for assertTrue/IsNone()
+* Remove netaddr useless requirement
+* Improve metadata update operations
+* Add atomic conditional updates to objects
+* Revert "Add Scality SRB driver"
+* VMware: Validate extra spec opt vmware:clone_type
+* Update list_replication_targets
+* Port key manager to Python 3
+* Move oslo-incubator's scheduler module to cinder
+* Remove stubs and add resource cleanup
+* VMware: Skip unsupported datastore types
+* Port IBM storewize_svc driver to Python 3
+* Declare multiattach is True in RBD driver
+* XtremIO fix attach readonly bug
+* CG API should return volume type IDs
+* EMC VMAX - Change naming convention for MV and SG for FAST
+* Fix the bug of OSError when convert image
+* Don't build two tox envs for pep8(-constraints)
+* Add guidelines for release notes to devref
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Updated from global requirements
+* Eager load columns in volume_get_active_by_window
+* LeftHand: Remove self.db assignment
+* Deprecate *_multipath_enabled flag for IBM drivers
+* Fix debug output for cinder-volume-usage-audit
+* Add check_uptodate.sh --checkopts to "pep8"
+* Move get_by_id to CinderObject
+* Imported Translations from Zanata
+* fast8: Skip git rm'd files
+* Manage existing: fix volume object saving
+* Fix swap_volume for case without migration
+* Remove .mailmap file
+* Remove db access from 3PAR and LH cg functions
+* Additional VAG support for SolidFire
+* Fix InstanceLocalityFilter scheduler filter
+* Fix metadata retrieval in GPFS driver
+* Imported Translations from Zanata
+* VNX: Fix metadata get overriden issue
+* Added VAG support to SolidFire
+* Refactor HP LeftHand driver to now be HPE
+* Remove db access from XIV/DS8K CG functions
+* Bad exception clauses order
+* Imported Translations from Zanata
+* Check specific driver enabled in create_backup
+* get_all_snapshots: Fix log message typo
+* Updated from global requirements
+* ScaleIO extend volume round up capacity
+* Port HP 3PAR driver to Python 3
+* Modify test_hpe3par to support random hash
+* Imported Translations from Zanata
+* Fix ScaleIO driver provisioning key
+* Imported Translations from Zanata
+* Remove the HP CLIQ proxy driver
+* Retry on database deadlock on service_update method
+* Downstream Fix for Genconfig
+* Correct assertDictMatch argument order
+* 3PAR Fix find_existing_vluns
+* Port xio driver to Python 3
+* Remove kombu as a dependency for Cinder
+* Port EMC VMAX to Python 3
+* Port EMC VNX CLI to Python 3
+* Imported Translations from Zanata
+* Update compression license check
+* py3: Fix error handling in prophetstor driver
+* Updated from global requirements
+* Refactor HP 3PAR drivers to now be HPE
+* add "unreleased" release notes page
+* Add os-win to requirements.txt
+* Update extend_volume API to use versionedobjects
+* Update retype API to use versionedobjects
+* Update get/delete_volume API to use versionedobjects
+* Update create_volume API to use versionedobjects
+* Test for object version hash changes
+* Fix cinder objects unit test registration
+* CG driver function should not access db
+* Add test for snapshot filtering by project id
+* Imported Translations from Zanata
+* Use oslo_config new type PortOpt for port options
+* Update CONTRIBUTING.md to CONTRIBUTING.rst
+* CG creation should be scheduled on backend level
+* Removal of deprecated NPIV option in Storwize
+* Fix ZFSSA drivers' local cache bugs
+* OpenStack typo
+* Change nfs to NFS in the help strings of nfs.py
+* Port zfssa driver to Python 3
+* Port vzstorage to Python 3
+* Port cinder.utils.monkey_patch() to Python 3
+* XtremIO fix create CG from src flow
+* Don't use default=None for config options
+* Imported Translations from Zanata
+* 3PAR drivers volume size conversion is incorrect
+* Port vmware datastore to Python 3
+* Use Service object instead of DB API directly
+* Docstring fix in scheduler-stats
+* Add LC_ALL=C to lvcreate, lvextend and pvresize
+* Port cinder.hacking to Python 3
+* Port test_tintri to Python 3
+* Add reno for release notes management
+* Imported Translations from Zanata
+* Fix failure of unit test TestCinderAllCmd
+* Execute mount.nfs check with absolute path
+* Imported Translations from Zanata
+* Update minimum tox version to 1.8
+* Update cinder-manage man to match current options
+* Replace warnings.warn in sqlalchemy-api
+* Replace warnings.warn in glusterfs
+* Using extra-specs in cloned vols for Nimble driver
+* SheepdogDriver: Improve get_volume_stats operation
+* Add retype logic in manage_existing for VNX
+* Adds CORS support to Cinder
+* Fix calling delete_zones method with a wrong argument
+* Return volume_type extra specs based on policy
+* Revert "Handle correct exception raised by python-novaclient"
+* NetApp: Fix issue with updating E-Series password
+* NetApp: Fix issue with E-Series volume expand
+* Update register_opts hacking check to allow tuples
+* Updated from global requirements
+* optimize the copy_image_to_volume method of sheepdogdriver
+* Fix UsedLimitsController's authorizer to soft
+* Imported Translations from Zanata
+* Handle correct exception raised by python-novaclient
+* lvconvert missing from cinder volume.filters
+* Support insecure NAS security options in Quobyte
+* Brocade driver add_zone optimization
+* Imported Translations from Zanata
+* Add missing cgsnapshot field to Snapshot object
+* Eager load snapshot_metadata in *snapshot_get_all
+* Case sensitivity problem in cinder scheduler
+* Add protocol to help of glance_api_servers option
+* SMBFS: Fix retrieving total allocated size
+* Make relationships in objects consistent
+* Imported Translations from Zanata
+* Remove the jointly loaded model in finish_volume_migration
+* Update docs to generate Guru Meditation Report
+* Add qos_specs_id to volume type show
+* Fix NoneType Attribute error
+* Support initialization state in Backup Manager
+* Imported Translations from Zanata
+* Add -constraints for CI jobs
+* Fix typos about 'target_discovered'
+* NetApp: Cleanup if E-Series volume create fails
+* VMware: Unit test refactoring
+* Cleanup for cinder tests with CGSnapshot
+* Imported Translations from Zanata
+* VMware: Enforce min vCenter version
+* Add hypermetro support for Huawei driver
+* Updated from global requirements
+* devref doc: assorted fixes in "Unit Tests"
+* LIO: Let delete_initiator succeed if iqn not found
+* CGSnapshot Object
+* Updates in consistency_group in xiv/ds8k driver
+* Retype support for CloudByte iSCSI cinder driver
+* Add retries for Cisco FCZM client CLI _cfg_save
+* Updated from global requirements
+* Remove unused gettextutils from oslo-incubator
+* NetApp: E-Series fix deletion of missing volume
+* VMware: Relocate volume only during no disk space
+* Port Windows drivers to Python 3
+* Use project id from volume when retyping volumes
+* Fix typo in LIO terminate_connection error msg
+* Update the devref for volume migration
+* Implement update_migrated_volume for NFS driver
+* Only use LOG.exception in exception handler
+* Port API admin action tests to Python 3
+* Port API types extra specs to Python 3
+* Port API to Python 3
+* Mark XML API as deprecated in Mitaka
+* windows: don't use LOG.exception if not logging an exception
+* Improve performance listing detail for volumes
+* Move CloneableVD to common functions
+* Fix updating only volume type is_public
+* encryption_api_url requires a version
+* Cleanup/move code in Storwize Driver
+* Port WSGI tests to Python 3
+* Fix method VolumeTypeList.get_all
+* Use lvm_conf_file directory for LVM_SYSTEM_DIR value
+
 7.0.0
 -----
 
 * Squashed commit of WebOb 1.5 and oslo.db fixes
+* Change default Exception code to 500
+* Dell SC: Disable REST verify warnings
+* Update config format for replication_devices
+* Fix log formatting for rbd driver
+* Fix Status-Line in HTTP response
+* Huawei driver handle volume exists error
+* Updated from global requirements
+* Tox fast8: use pep8 env dir
+* Move ssh_utils tests to test_ssh_utils
+* Volume extend error does not catch exception
+* Fix test_misc for WebOb 1.5
+* ScaleIO driver: update_migrated_volume
+* Fix error string format for replication API calls
+* Port IBM flashsystem to Python 3
+* Port ceph driver to Python 3
+* Provide better debug log when 'cinder manage' fails
+* Remove references to Swift in chunked driver
+* Add insecure option for swift backup
+* ScaleIO: Fix protection_domain_id log message at init
+* Port test_srb to Python 3
+* Add fast format option for thick volume creation
+* Imported Translations from Zanata
+* Retype enhancement for EMC VNX cinder driver
+* Updated from global requirements
+* Verify volume is replication capable
+* Add device identifier to replication device
+* Port violin driver to Python 3
+* Port EMC scaleio to Python 3
+* Remove extra register_opts() calls in netapp eseries
+* Add multi-initiator extra-spec for Nimble driver
+* Fix SolidFire target composition
+* Port targets test_iet_driver to Python 3
+* Port image cache to Python 3
+* py3: Run unit tests with ostestr on Python 3.4
+* Add testresources and testscenarios used by oslo.db fixture
+* Clone cg support in VNX driver
+* Test_backup_swift: Don't leak notifications
+* test_backup_nfs: Set volume id per test
+* test_backup_swift: Set volume id per test
+* Add backup_swift_auth_url to swift backup driver
+* Dell Eqlx: Support over subscription in thin provisioning
+* Hacking check for opt name registration
+* Add ability to set prefix in SolidFire Volume name
+* Updated from global requirements
+* Fix broken format string in vol mgr log
+* Detach volume on device validation failure
+* Convert Retry-After header parameter value to string
+* Fix capacity report error in Huawei driver
+* emc vmax driver: use integer division for Python 3
+* VMAX Target iSCSI IP Address
+* Updated from global requirements
+* Delete a temporary volume in DB with admin context
+* Fix update quota of subprojects
+* Port test_quobyte to Python 3
+* Remove unused 'deprecated' option from auth_strategy opt
 
 7.0.0.0rc2
 ----------
 
 * Fix VMAX live migration problem
 * Imported Translations from Zanata
+* Port netapp SSC Cmode to Python 3
+* Port test_netapp to Python 3
+* VMAX Truncate Storage Group Name
+* HNAS iSCSI manage does not work with spaces
+* Port scheduler host manager to Python 3
+* Fix various Python 3 issues
+* Fix volume throttling to Python 3
+* Ensure replication functions check driver status
+* Fix enable/disable_replication raise InvalidVolume
+* Tests: print fake_notifier queue upon mismatch
+* Cleanup orphaned code from cinder root directory
+* Image cache tests: use fake_notifier
+* Implement extend_volume method to Block Device driver
+* Small optimization in Block Device driver
+* DRBD: new option "drbdmanage_devs_on_controller"
+* Obtain target authentication from database same as LIO target
 * Dell SC: cgsnapshot-delete doesn't actually delete
+* LVM: Make sparse_copy_volume private, use for capabilities
+* Dell SC: cgsnapshot-delete doesn't actually delete
+* Fix typo in cinder-config-generator.conf
+* Port test_volume to Python 3
+* Fix unreachable code pylint issues
 * Huawei driver add check before use a QoS
 * Report *real* free capacity in Huawei driver
+* Fix update Huawei driver issue
+* Fix Python 3 issues in wsgi
+* py3: Port pure driver test to Python 3
+* GlusterFS: extend volume to the right path
+* Use pbr wsgi_scripts to install Cinder WSGI entry point
+* Report *real* free capacity in Huawei driver
+* Imported Translations from Zanata
+* Fix Bad indentation pylint issues
+* Show image metadata
+* XtremIO fix remapping bug
 * Revert use of netapp_lib from NetApp Drivers
+* Fix volume related operation in CloudByte driver
 * Add placholder for migration backports in Liberty
+* Add placholder for migration backports in Liberty
+* Revert use of netapp_lib from NetApp Drivers
+* Remove the destination volume check in delete_volume
+* Huawei driver add check before use a QoS
+* Fix VMAX live migration problem
 * Cleanup of Translations
+* Missing configuration opts from cinder.sample.conf
+* Use function capsulation in Huawei driver
 
 7.0.0.0rc1
 ----------
 
+* Open Mitaka development
+* Create volume in cg enhancement in VNX driver
+* Remove duplicate keys from dictionary
 * Fix URL format in Huawei driver
+* Setup LVM_SYSTEM_DIR earlier in LVM.__init()
+* Add "fast8" tox env
 * Allow c-vol backends to start when some backends fail to load
 * Fix use of wrong storage pools for NetApp Drivers
+* VMware: Remove VMDK driver for ESX server
+* Use of ast for integers doesn't changes type
 * Make rpc_client method private for VolumeCommands
 * Ignore Forbidden error on quotas-get for nested projects
 * Change ignore-errors to ignore_errors
@@ -31,6 +334,7 @@ CHANGES
 * Replace soft_delete in volume_type_access_remove
 * Fix way of getting LUN id in Huawei driver
 * Fixing create CG from Cgsnapshot bug in VNX driver
+* Fix delete quota of subprojects
 * Dynamically create cinder.conf.sample
 * Updated from global requirements
 * Fix MITM vulnerability for Brocade FC SAN lookup
@@ -45,6 +349,7 @@ CHANGES
 * Local img-cache files ignored for image transfers
 * Snapmirror targets should not be reported as pools
 * Change check method for 'all_tenants'
+* Create a page of drivers with stevedore.sphinxext
 * Enable certificate verification during image copy
 * Fix NetApp clone from glance failure
 * Storwize: Fix format string
@@ -64,6 +369,7 @@ CHANGES
 * SolidFire provider_id for snapshots on init
 * LeftHand Add update_migrated_volume to drivers
 * Huawei: fix multi REST-URLs bug
+* Improve coverage for snapshot_get_by_host
 * LVM: add the exception handling to volume copy
 * Fix NetApp loop in clone of NFS backed images
 * Hacking log format arg check
@@ -79,9 +385,11 @@ CHANGES
 * Return a tuple from SolidFire update_provider_info
 * Add unmanage default implementation to VolumeDriver
 * Correctly report multiattach in Pure drivers
+* Add manage_existing and unmanage to BaseVD
 * Add migrate_volume to BaseVD
 * Update update_migrated_volume in VNX driver
 * 3PAR Disable generic image volume cache
+* Add updated_at into response of listing detail
 * Add os-brick's scsi_id command to Cinder rootwrap
 * Fix order of arguments in assertEqual
 * Updated from global requirements
@@ -108,6 +416,7 @@ CHANGES
 * Generic image-volume cache
 * Implement thin provisioning support for E-Series
 * Remove useless response checks in SolidFire driver
+* Sheepdog: Improve snapshot and clone operation
 * Fix the virtual port support in VNX driver
 * DotHill driver fix create_cloned_volume parent id
 * 3PAR Fix create_cloned_volume source volume id
@@ -119,11 +428,14 @@ CHANGES
 * Check before add lun to QoS in Huawei driver
 * Fix backup metadata import missing fields
 * Remove the unnecassary volume_api.get(context, volume_id)
+* Port image_utils to Python 3
+* Port volume transfer to Python 3
 * Service object
 * Allow specified backend capabilities to be retrieved
 * Remove deprecated options
 * Add cinder.conf.sample to gitignore
 * Add delete_snapshot and update_snapshot rules
+* Handle KeyManager exception when deleting a volume
 * Fix a merge problem in VMAX driver
 * Don't require OpenSSL for unit tests
 * Add pagination to backups
@@ -161,6 +473,7 @@ CHANGES
 * Reduce runtime of E-Series iSCSI tests
 * Cinder Nested Quota Driver
 * Add manage/unmanage volume support for Nimble
+* Python 3 incompatible expression fix
 * Local cache feature of Oracle ZFSSA drivers
 * Replace urllib.unquote with urllib.parse.unquote
 * Remove unused dependency discover
@@ -192,6 +505,7 @@ CHANGES
 * Add volume retype support for Huawei driver
 * Fix URLs to admin-guide-cloud
 * Nested Quota Driver: Get Project Hierarchy
+* Check sio_storage_pools in check_for_setup_error
 * Fix description for "Barbarism of editting a file"
 * Dell SC: Added logging for the find_wwns functions
 * Add missing space to logged error in create volume
@@ -205,6 +519,7 @@ CHANGES
 * Add SolidFire svip to config options
 * Return multiple iSCSI portals in VNX Cinder driver
 * Avoid returning volume metadata in DotHill driver
+* Small cleanups in BaseVD/VolumeDriver
 * Port 3PAR drivers to use ABCMeta driver model
 * Updated from global requirements
 * Switch to the oslo_utils.fileutils

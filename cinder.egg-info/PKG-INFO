@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 7.0.0
+Version: 8.0.0.0b1
 Summary: OpenStack Block Storage
 Home-page: http://www.openstack.org/
 Author: OpenStack

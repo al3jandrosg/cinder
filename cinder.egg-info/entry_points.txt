@@ -2,14 +2,14 @@
 sqlalchemy = oslo_db.sqlalchemy.migration
 
 [cinder.scheduler.filters]
-AvailabilityZoneFilter = cinder.openstack.common.scheduler.filters.availability_zone_filter:AvailabilityZoneFilter
-CapabilitiesFilter = cinder.openstack.common.scheduler.filters.capabilities_filter:CapabilitiesFilter
+AvailabilityZoneFilter = cinder.scheduler.filters.availability_zone_filter:AvailabilityZoneFilter
+CapabilitiesFilter = cinder.scheduler.filters.capabilities_filter:CapabilitiesFilter
 CapacityFilter = cinder.scheduler.filters.capacity_filter:CapacityFilter
 DifferentBackendFilter = cinder.scheduler.filters.affinity_filter:DifferentBackendFilter
 DriverFilter = cinder.scheduler.filters.driver_filter:DriverFilter
 InstanceLocalityFilter = cinder.scheduler.filters.instance_locality_filter:InstanceLocalityFilter
-JsonFilter = cinder.openstack.common.scheduler.filters.json_filter:JsonFilter
-RetryFilter = cinder.openstack.common.scheduler.filters.ignore_attempted_hosts_filter:IgnoreAttemptedHostsFilter
+JsonFilter = cinder.scheduler.filters.json_filter:JsonFilter
+RetryFilter = cinder.scheduler.filters.ignore_attempted_hosts_filter:IgnoreAttemptedHostsFilter
 SameBackendFilter = cinder.scheduler.filters.affinity_filter:SameBackendFilter
 
 [cinder.scheduler.weights]
@@ -47,4 +47,7 @@ cinder.openstack.common.notifier.test_notifier = oslo_messaging.notify._impl_tes
 [oslo_middleware]
 cinder.api.middleware.sizelimit = oslo_middleware.sizelimit
 cinder.openstack.common.middleware.request_id = oslo_middleware.request_id
+
+[wsgi_scripts]
+cinder-wsgi = cinder.wsgi.wsgi:initialize_application
 
