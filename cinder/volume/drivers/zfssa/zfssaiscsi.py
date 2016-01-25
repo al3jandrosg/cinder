@@ -137,7 +137,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         self.tgt_zfssa = factory_zfssa()
         self.zfssa.set_host(lcfg.san_ip, timeout=lcfg.zfssa_rest_timeout)
         auth_str = '%s:%s' % (lcfg.san_login, lcfg.san_password)
-        auth_str = base64.encode_as_text(auth_str)[:-1]
+        auth_str = base64.encode_as_text(auth_str)
         self.zfssa.login(auth_str)
 
         self.zfssa.create_project(lcfg.zfssa_pool, lcfg.zfssa_project,
@@ -402,7 +402,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         pool = lcfg.zfssa_pool
         project = lcfg.zfssa_project
         auth_str = '%s:%s' % (lcfg.san_login, lcfg.san_password)
-        auth_str = base64.encode_as_text(auth_str)[:-1]
+        auth_str = base64.encode_as_text(auth_str)
         zfssa_tgt_group = lcfg.zfssa_target_group
         repl_ip = lcfg.zfssa_replication_ip
 
@@ -904,7 +904,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         :param new_volume: The migration volume object that was created on
                            this backend as part of the migration process
         :param original_volume_status: The status of the original volume
-        :return model_update to update DB with any needed changes
+        :returns: model_update to update DB with any needed changes
         """
 
         lcfg = self.configuration
