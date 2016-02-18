@@ -1,3 +1,10 @@
+cinder (2:8.0.0~b2-0ubuntu2) xenial; urgency=medium
+
+  * d/control: Drop python-googleapi from (Build-)Depends and move to Suggests.
+  * d/rules, d/p/skip-google-backup-tests.patch: Skip python-googleapi tests.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 18 Feb 2016 12:07:28 -0500
+
 cinder (2:8.0.0~b2-0ubuntu1) xenial; urgency=medium
 
   * New upstream milestone for OpenStack Mitaka.
