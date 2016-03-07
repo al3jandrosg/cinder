@@ -1,15 +1,238 @@
 CHANGES
 =======
 
+8.0.0.0b3
+---------
+
+* Changes in ScaleIO configurations options
+* Update Pure replication to cheesecake
+* Fixed logging for oslo versioned objects
+* Move replication volume manager warnings to info
+* Trim 50s from huawei ISCSIDriver unit tests
+* Copy unit tests for StandardLogging fixture from Nova
+* Use is_int_like method from oslo_utils
+* Fix sshpool.remove code
+* Copy StandardLogging fixture from Nova
+* Add ability to failback for replication V2.1
+* Storwize SVC multiple management IPs
+* Updating Datera DataFabric Driver to v2 of Datera DataFabric API
+* Capture warnings into logs
+* Return BadRequest for invalid unicode names (continued)
+* IBM Storwize with pool-aware-cinder-scheduler
+* Fix HTTP sessions left open in Brocade zone driver
+* Clean up replication v2.1 (Cheesecake) RPC API
+* always use pip constraints
+* Remove unused columns from Service ORM model
+* Remove unused pngmath sphinx extension
+* Delete volumes with snapshots
+* NetApp: Fix SSH Client File Creation in Unit Test
+* Trim 12s from disco unit tests
+* EMC VMAX - get iscsi ip from port in existing MV
+* Misprint in policy.json
+* Re-enable -1 child limits for nested quotas
+* Updated from global requirements
+* Huawei: delete_snapshot need not return any value
+* Match the ip more accurately in Huawei driver
+* Huawei: Consider bandwidth when selecting port
+* Add description when rename LUN in Huawei driver
+* Huawei: Code cleanup
+* Modify the number of params of hypermetro in HuaweiDriver
+* EMC VMAX - Changing PercentSynced to CopyState in isSynched
+* Add basic workflow of attach/detach to devref
+* Change frozen error messages from _LE to _
+* Replication v2.1 (Cheesecake)
+* Change Fail to Failed in error messages
+* NetApp: Add Consistency Group support for E-Series
+* Return BadRequest for invalid Unicode names
+* Check for service existance in capabilities API
+* Enable all unit tests on Python 3.4
+* Adding general notes about rolling upgrades
+* Move deprecation release notes to correct section
+* Tests: Don't assert on LOG.warn
+* Return all target_wwpns for FC storwize
+* Fix error message in cinder type-update
+* Fix NoneType error in service_get_all
+* Add os-brick rootwrap filter for privsep
+* LeftHand: Updating minimum client version
+* NetApp: Implement CGs for ONTAP Drivers
+* Fix HNAS iSCSI driver attachment
+* NetApp: Support iSCSI CHAP Uni-directional Auth
+* Avoid hardcoding value from oslo library
+* cinder-api-microversions code
+* Port netapp dataontap driver to Python 3
+* Scalable backup service - Liberty compatibility
+* Huawei: Log the IP when login fails
+* Huawei: Fix create volume with prefetch value error
+* Huawei: Don't fail when port group does not exist
+* Force target_lun to be int type to make os-brick happy
+* Volume manage/unmanage support to ZFSSA drivers
+* Disable multi-attach for RBD
+* Correct iscsi lun type
+* Fix invalid uuid warnings in object unit tests
+* Imported Translations from Zanata
+* EMC VMAX - not cleaning up HW Resource WWPN initiators
+* Huawei: Fixed url range
+* Updated from global requirements
+* Move anyjson to test-requirements
+* Huawei: Judgement failure when creating hypermetro
+* Remove useless get_replication_updates driver call
+* [LVM] Restore target config during ensure_export
+* 3PAR get host by WWN now handles mixed cases
+* NetApp: E-Series remove snapshot limitations
+* Fix race condition in RemoteFS create_snapshot_online
+* Add SIGHUP handlers to reset RPC version pins
+* Handle OverQuota exception during volume transfer
+* Tintri image cache cleanup
+* Huawei: Ensure the port is online
+* Rtstool sets wrong exception message on save
+* Test middleware test_faults to Python 3
+* Split out NestedQuotas into a separate driver
+* Revert changes to use ostestr
+* Propoerly call oslo's Service stop and wait
+* Remove unused kill method from Service
+* Wait for periodic tasks to stop on exit
+* Dell: Failed vol create could leave dead volumes
+* Roll back reservations quota in RPC if necessary
+* Scaling backup service
+* EMC ScaleIO - fix bug in extend volume
+* VMware: manage_existing for VMDK driver
+* VMware: manage_existing_get_size for VMDK driver
+* Delete unuseful code in Huawei driver
+* Cleanup unused conf variables
+* Port infortrend driver to Python 3
+* Disable Rally backup-related scenarios
+* Fix last Python 3 issues in zonemanager
+* Port hgst driver to Python 3
+* Port API v1 and v2 to Python 3
+* Port API contribs to Python 3
+* Port test_emc_vnx to Python 3
+* Fix service-list filter
+* Coho volume stats update
+* Sheepdog: Fix malformed image url format
+* Update quota when volume type renames
+* Add restore_volume_id in backup
+* Updated from global requirements
+* Support for consistency groups in ScaleIO driver
+* Use of metadata id instead of metadata name
+* Fix 'asert' typo in unit test
+* Fix dynamic import of CONF.volume_api_class
+* Filter & goodness functions in NetApp drivers
+* Manage/unmanage volume in ScaleIO driver
+* HNAS driver: Fix SSH and cluster_admin_ip0 bug
+* Don't use Mock.called_once_with that does not exist
+* EMC VMAX - necessary updates for CG changes
+* RBD: use versioned objects
+* Tests: Fix calls to non-existent assert methods
+* Updated from global requirements
+* Profiler: make it possible to run without loading osprofiler
+* Profiler: don't call trace_cls if profiler is not enabled
+* Tests: Set volume listen port to test_service_listen_port
+* Remove Cisco FC Zone Manager Driver
+* Add variable QoS to NetApp cDOT drivers
+* Move integrated tests to 'functional' directory
+* py3: Fix usage of JSON in API contrib
+* Port utils.safe_minidom_parse_string() to Python 3
+* Include allocated quota value in the quota reserve
+* Log stack trace for middleware faults
+* hacking: Fix false positive in C302 check
+* Port backup drivers to Python 3
+* Storwize: Implement v2 replication
+* Volume create fails with FakeISCSIDriver
+* Adds support for configuring zoning in a virtual fabric
+* ScaleIO QoS Support
+* Zfssaiscsi driver should not use 'default' initiator group
+* Update db in CGSnapshot create
+* 3PAR: Create consistency group from source CG
+* Remove old client version checks from 3PAR driver
+* Improve logging to debug invalid "extra_specs" entries
+* Huawei: Implement v2 replication (managed)
+* DRBD: Fix arguments for resize_volume DBus API call
+* Port objects unit tests to Python 3
+* Updated from global requirements
+* LeftHand: Implement un/manage snapshot support
+* Updated from global requirements
+* EMC VMAX - Method not being called for V3
+* Allow for eradicating Pure volumes on Cinder delete
+* HNAS driver: retry on Connection reset fix
+* Fix issue in hacking with underscore imports
+* DRBD: Compat for current DRBDmanage versions
+* Fix variable scope issue in try-except
+* Imported Translations from Zanata
+* Bootable filter for listening volumes from CLI
+* Clean uploading volume when c-vol restarts
+* mock time.sleep in Broadcom unit test
+* Don't create cgsnapshot if cg is empty
+* Added osprofiler headers to cors middleware
+* Imported Translations from Zanata
+* Fix the replication spelling in message
+* 3PAR fix driver to work with image cache
+* Updated from global requirements
+* Improve logging for volume detach
+* Remove useless unit tests mock in Huawei driver
+* Return updated volume type after updating
+* Remove 'external=True' in Huawei driver
+* Fix XtremIO multi cluster support
+* EMC VMAX - Fix for last volume in VMAX3 storage group
+* Filtering type extra-spec support to ZFSSA drivers
+* Zfssaiscsi driver should return target_lun as int
+* Pin RPC and object version to lowest running
+* Report RPC and objects versions
+* Add missing RPC calls versions to rpcapi modules
+* Huawei: Balanced FC port selection when zoning
+* VNX: Replication V2 support(managed)
+* Adds HTTPS southbound connector for Brocade FC Zone Driver
+* Replication V2 for Pure Storage
+* Support ZeroMQ messaging driver in cinder
+* Remove redundant definition of 'deleted'
+* Fix update_consistencygroup log info
+* Correct opt type for nexenta_chunksize/blocksize
+* Huawei: Add manage/unmanage snapshot support
+* Remove deprecated options from NFS driver
+* Fixing HNAS XML parser
+* Replace exit() by sys.exit()
+* IBM XIV/DS8K: Implements Replication V2
+* Support cinder_img_volume_type in image metadata
+* Adds friendly zone name support
+* LeftHand: Implement v2 replication (unmanaged)
+* EMC VMAX - VMAX driver failing to remove zones
+* Remove access_mode 'rw' setting in drivers
+* Tests: Strengthen assertFalse assertions
+* Fix laggard cisco FC zone client unit tests
+* Fix xtremio slow unit tests
+* Fix sluggish rbd unit tests
+* Fix torpid coordinator unit tests
+* NetApp ONTAP - Reapply API tracing
+* Run flake8 also on cinder/common
+* Replace assertEqual(*, None) with assertIsNone in tests
+* Wrap the method to calculate virtual free capacity
+* Add pagination support to consistency group
+
 8.0.0.0b2
 ---------
 
+* Fix NFS driver unit test docstring
+* Adding action to policy.json
+* fix NFS driver max_over_subscription_ratio typo
+* Add pip-missing-reqs tox env
+* Add missing requirements
+* Added 'bootable volume' filter for non-admin user
+* Move wsgi to oslo_service.wsgi
+* Set LVM driver default overprovisioning ratio to 1.0
+* Tegile tests: Change volume size to int
+* VMware: Fix release notes
+* Huawei: Refactor driver for the second time
 * Add cinder backup driver for Google Cloud Storage
 * NexentaStor 5 iSCSI backend driver
+* NexentaStor 5 NFS backend driver
+* DRBD: Rename "dres" to avoid confusion with "res"
+* EMC VMAX - Incorrect SG selected on an VMAX3 attach
 * Activate sparse copy for Netapp
 * Add Fujitsu ETERNUS DX Volume Driver (FC part)
 * Imported Translations from Zanata
+* XtremIO: FC initialize connection failed
 * Updated from global requirements
+* Disallow transferring volume in consistency group
+* Reduce use of eval()
 * Remote unused iscsi_targets table
 * ITRI DISCO cinder driver
 * NetApp eseries: report max_over_subscription_ratio correctly
@@ -19,6 +242,7 @@ CHANGES
 * Refactor Windows drivers using os-win
 * Base iSCSI initiator validation
 * Fix ChunkedBackupDriver _create_container
+* XtremIO: Set the location of a CA certificate
 * Huawei: Add manage/unmanage volume support
 * Remove DB calls from Pure Volume Driver CG methods
 * Dell SC: Adding logging to httpclient
@@ -26,11 +250,15 @@ CHANGES
 * Enable trim/discard in SolidFire's driver
 * API Middleware fault: Log exception type
 * Re-add Nexenta drivers
+* Remove invalid NetApp QoS keys
+* Fix thin provisioning flags in NetApp drivers
+* Return BadRequest for invalid Unicode names
 * Handling Invalid argument iflag=direct in dd
 * Execute mount.nfs check as root
 * Report discard support for Dell SC connections
 * Add ConsistencyGroupStatus enum field
 * 3PAR: Adding volume checks to manage snapshot API
+* Added Keystone and RequestID headers to CORS middleware
 * Allow host and instance_uuid at attach
 * Imported Translations from Zanata
 * Add finish_volume_migration to volume object
@@ -38,9 +266,14 @@ CHANGES
 * Updated from global requirements
 * Removes the Violin 6000 FC and iSCSI drivers
 * Dell SC: Implements Replication V2
+* Storwize: Add force flag on vdisk mapping call
+* Storwize/SVC: Volume manage using source-name
 * Enable consisgroups in SolidFire driver
 * Replace deprecated library function os.popen() with subprocess
 * Constant defined for sqlAlchemy VARCHAR & INTEGER
+* Fix image volume creation error
+* Cleanup in backup reset status
+* NetApp FC drivers should not set 'rw' access mode
 * Change minimum 3PAR API version for replication
 * Optimize 3PAR array ID retrieval
 * Add metadata aliases to Volume object
@@ -64,9 +297,11 @@ CHANGES
 * Fix to allow RBD delete an unprotected snapshot
 * Remove the deprecated ibmnas driver
 * Wrong usage of "a"
+* VMware: optimize in get_cluster_refs
 * Rebrand HP XP driver to now be HPE
 * Fix creating volume by snapshot for GPFS driver
 * Rename Huawei drivers
+* Check min config requirements for rbd driver
 * Remove API races from delete methods
 * Remove API races from attach and detach methods
 * Quota API is now compatible with keystone API v2
@@ -82,6 +317,7 @@ CHANGES
 * Storwize: Split up __init__ into separate files
 * Fix volume upload failure with glance_api_version=2
 * EMC VMAX - Extend Volume for VMAX3
+* XtremIO add support for create CG from CG src
 * Fix bugs caused by porting to python3
 * Imported Translations from Zanata
 * Disable capabilities based on 3PAR licenses
@@ -89,6 +325,7 @@ CHANGES
 * Fix python 3.x import issues with pure.py
 * Override osapi_volume_listen_port for test_workers
 * Updated from global requirements
+* replace deprecated oslo_messaging _impl_messaging
 * Remove downgrade migrations
 * Fix delete_snapshot error case in Pure driver
 * 3PAR: Implement un/manage snapshot support
