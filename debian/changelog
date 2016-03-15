@@ -1,3 +1,9 @@
+cinder (2:8.0.0~b3-0ubuntu2) xenial; urgency=medium
+
+  * d/p/skip-google-backup-tests.patch: Drop python-googleapi from requirements.txt.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 15 Mar 2016 17:01:42 -0400
+
 cinder (2:8.0.0~b3-0ubuntu1) xenial; urgency=medium
 
   * New upstream milestone for OpenStack Mitaka.
