@@ -54,10 +54,10 @@ Forwarded: not-needed
 +    fake_google_client2_fakecreds = None
 +    fake_google_client2_fakediscbuild = None
 +    fake_google_client2_fakemediadown = None
+ from cinder.tests.unit import fake_constants as fake
  
  
- class FakeMD5(object):
-@@ -65,12 +93,12 @@
+@@ -66,12 +94,12 @@
  
  
  def gcs_client(func):
@@ -75,7 +75,7 @@ Forwarded: not-needed
      @mock.patch.object(hashlib, 'md5', FakeMD5)
      def func_wrapper(self, *args, **kwargs):
          return func(self, *args, **kwargs)
-@@ -79,13 +107,13 @@
+@@ -80,13 +108,13 @@
  
  
  def gcs_client2(func):
@@ -95,7 +95,7 @@ Forwarded: not-needed
                         '_generate_object_name_prefix',
                         FakeObjectName._fake_generate_object_name_prefix)
      @mock.patch.object(hashlib, 'md5', FakeMD5)
-@@ -120,7 +148,7 @@
+@@ -121,7 +149,7 @@
  
      def _create_backup_db_entry(self,
                                  volume_id=_DEFAULT_VOLUME_ID,
@@ -104,7 +104,7 @@ Forwarded: not-needed
                                  parent_id=None,
                                  service_metadata=None):
  
-@@ -141,6 +169,7 @@
+@@ -142,6 +170,7 @@
          backup.create()
          return backup
  
@@ -112,7 +112,7 @@ Forwarded: not-needed
      def setUp(self):
          super(GoogleBackupDriverTestCase, self).setUp()
          self.flags(backup_gcs_bucket='gcscinderbucket')
-@@ -405,7 +434,7 @@
+@@ -406,7 +435,7 @@
                            backup, self.volume_file)
  
      @gcs_client
@@ -121,7 +121,7 @@ Forwarded: not-needed
                         fake_backup_metadata)
      def test_backup_backup_metadata_fail(self):
          """Test of when an exception occurs in backup().
-@@ -426,9 +455,9 @@
+@@ -427,9 +456,9 @@
                            backup, self.volume_file)
  
      @gcs_client
@@ -133,7 +133,7 @@ Forwarded: not-needed
      def test_backup_backup_metadata_fail2(self):
          """Test of when an exception occurs in an exception handler.
  
-@@ -511,7 +540,7 @@
+@@ -512,7 +541,7 @@
          service.delete(backup)
  
      @gcs_client
@@ -144,8 +144,8 @@ Forwarded: not-needed
          volume_id = 'ee30d649-72a6-49a5-b78d-000000edb6b1'
 --- a/requirements.txt
 +++ b/requirements.txt
-@@ -55,4 +55,3 @@
+@@ -57,4 +57,3 @@
  os-brick>=1.0.0 # Apache-2.0
- os-win>=0.2.1 # Apache-2.0
+ os-win>=0.2.3 # Apache-2.0
  tooz>=1.28.0 # Apache-2.0
 -google-api-python-client>=1.4.2 # Apache-2.0
