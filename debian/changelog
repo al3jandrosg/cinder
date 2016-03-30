@@ -1,3 +1,11 @@
+cinder (2:8.0.0~rc1-0ubuntu2) xenial; urgency=medium
+
+  * d/p/skip-google-backup-tests.patch: Drop oauth2client from requirements.txt
+    as its only requires to support Google backup, unblocking migration from
+    proposed pocket.
+
+ -- James Page <james.page@ubuntu.com>  Wed, 30 Mar 2016 12:20:09 +0100
+
 cinder (2:8.0.0~rc1-0ubuntu1) xenial; urgency=medium
 
   * New upstream release candidate for OpenStack Mitaka.
