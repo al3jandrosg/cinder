@@ -277,7 +277,11 @@ cinder/locale/de/LC_MESSAGES/cinder.po
 cinder/locale/es/LC_MESSAGES/cinder.po
 cinder/locale/fr/LC_MESSAGES/cinder.po
 cinder/locale/it/LC_MESSAGES/cinder-log-error.po
+cinder/locale/it/LC_MESSAGES/cinder-log-info.po
 cinder/locale/it/LC_MESSAGES/cinder.po
+cinder/locale/ja/LC_MESSAGES/cinder.po
+cinder/locale/ko_KR/LC_MESSAGES/cinder-log-error.po
+cinder/locale/ko_KR/LC_MESSAGES/cinder-log-info.po
 cinder/locale/ko_KR/LC_MESSAGES/cinder.po
 cinder/locale/pt_BR/LC_MESSAGES/cinder.po
 cinder/locale/ru/LC_MESSAGES/cinder.po

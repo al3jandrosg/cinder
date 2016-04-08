@@ -1,6 +1,33 @@
 CHANGES
 =======
 
+8.0.0
+-----
+
+* Huawei: Fix getting admin_metadata
+* Imported Translations from Zanata
+* NexentaStor4 iSCSI: convert blocksize to str
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* XtremIO handle errors in terminate_connection:
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Report 2.0 as supported version of RPC APIs
+* Fix volume RPC API methods related to backups
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Dell SC: create_cgsnapshot returning wrong structure
+* Imported Translations from Zanata
+* Fix race condition when toggling SP
+* Huawei: Record and check LUN wwn
+* SMBFS: fix parsing volume type extra specs and metadata
+* VMware: Bump driver version
+* Update .gitreview for stable/mitaka
+
 8.0.0.0rc1
 ----------
 

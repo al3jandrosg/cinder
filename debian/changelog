@@ -1,3 +1,13 @@
+cinder (2:8.0.0-0ubuntu1) xenial; urgency=medium
+
+  [ Corey Bryant ]
+  * d/p/fix-i386.patch: Fix failures for i386.
+
+  [ David Della Vecchia ]
+  * Final upstream release for OpenStack Mitaka.
+
+ -- David Della Vecchia <ddv@canonical.com>  Fri, 08 Apr 2016 14:14:21 +0100
+
 cinder (2:8.0.0~rc1-0ubuntu2) xenial; urgency=medium
 
   * d/p/skip-google-backup-tests.patch: Drop oauth2client from requirements.txt
