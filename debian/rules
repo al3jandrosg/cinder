@@ -13,12 +13,7 @@ get-orig-source:
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	rm -rf .testrepository
-	testr init && \
-	set -e && \
-	TEMP_REZ=`mktemp -t` && \
-	testr run --subunit | tee $$TEMP_REZ | subunit2pyunit; \
-	rm -f $$TEMP_REZ
+	ostestr
 endif
 
 override_dh_install:
@@ -34,4 +29,4 @@ override_dh_clean:
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -rf .eggs
+	rm -rf .eggs .testrepository

@@ -4,7 +4,7 @@ Forwarded: yes
 
 --- a/cinder/volume/drivers/nexenta/utils.py
 +++ b/cinder/volume/drivers/nexenta/utils.py
-@@ -39,7 +39,7 @@
+@@ -33,7 +33,7 @@ def str2size(s, scale=1024):
      if not s:
          return 0
  

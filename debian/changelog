@@ -1,3 +1,30 @@
+cinder (2:9.0.0~b1-0ubuntu1) yakkety; urgency=medium
+
+  [ James Page ]
+  * New upstream version.
+  * d/control,d/p/*: Restore BD's for google backup tests, limit patch
+    to removal of hard runtime requirement on required dependencies.
+  * d/p/Drop-use-of-invalid-assert_called_once-call.patch: Cherry pick
+    inflight fix for invalid use of assert methods.
+  * d/p/*: Refresh.
+
+  [ Corey Bryant ]
+  * d/p/skip-test-retype-volume-migration-failed.patch: Skip
+    test_retype_volume_migration_failed until bug is resolved.
+    https://bugs.launchpad.net/cinder/+bug/1582306
+  * d/p/skip-timeout-exception.patch: Skip
+    test_snapshot_failure_when_remote_is_unreachable until bug is resolved.
+    https://bugs.launchpad.net/cinder/+bug/1582370
+  * d/p/skip-timeout-exceptions.patch: Dropped. Fixed upstream.
+  * d/p/Drop-use-of-invalid-assert_called_once-call.patch: Dropped. Fixed
+    upstream.
+  * d/p/google-back-requirements.patch: Rebased.
+  * New upstream milestone for OpenStack Newton.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/control: Leave paramiko at >= 1.16.0 for b1.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 06 Jun 2016 09:16:13 -0400
+
 cinder (2:8.0.0-0ubuntu1) xenial; urgency=medium
 
   [ Corey Bryant ]

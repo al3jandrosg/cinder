@@ -32,10 +32,6 @@ cinder-volume-usage-audit = cinder.cmd.volume_usage_audit:main
 
 [oslo.config.opts]
 cinder = cinder.opts:list_opts
-keystonemiddleware = keystonemiddleware.auth_token:list_opts
-oslo.db.concurrency = oslo.db.concurrency:list_opts
-oslo.messaging = oslo_messaging.opts:list_opts
-oslo_concurrency = oslo_concurrency.opts:list_opts
 
 [oslo.config.opts.defaults]
 cinder = cinder.common.config:set_middleware_defaults
@@ -50,6 +46,9 @@ cinder.openstack.common.notifier.test_notifier = oslo_messaging.notify._impl_tes
 [oslo_middleware]
 cinder.api.middleware.sizelimit = oslo_middleware.sizelimit
 cinder.openstack.common.middleware.request_id = oslo_middleware.request_id
+
+[tempest.test_plugins]
+cinder_tests = cinder.tests.tempest.plugin:CinderTempestPlugin
 
 [wsgi_scripts]
 cinder-wsgi = cinder.wsgi.wsgi:initialize_application
