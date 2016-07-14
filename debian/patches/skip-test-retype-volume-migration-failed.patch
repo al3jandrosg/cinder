@@ -5,7 +5,7 @@ Bug: https://bugs.launchpad.net/cinder/+bug/1582306
 
 --- a/cinder/tests/unit/test_volume.py
 +++ b/cinder/tests/unit/test_volume.py
-@@ -5286,6 +5286,7 @@ class VolumeMigrationTestCase(BaseVolume
+@@ -5315,6 +5315,7 @@ class VolumeMigrationTestCase(BaseVolume
          self._retype_volume_exec(False, snap=True, exc=exception.InvalidVolume)
  
      def test_retype_volume_migration_failed(self):

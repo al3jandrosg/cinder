@@ -1,5 +1,4 @@
 skip-test-retype-volume-migration-failed.patch
-fix-i386.patch
 google-back-requirements.patch
 fix-long-casting.patch
 skip-failing-tests.patch
