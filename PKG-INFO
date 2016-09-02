@@ -1,8 +1,8 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 9.0.0.0b2
+Version: 9.0.0.0b3
 Summary: OpenStack Block Storage
-Home-page: http://www.openstack.org/
+Home-page: http://docs.openstack.org/developer/cinder/
 Author: OpenStack
 Author-email: openstack-dev@lists.openstack.org
 License: UNKNOWN

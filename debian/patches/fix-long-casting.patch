@@ -24,7 +24,7 @@ Forwarded: no
 
 --- a/cinder/utils.py
 +++ b/cinder/utils.py
-@@ -631,7 +631,8 @@ def get_blkdev_major_minor(path, lookup_
+@@ -596,7 +596,8 @@
      st = os.stat(path)
      if stat.S_ISBLK(st.st_mode):
          path, st = _get_disk_of_partition(path, st)

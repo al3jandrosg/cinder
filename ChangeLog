@@ -1,17 +1,306 @@
 CHANGES
 =======
 
+9.0.0.0b3
+---------
+
+* Fix backup unit tests imports for os-brick
+* Fix backup unit test with new os-brick
+* ScaleIO over subscription support
+* Fix CapacityFilter to accept None volume type
+* Imported Translations from Zanata
+* Deleting volume metadata keys with a single request
+* Add Castellan release note
+* Changes stats report for ScaleIO driver
+* Remove cinder/tests/unit/test_misc.py
+* Imported Translations from Zanata
+* CoprHD: Handle create volume from CG snapshot error
+* Stop using mox in test_wsgi, test_nexenta, test_netapp
+* Fix an invalid function call in test_consistencygroups.py
+* Fix typo in enable_unsupported_driver description
+* Mark GlusterFS driver as deprecated
+* Retype encrypted volumes
+* Create encrypted volumes from images
+* Add encryptor attach/detach in utils
+* XtremIO: fix the returned value of CG actions
+* Change assertTrue(isinstance()) with optimal assert
+* Stop using mox in unit/*.py tests (1/2)
+* Use assertIn instead of assertTrue(A in B)
+* Remove unused function from unit/fake_utils.py
+* Imported Translations from Zanata
+* Clean import in code
+* Remove unused config.CONF
+* Add tempest tests for Consistency Groups
+* HNAS: Add support for manage/unmanage snapshots in NFS driver
+* Reduce the runtime of drivers/ibm/test_storwize_svc
+* Improve TestCase.mock_object method
+* Remove self.__dict__ for formatting strings
+* Imported Translations from Zanata
+* CoprHD: Add missing key in ScaleIO driver
+* Avoid patch loopingcall in VNX
+* Add validation for the metadata properties
+* Removed RPC topic config options
+* Clean imports in code
+* Replace key manager with Castellan
+* Cleanup api-ref
+* Update api-ref path
+* Nexenta: NexentaStor4 NFS driver cache capacity and use sessions
+* Stop using /etc/cinder/cinder.conf for cmd tests
+* Use utils.validate_dictionary_string_length
+* Stop using mox from unit/image/*.py
+* Separate create and update rules for volume metadata
+* Updated from global requirements
+* TrivialFix: remove unnecessary VERSION_COMPATIBILITY
+* Pure - warn when deleting destroyed snapshot
+* Pin RPC server's serializer to min obj version
+* Driver documentation cleanup
+* Host selection when creating backup
+* TrivialFix: Remove cfg import unused
+* Fix password masking result
+* Dell SC: Add exclude_domain_ip option
+* Add support for force backup for Nimble Storage
+* Retype issue in Kaminario Cinder drivers
+* TrivialFix: Remove logging import unused
+* Stop using mox in unit/volume/drivers/emc/*.py tests
+* Stop using mox in unit/consistencygroup/*.py tests
+* Stop using mox in unit/scheduler/*.py tests
+* Stop using mox in unit/zonemanager/*.py tests
+* Stop using mox in unit/backup/drivers/*.py
+* Fix incorrect parameter in create_key
+* Use constraints for api-ref environment
+* Dell SC: Live Volume Autofailover
+* Add new supported driver checks
+* Tests: Fix racy volume unit test
+* vzstorage: fix create/delete snapshots
+* Sending ScaleIO volume id in attach and detach volume
+* Cleanup upgrade-related FIXME's
+* Using oslo_config's min attribute
+* Add replication failback in Kaminario K2 drivers
+* Group specs: Fix exception name
+* Dell SC: Failback replications limited to 5 at a time
+* VMware: Add volume name in vCenter to conn info
+* NetApp: Report multiattach as enabled
+* Attachment lost after migrating in-use volume
+* Fix typo in the huawei_driver.py
+* Updated from global requirements
+* Change NFS driver to not throw exception without nfs shares file
+* Datera driver 2.2 update
+* Reduce the runtime of drivers/dell/test_dellsc
+* Add release note to warn about os-brick lock dir
+* Updated from global requirements
+* Use min attribute from oslo_config
+* Imported Translations from Zanata
+* Fix the interface to call update_server_volume
+* Dell SC: Break_replication unhandled NoneType error
+* Volume Manage/Unmanage Support for IBM FlashSystem
+* Imported Translations from Zanata
+* Change a typo error in the releasenote
+* Fix reported driver's versions
+* Use OVOs to set errors in manage volume/snapshot
+* Use original volume OVO instance in create flow
+* Fix mysql binary comparison
+* Add CI_WIKI_NAME to driver's devref
+* Improve Hitachi HNAS volume drivers log messages
+* Updated from global requirements
+* EMC VMAX - iSCSI Multipath support
+* Fix typo in cinder/tests/unit/image/test_glance.py
+* Clean imports in code
+* Imported Translations from Zanata
+* Enhance api_microversion doc
+* Add CI_WIKI_NAME to Tegile volume driver
+* Add get_manageable_* methods to Pure drivers
+* Use constraints for all tox environments
+* Imported Translations from Zanata
+* Remove the using of dict.get() in assertIsNone
+* Revise Synology DSM storage driver
+* Add volumes/summary API support
+* Imported Translations from Zanata
+* Ignore case when comparing wwns in Pure FC driver
+* NetApp: Add Consistency Group Support for NFS
+* Replication, hard-coding and dict.name issues in K2
+* Update homepage with developer document page
+* Add CI wiki page to driver listing
+* Imported Translations from Zanata
+* Refactor cinder.utils._copy_volume_with_path
+* HNAS: Deprecating XML config file
+* Add functional-py35 to tox
+* Remove code duplication in enums
+* Concurrency issue in K2 iSCSI and FC Cinder drivers
+* VMAX Driver - QoS support for the VMAX3
+* Mask out passwords when tracing
+* Remove debug logger translations
+* Imported Translations from Zanata
+* Fix volume creation with no volume type
+* Dell SC: delete_live_volume payload incorrect
+* Dell SC: Requests async header is invalid
+* Imported Translations from Zanata
+* Use object instead of string when reset backup
+* Prevent doc generation failure on OVO decorators
+* CI: Add CI_WIKI_NAME to all drivers
+* Imported Translations from Zanata
+* Make the volume-manage doc be more general
+* Add missing dependency on keystoneauth1
+* Fix tox pip-missing-reqs
+* Revert "Remove Tegile volume driver"
+* HPE XP add entry point debug tracing
+* Remove resource_common_manage load warning
+* Updated from global requirements
+* Imported Translations from Zanata
+* Remove unused context parameter
+* Imported Translations from Zanata
+* QoS support for the Coho Data Cinder driver
+* Add tracing to remotefs entry points
+* NetApp cDOT: Add cheesecake replication support
+* Don't use config option sqlite_db
+* Improve snapshot handling in K2
+* Fix volume retype from SolidFire
+* EMC VMAX - Oversubscription support
+* Updated from global requirements
+* Fix volume upload-to-image for vhd disk-format
+* Imported Translations from Zanata
+* Remove context object in oslo.log method
+* 3PAR add entry point debug tracing
+* Fail manage operations if service is down
+* Support retype in K2 cinder driver
+* Remove comma from end of policy.json
+* Prevent adding same OVO version twice to history
+* Removed a dead db function register_models()
+* Handle snapshot delete conflict in 3par driver
+* Imported Translations from Zanata
+* Specify key algorithm and size for create_key
+* Add functional-py34 to tox
+* Fix size exceed of dd action when clearing a volume
+* HNAS drivers refactoring
+* Use volume o.vo in get_backup_volume_temp_snapshot
+* Imported Translations from Zanata
+* Fix ImportError of fake_driver
+* Add proxy config option to google backup driver
+* Add stochastic weight handler to scheduler
+* Fix Scheduler manager masking retype fail details
+* fixed misspelling in synology_common.py
+* Updated from global requirements
+* Don't puke when exiting driver list
+* corrected the help string in coho.driver
+* Fix ImportError of fake_driver
+* Storwize:create_volume_from_snapshot with different size
+* Imported Translations from Zanata
+* Fixing pending comments for CoprHD Drivers
+* Huawei: Fixed problems caused by password expiration
+* Add metadata length check to volume-manage
+* Dell SC: Use Live Volume for replication
+* Remove race condition from lvextend
+* Switch request_spec in create volume calls to ovo
+* Support replication in K2
+* Support manage/unmanage and extra-specs in K2
+* Update xiv_ds8k driver name and description
+* Imported Translations from Zanata
+* Set VERSION in VNX cinder driver
+* ScaleIO ignore rename of external volumes
+* Managed snapshot should return ceiling of size in Huawei driver
+* Size in tintri driver should be converted to integer
+* Improvement to query cg detail(Part 1)
+* Fix documentation and remove dead code
+* VMware: Fix retype when storage policy is enabled
+* Validate name in qos-spec
+* Replace functions 'Dict.get' and 'del' with 'Dict.pop'
+* Updated from global requirements
+* NetApp: Report hybrid aggregates in volume stats
+* Storwize: Quote vdisk names to handle spaces
+* DRBD: Disk-options for new resources
+* Fix mistakes introduced with QoSSpecs object
+* Add backup update function (microversion)
+* VMware: Fix upload to image with glance v2
+* Remove Tegile volume driver
+* Quobyte volume driver should use DLM
+* Add functional tests for nested quotas
+* XtremIO: Implement update_migrated_volume
+* NetApp: Refactor unit tests
+* Add driver list to doc build
+* Move fake_driver to tests root dir
+* Map volume/snapshot manage extensions to v3
+* Replace OpenStack LLC with OpenStack Foundation
+* VMAX Driver - SnapVX licensing checks for VMAX3
+* LVM driver: list manageable volumes and snapshots
+* Sheepdog:fix the bug of failed to clone image
+* Move drivers unit tests to unit.volume.drivers directory
+* Docs: Correct i18n information
+* Fix db purge for quality_of_service_specs FK constraint
+* Fix log message when service is disabled
+* Add interface documentation to driver devref
+* Docs: cleanup doc8 errors
+* Docs: remove todo list generation
+* Update doc README and remove old Makefile
+* Imported Translations from Zanata
+* Handle API NotFound exceptions at WSGI level
+* Add worker's DB operations
+* Add workers table
+* Modify API to include cluster related operations
+* Update manage with cluster related commands
+* Improve cinder-manage arg parsing
+* Add cluster job distribution
+* Update Versioned Objects with Cluster object
+* Add cluster table and related methods
+* Update OVO instance on destroy method call
+* Fix wrong declaration in Scheduler's base driver
+* Refactor sqlalchemy service methods
+* Improve api_version decorator to avoid noqa
+* Imported Translations from Zanata
+* Tests: mock notifier in CG tests
+* Remove duplicated code in manage_existing_snapshot
+* Initialise oslo.privsep early in main
+* Imported Translations from Zanata
+* Add lock decorator to SolidFire clone_image method
+* Dell: Fix docstring cut/paste error
+* NetApp: Support new parameter to cDOT clone API
+* Auto sync manager's RPC_API_VERSION
+* Fix CinderPersistentObject.refresh
+* Replace locks in remotefs and glusterfs backend drivers
+* Block Device Driver: report pools in volume stats
+* Add missing test case
+* Updated from global requirements
+* Invalid volume state when manage operation fails
+* Add group snapshots - APIs
+* Dell SC: Add secondary DSM support
+* Fix some typos
+* Remove generate_driver_list dependency on cur dir
+* Huawei: Support reporting disk type of pool
+* Fix 500 for 'qos-create' key or value > 255 characters
+* Add group snapshots - manager
+* Add group snapshots - db and objects
+* XtremIO: support of snapshot manage commands
+* Fix the group type filter
+* Fix policy check for group types
+* Differentiate thick and thin provisioning
+* Remove force option from create_snapshots_in_db()
+* Set sleep time to 0 in Datera driver
+* Add generic volume groups
+* Huawei: Support backup snapshot
+* Fix assertEqual usage in test_volume_manage
+* Fix chunked backup driver interface name
+* Removed unused code from cinder.utils
+* 3par driver handles concurrent host create conflict
+* Fix typo in delete snapshot in Synology driver
+* Removed unused code from cinder.utils
+
 9.0.0.0b2
 ---------
 
+* Fixes consistency snapshot creation
+* [doc] Fix a non-alphabetical order bug
 * Trivial: Use fake.VOLUME_ID instead of id
 * Violin Memory iSCSI storage for 7000 series AFA
 * update min tox version to 2.0
 * Updated from global requirements
+* Switch _create_temp_cloned_volume in driver to VO
+* NetApp: Add aggregate capacity info to scheduler
 * Add Synology DSM storage driver
+* Use from_environ to load context
+* Use context.from_dict to determine available arguments
 * Add ZTE Block Storage Driver
 * iSCSI Target: remove confusing comment/log
+* Storwize: Fix exception ProcessExecutionError
 * Changing method _from_db_object to classmethod
+* Allow admin project to operate on all quotas
 * Use default provisioning type from config
 * Delete *.pyc files before running tox tests
 * Implementation for CoprHD Cinder Drivers
@@ -22,20 +311,27 @@ CHANGES
 * Nexenta: Added HA support and enhance get_volume_stats()
 * Fix failure with "None" volume type in Pure drivers
 * Add backend driver for Zadara Storage VPSA
+* Add group type and group specs
+* Don't use shred for volume clearing
 * Add cinder backend driver for Huawei FusionStorage
 * Do not conjecture volume-id from iscsi_name
 * VNX: New Cinder driver in Newton
+* Return vaild reason when unknown error occur
 * Moving the OPTIONAL_FIELDS inside the OVO  object
 * Support microversions on inherited Controllers
 * Replace use of mox with mock in test_base_filter
+* Replace 10 ** 9 with a constant units.G
 * Reduce logging level of API validation messages
 * Fix manage existing volume fails after object merged
 * Add strict Boolean checking for volume manage
 * Adds unit test coverage for consistencygroups.py
+* FalconStor: New Cinder driver in Newton
+* Move QualityOfServiceSpecs to use VersionedObject
 * Snapshot object has no attribute about size
 * Add return parameter info for manage_existing_get_size
 * cinder-manage db purge has issues with foreign keys
 * Huawei: Use versionedObject
+* Resolve unittest hang issue
 * Fix some typos
 * Add logging when filtering returns nothing
 * Validate extra_specs type
@@ -49,11 +345,13 @@ CHANGES
 * Fix consisgroup V3 interfaces
 * Add proper scheduler_hint key to dev-ref
 * check the validity of metadata when update volume
+* Remove unused __init__
 * EQLX: Extend of snapshot or clone failure
 * Log terminate_connection exception with traceback
 * Replace use of mox with mock in test_api_urlmap
 * Add README in release notes directory
 * Fix broken link in HACKING.rst
+* Replace int with float to bring math.ceil into effect
 * EMC ScaleIO should return ceiling of volume size
 * Deprecate defining c-vol backends in DEFAULT
 * Dell SC: Do not set High Availability in async mode
@@ -67,6 +365,7 @@ CHANGES
 * Fix raise UnableToFailover call in SolidFire
 * Provide Kaminario K2 all-flash array FC driver
 * RBD: uppercase rbd_opts for consistency
+* Add strict Boolean checking for volume create
 * Replace use of mox with mock in test_brick_lvm
 * Replace use of mox with mock in test_lvm_driver
 * Remove six.iter*
@@ -95,8 +394,10 @@ CHANGES
 * Violin: resize volume if cloned lun is larger
 * Make dict.keys() PY3 compatible
 * Move _validate_extra_specs to cinder/utils
+* VMware: Refactor vmdk unit tests
 * Updated from global requirements
 * Move _check_metadata_properties to cinder/utils
+* Remove deprecaterd mapping in manager.py
 * Capability lists in Cinder scheduler
 * Updated from global requirements
 * Nexenta: Add NBD driver for NexentaEdge
@@ -109,8 +410,10 @@ CHANGES
 * Fix lock files littering working dir during tests
 * Fix TSM backup driver test mocks
 * Improve DB volume check in LVM manage volume
+* VMware: Honor vmware_cluster_name during retype
 * Revert "Revert "use utf8 as default charset for all tables in mysql db""
 * Fix snapshot stuck in 'deleting' after reboot c-v
+* Update initialize_connection to use versionedobjects
 * Updated from global requirements
 * NetApp: Replace SSC for cDOT block & file drivers
 * Revert "use utf8 as default charset for all tables in mysql db"
@@ -193,6 +496,7 @@ CHANGES
 * Switch to using correct TaskFlow Failure class
 * Optimize service find in migration
 * NetApp NFS Cmode: Fix NotFound exception
+* Add check to limit maximum value of age_in_days
 * GPFS: Fix consistency group ERROR_CREATE status
 * Remove the duplicated definition of _add_to_threadpool
 * Imported Translations from Zanata
@@ -208,6 +512,7 @@ CHANGES
 * Add unit test case in Nimble Driver
 * Fix attachment_get_by_* to return entire list
 * Remove API races from migrate and retype
+* SwiftBackupDriver: Dont add project_id to authurl
 * Updated from global requirements
 * Catch GlanceMetadataNotFound in creating cgsnp
 * Updated from global requirements
@@ -258,6 +563,7 @@ CHANGES
 * NetApp: Remove type checks from manage workflow
 * ScaleIO actual volume size model update
 * Capacity weigher: Pass correct arg to super()
+* IBM Flashsystem: Add missing items to common
 * Prevent Multitable conditional updates
 * Remove support for 1.x volume RPC API
 * Remove inappropriate Copyright
