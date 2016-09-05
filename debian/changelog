@@ -1,3 +1,10 @@
+cinder (2:9.0.0~b3-0ubuntu2) yakkety; urgency=medium
+
+  * d/p/bug1619246.patch: Cherry pick fix for scheduling of
+    volumes with no volume type set (LP: #1619246).
+
+ -- James Page <james.page@ubuntu.com>  Mon, 05 Sep 2016 16:29:47 +0100
+
 cinder (2:9.0.0~b3-0ubuntu1) yakkety; urgency=medium
 
   [ James Page ]

@@ -1,2 +1,3 @@
 google-back-requirements.patch
 fix-long-casting.patch
+bug1619246.patch
