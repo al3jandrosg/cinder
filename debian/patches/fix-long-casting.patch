@@ -24,7 +24,7 @@ Forwarded: no
 
 --- a/cinder/utils.py
 +++ b/cinder/utils.py
-@@ -596,7 +596,8 @@
+@@ -628,7 +628,8 @@
      st = os.stat(path)
      if stat.S_ISBLK(st.st_mode):
          path, st = _get_disk_of_partition(path, st)
