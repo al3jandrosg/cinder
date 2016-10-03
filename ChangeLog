@@ -1,6 +1,25 @@
 CHANGES
 =======
 
+9.0.0.0rc2
+----------
+
+* Imported Translations from Zanata
+* Provide cfg to ignore lvm descriptor leak warnings
+* XtremIO: fix migration bug
+* Fix a typo in scheduler manager "filter_propterties"
+* Fix request_spec conversion from o.vo to dict
+* Limit memory & CPU when running qemu-img info
+* Dell SC: Error attaching after LV-AFO
+* Have a default OPTIONAL_FIELDS for persistent OVOs
+* Include OPTIONAL_FIELDS in VolumeType OVO class
+* Fix creating typeless volumes with Mitaka's c-sch
+* Remove extra param in list_manageable_snapshots
+* Dell SC: ISCSI initialize_connection fixes
+* Imported Translations from Zanata
+* Update UPPER_CONSTRAINTS_FILE for stable/newton
+* Update .gitreview for stable/newton
+
 9.0.0.0rc1
 ----------
 

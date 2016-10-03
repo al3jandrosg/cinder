@@ -1365,10 +1365,12 @@ releasenotes/notes/add-coho-driver-b4472bff3f64aa41.yaml
 releasenotes/notes/add-del-volumeTypeAccess-b1c8cb14a9d14db3.yaml
 releasenotes/notes/add-google-backup-driver-d1e7ac33d5780b79.yaml
 releasenotes/notes/add-stochastic-scheduling-option-99e10eae023fbcca.yaml
+releasenotes/notes/add-suppress-lvm-fd-warnings-option.402bebc03b0a9f00.yaml
 releasenotes/notes/add-tegile-driver-b7919c5f30911998.yaml
 releasenotes/notes/add-volume-upload-image-options-3a61a31c544fa034.yaml
 releasenotes/notes/allow-admin-quota-operations-c1c2236711224023.yaml
 releasenotes/notes/allow-remove-name-and-description-for-consisgroup-408257a0a18bd530.yaml
+releasenotes/notes/apply-limits-to-qemu-img-29f722a1bf4b91f8.yaml
 releasenotes/notes/backup-snapshot-6e7447db930c31f6.yaml
 releasenotes/notes/backup-snapshots-2f547c8788bc11e1.yaml
 releasenotes/notes/backup-update-d0b0db6a7b1c2a5b.yaml
