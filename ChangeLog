@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-9.0.0.0rc2
-----------
+9.0.0
+-----
 
 * Imported Translations from Zanata
 * Provide cfg to ignore lvm descriptor leak warnings
