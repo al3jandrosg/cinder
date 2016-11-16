@@ -407,6 +407,21 @@ class DBAPIVolumeTestCase(BaseTest):
         self._assertEqualListsOfObjects(volumes, db.volume_get_all(
                                         self.ctxt, None, None, ['host'], None))
 
+    @ddt.data('cluster_name', 'host')
+    def test_volume_get_all_filter_host_and_cluster(self, field):
+        volumes = []
+        for i in range(2):
+            for value in ('host%d@backend#pool', 'host%d@backend', 'host%d'):
+                kwargs = {field: value % i}
+                volumes.append(utils.create_volume(self.ctxt, **kwargs))
+
+        for i in range(3):
+            filters = {field: getattr(volumes[i], field)}
+            result = db.volume_get_all(self.ctxt, filters=filters)
+            self.assertEqual(i + 1, len(result))
+            self.assertSetEqual({v.id for v in volumes[:i + 1]},
+                                {v.id for v in result})
+
     def test_volume_get_all_marker_passed(self):
         volumes = [
             db.volume_create(self.ctxt, {'id': 1}),
@@ -927,17 +942,15 @@ class DBAPIVolumeTestCase(BaseTest):
 
     def test_volume_update(self):
         volume = db.volume_create(self.ctxt, {'host': 'h1'})
-        ref_a = db.volume_update(self.ctxt, volume['id'],
-                                 {'host': 'h2',
-                                  'metadata': {'m1': 'v1'}})
-        volume = db.volume_get(self.ctxt, volume['id'])
-        self.assertEqual('h2', volume['host'])
-        expected = dict(ref_a)
-        expected['volume_metadata'] = list(map(dict,
-                                               expected['volume_metadata']))
-        result = dict(volume)
-        result['volume_metadata'] = list(map(dict, result['volume_metadata']))
-        self.assertEqual(expected, result)
+        db.volume_update(self.ctxt, volume.id,
+                         {'host': 'h2',
+                          'metadata': {'m1': 'v1'}})
+        volume = db.volume_get(self.ctxt, volume.id)
+        self.assertEqual('h2', volume.host)
+        self.assertEqual(1, len(volume.volume_metadata))
+        db_metadata = volume.volume_metadata[0]
+        self.assertEqual('m1', db_metadata.key)
+        self.assertEqual('v1', db_metadata.value)
 
     def test_volume_update_nonexistent(self):
         self.assertRaises(exception.VolumeNotFound, db.volume_update,
@@ -1277,6 +1290,7 @@ class DBAPIVolumeTestCase(BaseTest):
                 db_vols[i].cluster_name)
 
 
+@ddt.ddt
 class DBAPISnapshotTestCase(BaseTest):
 
     """Tests for cinder.db.api.snapshot_*."""
@@ -1366,6 +1380,24 @@ class DBAPISnapshotTestCase(BaseTest):
                                             self.ctxt,
                                             filters),
                                         ignored_keys=['metadata', 'volume'])
+
+    @ddt.data('cluster_name', 'host')
+    def test_snapshot_get_all_filter_host_and_cluster(self, field):
+        volumes = []
+        snapshots = []
+        for i in range(2):
+            for value in ('host%d@backend#pool', 'host%d@backend', 'host%d'):
+                kwargs = {field: value % i}
+                vol = utils.create_volume(self.ctxt, **kwargs)
+                volumes.append(vol)
+                snapshots.append(utils.create_snapshot(self.ctxt, vol.id))
+
+        for i in range(3):
+            filters = {field: getattr(volumes[i], field)}
+            result = db.snapshot_get_all(self.ctxt, filters=filters)
+            self.assertEqual(i + 1, len(result))
+            self.assertSetEqual({s.id for s in snapshots[:i + 1]},
+                                {s.id for s in result})
 
     def test_snapshot_get_by_host(self):
         db.volume_create(self.ctxt, {'id': 1, 'host': 'host1'})

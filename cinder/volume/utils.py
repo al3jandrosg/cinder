@@ -60,6 +60,9 @@ def _usage_from_volume(context, volume_ref, **kw):
     now = timeutils.utcnow()
     launched_at = volume_ref['launched_at'] or now
     created_at = volume_ref['created_at'] or now
+    volume_status = volume_ref['status']
+    if volume_status == 'error_managing_deleting':
+        volume_status = 'deleting'
     usage_info = dict(
         tenant_id=volume_ref['project_id'],
         host=volume_ref['host'],
@@ -70,7 +73,7 @@ def _usage_from_volume(context, volume_ref, **kw):
         display_name=volume_ref['display_name'],
         launched_at=launched_at.isoformat(),
         created_at=created_at.isoformat(),
-        status=volume_ref['status'],
+        status=volume_status,
         snapshot_id=volume_ref['snapshot_id'],
         size=volume_ref['size'],
         replication_status=volume_ref['replication_status'],
@@ -149,10 +152,22 @@ def notify_about_backup_usage(context, backup, event_suffix,
 
 
 def _usage_from_snapshot(snapshot, **extra_usage_info):
+    try:
+        az = snapshot.volume['availability_zone']
+    except exception.VolumeNotFound:
+        # (zhiteng) Snapshot's source volume could have been deleted
+        # (which means snapshot has been deleted as well),
+        # lazy-loading volume would raise VolumeNotFound exception.
+        # In that case, not going any further by abusing low level
+        # DB API to fetch deleted volume but simply return empty
+        # string for snapshot's AZ info.
+        az = ''
+        LOG.debug("Source volume %s deleted", snapshot.volume_id)
+
     usage_info = {
         'tenant_id': snapshot.project_id,
         'user_id': snapshot.user_id,
-        'availability_zone': snapshot.volume['availability_zone'],
+        'availability_zone': az,
         'volume_id': snapshot.volume_id,
         'volume_size': snapshot.volume_size,
         'snapshot_id': snapshot.id,
@@ -645,7 +660,8 @@ def extract_host(host, level='backend', default_pool_name=False):
                               string.  default_pool_name=True will return
                               DEFAULT_POOL_NAME, otherwise we return None.
                               Default value of this parameter is False.
-    :return: expected level of information
+    :return: expected information, string or None
+    :raises: exception.InvalidVolume
 
     For example:
         host = 'HostA@BackendB#PoolC'
@@ -662,6 +678,11 @@ def extract_host(host, level='backend', default_pool_name=False):
         ret = extract_host(host, 'pool', True)
         # ret is '_pool0'
     """
+
+    if host is None:
+        msg = _("volume is not assigned to a host")
+        raise exception.InvalidVolume(reason=msg)
+
     if level == 'host':
         # make sure pool is not included
         hst = host.split('#')[0]

@@ -254,12 +254,26 @@ class StorwizeSSH(object):
 
         If vdisk already mapped and multihostmap is True, use the force flag.
         """
-        ssh_cmd = ['svctask', 'mkvdiskhostmap', '-host', '"%s"' % host,
-                   '-scsi', lun, '"%s"' % vdisk]
+        ssh_cmd = ['svctask', 'mkvdiskhostmap', '-host', '"%s"' % host, vdisk]
+
+        if lun:
+            ssh_cmd.insert(ssh_cmd.index(vdisk), '-scsi')
+            ssh_cmd.insert(ssh_cmd.index(vdisk), lun)
+
         if multihostmap:
             ssh_cmd.insert(ssh_cmd.index('mkvdiskhostmap') + 1, '-force')
         try:
             self.run_ssh_check_created(ssh_cmd)
+            result_lun = self.get_vdiskhostmapid(vdisk, host)
+            if result_lun is None or (lun and lun != result_lun):
+                msg = (_('mkvdiskhostmap error:\n command: %(cmd)s\n '
+                       'lun: %(lun)s\n result_lun: %(result_lun)s') %
+                       {'cmd': ssh_cmd,
+                        'lun': lun,
+                        'result_lun': result_lun})
+                LOG.error(msg)
+                raise exception.VolumeDriverException(message=msg)
+            return result_lun
         except Exception as ex:
             if (not multihostmap and hasattr(ex, 'message') and
                     'CMMVC6071E' in ex.message):
@@ -346,6 +360,14 @@ class StorwizeSSH(object):
     def lshostvdiskmap(self, host):
         ssh_cmd = ['svcinfo', 'lshostvdiskmap', '-delim', '!', '"%s"' % host]
         return self.run_ssh_info(ssh_cmd, with_header=True)
+
+    def get_vdiskhostmapid(self, vdisk, host):
+        resp = self.lsvdiskhostmap(vdisk)
+        for mapping_info in resp:
+            if mapping_info['host_name'] == host:
+                lun_id = mapping_info['SCSI_id']
+                return lun_id
+        return None
 
     def rmhost(self, host):
         ssh_cmd = ['svctask', 'rmhost', '"%s"' % host]
@@ -730,8 +752,25 @@ class StorwizeHelpers(object):
             LOG.debug('Leave: get_host_from_connector: host %s.', host_name)
             return host_name
 
+        def update_host_list(host, host_list):
+            idx = host_list.index(host)
+            del host_list[idx]
+            host_list.insert(0, host)
+
         # That didn't work, so try exhaustive search
         hosts_info = self.ssh.lshost()
+        host_list = list(hosts_info.select('name'))
+        # If we have a "real" connector, we might be able to find the
+        # the host entry with fewer queries if we move the host entries
+        # that contain the connector's host property value to the front
+        # of the list
+        if 'host' in connector:
+            # order host_list such that the host entries that
+            # contain the connector's host name are at the
+            # begining of the list
+            for host in host_list:
+                if re.search(connector['host'], host):
+                    update_host_list(host, host_list)
         # If we have a volume name we have a potential fast path
         # for finding the matching host for that volume.
         # Add the host_names that have mappings for our volume to the
@@ -739,15 +778,10 @@ class StorwizeHelpers(object):
         if volume_name:
             hosts_map_info = self.ssh.lsvdiskhostmap(volume_name)
             hosts_map_info_list = list(hosts_map_info.select('host_name'))
-            hosts_info_list = list(hosts_info.select('name'))
             # remove the fast path host names from the end of the list
-            # so they are only searched for once.
+            # and move to the front so they are only searched for once.
             for host in hosts_map_info_list:
-                idx = hosts_info_list.index(host)
-                del hosts_info_list[idx]
-            host_list = hosts_map_info_list + hosts_info_list
-        else:
-            host_list = list(hosts_info.select('name'))
+                update_host_list(host, host_list)
         found = False
         for name in host_list:
             try:
@@ -853,26 +887,10 @@ class StorwizeHelpers(object):
                   {'volume_name': volume_name, 'host_name': host_name})
 
         # Check if this volume is already mapped to this host
-        mapped = False
-        luns_used = []
-        result_lun = '-1'
-        resp = self.ssh.lshostvdiskmap(host_name)
-        for mapping_info in resp:
-            luns_used.append(int(mapping_info['SCSI_id']))
-            if mapping_info['vdisk_name'] == volume_name:
-                mapped = True
-                result_lun = mapping_info['SCSI_id']
-
-        if not mapped:
-            # Find unused lun
-            luns_used.sort()
-            result_lun = str(len(luns_used))
-            for index, n in enumerate(luns_used):
-                if n > index:
-                    result_lun = str(index)
-                    break
-            self.ssh.mkvdiskhostmap(host_name, volume_name, result_lun,
-                                    multihostmap)
+        result_lun = self.ssh.get_vdiskhostmapid(volume_name, host_name)
+        if result_lun is None:
+            result_lun = self.ssh.mkvdiskhostmap(host_name, volume_name, None,
+                                                 multihostmap)
 
         LOG.debug('Leave: map_vol_to_host: LUN %(result_lun)s, volume '
                   '%(volume_name)s, host %(host_name)s.',
@@ -1858,7 +1876,7 @@ class CLIResponse(object):
 class StorwizeSVCCommonDriver(san.SanDriver,
                               driver.ManageableVD,
                               driver.ExtendVD, driver.SnapshotVD,
-                              driver.MigrateVD, driver.ReplicaVD,
+                              driver.MigrateVD,
                               driver.ConsistencyGroupVD,
                               driver.CloneableImageVD,
                               driver.TransferVD):

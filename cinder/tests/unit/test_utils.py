@@ -16,6 +16,7 @@
 import datetime
 import functools
 import os
+import sys
 import time
 
 import ddt
@@ -168,6 +169,7 @@ class GenericUtilsTestCase(test.TestCase):
                           utils.read_file_as_root,
                           test_filepath)
 
+    @test.testtools.skipIf(sys.platform == "darwin", "SKIP on OSX")
     @mock.patch('tempfile.NamedTemporaryFile')
     @mock.patch.object(os, 'open')
     @mock.patch.object(os, 'fdatasync')
@@ -551,7 +553,7 @@ class GetBlkdevMajorMinorTestCase(test.TestCase):
         mock_stat.assert_called_once_with(path)
         mock_isblk.assert_called_once_with(mock_stat.return_value.st_mode)
         mock_ischr.assert_called_once_with(mock_stat.return_value.st_mode)
-        self.assertIs(None, output)
+        self.assertIsNone(output)
 
 
 class MonkeyPatchTestCase(test.TestCase):
@@ -953,9 +955,6 @@ class WrongException(Exception):
 
 
 class TestRetryDecorator(test.TestCase):
-    def setUp(self):
-        super(TestRetryDecorator, self).setUp()
-
     def test_no_retry_required(self):
         self.counter = 0
 

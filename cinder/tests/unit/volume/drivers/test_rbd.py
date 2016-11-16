@@ -26,7 +26,6 @@ from oslo_utils import units
 
 from cinder import context
 from cinder import exception
-from cinder.i18n import _
 import cinder.image.glance
 from cinder.image import image_utils
 from cinder import objects
@@ -79,12 +78,13 @@ def common_mocks(f):
 
     def _common_inner_inner1(inst, *args, **kwargs):
         @mock.patch('retrying.Retrying', _FakeRetrying)
+        @mock.patch.object(driver.RBDDriver, '_get_usage_info')
         @mock.patch('cinder.volume.drivers.rbd.RBDVolumeProxy')
         @mock.patch('cinder.volume.drivers.rbd.RADOSClient')
         @mock.patch('cinder.backup.drivers.ceph.rbd')
         @mock.patch('cinder.backup.drivers.ceph.rados')
         def _common_inner_inner2(mock_rados, mock_rbd, mock_client,
-                                 mock_proxy):
+                                 mock_proxy, mock_usage_info):
             inst.mock_rbd = mock_rbd
             inst.mock_rados = mock_rados
             inst.mock_client = mock_client
@@ -206,6 +206,14 @@ class RBDTestCase(test.TestCase):
             *args, **kwargs)
         client.__enter__.assert_called_once_with()
         client.__exit__.assert_called_once_with(None, None, None)
+
+    @common_mocks
+    def test_create_encrypted_volume(self):
+        self.volume_a.encryption_key_id = \
+            '00000000-0000-0000-0000-000000000000'
+        self.assertRaises(exception.VolumeDriverException,
+                          self.driver.create_volume,
+                          self.volume_a)
 
     @common_mocks
     def test_manage_existing_get_size(self):
@@ -821,7 +829,10 @@ class RBDTestCase(test.TestCase):
             storage_protocol='ceph',
             total_capacity_gb=28.44,
             free_capacity_gb=27.0,
-            reserved_percentage=0,
+            reserved_percentage='RBD',
+            thin_provisioning_support=True,
+            provisioned_capacity_gb=0.0,
+            max_over_subscription_ratio='RBD',
             multiattach=False)
 
         actual = self.driver.get_volume_stats(True)
@@ -847,8 +858,11 @@ class RBDTestCase(test.TestCase):
                         storage_protocol='ceph',
                         total_capacity_gb='unknown',
                         free_capacity_gb='unknown',
-                        reserved_percentage=0,
-                        multiattach=False)
+                        reserved_percentage='RBD',
+                        multiattach=False,
+                        provisioned_capacity_gb=0.0,
+                        max_over_subscription_ratio='RBD',
+                        thin_provisioning_support=True)
 
         actual = self.driver.get_volume_stats(True)
         client.cluster.mon_command.assert_called_once_with(
@@ -1051,123 +1065,6 @@ class RBDTestCase(test.TestCase):
             3, self.mock_rados.Rados.return_value.shutdown.call_count)
 
 
-class RBDImageIOWrapperTestCase(test.TestCase):
-    def setUp(self):
-        super(RBDImageIOWrapperTestCase, self).setUp()
-        self.meta = mock.Mock()
-        self.meta.user = 'mock_user'
-        self.meta.conf = 'mock_conf'
-        self.meta.pool = 'mock_pool'
-        self.meta.image = mock.Mock()
-        self.meta.image.read = mock.Mock()
-        self.meta.image.write = mock.Mock()
-        self.meta.image.size = mock.Mock()
-        self.mock_rbd_wrapper = driver.RBDImageIOWrapper(self.meta)
-        self.data_length = 1024
-        self.full_data = b'abcd' * 256
-
-    def test_init(self):
-        self.assertEqual(self.mock_rbd_wrapper._rbd_meta, self.meta)
-        self.assertEqual(0, self.mock_rbd_wrapper._offset)
-
-    def test_inc_offset(self):
-        self.mock_rbd_wrapper._inc_offset(10)
-        self.mock_rbd_wrapper._inc_offset(10)
-        self.assertEqual(20, self.mock_rbd_wrapper._offset)
-
-    def test_rbd_image(self):
-        self.assertEqual(self.mock_rbd_wrapper.rbd_image, self.meta.image)
-
-    def test_rbd_user(self):
-        self.assertEqual(self.mock_rbd_wrapper.rbd_user, self.meta.user)
-
-    def test_rbd_pool(self):
-        self.assertEqual(self.mock_rbd_wrapper.rbd_conf, self.meta.conf)
-
-    def test_rbd_conf(self):
-        self.assertEqual(self.mock_rbd_wrapper.rbd_pool, self.meta.pool)
-
-    def test_read(self):
-
-        def mock_read(offset, length):
-            return self.full_data[offset:length]
-
-        self.meta.image.read.side_effect = mock_read
-        self.meta.image.size.return_value = self.data_length
-
-        data = self.mock_rbd_wrapper.read()
-        self.assertEqual(self.full_data, data)
-
-        data = self.mock_rbd_wrapper.read()
-        self.assertEqual(b'', data)
-
-        self.mock_rbd_wrapper.seek(0)
-        data = self.mock_rbd_wrapper.read()
-        self.assertEqual(self.full_data, data)
-
-        self.mock_rbd_wrapper.seek(0)
-        data = self.mock_rbd_wrapper.read(10)
-        self.assertEqual(self.full_data[:10], data)
-
-    def test_write(self):
-        self.mock_rbd_wrapper.write(self.full_data)
-        self.assertEqual(1024, self.mock_rbd_wrapper._offset)
-
-    def test_seekable(self):
-        self.assertTrue(self.mock_rbd_wrapper.seekable)
-
-    def test_seek(self):
-        self.assertEqual(0, self.mock_rbd_wrapper._offset)
-        self.mock_rbd_wrapper.seek(10)
-        self.assertEqual(10, self.mock_rbd_wrapper._offset)
-        self.mock_rbd_wrapper.seek(10)
-        self.assertEqual(10, self.mock_rbd_wrapper._offset)
-        self.mock_rbd_wrapper.seek(10, 1)
-        self.assertEqual(20, self.mock_rbd_wrapper._offset)
-
-        self.mock_rbd_wrapper.seek(0)
-        self.mock_rbd_wrapper.write(self.full_data)
-        self.meta.image.size.return_value = self.data_length
-        self.mock_rbd_wrapper.seek(0)
-        self.assertEqual(0, self.mock_rbd_wrapper._offset)
-
-        self.mock_rbd_wrapper.seek(10, 2)
-        self.assertEqual(self.data_length + 10, self.mock_rbd_wrapper._offset)
-        self.mock_rbd_wrapper.seek(-10, 2)
-        self.assertEqual(self.data_length - 10, self.mock_rbd_wrapper._offset)
-
-        # test exceptions.
-        self.assertRaises(IOError, self.mock_rbd_wrapper.seek, 0, 3)
-        self.assertRaises(IOError, self.mock_rbd_wrapper.seek, -1)
-        # offset should not have been changed by any of the previous
-        # operations.
-        self.assertEqual(self.data_length - 10, self.mock_rbd_wrapper._offset)
-
-    def test_tell(self):
-        self.assertEqual(0, self.mock_rbd_wrapper.tell())
-        self.mock_rbd_wrapper._inc_offset(10)
-        self.assertEqual(10, self.mock_rbd_wrapper.tell())
-
-    def test_flush(self):
-        with mock.patch.object(driver, 'LOG') as mock_logger:
-            self.meta.image.flush = mock.Mock()
-            self.mock_rbd_wrapper.flush()
-            self.meta.image.flush.assert_called_once_with()
-            self.meta.image.flush.reset_mock()
-            # this should be caught and logged silently.
-            self.meta.image.flush.side_effect = AttributeError
-            self.mock_rbd_wrapper.flush()
-            self.meta.image.flush.assert_called_once_with()
-            msg = _("flush() not supported in this version of librbd")
-            mock_logger.warning.assert_called_with(msg)
-
-    def test_fileno(self):
-        self.assertRaises(IOError, self.mock_rbd_wrapper.fileno)
-
-    def test_close(self):
-        self.mock_rbd_wrapper.close()
-
-
 class ManagedRBDTestCase(test_volume.DriverTestCase):
     driver_name = "cinder.volume.drivers.rbd.RBDDriver"
 
@@ -1204,17 +1101,14 @@ class ManagedRBDTestCase(test_volume.DriverTestCase):
 
         try:
             if not clone_error:
-                self.volume.create_volume(self.context,
-                                          volume.id,
-                                          request_spec={'image_id': image_id},
-                                          volume=volume)
+                self.volume.create_volume(self.context, volume,
+                                          request_spec={'image_id': image_id})
             else:
                 self.assertRaises(exception.CinderException,
                                   self.volume.create_volume,
                                   self.context,
-                                  volume.id,
-                                  request_spec={'image_id': image_id},
-                                  volume=volume)
+                                  volume,
+                                  request_spec={'image_id': image_id})
 
             volume = objects.Volume.get_by_id(self.context, volume.id)
             self.assertEqual(expected_status, volume.status)

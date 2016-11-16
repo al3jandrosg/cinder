@@ -13,10 +13,7 @@
 #    under the License.
 
 
-from oslo_serialization import jsonutils
-
 from cinder.common import constants
-from cinder import objects
 from cinder import quota
 from cinder import rpc
 from cinder.volume import utils
@@ -110,32 +107,32 @@ class VolumeAPI(rpc.RPCAPI):
         the version_cap being set to 2.6.
 
         3.0  - Drop 2.x compatibility
+        3.1  - Remove promote_replica and reenable_replication. This is
+               non-backward compatible, but the user-facing API was removed
+               back in Mitaka when introducing cheesecake replication.
     """
 
-    RPC_API_VERSION = '3.0'
+    RPC_API_VERSION = '3.1'
+    RPC_DEFAULT_VERSION = '3.0'
     TOPIC = constants.VOLUME_TOPIC
     BINARY = 'cinder-volume'
 
-    def _get_cctxt(self, host, version):
-        new_host = utils.get_volume_rpc_host(host)
-        return self.client.prepare(server=new_host, version=version)
+    def _get_cctxt(self, host=None, version=None, **kwargs):
+        if host is not None:
+            kwargs['server'] = utils.get_volume_rpc_host(host)
+        return super(VolumeAPI, self)._get_cctxt(version, **kwargs)
 
     def create_consistencygroup(self, ctxt, group, host):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
-        cctxt.cast(ctxt, 'create_consistencygroup',
-                   group=group)
+        cctxt = self._get_cctxt(host)
+        cctxt.cast(ctxt, 'create_consistencygroup', group=group)
 
     def delete_consistencygroup(self, ctxt, group):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(group.host, version)
-        cctxt.cast(ctxt, 'delete_consistencygroup',
-                   group=group)
+        cctxt = self._get_cctxt(group.host)
+        cctxt.cast(ctxt, 'delete_consistencygroup', group=group)
 
     def update_consistencygroup(self, ctxt, group, add_volumes=None,
                                 remove_volumes=None):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(group.host, version)
+        cctxt = self._get_cctxt(group.host)
         cctxt.cast(ctxt, 'update_consistencygroup',
                    group=group,
                    add_volumes=add_volumes,
@@ -143,75 +140,52 @@ class VolumeAPI(rpc.RPCAPI):
 
     def create_consistencygroup_from_src(self, ctxt, group, cgsnapshot=None,
                                          source_cg=None):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(group.host, version)
+        cctxt = self._get_cctxt(group.host)
         cctxt.cast(ctxt, 'create_consistencygroup_from_src',
                    group=group,
                    cgsnapshot=cgsnapshot,
                    source_cg=source_cg)
 
     def create_cgsnapshot(self, ctxt, cgsnapshot):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(cgsnapshot.consistencygroup.host, version)
+        cctxt = self._get_cctxt(cgsnapshot.consistencygroup.host)
         cctxt.cast(ctxt, 'create_cgsnapshot', cgsnapshot=cgsnapshot)
 
     def delete_cgsnapshot(self, ctxt, cgsnapshot):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(cgsnapshot.consistencygroup.host, version)
+        cctxt = self._get_cctxt(cgsnapshot.consistencygroup.host)
         cctxt.cast(ctxt, 'delete_cgsnapshot', cgsnapshot=cgsnapshot)
 
     def create_volume(self, ctxt, volume, host, request_spec,
                       filter_properties, allow_reschedule=True):
-        msg_args = {'request_spec': request_spec,
-                    'filter_properties': filter_properties,
-                    'allow_reschedule': allow_reschedule,
-                    'volume': volume,
-                    }
-        version = self._compat_ver('3.0', '2.4', '2.0')
-        if version in ('2.4', '2.0'):
-            msg_args['volume_id'] = volume.id
-        if version == '2.0':
-            # Send request_spec as dict
-            msg_args['request_spec'] = jsonutils.to_primitive(request_spec)
-
-        cctxt = self._get_cctxt(host, version)
-        cctxt.cast(ctxt, 'create_volume', **msg_args)
+        cctxt = self._get_cctxt(host)
+        cctxt.cast(ctxt, 'create_volume',
+                   request_spec=request_spec,
+                   filter_properties=filter_properties,
+                   allow_reschedule=allow_reschedule,
+                   volume=volume)
 
     def delete_volume(self, ctxt, volume, unmanage_only=False, cascade=False):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
+        volume.create_worker()
+        cctxt = self._get_cctxt(volume.host)
         msg_args = {
             'volume': volume, 'unmanage_only': unmanage_only,
             'cascade': cascade,
         }
 
-        if version == '2.0':
-            msg_args['volume_id'] = volume.id
-
         cctxt.cast(ctxt, 'delete_volume', **msg_args)
 
     def create_snapshot(self, ctxt, volume, snapshot):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
-        msg_args = {
-            'snapshot': snapshot,
-        }
-
-        if version == '2.0':
-            msg_args['volume_id'] = volume['id']
-
-        cctxt.cast(ctxt, 'create_snapshot', **msg_args)
+        snapshot.create_worker()
+        cctxt = self._get_cctxt(volume['host'])
+        cctxt.cast(ctxt, 'create_snapshot', snapshot=snapshot)
 
     def delete_snapshot(self, ctxt, snapshot, host, unmanage_only=False):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         cctxt.cast(ctxt, 'delete_snapshot', snapshot=snapshot,
                    unmanage_only=unmanage_only)
 
     def attach_volume(self, ctxt, volume, instance_uuid, host_name,
                       mountpoint, mode):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'attach_volume',
                           volume_id=volume['id'],
                           instance_uuid=instance_uuid,
@@ -220,253 +194,153 @@ class VolumeAPI(rpc.RPCAPI):
                           mode=mode)
 
     def detach_volume(self, ctxt, volume, attachment_id):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'detach_volume', volume_id=volume['id'],
                           attachment_id=attachment_id)
 
     def copy_volume_to_image(self, ctxt, volume, image_meta):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         cctxt.cast(ctxt, 'copy_volume_to_image', volume_id=volume['id'],
                    image_meta=image_meta)
 
     def initialize_connection(self, ctxt, volume, connector):
-        version = self._compat_ver('3.0', '2.3', '2.0')
-        msg_args = {'connector': connector, 'volume': volume}
-
-        if version in ('2.0', '2.3'):
-            msg_args['volume_id'] = volume.id
-        if version == '2.0':
-            del msg_args['volume']
-
-        cctxt = self._get_cctxt(volume['host'], version=version)
-        return cctxt.call(ctxt, 'initialize_connection', **msg_args)
+        cctxt = self._get_cctxt(volume['host'])
+        return cctxt.call(ctxt, 'initialize_connection', connector=connector,
+                          volume=volume)
 
     def terminate_connection(self, ctxt, volume, connector, force=False):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'terminate_connection', volume_id=volume['id'],
                           connector=connector, force=force)
 
     def remove_export(self, ctxt, volume):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         cctxt.cast(ctxt, 'remove_export', volume_id=volume['id'])
 
     def publish_service_capabilities(self, ctxt):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self.client.prepare(fanout=True, version=version)
+        cctxt = self._get_cctxt(fanout=True)
         cctxt.cast(ctxt, 'publish_service_capabilities')
 
     def accept_transfer(self, ctxt, volume, new_user, new_project):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
+        cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'accept_transfer', volume_id=volume['id'],
                           new_user=new_user, new_project=new_project)
 
     def extend_volume(self, ctxt, volume, new_size, reservations):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
-        msg_args = {
-            'volume': volume, 'new_size': new_size,
-            'reservations': reservations,
-        }
-
-        if version == '2.0':
-            msg_args['volume_id'] = volume.id
-
-        cctxt.cast(ctxt, 'extend_volume', **msg_args)
+        cctxt = self._get_cctxt(volume.host)
+        cctxt.cast(ctxt, 'extend_volume', volume=volume, new_size=new_size,
+                   reservations=reservations)
 
     def migrate_volume(self, ctxt, volume, dest_host, force_host_copy):
         host_p = {'host': dest_host.host,
                   'capabilities': dest_host.capabilities}
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
-
-        msg_args = {
-            'volume': volume, 'host': host_p,
-            'force_host_copy': force_host_copy,
-        }
-
-        if version == '2.0':
-            msg_args['volume_id'] = volume.id
-
-        cctxt.cast(ctxt, 'migrate_volume', **msg_args)
+        cctxt = self._get_cctxt(volume.host)
+        cctxt.cast(ctxt, 'migrate_volume', volume=volume, host=host_p,
+                   force_host_copy=force_host_copy)
 
     def migrate_volume_completion(self, ctxt, volume, new_volume, error):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
-
-        msg_args = {
-            'volume': volume, 'new_volume': new_volume, 'error': error,
-        }
-
-        if version == '2.0':
-            msg_args['volume_id'] = volume.id
-            msg_args['new_volume_id'] = new_volume.id
-
-        return cctxt.call(ctxt, 'migrate_volume_completion', **msg_args)
+        cctxt = self._get_cctxt(volume.host)
+        return cctxt.call(ctxt, 'migrate_volume_completion', volume=volume,
+                          new_volume=new_volume, error=error,)
 
     def retype(self, ctxt, volume, new_type_id, dest_host,
                migration_policy='never', reservations=None,
                old_reservations=None):
         host_p = {'host': dest_host.host,
                   'capabilities': dest_host.capabilities}
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
-
-        msg_args = {
-            'volume': volume, 'new_type_id': new_type_id, 'host': host_p,
-            'migration_policy': migration_policy, 'reservations': reservations,
-            'old_reservations': old_reservations,
-        }
-
-        if version == '2.0':
-            msg_args['volume_id'] = volume.id
-
-        cctxt.cast(ctxt, 'retype', **msg_args)
+        cctxt = self._get_cctxt(volume.host)
+        cctxt.cast(ctxt, 'retype', volume=volume, new_type_id=new_type_id,
+                   host=host_p, migration_policy=migration_policy,
+                   reservations=reservations,
+                   old_reservations=old_reservations)
 
     def manage_existing(self, ctxt, volume, ref):
-        msg_args = {
-            'ref': ref, 'volume': volume,
-        }
-        version = self._compat_ver('3.0', '2.2', '2.0')
-        if version in ('2.2', '2.0'):
-            msg_args['volume_id'] = volume.id
-        if version == '2.0':
-            msg_args.pop('volume')
-        cctxt = self._get_cctxt(volume.host, version)
-        cctxt.cast(ctxt, 'manage_existing', **msg_args)
-
-    def promote_replica(self, ctxt, volume):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
-        cctxt.cast(ctxt, 'promote_replica', volume_id=volume['id'])
-
-    def reenable_replication(self, ctxt, volume):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume['host'], version)
-        cctxt.cast(ctxt, 'reenable_replication', volume_id=volume['id'])
+        cctxt = self._get_cctxt(volume.host)
+        cctxt.cast(ctxt, 'manage_existing', ref=ref, volume=volume)
 
     def update_migrated_volume(self, ctxt, volume, new_volume,
                                original_volume_status):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(new_volume['host'], version)
-        cctxt.call(ctxt,
-                   'update_migrated_volume',
+        cctxt = self._get_cctxt(new_volume['host'])
+        cctxt.call(ctxt, 'update_migrated_volume',
                    volume=volume,
                    new_volume=new_volume,
                    volume_status=original_volume_status)
 
     def freeze_host(self, ctxt, host):
         """Set backend host to frozen."""
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         return cctxt.call(ctxt, 'freeze_host')
 
     def thaw_host(self, ctxt, host):
         """Clear the frozen setting on a backend host."""
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         return cctxt.call(ctxt, 'thaw_host')
 
     def failover_host(self, ctxt, host, secondary_backend_id=None):
-        """Failover host to the specified backend_id (secondary). """
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        """Failover host to the specified backend_id (secondary)."""
+        cctxt = self._get_cctxt(host)
         cctxt.cast(ctxt, 'failover_host',
                    secondary_backend_id=secondary_backend_id)
 
     def manage_existing_snapshot(self, ctxt, snapshot, ref, host):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         cctxt.cast(ctxt, 'manage_existing_snapshot',
                    snapshot=snapshot,
                    ref=ref)
 
     def get_capabilities(self, ctxt, host, discover):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         return cctxt.call(ctxt, 'get_capabilities', discover=discover)
 
     def get_backup_device(self, ctxt, backup, volume):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
+        cctxt = self._get_cctxt(volume.host)
         backup_dict = cctxt.call(ctxt, 'get_backup_device', backup=backup)
-
-        # FIXME(dulek): Snippet below converts received raw dicts to o.vo. This
-        # is only for a case when Mitaka's c-vol will answer us with volume
-        # dict instead of an o.vo and should go away in early Ocata.
-        if isinstance(backup_dict.get('backup_device'), dict):
-            is_snapshot = backup_dict.get('is_snapshot')
-            obj_class = objects.Snapshot if is_snapshot else objects.Volume
-            obj = obj_class()
-            obj_class._from_db_object(ctxt, obj, backup_dict['backup_device'])
-            backup_dict['backup_device'] = obj
-
         return backup_dict
 
     def secure_file_operations_enabled(self, ctxt, volume):
-        version = self._compat_ver('3.0', '2.0')
-        cctxt = self._get_cctxt(volume.host, version)
+        cctxt = self._get_cctxt(volume.host)
         return cctxt.call(ctxt, 'secure_file_operations_enabled',
                           volume=volume)
 
     def get_manageable_volumes(self, ctxt, host, marker, limit, offset,
                                sort_keys, sort_dirs):
-        version = self._compat_ver('3.0', '2.1')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         return cctxt.call(ctxt, 'get_manageable_volumes', marker=marker,
                           limit=limit, offset=offset, sort_keys=sort_keys,
                           sort_dirs=sort_dirs)
 
     def get_manageable_snapshots(self, ctxt, host, marker, limit, offset,
                                  sort_keys, sort_dirs):
-        version = self._compat_ver('3.0', '2.1')
-        cctxt = self._get_cctxt(host, version)
+        cctxt = self._get_cctxt(host)
         return cctxt.call(ctxt, 'get_manageable_snapshots', marker=marker,
                           limit=limit, offset=offset, sort_keys=sort_keys,
                           sort_dirs=sort_dirs)
 
     def create_group(self, ctxt, group, host):
-        version = self._compat_ver('3.0', '2.5')
-        cctxt = self._get_cctxt(host, version)
-        cctxt.cast(ctxt, 'create_group',
-                   group=group)
+        cctxt = self._get_cctxt(host)
+        cctxt.cast(ctxt, 'create_group', group=group)
 
     def delete_group(self, ctxt, group):
-        version = self._compat_ver('3.0', '2.5')
-        cctxt = self._get_cctxt(group.host, version)
-        cctxt.cast(ctxt, 'delete_group',
-                   group=group)
+        cctxt = self._get_cctxt(group.host)
+        cctxt.cast(ctxt, 'delete_group', group=group)
 
-    def update_group(self, ctxt, group, add_volumes=None,
-                     remove_volumes=None):
-        version = self._compat_ver('3.0', '2.5')
-        cctxt = self._get_cctxt(group.host, version)
-        cctxt.cast(ctxt, 'update_group',
-                   group=group,
-                   add_volumes=add_volumes,
+    def update_group(self, ctxt, group, add_volumes=None, remove_volumes=None):
+        cctxt = self._get_cctxt(group.host)
+        cctxt.cast(ctxt, 'update_group', group=group, add_volumes=add_volumes,
                    remove_volumes=remove_volumes)
 
     def create_group_from_src(self, ctxt, group, group_snapshot=None,
                               source_group=None):
-        version = self._compat_ver('3.0', '2.6')
-        cctxt = self._get_cctxt(group.host, version)
-        cctxt.cast(ctxt, 'create_group_from_src',
-                   group=group,
-                   group_snapshot=group_snapshot,
-                   source_group=source_group)
+        cctxt = self._get_cctxt(group.host)
+        cctxt.cast(ctxt, 'create_group_from_src', group=group,
+                   group_snapshot=group_snapshot, source_group=source_group)
 
     def create_group_snapshot(self, ctxt, group_snapshot):
-        version = self._compat_ver('3.0', '2.6')
-        cctxt = self._get_cctxt(group_snapshot.group.host, version)
+        cctxt = self._get_cctxt(group_snapshot.group.host)
         cctxt.cast(ctxt, 'create_group_snapshot',
                    group_snapshot=group_snapshot)
 
     def delete_group_snapshot(self, ctxt, group_snapshot):
-        version = self._compat_ver('3.0', '2.6')
-        cctxt = self._get_cctxt(group_snapshot.group.host, version)
+        cctxt = self._get_cctxt(group_snapshot.group.host)
         cctxt.cast(ctxt, 'delete_group_snapshot',
                    group_snapshot=group_snapshot)

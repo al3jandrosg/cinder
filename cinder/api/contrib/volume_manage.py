@@ -13,7 +13,6 @@
 #   under the License.
 
 from oslo_log import log as logging
-from oslo_utils import uuidutils
 from webob import exc
 
 from cinder.api.contrib import resource_common_manage
@@ -21,6 +20,7 @@ from cinder.api import extensions
 from cinder.api.openstack import wsgi
 from cinder.api.v2.views import volumes as volume_views
 from cinder.api.views import manageable_volumes as list_manageable_view
+from cinder import exception
 from cinder.i18n import _
 from cinder import utils
 from cinder import volume as cinder_volume
@@ -119,14 +119,13 @@ class VolumeManageController(wsgi.Controller):
         kwargs = {}
         req_volume_type = volume.get('volume_type', None)
         if req_volume_type:
-            # Not found exception will be handled at the wsgi level
-            if not uuidutils.is_uuid_like(req_volume_type):
-                kwargs['volume_type'] = \
-                    volume_types.get_volume_type_by_name(
-                        context, req_volume_type)
-            else:
-                kwargs['volume_type'] = volume_types.get_volume_type(
+            try:
+                kwargs['volume_type'] = volume_types.get_by_name_or_id(
                     context, req_volume_type)
+            except exception.VolumeTypeNotFound:
+                msg = _("Cannot find requested '%s' "
+                        "volume type") % req_volume_type
+                raise exception.InvalidVolumeType(reason=msg)
         else:
             kwargs['volume_type'] = {}
 
@@ -138,11 +137,14 @@ class VolumeManageController(wsgi.Controller):
 
         utils.check_metadata_properties(kwargs['metadata'])
 
-        # Not found exception will be handled at wsgi level
-        new_volume = self.volume_api.manage_existing(context,
-                                                     volume['host'],
-                                                     volume['ref'],
-                                                     **kwargs)
+        try:
+            new_volume = self.volume_api.manage_existing(context,
+                                                         volume['host'],
+                                                         volume['ref'],
+                                                         **kwargs)
+        except exception.ServiceNotFound:
+            msg = _("Host '%s' not found") % volume['host']
+            raise exception.ServiceUnavailable(message=msg)
 
         utils.add_visible_admin_metadata(new_volume)
 

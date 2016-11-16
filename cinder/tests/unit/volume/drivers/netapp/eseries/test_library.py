@@ -551,7 +551,7 @@ class NetAppEseriesLibraryTestCase(test.TestCase):
             self.assertEqual(ssc[key], pool_stats[key])
 
     def test_update_volume_stats_no_ssc(self):
-        """Ensure that that pool stats are correctly reported without SSC"""
+        """Ensure that pool stats are correctly reported without SSC"""
         fake_pool = copy.deepcopy(eseries_fake.STORAGE_POOL)
         self.library._get_storage_pools = mock.Mock(return_value=[fake_pool])
         self.library._update_volume_stats()
@@ -2004,8 +2004,8 @@ class NetAppEseriesLibraryMultiAttachTestCase(test.TestCase):
             bitset.set(i)
         snapshots.append(snap)
 
-        filtered_snaps = list(filter(lambda x: x['pitGroupRef'] == snap[
-            'pitGroupRef'], snapshots))
+        filtered_snaps = [x for x in snapshots
+                          if x['pitGroupRef'] == snap['pitGroupRef']]
 
         self.mock_object(self.library, '_get_volume', mock.Mock(
             return_value=vol))

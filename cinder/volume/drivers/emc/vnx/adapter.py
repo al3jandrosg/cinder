@@ -613,7 +613,7 @@ class CommonAdapter(object):
             LOG.info(_LI('No storage pool is configured. This host will '
                          'manage all the pools on the VNX system.'))
 
-        return list(filter(lambda pool: pool.name in pool_names, array_pools))
+        return [pool for pool in array_pools if pool.name in pool_names]
 
     def get_enabler_stats(self):
         stats = dict()
@@ -982,7 +982,7 @@ class CommonAdapter(object):
         try:
             LOG.info(_LI("Storage Group %s is empty."), sg.name)
             sg.disconnect_host(sg.name)
-            sg.remove()
+            sg.delete()
             if self.itor_auto_dereg:
                 self._deregister_initiator(host)
         except storops_ex.StoropsException:
@@ -1456,7 +1456,7 @@ class FCAdapter(CommonAdapter):
     def _get_wwns_of_online_fc_ports(self, sg, allowed_port_only=False):
         ports = sg.fc_ports
         if allowed_port_only:
-            ports = list(filter(lambda po: self._is_allowed_port(po), ports))
+            ports = [po for po in ports if self._is_allowed_port(po)]
 
         fc_port_wwns = self.client.get_wwn_of_online_fc_ports(ports)
 

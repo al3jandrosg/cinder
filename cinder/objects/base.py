@@ -116,6 +116,10 @@ OBJ_VERSIONS.add('1.10', {'Group': '1.0', 'GroupList': '1.0', 'Volume': '1.5',
                           'RequestSpec': '1.1', 'VolumeProperties': '1.1'})
 OBJ_VERSIONS.add('1.11', {'GroupSnapshot': '1.0', 'GroupSnapshotList': '1.0',
                           'Group': '1.1'})
+OBJ_VERSIONS.add('1.12', {'VolumeType': '1.3'})
+OBJ_VERSIONS.add('1.13', {'CleanupRequest': '1.0'})
+OBJ_VERSIONS.add('1.14', {'VolumeAttachmentList': '1.1'})
+OBJ_VERSIONS.add('1.15', {'Volume': '1.6', 'Snapshot': '1.2'})
 
 
 class CinderObjectRegistry(base.VersionedObjectRegistry):

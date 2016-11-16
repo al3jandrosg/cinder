@@ -16,7 +16,6 @@ import taskflow.engines
 from taskflow.patterns import linear_flow
 from taskflow.types import failure as ft
 
-from cinder.common import constants
 from cinder import exception
 from cinder import flow_utils
 from cinder.i18n import _LE
@@ -56,7 +55,7 @@ class EntryCreateTask(flow_utils.CinderTask):
             'size': 0,
             'user_id': context.user_id,
             'project_id': context.project_id,
-            'status': 'creating',
+            'status': 'managing',
             'attach_status': 'detached',
             # Rename these to the internal name.
             'display_description': kwargs.pop('description'),
@@ -108,14 +107,12 @@ class ManageCastTask(flow_utils.CinderTask):
 
         # Call the scheduler to ensure that the host exists and that it can
         # accept the volume
-        self.scheduler_rpcapi.manage_existing(context, constants.VOLUME_TOPIC,
-                                              volume.id,
-                                              request_spec=request_spec,
-                                              volume=volume)
+        self.scheduler_rpcapi.manage_existing(context, volume,
+                                              request_spec=request_spec)
 
     def revert(self, context, result, flow_failures, volume, **kwargs):
         # Restore the source volume status and set the volume to error status.
-        common.error_out(volume)
+        common.error_out(volume, status='error_managing')
         LOG.error(_LE("Volume %s: manage failed."), volume.id)
         exc_info = False
         if all(flow_failures[-1].exc_info):

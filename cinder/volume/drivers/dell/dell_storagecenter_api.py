@@ -132,17 +132,27 @@ class HttpClient(object):
                 'https://')[1].split('/', 1)[1]
         except IndexError:
             url = asyncTask.get('returnValue')
+        except AttributeError:
+            LOG.debug('_get_async_url: Atttribute Error. (%r)', asyncTask)
+            url = 'api/rest/ApiConnection/AsyncTask/'
+
+        # Blank URL
+        if not url:
+            LOG.debug('_get_async_url: No URL. (%r)', asyncTask)
+            url = 'api/rest/ApiConnection/AsyncTask/'
+
         # Check for incomplete url error case.
         if url.endswith('/'):
             # Try to fix.
             id = asyncTask.get('instanceId')
             if id:
                 # We have an id so note the error and add the id.
-                LOG.debug('_get_async_url: url format error. (%s)', asyncTask)
+                LOG.debug('_get_async_url: url format error. (%r)', asyncTask)
                 url = url + id
             else:
                 # No hope.
-                LOG.error(_LE('_get_async_url: Bogus return url %s'), url)
+                LOG.error(_LE('_get_async_url: Bogus return async task %r'),
+                          asyncTask)
                 raise exception.VolumeBackendAPIException(
                     message=_('_get_async_url: Invalid URL.'))
         return url
@@ -181,6 +191,8 @@ class HttpClient(object):
                          'method %(method)s result')
                        % {'obj': objectTypeName, 'method': methodname})
                 raise exception.VolumeBackendAPIException(message=msg)
+        # Shouldn't really be able to get here.
+        LOG.debug('_wait_for_async_complete: Error asyncTask: %r', asyncTask)
         return None
 
     def _rest_ret(self, rest_response, async):
@@ -243,18 +255,13 @@ class HttpClient(object):
     def delete(self, url, payload=None, async=False):
         LOG.debug('delete: %(url)s data: %(payload)s',
                   {'url': url, 'payload': payload})
+        named = {'headers': self._get_header(async), 'verify': self.verify}
         if payload:
-            return self._rest_ret(
-                self.session.delete(self.__formatUrl(url),
-                                    data=json.dumps(payload,
-                                                    ensure_ascii=False
-                                                    ).encode('utf-8'),
-                                    headers=self._get_header(async),
-                                    verify=self.verify), async)
+            named['data'] = json.dumps(
+                payload, ensure_ascii=False).encode('utf-8')
+
         return self._rest_ret(
-            self.session.delete(self.__formatUrl(url),
-                                headers=self._get_header(async),
-                                verify=self.verify), async)
+            self.session.delete(self.__formatUrl(url), **named), async)
 
 
 class StorageCenterApiHelper(object):
@@ -661,6 +668,10 @@ class StorageCenterApi(object):
             try:
                 if provider_id.split('.')[0] == six.text_type(self.ssn):
                     ret = True
+                else:
+                    LOG.debug('_use_provider_id: provider_id '
+                              '%(pid)r not valid on %(ssn)r',
+                              {'pid': provider_id, 'ssn': self.ssn})
             except Exception:
                 LOG.error(_LE('_use_provider_id: provider_id %s is invalid!'),
                           provider_id)
@@ -827,11 +838,19 @@ class StorageCenterApi(object):
                 # This needs to be either a physical or virtual server.
                 # Outside of tempest tests this should not matter as we only
                 # "init" a volume to allow snapshotting of an empty volume.
-                if scserver.get('status', '').lower() != 'down':
+                if (scserver.get('status', 'down').lower() != 'down' and
+                   scserver.get('type', '').lower() == 'physical'):
                     # Map to actually create the volume
                     self.map_volume(scvolume, scserver)
                     # We have changed the volume so grab a new copy of it.
                     scvolume = self.get_volume(self._get_id(scvolume))
+                    if not scvolume.get('active', False):
+                        LOG.info(_LI('Failed to activate volume %(name)s, '
+                                     'operations such as snapshot and clone '
+                                     'may fail due to inactive volume. '
+                                     '(%(obj)r)'),
+                                 {'name': scvolume['name'],
+                                  'obj': scvolume})
                     self.unmap_volume(scvolume, scserver)
                     return
         # We didn't map/unmap the volume.  So no initialization done.
@@ -1130,6 +1149,9 @@ class StorageCenterApi(object):
         :return: sc volume object or None.
         :raises VolumeBackendAPIException: if unable to import.
         """
+        LOG.debug('find_volume: name:%(name)r provider_id:%(id)r islv:%(lv)r',
+                  {'name': name, 'id': provider_id,
+                   'lv': islivevol})
         scvolume = None
         if islivevol:
             # Just get the primary from the sc live vol.
@@ -2893,9 +2915,6 @@ class StorageCenterApi(object):
             return self._check_result(r)
         return False
 
-    def find_replication_dest(self, instance_id, destssn):
-        pass
-
     def break_replication(self, volumename, instance_id, destssn):
         """This just breaks the replication.
 
@@ -3114,7 +3133,7 @@ class StorageCenterApi(object):
         """Get's the live ScLiveVolume object for the vol with primaryid.
 
         :param primaryid: InstanceId of the primary volume.
-        :parma name: Volume name associated with this live volume.
+        :param name: Volume name associated with this live volume.
         :return: ScLiveVolume object or None
         """
         sclivevol = None
@@ -3139,6 +3158,7 @@ class StorageCenterApi(object):
                     if (name and sclivevol is None and
                        lv['instanceName'].endswith(name)):
                         sclivevol = lv
+        LOG.debug('get_live_volume: %r', sclivevol)
         return sclivevol
 
     def _get_hbas(self, serverid):

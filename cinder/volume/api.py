@@ -26,7 +26,6 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
-from oslo_utils import uuidutils
 import six
 
 from cinder.api import common
@@ -368,15 +367,18 @@ class API(base.Base):
             # NOTE(vish): scheduling failed, so delete it
             # Note(zhiteng): update volume quota reservation
             try:
-                reserve_opts = {'volumes': -1, 'gigabytes': -volume.size}
-                QUOTAS.add_volume_type_opts(context,
-                                            reserve_opts,
-                                            volume.volume_type_id)
-                reservations = QUOTAS.reserve(context,
-                                              project_id=project_id,
-                                              **reserve_opts)
-            except Exception:
                 reservations = None
+                if volume.status != 'error_managing':
+                    LOG.debug("Decrease volume quotas only if status is not "
+                              "error_managing.")
+                    reserve_opts = {'volumes': -1, 'gigabytes': -volume.size}
+                    QUOTAS.add_volume_type_opts(context,
+                                                reserve_opts,
+                                                volume.volume_type_id)
+                    reservations = QUOTAS.reserve(context,
+                                                  project_id=project_id,
+                                                  **reserve_opts)
+            except Exception:
                 LOG.exception(_LE("Failed to update quota while "
                                   "deleting volume."))
             volume.destroy()
@@ -400,7 +402,7 @@ class API(base.Base):
         # If not force deleting we have status conditions
         if not force:
             expected['status'] = ('available', 'error', 'error_restoring',
-                                  'error_extending')
+                                  'error_extending', 'error_managing')
 
         if cascade:
             # Allow deletion if all snapshots are in an expected state
@@ -409,6 +411,8 @@ class API(base.Base):
             # Don't allow deletion of volume with snapshots
             filters = [~db.volume_has_snapshots_filter()]
         values = {'status': 'deleting', 'terminated_at': timeutils.utcnow()}
+        if volume.status == 'error_managing':
+            values['status'] = 'error_managing_deleting'
 
         result = volume.conditional_update(values, expected, filters)
 
@@ -484,6 +488,13 @@ class API(base.Base):
     def get(self, context, volume_id, viewable_admin_meta=False):
         volume = objects.Volume.get_by_id(context, volume_id)
 
+        try:
+            check_policy(context, 'get', volume)
+        except exception.PolicyNotAuthorized:
+            # raise VolumeNotFound to avoid providing info about
+            # the existence of an unauthorized volume id
+            raise exception.VolumeNotFound(volume_id=volume_id)
+
         if viewable_admin_meta:
             ctxt = context.elevated()
             admin_metadata = self.db.volume_admin_metadata_get(ctxt,
@@ -491,12 +502,6 @@ class API(base.Base):
             volume.admin_metadata = admin_metadata
             volume.obj_reset_changes()
 
-        try:
-            check_policy(context, 'get', volume)
-        except exception.PolicyNotAuthorized:
-            # raise VolumeNotFound instead to make sure Cinder behaves
-            # as it used to
-            raise exception.VolumeNotFound(volume_id=volume_id)
         LOG.info(_LI("Volume info retrieved successfully."), resource=volume)
         return volume
 
@@ -615,7 +620,9 @@ class API(base.Base):
 
         if not result:
             expected_status = utils.build_or_str(expected['status'])
-            msg = _('Volume status must be %s to reserve.') % expected_status
+            msg = _('Volume status must be %(expected)s to reserve, but the '
+                    'status is %(current)s.') % {'expected': expected_status,
+                                                 'current': volume.status}
             LOG.error(msg)
             raise exception.InvalidVolume(reason=msg)
 
@@ -845,12 +852,7 @@ class API(base.Base):
                                group_snapshot_id=None):
         snapshot_list = []
         for volume in volume_list:
-            self._create_snapshot_in_db_validate(context, volume, True)
-            if volume['status'] == 'error':
-                msg = _("The snapshot cannot be created when the volume is "
-                        "in error status.")
-                LOG.error(msg)
-                raise exception.InvalidVolume(reason=msg)
+            self._create_snapshot_in_db_validate(context, volume)
 
         reservations = self._create_snapshots_in_db_reserve(
             context, volume_list)
@@ -879,7 +881,7 @@ class API(base.Base):
 
         return snapshot_list
 
-    def _create_snapshot_in_db_validate(self, context, volume, force):
+    def _create_snapshot_in_db_validate(self, context, volume):
         check_policy(context, 'create_snapshot', volume)
 
         if volume['status'] == 'maintenance':
@@ -892,12 +894,10 @@ class API(base.Base):
             # Volume is migrating, wait until done
             msg = _("Snapshot cannot be created while volume is migrating.")
             raise exception.InvalidVolume(reason=msg)
-
-        if ((not force) and (volume['status'] != "available")):
-            msg = _("Snapshot cannot be created because volume %(vol_id)s "
-                    "is not available, current volume status: "
-                    "%(vol_status)s.") % {'vol_id': volume['id'],
-                                          'vol_status': volume['status']}
+        if volume['status'] == 'error':
+            msg = _("The snapshot cannot be created when the volume is "
+                    "in error status.")
+            LOG.error(msg)
             raise exception.InvalidVolume(reason=msg)
 
     def _create_snapshots_in_db_reserve(self, context, volume_list):
@@ -1380,12 +1380,10 @@ class API(base.Base):
                         'volume_type': volume_type,
                         'volume_id': volume.id}
         self.scheduler_rpcapi.migrate_volume_to_host(context,
-                                                     constants.VOLUME_TOPIC,
-                                                     volume.id,
+                                                     volume,
                                                      host,
                                                      force_host_copy,
-                                                     request_spec,
-                                                     volume=volume)
+                                                     request_spec)
         LOG.info(_LI("Migrate volume request issued successfully."),
                  resource=volume)
 
@@ -1455,12 +1453,8 @@ class API(base.Base):
 
         # Support specifying volume type by ID or name
         try:
-            if uuidutils.is_uuid_like(new_type):
-                vol_type = volume_types.get_volume_type(context.elevated(),
-                                                        new_type)
-            else:
-                vol_type = volume_types.get_volume_type_by_name(
-                    context.elevated(), new_type)
+            vol_type = (
+                volume_types.get_by_name_or_id(context.elevated(), new_type))
         except exception.InvalidVolumeType:
             msg = _('Invalid volume_type passed: %s.') % new_type
             LOG.error(msg)
@@ -1529,10 +1523,9 @@ class API(base.Base):
                         'quota_reservations': reservations,
                         'old_reservations': old_reservations}
 
-        self.scheduler_rpcapi.retype(context, constants.VOLUME_TOPIC,
-                                     volume.id,
+        self.scheduler_rpcapi.retype(context, volume,
                                      request_spec=request_spec,
-                                     filter_properties={}, volume=volume)
+                                     filter_properties={})
         LOG.info(_LI("Retype volume request issued successfully."),
                  resource=volume)
 

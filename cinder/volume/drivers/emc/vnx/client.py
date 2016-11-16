@@ -81,6 +81,9 @@ class Client(object):
     def __init__(self, ip, username, password, scope,
                  naviseccli, sec_file):
         self.naviseccli = naviseccli
+        if not storops:
+            msg = _('storops Python library is not installed.')
+            raise exception.VolumeBackendAPIException(message=msg)
         self.vnx = storops.VNXSystem(ip=ip,
                                      username=username,
                                      password=password,
@@ -477,10 +480,8 @@ class Client(object):
         wwns = set()
         ports_with_all_info = self.vnx.get_fc_port()
         for po in ports:
-            online_list = list(
-                filter(lambda p: (p == po and p.link_status == 'Up'
-                                  and p.port_status == 'Online'),
-                       ports_with_all_info))
+            online_list = [p for p in ports_with_all_info if p == po and
+                           p.link_status == 'Up' and p.port_status == 'Online']
 
             wwns.update([p.wwn for p in online_list])
         return list(wwns)

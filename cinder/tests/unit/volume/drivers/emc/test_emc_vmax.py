@@ -27,6 +27,7 @@ import six
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.objects import consistencygroup
 from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit import utils
@@ -418,22 +419,13 @@ class EMCVMAXCommonData(object):
                       'host': fake_host
                       }
 
-    test_volume_CG_v3 = {'name': 'volInCG',
-                         'consistencygroup_id': 'abc',
-                         'size': 1,
-                         'volume_name': 'volInCG',
-                         'id': 'volInCG',
-                         'device_id': '1',
-                         'provider_auth': None,
-                         'project_id': 'project',
-                         'display_name': 'volInCG',
-                         'display_description':
-                         'test volume in Consistency group',
-                         'volume_type_id': 'abc',
-                         'provider_location':
-                         six.text_type(provider_location),
-                         'status': 'available',
-                         'host': fake_host_v3}
+    test_volume_CG_v3 = consistencygroup.ConsistencyGroup(
+        context=None, name='volInCG', consistencygroup_id='abc', size=1,
+        volume_name='volInCG', id='volInCG', device_id='1', status='available',
+        provider_auth=None, volume_type_id='abc', project_id='project',
+        display_name='volInCG',
+        display_description='test volume in Consistency group',
+        host=fake_host_v3, provider_location=six.text_type(provider_location))
 
     test_failed_volume = {'name': 'failed_vol',
                           'size': 1,
@@ -489,11 +481,10 @@ class EMCVMAXCommonData(object):
                              six.text_type(provider_location),
                              'display_description': 'snapshot source volume'}
 
-    test_CG = {'name': 'myCG1',
-               'id': '12345abcde',
-               'volume_type_id': 'abc',
-               'status': fields.ConsistencyGroupStatus.AVAILABLE
-               }
+    test_CG = consistencygroup.ConsistencyGroup(
+        context=None, name='myCG1', id='12345abcde',
+        volume_type_id='abc', status=fields.ConsistencyGroupStatus.AVAILABLE)
+
     test_snapshot = {'name': 'myCG1',
                      'id': '12345abcde',
                      'status': 'available',
@@ -645,6 +636,17 @@ class FakeEcomConnection(object):
                                   self.data.meta_volume1,
                                   self.data.meta_volume2]
             return rc, ret
+        if (MethodName == 'CreateGroup' and
+                GroupName == self.data.initiatorgroup_name):
+            rc = 0
+            job = {}
+            job['MaskingGroup'] = GroupName
+            return rc, job
+        if MethodName == 'CreateGroup' and GroupName == 'IG_unsuccessful':
+            rc = 10
+            job = {}
+            job['status'] = 'failure'
+            return rc, job
 
         job = {'Job': myjob}
         return rc, job
@@ -1148,7 +1150,7 @@ class FakeEcomConnection(object):
         replicationgroup = {}
         replicationgroup['CreationClassName'] = (
             self.data.replicationgroup_creationclass)
-        replicationgroup['ElementName'] = '1234bcde'
+        replicationgroup['ElementName'] = '12345abcde'
         return replicationgroup
 
     def _getinstance_srpstoragepool(self, objectpath):
@@ -3584,10 +3586,6 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -3601,7 +3599,7 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         return_value={'volume_backend_name': 'ISCSINoFAST'})
     def test_delete_CG_no_volumes_no_fast_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -3902,7 +3900,7 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         utils = self.driver.common.utils
         status = 'status-string'
         volumes = utils.get_volume_model_updates(
-            None, self.driver.db.volume_get_all_by_group("", 5),
+            self.driver.db.volume_get_all_by_group("", 5),
             self.data.test_CG['id'],
             status)
         self.assertEqual(status, volumes[0]['status'])
@@ -4471,10 +4469,6 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -4488,7 +4482,7 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
         return_value={'volume_backend_name': 'ISCSIFAST'})
     def test_delete_CG_no_volumes_fast_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -4947,10 +4941,6 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -4964,7 +4954,7 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
         return_value={'volume_backend_name': 'FCNoFAST'})
     def test_delete_CG_no_volumes_no_fast_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -5714,10 +5704,6 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -5731,7 +5717,7 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
         return_value={'volume_backend_name': 'FCFAST'})
     def test_delete_CG_no_volumes_fast_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -5905,7 +5891,7 @@ class EMCV3DriverTestCase(test.TestCase):
         emc.appendChild(array)
         array.appendChild(arraytext)
 
-        slo = doc.createElement("SLO")
+        slo = doc.createElement("ServiceLevel")
         slotext = doc.createTextNode("Bronze")
         emc.appendChild(slo)
         slo.appendChild(slotext)
@@ -6281,10 +6267,6 @@ class EMCV3DriverTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_volume_CG_v3)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -6298,7 +6280,7 @@ class EMCV3DriverTestCase(test.TestCase):
         return_value={'volume_backend_name': 'V3_BE'})
     def test_delete_CG_no_volumes_v3_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -6921,10 +6903,6 @@ class EMCV2MultiPoolDriverTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -6938,7 +6916,7 @@ class EMCV2MultiPoolDriverTestCase(test.TestCase):
         return_value={'volume_backend_name': 'MULTI_POOL_BE'})
     def test_delete_CG_no_volumes_multi_pool_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -7054,7 +7032,7 @@ class EMCV3MultiSloDriverTestCase(test.TestCase):
         vpool.appendChild(poolName)
         poolNameText = doc.createTextNode("SRP_1")
         poolName.appendChild(poolNameText)
-        poolslo = doc.createElement("SLO")
+        poolslo = doc.createElement("ServiceLevel")
         vpool.appendChild(poolslo)
         poolsloText = doc.createTextNode("Bronze")
         poolslo.appendChild(poolsloText)
@@ -7069,7 +7047,7 @@ class EMCV3MultiSloDriverTestCase(test.TestCase):
         vpool2.appendChild(pool2Name)
         pool2NameText = doc.createTextNode("SRP_1")
         pool2Name.appendChild(pool2NameText)
-        pool2slo = doc.createElement("SLO")
+        pool2slo = doc.createElement("ServiceLevel")
         vpool2.appendChild(pool2slo)
         pool2sloText = doc.createTextNode("Silver")
         pool2slo.appendChild(pool2sloText)
@@ -7224,10 +7202,6 @@ class EMCV3MultiSloDriverTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_members_of_replication_group',
-        return_value=None)
-    @mock.patch.object(
         FakeDB,
         'volume_get_all_by_group',
         return_value=None)
@@ -7241,7 +7215,7 @@ class EMCV3MultiSloDriverTestCase(test.TestCase):
         return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     def test_delete_CG_no_volumes_multi_slo_success(
             self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
+            _mock_db_volumes):
         self.driver.delete_consistencygroup(
             self.data.test_ctxt, self.data.test_CG, [])
 
@@ -7853,7 +7827,7 @@ class EMCVMAXMaskingTest(test.TestCase):
             volumeInstance, volumeName, sgGroupName, extraSpecs)
         self.assertIsNone(msg)
 
-    def test_remove_volume_from_sg(self):
+    def test_cleanup_deletion_v3(self):
         masking = self.driver.common.masking
         conn = self.fake_ecom_connection()
         volumeInstanceName = (
@@ -7981,6 +7955,152 @@ class EMCVMAXMaskingTest(test.TestCase):
             _check_if_rollback_action_for_masking_required(conn,
                                                            rollbackDict))
         self.assertEqual(expectedmessage, message)
+
+    def test_remove_volume_from_sg(self):
+        extraSpecs = self.data.extra_specs
+        conn = self.fake_ecom_connection()
+        common = self.driver.common
+        masking = common.masking
+        controllerConfigService = (
+            common.utils.find_controller_configuration_service(
+                conn, self.data.storage_system))
+        storageGroupName = self.data.storagegroupname
+        storageGroupInstanceName = (
+            self.driver.utils.find_storage_masking_group(
+                conn, controllerConfigService, storageGroupName))
+        volumeInstanceNames = (
+            conn.EnumerateInstanceNames("EMC_StorageVolume"))
+        volumeInstanceName = volumeInstanceNames[0]
+        volumeInstance = conn.GetInstance(volumeInstanceName)
+        masking.get_devices_from_storage_group = (
+            mock.Mock(return_value=volumeInstanceNames))
+        masking._remove_volume_from_sg(
+            conn, controllerConfigService, storageGroupInstanceName,
+            volumeInstance, extraSpecs)
+        masking.get_devices_from_storage_group.assert_called_with(
+            conn, storageGroupInstanceName)
+
+    # bug 1555728: _create_initiator_Group uses multiple CIM calls
+    # where one suffices
+    def test_create_initiator_group(self):
+        utils = self.driver.common.utils
+        masking = self.driver.common.masking
+        conn = self.fake_ecom_connection()
+        controllerConfigService = (utils.
+                                   find_controller_configuration_service(
+                                       conn, self.data.storage_system))
+        igGroupName = self.data.initiatorgroup_name
+        hardwareIdinstanceNames = self.data.initiatorNames
+        extraSpecs = self.data.extra_specs
+        # path 1: Initiator Group created successfully
+        foundInitiatorGroupName = (masking._create_initiator_Group(
+                                   conn, controllerConfigService,
+                                   igGroupName, hardwareIdinstanceNames,
+                                   extraSpecs))
+        self.assertEqual(foundInitiatorGroupName, igGroupName)
+        # path 2: Unsuccessful Initiator Group creation
+        with mock.patch.object(utils, 'wait_for_job_complete',
+                               return_value=(10, None)):
+            igGroupName = 'IG_unsuccessful'
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              masking._create_initiator_Group,
+                              conn, controllerConfigService,
+                              igGroupName, hardwareIdinstanceNames,
+                              extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_delete_initiators_from_initiator_group")
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_delete_initiator_group")
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_create_initiator_Group",
+        return_value=EMCVMAXCommonData.initiatorgroup_name)
+    # bug 1579934: duplicate IG name error from SMI-S
+    def test_verify_initiator_group_from_masking_view(
+            self, create_ig, delete_ig, delete_initiators):
+        utils = self.driver.common.utils
+        masking = self.driver.common.masking
+        conn = self.fake_ecom_connection()
+        controllerConfigService = (
+            utils.find_controller_configuration_service(
+                conn, self.data.storage_system))
+        connector = self.data.connector
+        maskingViewName = self.data.lunmaskctrl_name
+        storageSystemName = self.data.storage_system
+        igGroupName = self.data.initiatorgroup_name
+        extraSpecs = self.data.extra_specs
+        initiatorNames = (
+            self.driver.common.masking._find_initiator_names(conn, connector))
+        storageHardwareIDInstanceNames = (
+            masking._get_storage_hardware_id_instance_names(
+                conn, initiatorNames, storageSystemName))
+        foundInitiatorGroupFromMaskingView = (
+            masking._get_initiator_group_from_masking_view(
+                conn, maskingViewName, storageSystemName))
+        # path 1: initiator group from masking view matches initiator
+        # group from connector
+        verify = masking._verify_initiator_group_from_masking_view(
+            conn, controllerConfigService, maskingViewName, connector,
+            storageSystemName, igGroupName, extraSpecs)
+        masking._create_initiator_Group.assert_not_called()
+        self.assertTrue(verify)
+        # path 2: initiator group from masking view does not match
+        # initiator group from connector
+        with mock.patch.object(
+                masking, "_find_initiator_masking_group",
+                return_value="not_a_match"):
+            # path 2a: initiator group from connector is not None
+            # - no new initiator group created
+            verify = masking._verify_initiator_group_from_masking_view(
+                conn, controllerConfigService, maskingViewName,
+                connector, storageSystemName, igGroupName,
+                extraSpecs)
+            self.assertTrue(verify)
+            masking._create_initiator_Group.assert_not_called()
+            # path 2b: initiator group from connector is None
+            # - new initiator group created
+            with mock.patch.object(
+                    masking, "_find_initiator_masking_group",
+                    return_value=None):
+                masking._verify_initiator_group_from_masking_view(
+                    conn, controllerConfigService, maskingViewName,
+                    connector, storageSystemName, igGroupName,
+                    extraSpecs)
+                (masking._create_initiator_Group.
+                 assert_called_once_with(conn, controllerConfigService,
+                                         igGroupName,
+                                         storageHardwareIDInstanceNames,
+                                         extraSpecs))
+                # path 2b(i) - the name of the initiator group from the
+                # masking view is the same as the provided igGroupName
+                # - existing ig must be deleted
+                (masking._delete_initiator_group.
+                 assert_called_once_with(conn, controllerConfigService,
+                                         foundInitiatorGroupFromMaskingView,
+                                         igGroupName, extraSpecs))
+                # path 2b(ii) - the name of the ig from the masking view
+                # is different - do not delete the existing ig
+                masking._delete_initiator_group.reset_mock()
+                with mock.patch.object(
+                        conn, "GetInstance",
+                        return_value={'ElementName': "different_name"}):
+                    masking._verify_initiator_group_from_masking_view(
+                        conn, controllerConfigService, maskingViewName,
+                        connector, storageSystemName, igGroupName,
+                        extraSpecs)
+                    masking._delete_initiator_group.assert_not_called()
+            # path 3 - the masking view cannot be verified
+            with mock.patch.object(
+                    masking, "_get_storage_group_from_masking_view",
+                    return_value=None):
+                verify = masking._verify_initiator_group_from_masking_view(
+                    conn, controllerConfigService, maskingViewName,
+                    connector, storageSystemName, igGroupName,
+                    extraSpecs)
+                self.assertFalse(verify)
 
 
 class EMCVMAXFCTest(test.TestCase):
@@ -8579,6 +8699,38 @@ class EMCVMAXCommonTest(test.TestCase):
                       'slo': 'Bronze'}
         self.driver.common._extend_volume(
             volumeInstance, volumeName, new_size_gb, old_size_gbs, extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=(EMCVMAXCommonData.extra_specs))
+    def test_get_consistency_group_utils(self, mock_init, mock_pool):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        replicationService, storageSystem, extraSpecs = (
+            common._get_consistency_group_utils(
+                common.conn, EMCVMAXCommonData.test_CG))
+        self.assertEqual(self.data.extra_specs, extraSpecs)
+        self.assertEqual(common.conn.EnumerateInstanceNames(
+            'EMC_ReplicationService')[0], replicationService)
+
+    def test_update_consistency_group_name(self):
+        common = self.driver.common
+        cg_name = common._update_consistency_group_name(
+            EMCVMAXCommonData.test_CG)
+        self.assertEqual('myCG1_12345abcde', cg_name)
+
+    def test_update_consistency_group_name_truncate_name(self):
+        common = self.driver.common
+        test_cg = {'name': 'This_is_too_long_a_name_for_a_consistency_group',
+                   'id': '12345abcde', 'volume_type_id': 'abc',
+                   'status': fields.ConsistencyGroupStatus.AVAILABLE}
+        cg_name = common._update_consistency_group_name(test_cg)
+        self.assertEqual('This_is_too_listency_group_12345abcde', cg_name)
 
 
 class EMCVMAXProvisionTest(test.TestCase):

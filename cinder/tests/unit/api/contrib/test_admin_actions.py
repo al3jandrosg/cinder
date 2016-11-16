@@ -21,6 +21,7 @@ import webob
 from webob import exc
 
 from cinder.api.contrib import admin_actions
+from cinder.backup import api as backup_api
 from cinder.backup import rpcapi as backup_rpcapi
 from cinder.common import constants
 from cinder import context
@@ -33,7 +34,7 @@ from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import test
 from cinder.tests.unit.api.contrib import test_backups
 from cinder.tests.unit.api import fakes
-from cinder.tests.unit.api.v2 import stubs
+from cinder.tests.unit.api.v2 import fakes as v2_fakes
 from cinder.tests.unit import cast_as_call
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
@@ -105,39 +106,36 @@ class AdminActionsTest(BaseAdminTest):
         self.svc.stop()
         super(AdminActionsTest, self).tearDown()
 
-    def _issue_volume_reset(self, ctx, volume, updated_status):
-        req = webob.Request.blank('/v2/%s/volumes/%s/action' % (
-            fake.PROJECT_ID, volume['id']))
+    def _issue_resource_reset(self, ctx, name, id, status):
+        req = webob.Request.blank('/v2/%s/%s/%s/action' % (
+            fake.PROJECT_ID, name, id))
         req.method = 'POST'
         req.headers['content-type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes({'os-reset_status': updated_status})
+        req.body = jsonutils.dump_as_bytes({'os-reset_status': status})
         req.environ['cinder.context'] = ctx
         resp = req.get_response(app())
         return resp
+
+    def _issue_volume_reset(self, ctx, volume, updated_status):
+        return self._issue_resource_reset(ctx,
+                                          'volumes',
+                                          volume['id'],
+                                          updated_status)
 
     def _issue_snapshot_reset(self, ctx, snapshot, updated_status):
-        req = webob.Request.blank('/v2/%s/snapshots/%s/action' % (
-            fake.PROJECT_ID, snapshot.id))
-        req.method = 'POST'
-        req.headers['content-type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes({'os-reset_status': updated_status})
-        req.environ['cinder.context'] = ctx
-        resp = req.get_response(app())
-        return resp
+        return self._issue_resource_reset(ctx,
+                                          'snapshots',
+                                          snapshot.id,
+                                          updated_status)
 
     def _issue_backup_reset(self, ctx, backup, updated_status):
-        req = webob.Request.blank('/v2/%s/backups/%s/action' % (
-            fake.PROJECT_ID, backup['id']))
-        req.method = 'POST'
-        req.headers['content-type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes({'os-reset_status': updated_status})
-        req.environ['cinder.context'] = ctx
-        with mock.patch(
-                'cinder.backup.api.API._get_available_backup_service_host') \
-                as mock_get_backup_host:
-            mock_get_backup_host.return_value = 'testhost'
-            resp = req.get_response(app())
-            return resp
+        self.mock_object(backup_api.API,
+                         '_get_available_backup_service_host',
+                         mock.Mock(return_value='testhost'))
+        return self._issue_resource_reset(ctx,
+                                          'backups',
+                                          backup['id'],
+                                          updated_status)
 
     def test_valid_updates(self):
         vac = admin_actions.VolumeAdminController()
@@ -462,8 +460,8 @@ class AdminActionsTest(BaseAdminTest):
     @mock.patch.object(db, 'volume_get')
     def test_force_delete_snapshot(self, volume_get, snapshot_get, get_by_id,
                                    delete_snapshot):
-        volume = stubs.stub_volume(fake.VOLUME_ID)
-        snapshot = stubs.stub_snapshot(fake.SNAPSHOT_ID)
+        volume = v2_fakes.create_fake_volume(fake.VOLUME_ID)
+        snapshot = v2_fakes.fake_snapshot(fake.SNAPSHOT_ID)
         snapshot_obj = fake_snapshot.fake_snapshot_obj(self.ctx, **snapshot)
         volume_get.return_value = volume
         snapshot_get.return_value = snapshot
@@ -571,8 +569,8 @@ class AdminActionsTest(BaseAdminTest):
         expected_status = 400
         host = 'test2'
         volume = self._migrate_volume_prep()
-        model_update = {'migration_status': 'migrating'}
-        volume = db.volume_update(self.ctx, volume['id'], model_update)
+        volume.migration_status = 'migrating'
+        volume.save()
         self._migrate_volume_exec(self.ctx, volume, host, expected_status)
 
     def test_migrate_volume_with_snap(self):
@@ -1052,8 +1050,7 @@ class AdminActionsAttachDetachTest(BaseAdminTest):
         volume = self._create_volume(self.ctx, {'provider_location': '',
                                                 'size': 1})
 
-        values = {'status': 'attaching',
-                  'instance_uuid': fake.INSTANCE_ID}
+        values = {'status': 'attaching'}
         db.volume_update(self.ctx, volume['id'], values)
         db.volume_admin_metadata_update(self.ctx, volume['id'],
                                         {"attached_mode": 'rw'}, False)
@@ -1062,7 +1059,7 @@ class AdminActionsAttachDetachTest(BaseAdminTest):
                           self.volume_api.attach,
                           self.ctx,
                           volume,
-                          values['instance_uuid'],
+                          fake.INSTANCE_ID,
                           None,
                           mountpoint,
                           'ro')

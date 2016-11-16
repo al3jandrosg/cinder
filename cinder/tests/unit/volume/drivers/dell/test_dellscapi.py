@@ -7341,6 +7341,18 @@ class DellHttpClientTestCase(test.TestCase):
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.httpclient._get_async_url, badTask)
 
+    def test_get_async_url_no_returnvalue(self):
+        badTask = self.ASYNCTASK.copy()
+        badTask['returnValue'] = None
+        url = self.httpclient._get_async_url(badTask)
+        self.assertEqual('api/rest/ApiConnection/AsyncTask/1418394170395', url)
+
+    def test_get_async_url_no_blank_returnvalue(self):
+        badTask = self.ASYNCTASK.copy()
+        badTask['returnValue'] = ''
+        url = self.httpclient._get_async_url(badTask)
+        self.assertEqual('api/rest/ApiConnection/AsyncTask/1418394170395', url)
+
     def test_rest_ret(self):
         rest_response = self.RESPONSE_200
         response = self.httpclient._rest_ret(rest_response, False)
@@ -7428,9 +7440,6 @@ class DellStorageCenterApiHelperTestCase(test.TestCase):
 
     Class to test the Storage Center API helper using Mock.
     """
-
-    def setUp(self):
-        super(DellStorageCenterApiHelperTestCase, self).setUp()
 
     @mock.patch.object(dell_storagecenter_api.StorageCenterApi,
                        'open_connection')

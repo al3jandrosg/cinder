@@ -21,6 +21,8 @@ from cinder import exception
 from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit import fake_constants as fake
+from cinder.tests.unit import fake_snapshot
+from cinder.tests.unit import fake_volume
 from cinder.volume.drivers.dell import dell_storagecenter_api
 from cinder.volume.drivers.dell import dell_storagecenter_iscsi
 from cinder.volume import volume_types
@@ -513,9 +515,10 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
                                  mock_open_connection,
                                  mock_init):
         backends = self.driver.backends
-        vol = {'id': fake.VOLUME_ID}
+        vol = {'id': fake.VOLUME_ID,
+               'provider_id': '101.101'}
         mock_api = mock.MagicMock()
-        sclivevol = {'instanceId': '101.101',
+        sclivevol = {'instanceId': '101.102',
                      'secondaryVolume': {'instanceId': '102.101',
                                          'instanceName': fake.VOLUME_ID},
                      'secondaryScSerialNumber': 102,
@@ -523,23 +526,34 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
         mock_api.get_live_volume = mock.MagicMock(return_value=sclivevol)
         # No replication driver data.
         ret = self.driver._delete_live_volume(mock_api, vol)
+        self.assertFalse(mock_api.get_live_volume.called)
         self.assertFalse(ret)
         # Bogus rdd
-        vol = {'id': fake.VOLUME_ID, 'replication_driver_data': ''}
+        vol = {'id': fake.VOLUME_ID,
+               'provider_id': '101.101',
+               'replication_driver_data': ''}
         ret = self.driver._delete_live_volume(mock_api, vol)
+        self.assertFalse(mock_api.get_live_volume.called)
         self.assertFalse(ret)
         # Valid delete.
         mock_api.delete_live_volume = mock.MagicMock(return_value=True)
-        vol = {'id': fake.VOLUME_ID, 'replication_driver_data': '102'}
+        vol = {'id': fake.VOLUME_ID,
+               'provider_id': '101.101',
+               'replication_driver_data': '102'}
         ret = self.driver._delete_live_volume(mock_api, vol)
+        mock_api.get_live_volume.assert_called_with('101.101', fake.VOLUME_ID)
         self.assertTrue(ret)
         # Wrong ssn.
-        vol = {'id': fake.VOLUME_ID, 'replication_driver_data': '103'}
+        vol = {'id': fake.VOLUME_ID,
+               'provider_id': '101.101',
+               'replication_driver_data': '103'}
         ret = self.driver._delete_live_volume(mock_api, vol)
+        mock_api.get_live_volume.assert_called_with('101.101', fake.VOLUME_ID)
         self.assertFalse(ret)
         # No live volume found.
         mock_api.get_live_volume.return_value = None
         ret = self.driver._delete_live_volume(mock_api, vol)
+        mock_api.get_live_volume.assert_called_with('101.101', fake.VOLUME_ID)
         self.assertFalse(ret)
 
         self.driver.backends = backends
@@ -1375,6 +1389,28 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
                           volume,
                           connector)
 
+    def _simple_volume(self, **kwargs):
+        updates = {'display_name': fake.VOLUME_NAME,
+                   'id': fake.VOLUME_ID,
+                   'provider_id': self.VOLUME[u'instanceId']}
+        updates.update(kwargs)
+
+        return fake_volume.fake_volume_obj(self._context, **updates)
+
+    def _simple_snapshot(self, **kwargs):
+        updates = {'id': fake.SNAPSHOT_ID,
+                   'display_name': fake.SNAPSHOT_NAME,
+                   'status': 'available',
+                   'provider_location': None,
+                   'volume_size': 1}
+
+        updates.update(kwargs)
+        snapshot = fake_snapshot.fake_snapshot_obj(self._context, **updates)
+        volume = self._simple_volume()
+        snapshot.volume = volume
+
+        return snapshot
+
     @mock.patch.object(dell_storagecenter_api.StorageCenterApi,
                        'find_volume',
                        return_value=VOLUME)
@@ -1388,8 +1424,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
                              mock_open_connection,
                              mock_init):
         provider_id = self.VOLUME[u'instanceId']
-        snapshot = {'volume_id': fake.VOLUME_ID,
-                    'id': fake.SNAPSHOT_ID}
+        snapshot = self._simple_snapshot()
         expected = {'status': 'available',
                     'provider_id': provider_id}
         ret = self.driver.create_snapshot(snapshot)
@@ -1407,8 +1442,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
                                        mock_close_connection,
                                        mock_open_connection,
                                        mock_init):
-        snapshot = {'volume_id': fake.VOLUME_ID,
-                    'id': fake.SNAPSHOT_ID}
+        snapshot = self._simple_snapshot()
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_snapshot,
                           snapshot)
@@ -1425,8 +1459,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
                                      mock_close_connection,
                                      mock_open_connection,
                                      mock_init):
-        snapshot = {'volume_id': fake.VOLUME_ID,
-                    'id': fake.SNAPSHOT_ID}
+        snapshot = self._simple_snapshot()
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_snapshot,
                           snapshot)

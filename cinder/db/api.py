@@ -251,8 +251,8 @@ def volume_get(context, volume_id):
     return IMPL.volume_get(context, volume_id)
 
 
-def volume_get_all(context, marker, limit, sort_keys=None, sort_dirs=None,
-                   filters=None, offset=None):
+def volume_get_all(context, marker=None, limit=None, sort_keys=None,
+                   sort_dirs=None, filters=None, offset=None):
     """Get all volumes."""
     return IMPL.volume_get_all(context, marker, limit, sort_keys=sort_keys,
                                sort_dirs=sort_dirs, filters=filters,
@@ -344,14 +344,13 @@ def volume_attachment_get_all_by_volume_id(context, volume_id):
     return IMPL.volume_attachment_get_all_by_volume_id(context, volume_id)
 
 
-def volume_attachment_get_all_by_host(context, volume_id, host):
-    return IMPL.volume_attachment_get_all_by_host(context, volume_id, host)
+def volume_attachment_get_all_by_host(context, host):
+    return IMPL.volume_attachment_get_all_by_host(context, host)
 
 
 def volume_attachment_get_all_by_instance_uuid(context,
-                                               volume_id,
                                                instance_uuid):
-    return IMPL.volume_attachment_get_all_by_instance_uuid(context, volume_id,
+    return IMPL.volume_attachment_get_all_by_instance_uuid(context,
                                                            instance_uuid)
 
 
@@ -1155,6 +1154,14 @@ def backup_get_all_by_volume(context, volume_id, filters=None):
                                          filters=filters)
 
 
+def backup_get_active_by_window(context, begin, end=None, project_id=None):
+    """Get all the backups inside the window.
+
+    Specifying a project_id will filter for a certain project.
+    """
+    return IMPL.backup_get_active_by_window(context, begin, end, project_id)
+
+
 def backup_update(context, backup_id, values):
     """Set the given properties on a backup and update it.
 
@@ -1575,6 +1582,17 @@ def message_destroy(context, message_id):
 
 
 ###################
+
+
+def workers_init():
+    """Check if DB supports subsecond resolution and set global flag.
+
+    MySQL 5.5 doesn't support subsecond resolution in datetime fields, so we
+    have to take it into account when working with the worker's table.
+
+    Once we drop support for MySQL 5.5 we can remove this method.
+    """
+    return IMPL.workers_init()
 
 
 def worker_create(context, **values):

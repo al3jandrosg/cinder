@@ -573,47 +573,52 @@ port_speed!N/A
         else:
             ip_addr1 = '1.234.56.78'
             ip_addr2 = '1.234.56.79'
+            ip_addr3 = '1.234.56.80'
+            ip_addr4 = '1.234.56.81'
             gw = '1.234.56.1'
 
         rows = [None] * 17
         rows[0] = ['id', 'node_id', 'node_name', 'IP_address', 'mask',
                    'gateway', 'IP_address_6', 'prefix_6', 'gateway_6', 'MAC',
-                   'duplex', 'state', 'speed', 'failover']
+                   'duplex', 'state', 'speed', 'failover', 'link_state']
         rows[1] = ['1', '1', 'node1', ip_addr1, '255.255.255.0',
                    gw, '', '', '', '01:23:45:67:89:00', 'Full',
-                   'online', '1Gb/s', 'no']
+                   'online', '1Gb/s', 'no', 'active']
         rows[2] = ['1', '1', 'node1', '', '', '', '', '', '',
-                   '01:23:45:67:89:00', 'Full', 'online', '1Gb/s', 'yes']
-        rows[3] = ['2', '1', 'node1', '', '', '', '', '', '',
-                   '01:23:45:67:89:01', 'Full', 'unconfigured', '1Gb/s', 'no']
+                   '01:23:45:67:89:00', 'Full', 'online', '1Gb/s', 'yes', '']
+        rows[3] = ['2', '1', 'node1', ip_addr3, '255.255.255.0',
+                   gw, '', '', '', '01:23:45:67:89:01', 'Full',
+                   'configured', '1Gb/s', 'no', 'active']
         rows[4] = ['2', '1', 'node1', '', '', '', '', '', '',
-                   '01:23:45:67:89:01', 'Full', 'unconfigured', '1Gb/s', 'yes']
+                   '01:23:45:67:89:01', 'Full', 'unconfigured', '1Gb/s',
+                   'yes', 'inactive']
         rows[5] = ['3', '1', 'node1', '', '', '', '', '', '', '', '',
-                   'unconfigured', '', 'no']
+                   'unconfigured', '', 'no', '']
         rows[6] = ['3', '1', 'node1', '', '', '', '', '', '', '', '',
-                   'unconfigured', '', 'yes']
+                   'unconfigured', '', 'yes', '']
         rows[7] = ['4', '1', 'node1', '', '', '', '', '', '', '', '',
-                   'unconfigured', '', 'no']
+                   'unconfigured', '', 'no', '']
         rows[8] = ['4', '1', 'node1', '', '', '', '', '', '', '', '',
-                   'unconfigured', '', 'yes']
+                   'unconfigured', '', 'yes', '']
         rows[9] = ['1', '2', 'node2', ip_addr2, '255.255.255.0',
                    gw, '', '', '', '01:23:45:67:89:02', 'Full',
-                   'online', '1Gb/s', 'no']
+                   'online', '1Gb/s', 'no', '']
         rows[10] = ['1', '2', 'node2', '', '', '', '', '', '',
-                    '01:23:45:67:89:02', 'Full', 'online', '1Gb/s', 'yes']
-        rows[11] = ['2', '2', 'node2', '', '', '', '', '', '',
-                    '01:23:45:67:89:03', 'Full', 'unconfigured', '1Gb/s', 'no']
+                    '01:23:45:67:89:02', 'Full', 'online', '1Gb/s', 'yes', '']
+        rows[11] = ['2', '2', 'node2', ip_addr4, '255.255.255.0',
+                    gw, '', '', '', '01:23:45:67:89:03', 'Full',
+                    'configured', '1Gb/s', 'no', 'inactive']
         rows[12] = ['2', '2', 'node2', '', '', '', '', '', '',
                     '01:23:45:67:89:03', 'Full', 'unconfigured', '1Gb/s',
-                    'yes']
+                    'yes', '']
         rows[13] = ['3', '2', 'node2', '', '', '', '', '', '', '', '',
-                    'unconfigured', '', 'no']
+                    'unconfigured', '', 'no', '']
         rows[14] = ['3', '2', 'node2', '', '', '', '', '', '', '', '',
-                    'unconfigured', '', 'yes']
+                    'unconfigured', '', 'yes', '']
         rows[15] = ['4', '2', 'node2', '', '', '', '', '', '', '', '',
-                    'unconfigured', '', 'no']
+                    'unconfigured', '', 'no', '']
         rows[16] = ['4', '2', 'node2', '', '', '', '', '', '', '', '',
-                    'unconfigured', '', 'yes']
+                    'unconfigured', '', 'yes', '']
 
         if self._next_cmd_error['lsportip'] == 'header_mismatch':
             rows[0].pop(2)
@@ -1033,6 +1038,9 @@ port_speed!N/A
             host_name = kwargs['obj'].strip('\'\"')
             if host_name not in self._hosts_list:
                 return self._errors['CMMVC5754E']
+            if (self._next_cmd_error['lshost'] == 'fail_fastpath' and
+                    host_name == 'DifferentHost'):
+                return self._errors['CMMVC5701E']
             host = self._hosts_list[host_name]
             rows = []
             rows.append(['id', host['id']])
@@ -1084,14 +1092,14 @@ port_speed!N/A
     def _cmd_mkvdiskhostmap(self, **kwargs):
         mapping_info = {}
         mapping_info['id'] = self._find_unused_id(self._mappings_list)
-
         if 'host' not in kwargs:
             return self._errors['CMMVC5707E']
         mapping_info['host'] = kwargs['host'].strip('\'\"')
 
-        if 'scsi' not in kwargs:
-            return self._errors['CMMVC5707E']
-        mapping_info['lun'] = kwargs['scsi'].strip('\'\"')
+        if 'scsi' in kwargs:
+            mapping_info['lun'] = kwargs['scsi'].strip('\'\"')
+        else:
+            mapping_info['lun'] = mapping_info['id']
 
         if 'obj' not in kwargs:
             return self._errors['CMMVC5707E']
@@ -1112,7 +1120,7 @@ port_speed!N/A
                 return self._errors['CMMVC5879E']
 
         for v in self._mappings_list.values():
-            if (v['lun'] == mapping_info['lun']) and ('force' not in kwargs):
+            if (v['vol'] == mapping_info['vol']) and ('force' not in kwargs):
                 return self._errors['CMMVC6071E']
 
         self._mappings_list[mapping_info['id']] = mapping_info
@@ -1169,7 +1177,7 @@ port_speed!N/A
     # List information about vdisk->host mappings
     def _cmd_lsvdiskhostmap(self, **kwargs):
         mappings_found = 0
-        vdisk_name = kwargs['obj']
+        vdisk_name = kwargs['obj'].strip('\'\"')
 
         if vdisk_name not in self._volumes_list:
             return self._errors['CMMVC5753E']
@@ -1183,7 +1191,7 @@ port_speed!N/A
                 mappings_found += 1
                 volume = self._volumes_list[mapping['vol']]
                 host = self._hosts_list[mapping['host']]
-                rows.append([volume['id'], volume['name'], host['id'],
+                rows.append([volume['id'], mapping['lun'], host['id'],
                             host['host_name'], volume['uid'],
                             volume['IO_group_id'], volume['IO_group_name']])
 
@@ -1881,21 +1889,18 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
 
     def _generate_vol_info(self, vol_name, vol_id):
         pool = _get_test_pool()
-        rand_id = six.text_type(random.randint(10000, 99999))
+        prop = {'mdisk_grp_name': pool}
         if vol_name:
-            return {'name': 'snap_volume%s' % rand_id,
-                    'volume_name': vol_name,
-                    'id': rand_id,
-                    'volume_id': vol_id,
-                    'volume_size': 10,
-                    'mdisk_grp_name': pool}
+            prop.update(volume_name=vol_name,
+                        volume_id=vol_id,
+                        volume_size=10)
         else:
-            return {'name': 'test_volume%s' % rand_id,
-                    'size': 10,
-                    'id': rand_id,
-                    'volume_type_id': None,
-                    'mdisk_grp_name': pool,
-                    'host': 'openstack@svc#%s' % pool}
+            prop.update(size=10,
+                        volume_type_id=None,
+                        mdisk_grp_name=pool,
+                        host='openstack@svc#%s' % pool)
+        vol = testutils.create_volume(self.ctxt, **prop)
+        return vol
 
     def _assert_vol_exists(self, name, exists):
         is_vol_defined = self.iscsi_driver._helpers.is_vdisk_defined(name)
@@ -2036,6 +2041,102 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
         for conn in [connector, connector2]:
             host = self.iscsi_driver._helpers.get_host_from_connector(conn)
         self.assertIsNone(host)
+
+    def test_storwize_initialize_iscsi_connection_single_path(self):
+        # Test the return value for _get_iscsi_properties
+
+        connector = {'host': 'storwize-svc-host',
+                     'wwnns': ['20000090fa17311e', '20000090fa17311f'],
+                     'wwpns': ['ff00000000000000', 'ff00000000000001'],
+                     'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
+        # Expected single path host-volume map return value
+        exp_s_path = {'driver_volume_type': 'iscsi',
+                      'data': {'target_discovered': False,
+                               'target_iqn':
+                                   'iqn.1982-01.com.ibm:1234.sim.node1',
+                               'target_portal': '1.234.56.78:3260',
+                               'target_lun': 0,
+                               'auth_method': 'CHAP',
+                               'discovery_auth_method': 'CHAP'}}
+
+        volume_iSCSI = self._create_volume()
+        extra_spec = {'capabilities:storage_protocol': '<in> iSCSI'}
+        vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
+        volume_iSCSI['volume_type_id'] = vol_type_iSCSI['id']
+
+        # Make sure that the volumes have been created
+        self._assert_vol_exists(volume_iSCSI['name'], True)
+
+        # Check case where no hosts exist
+        ret = self.iscsi_driver._helpers.get_host_from_connector(
+            connector)
+        self.assertIsNone(ret)
+
+        # Initialize connection to map volume to a host
+        ret = self.iscsi_driver.initialize_connection(
+            volume_iSCSI, connector)
+        self.assertEqual(exp_s_path['driver_volume_type'],
+                         ret['driver_volume_type'])
+
+        # Check the single path host-volume map return value
+        for k, v in exp_s_path['data'].items():
+            self.assertEqual(v, ret['data'][k])
+
+        ret = self.iscsi_driver._helpers.get_host_from_connector(
+            connector)
+        self.assertIsNotNone(ret)
+
+    def test_storwize_initialize_iscsi_connection_multipath(self):
+        # Test the return value for _get_iscsi_properties
+
+        connector = {'host': 'storwize-svc-host',
+                     'wwnns': ['20000090fa17311e', '20000090fa17311f'],
+                     'wwpns': ['ff00000000000000', 'ff00000000000001'],
+                     'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa',
+                     'multipath': True}
+
+        # Expected multipath host-volume map return value
+        exp_m_path = {'driver_volume_type': 'iscsi',
+                      'data': {'target_discovered': False,
+                               'target_iqn':
+                                   'iqn.1982-01.com.ibm:1234.sim.node1',
+                               'target_portal': '1.234.56.78:3260',
+                               'target_lun': 0,
+                               'target_iqns': [
+                                   'iqn.1982-01.com.ibm:1234.sim.node1',
+                                   'iqn.1982-01.com.ibm:1234.sim.node1',
+                                   'iqn.1982-01.com.ibm:1234.sim.node2'],
+                               'target_portals':
+                                   ['1.234.56.78:3260',
+                                    '1.234.56.80:3260',
+                                    '1.234.56.79:3260'],
+                               'target_luns': [0, 0, 0],
+                               'auth_method': 'CHAP',
+                               'discovery_auth_method': 'CHAP'}}
+
+        volume_iSCSI = self._create_volume()
+        extra_spec = {'capabilities:storage_protocol': '<in> iSCSI'}
+        vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
+        volume_iSCSI['volume_type_id'] = vol_type_iSCSI['id']
+
+        # Check case where no hosts exist
+        ret = self.iscsi_driver._helpers.get_host_from_connector(
+            connector)
+        self.assertIsNone(ret)
+
+        # Initialize connection to map volume to a host
+        ret = self.iscsi_driver.initialize_connection(
+            volume_iSCSI, connector)
+        self.assertEqual(exp_m_path['driver_volume_type'],
+                         ret['driver_volume_type'])
+
+        # Check the multipath host-volume map return value
+        for k, v in exp_m_path['data'].items():
+            self.assertEqual(v, ret['data'][k])
+
+        ret = self.iscsi_driver._helpers.get_host_from_connector(
+            connector)
+        self.assertIsNotNone(ret)
 
     def test_storwize_svc_iscsi_host_maps(self):
         # Create two volumes to be used in mappings
@@ -2326,21 +2427,18 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
 
     def _generate_vol_info(self, vol_name, vol_id):
         pool = _get_test_pool()
-        rand_id = six.text_type(random.randint(10000, 99999))
+        prop = {'mdisk_grp_name': pool}
         if vol_name:
-            return {'name': 'snap_volume%s' % rand_id,
-                    'volume_name': vol_name,
-                    'id': rand_id,
-                    'volume_id': vol_id,
-                    'volume_size': 10,
-                    'mdisk_grp_name': pool}
+            prop.update(volume_name=vol_name,
+                        volume_id=vol_id,
+                        volume_size=10)
         else:
-            return {'name': 'test_volume%s' % rand_id,
-                    'size': 10,
-                    'id': '%s' % rand_id,
-                    'volume_type_id': None,
-                    'mdisk_grp_name': pool,
-                    'host': 'openstack@svc#%s' % pool}
+            prop.update(size=10,
+                        volume_type_id=None,
+                        mdisk_grp_name=pool,
+                        host='openstack@svc#%s' % pool)
+        vol = testutils.create_volume(self.ctxt, **prop)
+        return vol
 
     def _assert_vol_exists(self, name, exists):
         is_vol_defined = self.fc_driver._helpers.is_vdisk_defined(name)
@@ -2393,7 +2491,7 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
         # We will force the missing_host error for the first host, but
         # then tolerate and find the second host on the slow path normally.
         if self.USESIM:
-            self.sim._cmd_mkhost(name='DifferentHost', hbawwpn='123456')
+            self.sim._cmd_mkhost(name='storwize-svc-test-9', hbawwpn='123456')
         helper.create_host(self._connector)
         # tell lshost to fail while calling get_host_from_connector
         if self.USESIM:
@@ -2426,6 +2524,56 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
             self.assertRaises(exception.VolumeBackendAPIException,
                               helper.get_host_from_connector,
                               self._connector)
+
+    def test_storwize_get_host_from_connector_not_found(self):
+        self._connector.pop('initiator')
+        helper = self.fc_driver._helpers
+        # Create some hosts. The first is not related to the connector and
+        # we use the simulator for that. The second is for the connector.
+        # We will force the missing_host error for the first host, but
+        # then tolerate and find the second host on the slow path normally.
+        if self.USESIM:
+            self.sim._cmd_mkhost(name='storwize-svc-test-3', hbawwpn='1234567')
+            self.sim._cmd_mkhost(name='storwize-svc-test-2', hbawwpn='2345678')
+            self.sim._cmd_mkhost(name='storwize-svc-test-1', hbawwpn='3456789')
+            self.sim._cmd_mkhost(name='A-Different-host', hbawwpn='9345678')
+            self.sim._cmd_mkhost(name='B-Different-host', hbawwpn='8345678')
+            self.sim._cmd_mkhost(name='C-Different-host', hbawwpn='7345678')
+        # tell lshost to fail while calling get_host_from_connector
+        if self.USESIM:
+            # tell lsfabric to skip rows so that we skip past fast path
+            self.sim.error_injection('lsfabric', 'remove_rows')
+        # Run test
+        host_name = helper.get_host_from_connector(self._connector)
+
+        self.assertIsNone(host_name)
+
+    def test_storwize_get_host_from_connector_fast_path(self):
+        self._connector.pop('initiator')
+        helper = self.fc_driver._helpers
+        # Create two hosts. Our lshost will return the hosts in sorted
+        # Order. The extra host will be returned before the target
+        # host. If we get detailed lshost info on our host without
+        # gettting detailed info on the other host we used the fast path
+        if self.USESIM:
+            self.sim._cmd_mkhost(name='A-DifferentHost', hbawwpn='123456')
+        helper.create_host(self._connector)
+        # tell lshost to fail while calling get_host_from_connector
+        if self.USESIM:
+            # tell lshost to fail while called from get_host_from_connector
+            self.sim.error_injection('lshost', 'fail_fastpath')
+            # tell lsfabric to skip rows so that we skip past fast path
+            self.sim.error_injection('lsfabric', 'remove_rows')
+        # Run test
+        host_name = helper.get_host_from_connector(self._connector)
+
+        self.assertIsNotNone(host_name)
+        # Need to assert that lshost was actually called. The way
+        # we do that is check that the next simulator error for lshost
+        # has not been reset.
+        self.assertEqual(self.sim._next_cmd_error['lshost'], 'fail_fastpath',
+                         "lshost was not called in the simulator. The "
+                         "queued error still remains.")
 
     def test_storwize_initiator_multiple_wwpns_connected(self):
 
@@ -2912,8 +3060,8 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self.driver.do_setup(None)
         self.driver.check_for_setup_error()
         self.driver._helpers.check_fcmapping_interval = 0
-        self.mock_gr_sleep = mock.patch.object(
-            storwize_svc_common.StorwizeSVCCommonDriver, "DEFAULT_GR_SLEEP", 0)
+        self.mock_object(storwize_svc_iscsi.StorwizeSVCISCSIDriver,
+                         'DEFAULT_GR_SLEEP', 0)
 
     def _set_flag(self, flag, value, configuration=None):
         if not configuration:
@@ -3125,21 +3273,18 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
     def _generate_vol_info(self, vol_name, vol_id):
         pool = _get_test_pool()
-        rand_id = six.text_type(random.randint(10000, 99999))
+        prop = {'mdisk_grp_name': pool}
         if vol_name:
-            return {'name': 'snap_volume%s' % rand_id,
-                    'volume_name': vol_name,
-                    'id': rand_id,
-                    'volume_id': vol_id,
-                    'volume_size': 10,
-                    'mdisk_grp_name': pool}
+            prop.update(volume_name=vol_name,
+                        volume_id=vol_id,
+                        volume_size=10)
         else:
-            return {'name': 'test_volume%s' % rand_id,
-                    'size': 10,
-                    'id': '%s' % rand_id,
-                    'volume_type_id': None,
-                    'mdisk_grp_name': pool,
-                    'host': 'openstack@svc#%s' % pool}
+            prop.update(size=10,
+                        volume_type_id=None,
+                        mdisk_grp_name=pool,
+                        host='openstack@svc#%s' % pool)
+        vol = testutils.create_volume(self.ctxt, **prop)
+        return vol
 
     def _create_volume(self, **kwargs):
         pool = _get_test_pool()
@@ -3211,10 +3356,9 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         ctxt = testutils.get_test_admin_context()
         type_ref = volume_types.create(ctxt, 'testtype', opts)
         volume = self._generate_vol_info(None, None)
-        type_id = type_ref['id']
-        type_ref = volume_types.get_volume_type(ctxt, type_id)
-        volume['volume_type_id'] = type_id
-        volume['volume_type'] = type_ref
+        volume.volume_type_id = type_ref['id']
+        volume.volume_typ = objects.VolumeType.get_by_id(ctxt,
+                                                         type_ref['id'])
         self.driver.create_volume(volume)
 
         attrs = self.driver._helpers.get_vdisk_attributes(volume['name'])
@@ -3550,8 +3694,14 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
     def test_storwize_svc_volume_name(self):
         # Create a volume with space in name
-        volume = self._generate_vol_info(None, None)
-        volume['name'] = 'volume_ space'
+        pool = _get_test_pool()
+        rand_id = six.text_type(random.randint(10000, 99999))
+        volume = {'name': 'volume_ space',
+                  'size': 10,
+                  'id': '%s' % rand_id,
+                  'volume_type_id': None,
+                  'mdisk_grp_name': pool,
+                  'host': 'openstack@svc#%s' % pool}
         self.driver.create_volume(volume)
         self.driver.ensure_export(None, volume)
 
@@ -3629,12 +3779,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self.driver.do_setup(None)
 
         rand_id = random.randint(10000, 99999)
-        pool = _get_test_pool()
-        volume1 = {'name': u'unicode1_volume%s' % rand_id,
-                   'size': 2,
-                   'id': 1,
-                   'volume_type_id': None,
-                   'host': 'openstack@svc#%s' % pool}
+        volume1 = self._generate_vol_info(None, None)
         self.driver.create_volume(volume1)
         self._assert_vol_exists(volume1['name'], True)
 
@@ -3786,10 +3931,9 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         ctxt = testutils.get_test_admin_context()
         type_ref = volume_types.create(ctxt, 'testtype', None)
         volume = self._generate_vol_info(None, None)
-        type_id = type_ref['id']
-        type_ref = volume_types.get_volume_type(ctxt, type_id)
-        volume['volume_type_id'] = type_id
-        volume['volume_type'] = type_ref
+        volume.volume_type_id = type_ref['id']
+        volume.volume_type = objects.VolumeType.get_by_id(ctxt,
+                                                          type_ref['id'])
         self.driver.create_volume(volume)
         self.assertEqual(volume['mdisk_grp_name'],
                          self.driver.get_pool(volume))
@@ -4018,10 +4162,12 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                                       new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
-        old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
         volume['volume_type'] = old_type
         volume['host'] = host['host']
-        new_type = volume_types.get_volume_type(ctxt, new_type_ref['id'])
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
 
         self.driver.create_volume(volume)
         self.driver.retype(ctxt, volume, new_type, diff, host)
@@ -4108,10 +4254,12 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                                       new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
-        old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
         volume['volume_type'] = old_type
         volume['host'] = host['host']
-        new_type = volume_types.get_volume_type(ctxt, new_type_ref['id'])
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
 
         self.driver.create_volume(volume)
         self.driver.retype(ctxt, volume, new_type, diff, host)
@@ -4143,10 +4291,12 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                                       new_type_ref['id'])
 
         volume = self._generate_vol_info(None, None)
-        old_type = volume_types.get_volume_type(ctxt, old_type_ref['id'])
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
         volume['volume_type'] = old_type
         volume['host'] = host['host']
-        new_type = volume_types.get_volume_type(ctxt, new_type_ref['id'])
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
 
         self.driver.create_volume(volume)
         self.driver.retype(ctxt, volume, new_type, diff, host)
@@ -4750,9 +4900,8 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
             spec = {'capabilities:replication': '<is> False'}
             type_ref = volume_types.create(self.ctxt, "replication_2", spec)
 
-        replication_type = volume_types.get_volume_type(self.ctxt,
+        replication_type = objects.VolumeType.get_by_id(self.ctxt,
                                                         type_ref['id'])
-
         return replication_type
 
     def _create_consistency_group_volume_type(self):
@@ -5191,23 +5340,42 @@ class StorwizeHelpersTestCase(test.TestCase):
 class StorwizeSSHTestCase(test.TestCase):
     def setUp(self):
         super(StorwizeSSHTestCase, self).setUp()
-        self.storwize_ssh = storwize_svc_common.StorwizeSSH(None)
+        self.fake_driver = StorwizeSVCISCSIFakeDriver(
+            configuration=conf.Configuration(None))
+        sim = StorwizeSVCManagementSimulator(['openstack'])
+        self.fake_driver.set_fake_storage(sim)
+        self.storwize_ssh = storwize_svc_common.StorwizeSSH(
+            self.fake_driver._run_ssh)
 
     def test_mkvdiskhostmap(self):
         # mkvdiskhostmap should not be returning anything
+        self.fake_driver.fake_storage._volumes_list['9999'] = {
+            'name': ' 9999', 'id': '0', 'uid': '0',
+            'IO_group_id': '0', 'IO_group_name': 'fakepool'}
+        self.fake_driver.fake_storage._hosts_list['HOST1'] = {
+            'name': 'HOST1', 'id': '0', 'host_name': 'HOST1'}
+        self.fake_driver.fake_storage._hosts_list['HOST2'] = {
+            'name': 'HOST2', 'id': '1', 'host_name': 'HOST2'}
+        self.fake_driver.fake_storage._hosts_list['HOST3'] = {
+            'name': 'HOST3', 'id': '2', 'host_name': 'HOST3'}
+
+        ret = self.storwize_ssh.mkvdiskhostmap('HOST1', '9999', '511', False)
+        self.assertEqual('511', ret)
+
+        ret = self.storwize_ssh.mkvdiskhostmap('HOST2', '9999', '512', True)
+        self.assertEqual('512', ret)
+
+        ret = self.storwize_ssh.mkvdiskhostmap('HOST3', '9999', None, True)
+        self.assertIsNotNone(ret)
+
         with mock.patch.object(
                 storwize_svc_common.StorwizeSSH,
                 'run_ssh_check_created') as run_ssh_check_created:
-            run_ssh_check_created.return_value = None
-            ret = self.storwize_ssh.mkvdiskhostmap('HOST1', 9999, 511, False)
-            self.assertIsNone(ret)
-            ret = self.storwize_ssh.mkvdiskhostmap('HOST2', 9999, 511, True)
-            self.assertIsNone(ret)
             ex = exception.VolumeBackendAPIException(data='CMMVC6071E')
             run_ssh_check_created.side_effect = ex
             self.assertRaises(exception.VolumeBackendAPIException,
                               self.storwize_ssh.mkvdiskhostmap,
-                              'HOST3', 9999, 511, True)
+                              'HOST3', '9999', 511, True)
 
 
 class StorwizeSVCReplicationMirrorTestCase(test.TestCase):

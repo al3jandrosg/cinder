@@ -511,9 +511,6 @@ class PureBaseSharedDriverTestCase(PureDriverTestCase):
 
 @ddt.ddt
 class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
-    def setUp(self):
-        super(PureBaseVolumeDriverTestCase, self).setUp()
-
     def _setup_mocks_for_replication(self):
         # Mock config values
         self.mock_config.pure_replica_interval_default = (
@@ -1034,7 +1031,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         mock_cgsnapshot = mock.Mock()
         mock_snapshots = [mock.Mock() for i in range(5)]
         mock_volumes = [mock.Mock() for i in range(5)]
-        self.driver.create_consistencygroup_from_src(
+        result = self.driver.create_consistencygroup_from_src(
             mock_context,
             mock_group,
             mock_volumes,
@@ -1043,6 +1040,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
             source_cg=None,
             source_vols=None
         )
+        self.assertEqual((None, None), result)
         mock_create_cg.assert_called_with(mock_context, mock_group)
         expected_calls = [mock.call(vol, snap)
                           for vol, snap in zip(mock_volumes, mock_snapshots)]
@@ -1069,13 +1067,14 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         mock_source_cg = mock.MagicMock()
         mock_volumes = [mock.MagicMock() for i in range(num_volumes)]
         mock_source_vols = [mock.MagicMock() for i in range(num_volumes)]
-        self.driver.create_consistencygroup_from_src(
+        result = self.driver.create_consistencygroup_from_src(
             mock_context,
             mock_group,
             mock_volumes,
             source_cg=mock_source_cg,
             source_vols=mock_source_vols
         )
+        self.assertEqual((None, None), result)
         mock_create_cg.assert_called_with(mock_context, mock_group)
         self.assertTrue(self.array.create_pgroup_snapshot.called)
         self.assertEqual(num_volumes, self.array.copy_volume.call_count)
@@ -1122,13 +1121,8 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         expected_name = self.driver._get_pgroup_name_from_id(mock_cgroup.id)
         self.array.destroy_pgroup.assert_called_with(expected_name)
         self.assertFalse(self.array.eradicate_pgroup.called)
-
-        expected_volume_updates = [{
-            'id': mock_volume.id,
-            'status': 'deleted'
-        }]
-        self.assertEqual(expected_volume_updates, volumes)
-        self.assertEqual(mock_cgroup['status'], model_update['status'])
+        self.assertIsNone(volumes)
+        self.assertIsNone(model_update)
         mock_delete_volume.assert_called_with(self.driver, mock_volume)
 
         self.array.destroy_pgroup.side_effect = \
@@ -1274,13 +1268,8 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         self.array.create_pgroup_snapshot\
             .assert_called_with(expected_pgroup_name,
                                 suffix=expected_snap_suffix)
-        self.assertEqual({'status': 'available'}, model_update)
-
-        expected_snapshot_update = [{
-            'id': mock_snap.id,
-            'status': 'available'
-        }]
-        self.assertEqual(expected_snapshot_update, snapshots)
+        self.assertIsNone(model_update)
+        self.assertIsNone(snapshots)
 
         self.assert_error_propagates(
             [self.array.create_pgroup_snapshot],
@@ -1303,13 +1292,8 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
         self.array.destroy_pgroup.assert_called_with(snap_name)
         self.assertFalse(self.array.eradicate_pgroup.called)
-        self.assertEqual({'status': mock_cgsnap.status}, model_update)
-
-        expected_snapshot_update = [{
-            'id': mock_snap.id,
-            'status': 'deleted'
-        }]
-        self.assertEqual(expected_snapshot_update, snapshots)
+        self.assertIsNone(model_update)
+        self.assertIsNone(snapshots)
 
         self.array.destroy_pgroup.side_effect = \
             self.purestorage_module.PureHTTPError(
@@ -2189,7 +2173,7 @@ class PureISCSIDriverTestCase(PureDriverTestCase):
         bad_host = {"name": "bad-host", "iqn": ["wrong-iqn"]}
         self.array.list_hosts.return_value = [bad_host]
         real_result = self.driver._get_host(self.array, ISCSI_CONNECTOR)
-        self.assertIs(None, real_result)
+        self.assertIsNone(real_result)
         self.array.list_hosts.return_value.append(good_host)
         real_result = self.driver._get_host(self.array, ISCSI_CONNECTOR)
         self.assertEqual(good_host, real_result)
@@ -2504,7 +2488,7 @@ class PureFCDriverTestCase(PureDriverTestCase):
         bad_host = {"name": "bad-host", "wwn": ["wrong-wwn"]}
         self.array.list_hosts.return_value = [bad_host]
         actual_result = self.driver._get_host(self.array, FC_CONNECTOR)
-        self.assertIs(None, actual_result)
+        self.assertIsNone(actual_result)
         self.array.list_hosts.return_value.append(good_host)
         actual_result = self.driver._get_host(self.array, FC_CONNECTOR)
         self.assertEqual(good_host, actual_result)

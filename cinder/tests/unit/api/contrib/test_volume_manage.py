@@ -23,6 +23,7 @@ except ImportError:
     from urllib.parse import urlencode
 import webob
 
+from cinder.api.openstack import api_version_request as api_version
 from cinder import context
 from cinder import exception
 from cinder import test
@@ -38,6 +39,14 @@ def app():
     api = fakes.router.APIRouter()
     mapper = fakes.urlmap.URLMap()
     mapper['/v2'] = api
+    return mapper
+
+
+def app_v3():
+    # no auth, just let environ['cinder.context'] pass through
+    api = fakes.router.APIRouter()
+    mapper = fakes.urlmap.URLMap()
+    mapper['/v3'] = api
     return mapper
 
 
@@ -111,6 +120,12 @@ def api_manage(*args, **kwargs):
     return fake_volume.fake_volume_obj(ctx, **vol)
 
 
+def api_manage_new(*args, **kwargs):
+    volume = api_manage()
+    volume.status = 'managing'
+    return volume
+
+
 def api_get_manageable_volumes(*args, **kwargs):
     """Replacement for cinder.volume.api.API.get_manageable_volumes."""
     vols = [
@@ -168,6 +183,18 @@ class VolumeManageTest(test.TestCase):
         res = req.get_response(app())
         return res
 
+    def _get_resp_post_v3(self, body, version):
+        """Helper to execute a POST os-volume-manage API call."""
+        req = webob.Request.blank('/v3/%s/os-volume-manage' % fake.PROJECT_ID)
+        req.method = 'POST'
+        req.headers['Content-Type'] = 'application/json'
+        req.environ['cinder.context'] = self._admin_ctxt
+        req.headers["OpenStack-API-Version"] = "volume " + version
+        req.api_version_request = api_version.APIVersionRequest(version)
+        req.body = jsonutils.dump_as_bytes(body)
+        res = req.get_response(app_v3())
+        return res
+
     @mock.patch('cinder.volume.api.API.manage_existing', wraps=api_manage)
     @mock.patch(
         'cinder.api.openstack.wsgi.Controller.validate_name_and_description')
@@ -194,6 +221,17 @@ class VolumeManageTest(test.TestCase):
     def test_manage_volume_missing_host(self):
         """Test correct failure when host is not specified."""
         body = {'volume': {'ref': 'fake_ref'}}
+        res = self._get_resp_post(body)
+        self.assertEqual(400, res.status_int)
+
+    @mock.patch('cinder.objects.Service.get_by_args')
+    def test_manage_volume_service_not_found_on_host(self, mock_service):
+        """Test correct failure when host having no volume service on it."""
+        body = {'volume': {'host': 'host_ok',
+                           'ref': 'fake_ref'}}
+        mock_service.side_effect = exception.ServiceNotFound(
+            service_id='cinder-volume',
+            host='host_ok')
         res = self._get_resp_post(body)
         self.assertEqual(400, res.status_int)
 
@@ -270,7 +308,7 @@ class VolumeManageTest(test.TestCase):
                            'ref': 'fake_ref',
                            'volume_type': fake.WILL_NOT_BE_FOUND_ID}}
         res = self._get_resp_post(body)
-        self.assertEqual(404, res.status_int)
+        self.assertEqual(400, res.status_int)
 
     def test_manage_volume_bad_volume_type_by_name(self):
         """Test failure on nonexistent volume type specified by name."""
@@ -278,7 +316,7 @@ class VolumeManageTest(test.TestCase):
                            'ref': 'fake_ref',
                            'volume_type': 'bad_fakevt'}}
         res = self._get_resp_post(body)
-        self.assertEqual(404, res.status_int)
+        self.assertEqual(400, res.status_int)
 
     def _get_resp_get(self, host, detailed, paging, admin=True):
         """Helper to execute a GET os-volume-manage API call."""
@@ -372,3 +410,26 @@ class VolumeManageTest(test.TestCase):
         self.assertEqual(exception.ServiceUnavailable.message,
                          res.json['badRequest']['message'])
         self.assertTrue(mock_is_up.called)
+
+    @mock.patch('cinder.volume.api.API.manage_existing', wraps=api_manage_new)
+    def test_manage_volume_with_creating_status_in_v3(self, mock_api_manage):
+        """Test managing volume to return 'creating' status in V3 API."""
+        body = {'volume': {'host': 'host_ok',
+                           'ref': 'fake_ref'}}
+        res = self._get_resp_post_v3(body, '3.15')
+        self.assertEqual(202, res.status_int)
+        self.assertEqual(1, mock_api_manage.call_count)
+        self.assertEqual('creating',
+                         jsonutils.loads(res.body)['volume']['status'])
+
+    @mock.patch('cinder.volume.api.API.manage_existing', wraps=api_manage_new)
+    def test_manage_volume_with_creating_status_in_v2(self, mock_api_manage):
+        """Test managing volume to return 'creating' status in V2 API."""
+
+        body = {'volume': {'host': 'host_ok',
+                           'ref': 'fake_ref'}}
+        res = self._get_resp_post(body)
+        self.assertEqual(202, res.status_int)
+        self.assertEqual(1, mock_api_manage.call_count)
+        self.assertEqual('creating',
+                         jsonutils.loads(res.body)['volume']['status'])

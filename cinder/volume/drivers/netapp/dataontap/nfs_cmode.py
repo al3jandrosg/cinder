@@ -32,6 +32,7 @@ from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder.image import image_utils
 from cinder import interface
+from cinder.objects import fields
 from cinder import utils
 from cinder.volume.drivers.netapp.dataontap import nfs_base
 from cinder.volume.drivers.netapp.dataontap.performance import perf_cmode
@@ -162,6 +163,11 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
                     LOG.debug("Cleaning volume %s", volume['id'])
                     self._cleanup_volume_on_failure(volume)
 
+    def _get_volume_model_update(self, volume):
+        """Provide model updates for a volume being created."""
+        if self.replication_enabled:
+            return {'replication_status': fields.ReplicationStatus.ENABLED}
+
     def _set_qos_policy_group_on_volume(self, volume, qos_policy_group_info):
         if qos_policy_group_info is None:
             return
@@ -257,6 +263,11 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
             nfs_share = ssc_vol_info['pool_name']
             capacity = self._get_share_capacity_info(nfs_share)
             pool.update(capacity)
+
+            dedupe_used = self.zapi_client.get_flexvol_dedupe_used_percent(
+                ssc_vol_name)
+            pool['netapp_dedupe_used_percent'] = na_utils.round_down(
+                dedupe_used)
 
             aggregate_name = ssc_vol_info.get('netapp_aggregate')
             aggr_capacity = aggr_capacities.get(aggregate_name, {})

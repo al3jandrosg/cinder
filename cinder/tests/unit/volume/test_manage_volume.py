@@ -14,13 +14,12 @@
 
 import mock
 
-from cinder.tests.unit import fake_constants as fake
-from cinder.tests.unit import fake_volume
-from cinder.tests.unit import test_volume
-
 from cinder import context
 from cinder import exception
 from cinder import objects
+from cinder.tests.unit import fake_constants as fake
+from cinder.tests.unit import fake_volume
+from cinder.tests.unit import volume as base
 from cinder.volume.flows.manager import manage_existing
 from cinder.volume import manager
 from cinder.volume import utils
@@ -29,7 +28,7 @@ FAKE_HOST_POOL = 'volPool'
 FAKE_HOST = 'hostname@backend'
 
 
-class ManageVolumeTestCase(test_volume.BaseVolumeTestCase):
+class ManageVolumeTestCase(base.BaseVolumeTestCase):
 
     def setUp(self):
         super(ManageVolumeTestCase, self).setUp()
@@ -50,19 +49,15 @@ class ManageVolumeTestCase(test_volume.BaseVolumeTestCase):
 
     def test_manage_existing(self):
         volume_object = self._stub_volume_object_get(self)
-        mock_object_volume = self.mock_object(
-            objects.Volume, 'get_by_id', mock.Mock(return_value=volume_object))
         mock_run_flow_engine = self.mock_object(
             self.manager, '_run_manage_existing_flow_engine',
             mock.Mock(return_value=volume_object))
         mock_update_volume_stats = self.mock_object(
             self.manager, '_update_stats_for_managed')
 
-        result = self.manager.manage_existing(self.context, volume_object.id)
+        result = self.manager.manage_existing(self.context, volume_object)
 
         self.assertEqual(fake.VOLUME_ID, result)
-        mock_object_volume.assert_called_once_with(self.context,
-                                                   volume_object.id)
         mock_run_flow_engine.assert_called_once_with(self.context,
                                                      volume_object,
                                                      None)
@@ -78,7 +73,7 @@ class ManageVolumeTestCase(test_volume.BaseVolumeTestCase):
             self.manager, '_update_stats_for_managed')
 
         result = self.manager.manage_existing(
-            self.context, volume_object.id, volume=volume_object)
+            self.context, volume_object)
 
         self.assertEqual(fake.VOLUME_ID, result)
         mock_object_volume.assert_not_called()

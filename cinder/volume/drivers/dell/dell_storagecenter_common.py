@@ -87,7 +87,10 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
         self.replication_enabled = True if self.backends else False
         self.is_direct_connect = False
         self.active_backend_id = kwargs.get('active_backend_id', None)
-        self.failed_over = (self.active_backend_id is not None)
+        self.failed_over = True if self.active_backend_id else False
+        LOG.info(_LI('Loading %(name)s: Failover state is %(state)r'),
+                 {'name': self.backend_name,
+                  'state': self.failed_over})
         self.storage_protocol = 'iSCSI'
         self.failback_timeout = 30
 
@@ -362,7 +365,8 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
             ssnstrings = self._split_driver_data(replication_driver_data)
             if ssnstrings:
                 ssn = int(ssnstrings[0])
-                sclivevolume = api.get_live_volume(volume.get('provider_id'))
+                sclivevolume = api.get_live_volume(volume.get('provider_id'),
+                                                   volume.get('id'))
                 # Have we found the live volume?
                 if (sclivevolume and
                    sclivevolume.get('secondaryScSerialNumber') == ssn and
@@ -439,7 +443,7 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
         """Create snapshot"""
         # our volume name is the volume id
         volume_name = snapshot.get('volume_id')
-        provider_id = snapshot.get('provider_id')
+        provider_id = snapshot.volume.get('provider_id')
         snapshot_id = snapshot.get('id')
         LOG.debug('Creating snapshot %(snap)s on volume %(vol)s',
                   {'snap': snapshot_id,
@@ -676,6 +680,11 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
         if refresh:
             self._update_volume_stats()
 
+        # Take this opportunity to report our failover state.
+        if self.failed_over:
+            LOG.debug('%(source)s has been failed over to %(dest)s',
+                      {'source': self.backend_name,
+                       'dest': self.active_backend_id})
         return self._stats
 
     def _update_volume_stats(self):

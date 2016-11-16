@@ -20,8 +20,10 @@ import tempfile
 import uuid
 
 import mock
+from os_brick.initiator import linuxrbd
 from oslo_concurrency import processutils
 from oslo_serialization import jsonutils
+from oslo_utils import units
 import six
 from six.moves import range
 
@@ -33,7 +35,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import objects
 from cinder import test
-from cinder.volume.drivers import rbd as rbddriver
+from cinder.tests.unit import fake_constants as fake
 
 # This is used to collect raised exceptions so that tests may check what was
 # raised.
@@ -115,9 +117,9 @@ class BackupCephTestCase(test.TestCase):
         return self.counter
 
     def _get_wrapped_rbd_io(self, rbd_image):
-        rbd_meta = rbddriver.RBDImageMetadata(rbd_image, 'pool_foo',
-                                              'user_foo', 'conf_foo')
-        return rbddriver.RBDImageIOWrapper(rbd_meta)
+        rbd_meta = linuxrbd.RBDImageMetadata(rbd_image, 'pool_foo',
+                                             'user_foo', 'conf_foo')
+        return linuxrbd.RBDVolumeIOWrapper(rbd_meta)
 
     def _setup_mock_popen(self, mock_popen, retval=None, p1hook=None,
                           p2hook=None):
@@ -159,6 +161,7 @@ class BackupCephTestCase(test.TestCase):
         self._create_backup_db_entry(self.backup_id, self.volume_id,
                                      self.volume_size)
         self.backup = objects.Backup.get_by_id(self.ctxt, self.backup_id)
+        self.backup.container = "backups"
 
         # Create alternate volume.
         self.alt_volume_id = str(uuid.uuid4())
@@ -429,11 +432,11 @@ class BackupCephTestCase(test.TestCase):
                         with tempfile.NamedTemporaryFile() as test_file:
                             checksum = hashlib.sha256()
                             image = self.service.rbd.Image()
-                            meta = rbddriver.RBDImageMetadata(image,
-                                                              'pool_foo',
-                                                              'user_foo',
-                                                              'conf_foo')
-                            rbdio = rbddriver.RBDImageIOWrapper(meta)
+                            meta = linuxrbd.RBDImageMetadata(image,
+                                                             'pool_foo',
+                                                             'user_foo',
+                                                             'conf_foo')
+                            rbdio = linuxrbd.RBDVolumeIOWrapper(meta)
                             self.service.backup(self.backup, rbdio)
 
                             self.assertEqual(['popen_init',
@@ -502,7 +505,6 @@ class BackupCephTestCase(test.TestCase):
                                       '_try_delete_base_image') as \
                     mock_try_delete_base_image:
                 def mock_try_delete_base_image_side_effect(backup_id,
-                                                           volume_id,
                                                            base_name):
                     raise self.service.rbd.ImageNotFound(_('mock'))
 
@@ -513,11 +515,11 @@ class BackupCephTestCase(test.TestCase):
                     with tempfile.NamedTemporaryFile() as test_file:
                         checksum = hashlib.sha256()
                         image = self.service.rbd.Image()
-                        meta = rbddriver.RBDImageMetadata(image,
-                                                          'pool_foo',
-                                                          'user_foo',
-                                                          'conf_foo')
-                        rbdio = rbddriver.RBDImageIOWrapper(meta)
+                        meta = linuxrbd.RBDImageMetadata(image,
+                                                         'pool_foo',
+                                                         'user_foo',
+                                                         'conf_foo')
+                        rbdio = linuxrbd.RBDVolumeIOWrapper(meta)
 
                         # We expect that the second exception is
                         # notified.
@@ -578,11 +580,11 @@ class BackupCephTestCase(test.TestCase):
                 with tempfile.NamedTemporaryFile() as test_file:
                     checksum = hashlib.sha256()
                     image = self.service.rbd.Image()
-                    meta = rbddriver.RBDImageMetadata(image,
-                                                      'pool_foo',
-                                                      'user_foo',
-                                                      'conf_foo')
-                    rbdio = rbddriver.RBDImageIOWrapper(meta)
+                    meta = linuxrbd.RBDImageMetadata(image,
+                                                     'pool_foo',
+                                                     'user_foo',
+                                                     'conf_foo')
+                    rbdio = linuxrbd.RBDVolumeIOWrapper(meta)
 
                     # We expect that the second exception is
                     # notified.
@@ -593,15 +595,29 @@ class BackupCephTestCase(test.TestCase):
 
     @common_mocks
     def test_backup_vol_length_0(self):
-        volume_id = str(uuid.uuid4())
+        volume_id = fake.VOLUME_ID
         self._create_volume_db_entry(volume_id, 0)
-
-        backup_id = str(uuid.uuid4())
+        backup_id = fake.BACKUP_ID
         self._create_backup_db_entry(backup_id, volume_id, 1)
         backup = objects.Backup.get_by_id(self.ctxt, backup_id)
 
         self.assertRaises(exception.InvalidParameterValue, self.service.backup,
                           backup, self.volume_file)
+
+    @common_mocks
+    def test_backup_with_container_name(self):
+        volume_size = self.volume_size * units.Gi
+        backup_id = fake.BACKUP_ID
+        self._create_backup_db_entry(backup_id, self.volume_id, 1)
+        backup = objects.Backup.get_by_id(self.ctxt, backup_id)
+        backup.container = "test"
+        with mock.patch.object(
+                self.service, '_full_backup',
+                side_effect=exception.BackupOperationError()) as mock_full:
+            self.assertRaises(exception.BackupOperationError,
+                              self.service.backup, backup, self.volume_file)
+            mock_full.assert_called_once_with(backup, self.volume_file,
+                                              self.volume.name, volume_size)
 
     @common_mocks
     def test_restore(self):
@@ -758,7 +774,7 @@ class BackupCephTestCase(test.TestCase):
                 mock_get_backup_snaps:
             self.assertRaises(self.mock_rbd.ImageBusy,
                               self.service._try_delete_base_image,
-                              self.backup['id'], self.backup['volume_id'])
+                              self.backup)
             self.assertTrue(mock_get_backup_snaps.called)
 
         self.assertTrue(rbd.list.called)

@@ -128,6 +128,9 @@ vmdk_opts = [
     cfg.MultiStrOpt('vmware_cluster_name',
                     help='Name of a vCenter compute cluster where volumes '
                          'should be created.'),
+    cfg.IntOpt('vmware_connection_pool_size',
+               default=10,
+               help='Maximum number of connections in http connection pool.'),
 ]
 
 CONF = cfg.CONF
@@ -219,13 +222,15 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     # 1.4.0 - support for volume retype
     # 1.5.0 - restrict volume placement to specific vCenter clusters
     # 1.6.0 - support for manage existing
-    VERSION = '1.6.0'
+    # 1.7.0 - new config option 'vmware_connection_pool_size'
+    VERSION = '1.7.0'
 
-    # ThirdaPartySystems wiki page
+    # ThirdPartySystems wiki page
     CI_WIKI_NAME = "VMware_CI"
 
     # Minimum supported vCenter version.
     MIN_SUPPORTED_VC_VERSION = dist_version.LooseVersion('5.1')
+    NEXT_MIN_SUPPORTED_VC_VERSION = dist_version.LooseVersion('5.5')
 
     # PBM is enabled only for vCenter versions 5.5 and above
     PBM_ENABLED_VC_VERSION = dist_version.LooseVersion('5.5')
@@ -452,9 +457,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         if clusters:
             for cluster in clusters:
                 cluster_hosts = self.volumeops.get_cluster_hosts(cluster)
-                for host in cluster_hosts:
-                    if self.volumeops.is_host_usable(host):
-                        hosts.append(host)
+                hosts.extend(cluster_hosts)
         return hosts
 
     def _select_datastore(self, req, host=None):
@@ -1814,6 +1817,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             pbm_wsdl = self.pbm_wsdl if hasattr(self, 'pbm_wsdl') else None
             ca_file = self.configuration.vmware_ca_file
             insecure = self.configuration.vmware_insecure
+            pool_size = self.configuration.vmware_connection_pool_size
             self._session = api.VMwareAPISession(ip, username,
                                                  password, api_retry_count,
                                                  task_poll_interval,
@@ -1821,7 +1825,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                                                  pbm_wsdl_loc=pbm_wsdl,
                                                  port=port,
                                                  cacert=ca_file,
-                                                 insecure=insecure)
+                                                 insecure=insecure,
+                                                 pool_size=pool_size)
         return self._session
 
     def _get_vc_version(self):
@@ -1853,28 +1858,30 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                     '%s is not allowed.') % self.MIN_SUPPORTED_VC_VERSION
             LOG.error(msg)
             raise exceptions.VMwareDriverException(message=msg)
-        elif vc_version == self.MIN_SUPPORTED_VC_VERSION:
-            # TODO(vbala): enforce vCenter version 5.5 in Ocata release.
+        elif vc_version < self.NEXT_MIN_SUPPORTED_VC_VERSION:
+            # TODO(vbala): enforce vCenter version 5.5 in Pike release.
             LOG.warning(_LW('Running Cinder with a VMware vCenter version '
-                            '%s is deprecated. The minimum required version '
-                            'of vCenter server will be raised to 5.5 in the '
-                            '10.0.0 release.'), self.MIN_SUPPORTED_VC_VERSION)
+                            'less than %(ver)s is deprecated. The minimum '
+                            'required version of vCenter server will be raised'
+                            ' to %(ver)s in the 11.0.0 release.'),
+                        {'ver': self.NEXT_MIN_SUPPORTED_VC_VERSION})
 
     def do_setup(self, context):
         """Any initialization the volume driver does while starting."""
         self._validate_params()
 
         # Validate vCenter version.
-        vc_version = self._get_vc_version()
-        self._validate_vcenter_version(vc_version)
+        self._vc_version = self._get_vc_version()
+        self._validate_vcenter_version(self._vc_version)
 
         # Enable pbm only if vCenter version is 5.5+.
-        if vc_version and vc_version >= self.PBM_ENABLED_VC_VERSION:
+        if (self._vc_version and
+                self._vc_version >= self.PBM_ENABLED_VC_VERSION):
             self.pbm_wsdl = pbm.get_pbm_wsdl_location(
-                six.text_type(vc_version))
+                six.text_type(self._vc_version))
             if not self.pbm_wsdl:
                 LOG.error(_LE("Not able to configure PBM for vCenter server: "
-                              "%s"), vc_version)
+                              "%s"), self._vc_version)
                 raise exceptions.VMwareDriverException()
             self._storage_policy_enabled = True
             # Destroy current session so that it is recreated with pbm enabled
@@ -2014,7 +2021,15 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                                              host=host, resource_pool=rp,
                                              extra_config=extra_config,
                                              folder=folder)
-        self.volumeops.update_backing_disk_uuid(clone, volume['id'])
+
+        # vCenter 6.0+ does not allow changing the UUID of delta disk created
+        # during linked cloning; skip setting UUID for vCenter 6.0+.
+        if (clone_type == volumeops.LINKED_CLONE_TYPE and
+                self._vc_version >= dist_version.LooseVersion('6.0')):
+            LOG.debug("Not setting vmdk UUID for volume: %s.", volume['id'])
+        else:
+            self.volumeops.update_backing_disk_uuid(clone, volume['id'])
+
         # If the volume size specified by the user is greater than
         # the size of the source volume, the newly created volume will
         # allocate the capacity to the size of the source volume in the backend

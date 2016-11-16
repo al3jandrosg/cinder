@@ -53,7 +53,6 @@ EXPECTED = [{'created_at': datetime.datetime(2016, 6, 1, 2, 46, 28),
              'status': 'enabled',
              'updated_at': datetime.datetime(2016, 6, 1, 2, 46, 28)},
             {'created_at': datetime.datetime(2016, 6, 1, 1, 46, 28),
-             'updated_at': datetime.datetime(2016, 6, 1, 1, 46, 28),
              'disabled_reason': None,
              'last_heartbeat': '',
              'name': 'cluster2',
@@ -145,7 +144,7 @@ class ClustersTestCase(test.TestCase):
 
     @ddt.data(True, False)
     def test_index_wrong_version(self, detailed):
-        """Verify that unauthorized user can't list clusters."""
+        """Verify the wrong version so that user can't list clusters."""
         self.assertRaises(exception.VersionNotFoundForAPIMethod,
                           self._test_list, detailed=detailed,
                           filters={'version': '3.5'})

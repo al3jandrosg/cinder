@@ -68,9 +68,6 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
         }
         self.mock_object(block_base.NetAppBlockStorageLibrary, 'delete_volume')
 
-    def tearDown(self):
-        super(NetAppBlockStorageCmodeLibraryTestCase, self).tearDown()
-
     def get_config_cmode(self):
         config = na_fakes.create_configuration_cmode()
         config.netapp_storage_protocol = 'iscsi'
@@ -361,9 +358,12 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
             'size-total': 10737418240.0,
             'size-available': 2147483648.0,
         }
-        self.mock_object(
-            self.zapi_client, 'get_flexvol_capacity',
-            mock.Mock(return_value=mock_capacities))
+        self.mock_object(self.zapi_client,
+                         'get_flexvol_capacity',
+                         mock.Mock(return_value=mock_capacities))
+        self.mock_object(self.zapi_client,
+                         'get_flexvol_dedupe_used_percent',
+                         mock.Mock(return_value=55.0))
 
         aggr_capacities = {
             'aggr1': {
@@ -389,6 +389,7 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
             'total_capacity_gb': 10.0,
             'free_capacity_gb': 2.0,
             'provisioned_capacity_gb': 8.0,
+            'netapp_dedupe_used_percent': 55.0,
             'netapp_aggregate_used_percent': 45,
             'utilization': 30.0,
             'filter_function': 'filter',

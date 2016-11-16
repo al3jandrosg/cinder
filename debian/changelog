@@ -1,3 +1,22 @@
+cinder (2:10.0.0~b1-0ubuntu1) zesty; urgency=medium
+
+  [ Chuck Short ]
+  * New upstream version.
+  * debian/patches/fix-long-casting.patch: Dropped no longer needed.
+  * debian/patches/google-back-requirements.patch: Refreshed
+  * debian/control: Bump dependencies.
+
+  [ Corey Bryant ]
+  * New upstream version.
+  * d/rules: Add PBR_VERSION to set correct distro version for package build.
+  * d/control: Align python-oslo.versionedobjects with upstream.
+
+  [ David Della Vecchia ]
+  * New upstream milestone for OpenStack Ocata.
+  * d/control: Align (build-)depends with upstream.
+
+ -- David Della Vecchia <ddv@canonical.com>  Wed, 16 Nov 2016 15:33:19 -0500
+
 cinder (2:9.0.0-0ubuntu1) yakkety; urgency=medium
 
   * New upstream release for OpenStack Newton.

@@ -427,7 +427,8 @@ class ServiceTestCase(test.TestCase):
         # Since we have created the service entry we call init_host with
         # added_to_cluster=True
         init_host_mock.assert_called_once_with(
-            added_to_cluster=added_to_cluster)
+            added_to_cluster=added_to_cluster,
+            service_id=self.service_ref['id'])
 
         expected_target_calls = [mock.call(topic=self.topic, server=self.host)]
         expected_rpc_calls = [mock.call(target_mock.return_value, mock.ANY,
@@ -472,9 +473,6 @@ class ServiceTestCase(test.TestCase):
 
 
 class TestWSGIService(test.TestCase):
-
-    def setUp(self):
-        super(TestWSGIService, self).setUp()
 
     @mock.patch('oslo_service.wsgi.Loader')
     def test_service_random_port(self, mock_loader):

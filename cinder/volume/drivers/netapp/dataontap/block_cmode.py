@@ -30,6 +30,7 @@ import six
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.objects import fields
 from cinder import utils
 from cinder.volume.drivers.netapp.dataontap import block_base
 from cinder.volume.drivers.netapp.dataontap.performance import perf_cmode
@@ -298,6 +299,11 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
             pool['provisioned_capacity_gb'] = round(
                 pool['total_capacity_gb'] - pool['free_capacity_gb'], 2)
 
+            dedupe_used = self.zapi_client.get_flexvol_dedupe_used_percent(
+                ssc_vol_name)
+            pool['netapp_dedupe_used_percent'] = na_utils.round_down(
+                dedupe_used)
+
             aggregate_name = ssc_vol_info.get('netapp_aggregate')
             aggr_capacity = aggr_capacities.get(aggregate_name, {})
             pool['netapp_aggregate_used_percent'] = aggr_capacity.get(
@@ -400,6 +406,11 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
             raise exception.VolumeBackendAPIException(data=msg)
         self.zapi_client.provision_qos_policy_group(qos_policy_group_info)
         return qos_policy_group_info
+
+    def _get_volume_model_update(self, volume):
+        """Provide any updates necessary for a volume being created/managed."""
+        if self.replication_enabled:
+            return {'replication_status': fields.ReplicationStatus.ENABLED}
 
     def _mark_qos_policy_group_for_deletion(self, qos_policy_group_info):
         self.zapi_client.mark_qos_policy_group_for_deletion(

@@ -88,14 +88,10 @@ nas_opts = [
                      'where Cinder volumes are stored.')),
 ]
 
-old_vol_type_opts = [cfg.DeprecatedOpt('glusterfs_sparsed_volumes'),
-                     cfg.DeprecatedOpt('glusterfs_qcow2_volumes')]
-
 volume_opts = [
     cfg.StrOpt('nas_volume_prov_type',
                default='thin',
                choices=['thin', 'thick'],
-               deprecated_opts=old_vol_type_opts,
                help=('Provisioning type that will be used when '
                      'creating volumes.')),
 ]
@@ -336,7 +332,7 @@ class RemoteFSDriver(driver.LocalVD, driver.TransferVD, driver.BaseVD):
         """Creates a regular file of given size in GiB."""
 
         block_size_mb = 1
-        block_count = size * units.Gi / (block_size_mb * units.Mi)
+        block_count = size * units.Gi // (block_size_mb * units.Mi)
 
         self._execute('dd', 'if=/dev/zero', 'of=%s' % path,
                       'bs=%dM' % block_size_mb,
@@ -421,7 +417,7 @@ class RemoteFSDriver(driver.LocalVD, driver.TransferVD, driver.BaseVD):
 
         data = image_utils.qemu_img_info(self.local_path(volume),
                                          run_as_root=run_as_root)
-        virt_size = data.virtual_size / units.Gi
+        virt_size = data.virtual_size // units.Gi
         if virt_size != volume.size:
             raise exception.ImageUnacceptable(
                 image_id=image_id,

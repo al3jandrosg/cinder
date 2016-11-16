@@ -20,7 +20,6 @@ GoodnessWeigher = cinder.scheduler.weights.goodness:GoodnessWeigher
 VolumeNumberWeigher = cinder.scheduler.weights.volume_number:VolumeNumberWeigher
 
 [console_scripts]
-cinder-all = cinder.cmd.all:main
 cinder-api = cinder.cmd.api:main
 cinder-backup = cinder.cmd.backup:main
 cinder-manage = cinder.cmd.manage:main

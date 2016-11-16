@@ -24,6 +24,7 @@ Volume driver for NetApp NFS storage.
 import os
 
 from oslo_log import log as logging
+from oslo_log import versionutils
 import six
 
 from cinder import exception
@@ -67,6 +68,12 @@ class NetApp7modeNfsDriver(nfs_base.NetAppNfsDriver):
 
         self.perf_library = perf_7mode.Performance7modeLibrary(
             self.zapi_client)
+
+        # This driver has been marked 'deprecated' in the Ocata release and
+        # can be removed in Queens.
+        msg = _("The 7-mode Data ONTAP driver is deprecated and will be "
+                "removed in a future release.")
+        versionutils.report_deprecated_feature(LOG, msg)
 
     def check_for_setup_error(self):
         """Checks if setup occurred properly."""
@@ -227,6 +234,9 @@ class NetApp7modeNfsDriver(nfs_base.NetAppNfsDriver):
         """Set QoS policy on backend from volume type information."""
         # 7-mode DOT does not support QoS.
         return
+
+    def _get_volume_model_update(self, volume):
+        """Provide any updates necessary for a volume being created/managed."""
 
     def _get_backing_flexvol_names(self):
         """Returns a list of backing flexvol names."""
