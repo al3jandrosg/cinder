@@ -1768,8 +1768,7 @@ port_speed!N/A
         except IndexError:
             return self._errors['CMMVC5707E']
 
-        command = kwargs['cmd']
-        del kwargs['cmd']
+        command = kwargs.pop('cmd')
         func = getattr(self, '_cmd_' + command)
         out, err = func(**kwargs)
 
@@ -2484,6 +2483,7 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
         self.assertIsNotNone(host_name)
 
     def test_storwize_get_host_from_connector_with_lshost_failure(self):
+        self.skipTest('Bug 1640205')
         self._connector.pop('initiator')
         helper = self.fc_driver._helpers
         # Create two hosts. The first is not related to the connector and

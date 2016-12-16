@@ -29,6 +29,7 @@ from cinder import exception
 import cinder.image.glance
 from cinder.image import image_utils
 from cinder import objects
+from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
@@ -131,6 +132,14 @@ CEPH_MON_DUMP = """dumped monmap epoch 1
         1,
         2]}
 """
+
+
+def mock_driver_configuration(value):
+    if value == 'max_over_subscription_ratio':
+        return 1.0
+    if value == 'reserved_percentage':
+        return 0
+    return 'RBD'
 
 
 @ddt.ddt
@@ -819,8 +828,9 @@ class RBDTestCase(test.TestCase):
             '"bytes_used":1546440971,"max_avail":28987613184,"objects":412}},'
             '{"name":"volumes","id":3,"stats":{"kb_used":0,"bytes_used":0,'
             '"max_avail":28987613184,"objects":0}}]}\n', '')
-        self.driver.configuration.safe_get = mock.Mock()
-        self.driver.configuration.safe_get.return_value = 'RBD'
+
+        self.mock_object(self.driver.configuration, 'safe_get',
+                         mock_driver_configuration)
 
         expected = dict(
             volume_backend_name='RBD',
@@ -829,10 +839,10 @@ class RBDTestCase(test.TestCase):
             storage_protocol='ceph',
             total_capacity_gb=28.44,
             free_capacity_gb=27.0,
-            reserved_percentage='RBD',
+            reserved_percentage=0,
             thin_provisioning_support=True,
             provisioned_capacity_gb=0.0,
-            max_over_subscription_ratio='RBD',
+            max_over_subscription_ratio=1.0,
             multiattach=False)
 
         actual = self.driver.get_volume_stats(True)
@@ -849,8 +859,8 @@ class RBDTestCase(test.TestCase):
         client.cluster.mon_command = mock.Mock()
         client.cluster.mon_command.return_value = (22, '', '')
 
-        self.driver.configuration.safe_get = mock.Mock()
-        self.driver.configuration.safe_get.return_value = 'RBD'
+        self.mock_object(self.driver.configuration, 'safe_get',
+                         mock_driver_configuration)
 
         expected = dict(volume_backend_name='RBD',
                         vendor_name='Open Source',
@@ -858,10 +868,10 @@ class RBDTestCase(test.TestCase):
                         storage_protocol='ceph',
                         total_capacity_gb='unknown',
                         free_capacity_gb='unknown',
-                        reserved_percentage='RBD',
+                        reserved_percentage=0,
                         multiattach=False,
                         provisioned_capacity_gb=0.0,
-                        max_over_subscription_ratio='RBD',
+                        max_over_subscription_ratio=1.0,
                         thin_provisioning_support=True)
 
         actual = self.driver.get_volume_stats(True)
@@ -1094,7 +1104,7 @@ class ManagedRBDTestCase(test_volume.DriverTestCase):
                      'size': 20,
                      'status': 'creating',
                      'availability_zone': 'fake_zone',
-                     'attach_status': 'detached',
+                     'attach_status': fields.VolumeAttachStatus.DETACHED,
                      'host': 'dummy'}
         volume = objects.Volume(context=self.context, **db_volume)
         volume.create()

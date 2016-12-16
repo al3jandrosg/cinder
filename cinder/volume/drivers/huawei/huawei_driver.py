@@ -57,6 +57,7 @@ huawei_opts = [
                help='The remote metro device san user.'),
     cfg.StrOpt('metro_san_password',
                default=None,
+               secret=True,
                help='The remote metro device san password.'),
     cfg.StrOpt('metro_domain_name',
                default=None,
@@ -1305,6 +1306,7 @@ class HuaweiBaseDriver(driver.VolumeDriver):
 
     def _check_lun_valid_for_manage(self, lun_info, external_ref):
         lun_id = lun_info.get('ID')
+        lun_name = lun_info.get('NAME')
 
         # Check whether the LUN is already in LUN group.
         if lun_info.get('ISADD2LUNGROUP') == 'true':
@@ -1402,9 +1404,9 @@ class HuaweiBaseDriver(driver.VolumeDriver):
                 existing_ref=external_ref, reason=msg)
 
         # Check whether the LUN exists in a LUN mirror.
-        if self.client.is_lun_in_mirror(lun_id):
+        if self.client.is_lun_in_mirror(lun_name):
             msg = (_("Can't import LUN %s to Cinder. Already exists in "
-                     "a LUN mirror.") % lun_id)
+                     "a LUN mirror.") % lun_name)
             raise exception.ManageExistingInvalidReference(
                 existing_ref=external_ref, reason=msg)
 
@@ -1744,8 +1746,7 @@ class HuaweiBaseDriver(driver.VolumeDriver):
             metadata = huawei_utils.get_volume_metadata(v)
             old_status = 'available'
             if 'old_status' in metadata:
-                old_status = metadata['old_status']
-                del metadata['old_status']
+                old_status = metadata.pop('old_status')
             v_update['updates'] = {'status': old_status,
                                    'metadata': metadata}
             volumes_update.append(v_update)

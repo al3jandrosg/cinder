@@ -22,7 +22,7 @@ from cinder.i18n import _
 from cinder import objects
 from cinder.objects import base
 from cinder.objects import cleanable
-
+from cinder.objects import fields as c_fields
 
 CONF = cfg.CONF
 
@@ -82,7 +82,7 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         'size': fields.IntegerField(nullable=True),
         'availability_zone': fields.StringField(nullable=True),
         'status': fields.StringField(nullable=True),
-        'attach_status': fields.StringField(nullable=True),
+        'attach_status': c_fields.VolumeAttachStatusField(nullable=True),
         'migration_status': fields.StringField(nullable=True),
 
         'scheduled_at': fields.DateTimeField(nullable=True),
@@ -374,7 +374,9 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
             if updates.get('status') == 'downloading':
                 self.set_worker()
 
-            db.volume_update(self._context, self.id, updates)
+            # updates are changed after popping out metadata.
+            if updates:
+                db.volume_update(self._context, self.id, updates)
             self.obj_reset_changes()
 
     def destroy(self):
@@ -456,8 +458,14 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         # We swap fields between source (i.e. self) and destination at the
         # end of migration because we want to keep the original volume id
         # in the DB but now pointing to the migrated volume.
-        skip = ({'id', 'provider_location', 'glance_metadata',
-                 'volume_type'} | set(self.obj_extra_fields))
+        skip = {'id', 'provider_location', 'glance_metadata'
+                } | set(self.obj_extra_fields)
+
+        # For the migration started by retype, we should swap the
+        # volume type, other circumstances still skip volume type.
+        if self.status != 'retyping':
+            skip.add('volume_type')
+
         for key in set(dest_volume.fields.keys()) - skip:
             # Only swap attributes that are already set.  We do not want to
             # unexpectedly trigger a lazy-load.
@@ -503,6 +511,36 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         if obj_version and obj_version < 1.6:
             return False
         return status in ('creating', 'deleting', 'uploading', 'downloading')
+
+    def begin_attach(self, attach_mode):
+        attachment = objects.VolumeAttachment(
+            context=self._context,
+            attach_status=c_fields.VolumeAttachStatus.ATTACHING,
+            volume_id=self.id)
+        attachment.create()
+        with self.obj_as_admin():
+            self.admin_metadata['attached_mode'] = attach_mode
+            self.save()
+        return attachment
+
+    def finish_detach(self, attachment_id):
+        with self.obj_as_admin():
+            volume_updates, attachment_updates = (
+                db.volume_detached(self._context, self.id, attachment_id))
+            db.volume_admin_metadata_delete(self._context, self.id,
+                                            'attached_mode')
+            self.admin_metadata.pop('attached_mode', None)
+        # Remove attachment in volume only when this field is loaded.
+        if attachment_updates and self.obj_attr_is_set('volume_attachment'):
+            for i, attachment in enumerate(self.volume_attachment):
+                if attachment.id == attachment_id:
+                    del self.volume_attachment.objects[i]
+                    break
+
+        self.update(volume_updates)
+        self.obj_reset_changes(
+            list(volume_updates.keys()) +
+            ['volume_attachment', 'admin_metadata'])
 
 
 @base.CinderObjectRegistry.register
@@ -575,7 +613,7 @@ class VolumeList(base.ObjectListBase, base.CinderObject):
                                   volumes, expected_attrs=expected_attrs)
 
     @classmethod
-    def get_all_by_project(cls, context, project_id, marker, limit,
+    def get_all_by_project(cls, context, project_id, marker=None, limit=None,
                            sort_keys=None, sort_dirs=None, filters=None,
                            offset=None):
         volumes = db.volume_get_all_by_project(context, project_id, marker,
@@ -595,3 +633,10 @@ class VolumeList(base.ObjectListBase, base.CinderObject):
     def get_volume_summary_by_project(cls, context, project_id):
         volumes = db.get_volume_summary_by_project(context, project_id)
         return volumes
+
+    @classmethod
+    def get_active_by_window(cls, context, begin, end):
+        volumes = db.volume_get_active_by_window(context, begin, end)
+        expected_attrs = cls._get_expected_attrs(context)
+        return base.obj_make_list(context, cls(context), objects.Volume,
+                                  volumes, expected_attrs=expected_attrs)

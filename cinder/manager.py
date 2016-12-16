@@ -93,6 +93,10 @@ class Manager(base.Base, PeriodicTasks):
         self.additional_endpoints = []
         super(Manager, self).__init__(db_driver)
 
+    @property
+    def service_topic_queue(self):
+        return self.cluster or self.host
+
     def periodic_tasks(self, context, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
         return self.run_periodic_tasks(context, raise_on_error=raise_on_error)
@@ -174,6 +178,20 @@ class SchedulerDependentManager(Manager):
                 self.service_name,
                 self.host,
                 self.last_capabilities)
+            try:
+                self.scheduler_rpcapi.notify_service_capabilities(
+                    context,
+                    self.service_name,
+                    self.host,
+                    self.last_capabilities)
+            except exception.ServiceTooOld as e:
+                # This means we have Newton's c-sch in the deployment, so
+                # rpcapi cannot send the message. We can safely ignore the
+                # error. Log it because it shouldn't happen after upgrade.
+                msg = _LW("Failed to notify about cinder-volume service "
+                          "capabilities for host %(host)s. This is normal "
+                          "during a live upgrade. Error: %(e)s")
+                LOG.warning(msg, {'host': self.host, 'e': e})
 
     def _add_to_threadpool(self, func, *args, **kwargs):
         self._tp.spawn_n(func, *args, **kwargs)

@@ -2917,7 +2917,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
         mock_parse_secondary.return_value = None
         self.driver.failed_over = False
         self.driver.active_backend_id = None
-        self.assertRaises(exception.InvalidInput,
+        self.assertRaises(exception.InvalidReplicationTarget,
                           self.driver.failover_host,
                           {},
                           volumes,
@@ -2927,7 +2927,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
         self.driver.failover_host({}, volumes, 'default')
         mock_failback_volumes.assert_called_once_with(volumes)
         # Already failed over.
-        self.assertRaises(exception.VolumeBackendAPIException,
+        self.assertRaises(exception.InvalidReplicationTarget,
                           self.driver.failover_host, {}, volumes, '67890')
         self.driver.replication_enabled = False
 
@@ -3035,7 +3035,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
         mock_parse_secondary.return_value = None
         self.driver.failed_over = False
         self.driver.active_backend_id = None
-        self.assertRaises(exception.InvalidInput,
+        self.assertRaises(exception.InvalidReplicationTarget,
                           self.driver.failover_host,
                           {},
                           volumes,
@@ -4015,3 +4015,20 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
         ret = self.driver._get_qos(12345)
         self.assertEqual('cinderqos', ret)
         self.driver.backends = backends
+
+    def test_thaw_backend(self,
+                          mock_close_connection,
+                          mock_open_connection,
+                          mock_init):
+        self.driver.failed_over = False
+        ret = self.driver.thaw_backend(self._context)
+        self.assertTrue(ret)
+
+    def test_thaw_backend_failed_over(self,
+                                      mock_close_connection,
+                                      mock_open_connection,
+                                      mock_init):
+        self.driver.failed_over = True
+        self.assertRaises(exception.Invalid,
+                          self.driver.thaw_backend,
+                          self._context)

@@ -19,6 +19,8 @@ Client side of the scheduler manager RPC API.
 from oslo_serialization import jsonutils
 
 from cinder.common import constants
+from cinder import exception
+from cinder.i18n import _
 from cinder import rpc
 
 
@@ -58,9 +60,11 @@ class SchedulerAPI(rpc.RPCAPI):
         set to 2.3.
 
         3.0 - Remove 2.x compatibility
+        3.1 - Adds notify_service_capabilities()
+        3.2 - Adds extend_volume()
     """
 
-    RPC_API_VERSION = '3.0'
+    RPC_API_VERSION = '3.2'
     RPC_DEFAULT_VERSION = '3.0'
     TOPIC = constants.SCHEDULER_TOPIC
     BINARY = 'cinder-scheduler'
@@ -129,6 +133,25 @@ class SchedulerAPI(rpc.RPCAPI):
         }
         return cctxt.cast(ctxt, 'manage_existing', **msg_args)
 
+    def extend_volume(self, ctxt, volume, new_size, reservations,
+                      request_spec, filter_properties=None):
+        cctxt = self._get_cctxt()
+        if not cctxt.can_send_version('3.2'):
+            msg = _('extend_volume requires cinder-scheduler '
+                    'RPC API version >= 3.2.')
+            raise exception.ServiceTooOld(msg)
+
+        request_spec_p = jsonutils.to_primitive(request_spec)
+        msg_args = {
+            'volume': volume,
+            'new_size': new_size,
+            'reservations': reservations,
+            'request_spec': request_spec_p,
+            'filter_properties': filter_properties,
+        }
+
+        return cctxt.cast(ctxt, 'extend_volume', **msg_args)
+
     def get_pools(self, ctxt, filters=None):
         cctxt = self._get_cctxt()
         return cctxt.call(ctxt, 'get_pools', filters=filters)
@@ -137,5 +160,16 @@ class SchedulerAPI(rpc.RPCAPI):
                                     capabilities):
         cctxt = self._get_cctxt(fanout=True)
         cctxt.cast(ctxt, 'update_service_capabilities',
+                   service_name=service_name, host=host,
+                   capabilities=capabilities)
+
+    def notify_service_capabilities(self, ctxt, service_name,
+                                    host, capabilities):
+        cctxt = self._get_cctxt(version='3.1')
+        if not cctxt.can_send_version('3.1'):
+            msg = _('notify_service_capabilities requires cinder-scheduler '
+                    'RPC API version >= 3.1.')
+            raise exception.ServiceTooOld(msg)
+        cctxt.cast(ctxt, 'notify_service_capabilities',
                    service_name=service_name, host=host,
                    capabilities=capabilities)

@@ -20,6 +20,7 @@ Unit Tests for cinder.scheduler.rpcapi
 import mock
 
 from cinder import context
+from cinder import exception
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import test
 from cinder.tests.unit import fake_constants
@@ -96,6 +97,31 @@ class SchedulerRpcAPITestCase(test.TestCase):
                                  version='3.0')
         create_worker_mock.assert_called_once()
 
+    @mock.patch('oslo_messaging.RPCClient.can_send_version', return_value=True)
+    def test_notify_service_capabilities(self, can_send_version_mock):
+        capabilities = {'host': 'fake_host',
+                        'total': '10.01', }
+        self._test_scheduler_api('notify_service_capabilities',
+                                 rpc_method='cast',
+                                 service_name='fake_name',
+                                 host='fake_host',
+                                 capabilities=capabilities,
+                                 version='3.1')
+
+    @mock.patch('oslo_messaging.RPCClient.can_send_version',
+                return_value=False)
+    def test_notify_service_capabilities_capped(self, can_send_version_mock):
+        capabilities = {'host': 'fake_host',
+                        'total': '10.01', }
+        self.assertRaises(exception.ServiceTooOld,
+                          self._test_scheduler_api,
+                          'notify_service_capabilities',
+                          rpc_method='cast',
+                          service_name='fake_name',
+                          host='fake_host',
+                          capabilities=capabilities,
+                          version='3.1')
+
     def test_create_volume_serialization(self):
         volume = fake_volume.fake_volume_obj(self.context)
         create_worker_mock = self.mock_object(volume, 'create_worker')
@@ -141,6 +167,37 @@ class SchedulerRpcAPITestCase(test.TestCase):
                                  request_spec='fake_request_spec',
                                  filter_properties='filter_properties',
                                  volume=volume,
+                                 version='3.0')
+        create_worker_mock.assert_not_called()
+
+    @mock.patch('oslo_messaging.RPCClient.can_send_version',
+                return_value=False)
+    def test_extend_volume_capped(self, can_send_version_mock):
+        new_size = 4
+        volume = fake_volume.fake_volume_obj(self.context)
+        self.assertRaises(exception.ServiceTooOld,
+                          self._test_scheduler_api,
+                          'extend_volume',
+                          rpc_method='cast',
+                          request_spec='fake_request_spec',
+                          filter_properties='filter_properties',
+                          volume=volume,
+                          new_size=new_size,
+                          reservations=['RESERVATIONS'],
+                          version='3.0')
+
+    @mock.patch('oslo_messaging.RPCClient.can_send_version', return_value=True)
+    def test_extend_volume(self, can_send_version_mock):
+        new_size = 4
+        volume = fake_volume.fake_volume_obj(self.context)
+        create_worker_mock = self.mock_object(volume, 'create_worker')
+        self._test_scheduler_api('extend_volume',
+                                 rpc_method='cast',
+                                 request_spec='fake_request_spec',
+                                 filter_properties='filter_properties',
+                                 volume=volume,
+                                 new_size=new_size,
+                                 reservations=['RESERVATIONS'],
                                  version='3.0')
         create_worker_mock.assert_not_called()
 

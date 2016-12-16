@@ -120,10 +120,8 @@ class API(base.Base):
                cg_volume_types, availability_zone=None):
         check_policy(context, 'create')
 
-        volume_type_list = None
         volume_type_list = cg_volume_types.split(',')
 
-        req_volume_types = []
         # NOTE: Admin context is required to get extra_specs of volume_types.
         req_volume_types = (self.db.volume_types_get_by_name_or_id(
             context.elevated(), volume_type_list))
@@ -370,7 +368,7 @@ class API(base.Base):
                     'user_id': context.user_id,
                     'project_id': context.project_id,
                     'status': 'creating',
-                    'attach_status': 'detached',
+                    'attach_status': c_fields.VolumeAttachStatus.DETACHED,
                     'encryption_key_id': request_spec.get('encryption_key_id',
                                                           None),
                     'display_description': request_spec.get('description',

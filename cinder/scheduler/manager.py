@@ -88,6 +88,15 @@ class SchedulerManager(manager.Manager):
                                                 host,
                                                 capabilities)
 
+    def notify_service_capabilities(self, context, service_name,
+                                    host, capabilities):
+        """Process a capability update from a service node."""
+        if capabilities is None:
+            capabilities = {}
+        self.driver.notify_service_capabilities(service_name,
+                                                host,
+                                                capabilities)
+
     def _wait_for_scheduler(self):
         # NOTE(dulek): We're waiting for scheduler to announce that it's ready
         # or CONF.periodic_interval seconds from service startup has passed.
@@ -283,6 +292,28 @@ class SchedulerManager(manager.Manager):
         extension so it won't hurt the user much to retry the request manually.
         """
         return self.driver.get_pools(context, filters)
+
+    def extend_volume(self, context, volume, new_size, reservations,
+                      request_spec=None, filter_properties=None):
+
+        def _extend_volume_set_error(self, context, ex, request_spec):
+            volume_state = {'volume_state': {'status': 'available'}}
+            self._set_volume_state_and_notify('extend_volume', volume_state,
+                                              context, ex, request_spec)
+
+        if not filter_properties:
+            filter_properties = {}
+
+        filter_properties['new_size'] = new_size
+        try:
+            self.driver.host_passes_filters(context, volume.host,
+                                            request_spec, filter_properties)
+            volume_rpcapi.VolumeAPI().extend_volume(context, volume, new_size,
+                                                    reservations)
+        except exception.NoValidHost as ex:
+            QUOTAS.rollback(context, reservations,
+                            project_id=volume.project_id)
+            _extend_volume_set_error(self, context, ex, request_spec)
 
     def _set_volume_state_and_notify(self, method, updates, context, ex,
                                      request_spec, msg=None):

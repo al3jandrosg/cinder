@@ -1401,21 +1401,23 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
         volume_attachment_ref = volume_attachment_get(context, attachment_id,
                                                       session=session)
 
-        volume_attachment_ref['mountpoint'] = mountpoint
-        volume_attachment_ref['attach_status'] = 'attached'
-        volume_attachment_ref['instance_uuid'] = instance_uuid
-        volume_attachment_ref['attached_host'] = host_name
-        volume_attachment_ref['attach_time'] = timeutils.utcnow()
-        volume_attachment_ref['attach_mode'] = attach_mode
+        updated_values = {'mountpoint': mountpoint,
+                          'attach_status': fields.VolumeAttachStatus.ATTACHED,
+                          'instance_uuid': instance_uuid,
+                          'attached_host': host_name,
+                          'attach_time': timeutils.utcnow(),
+                          'attach_mode': attach_mode,
+                          'updated_at': literal_column('updated_at')}
+        volume_attachment_ref.update(updated_values)
+        volume_attachment_ref.save(session=session)
+        del updated_values['updated_at']
 
         volume_ref = _volume_get(context, volume_attachment_ref['volume_id'],
                                  session=session)
-        volume_attachment_ref.save(session=session)
-
         volume_ref['status'] = 'in-use'
-        volume_ref['attach_status'] = 'attached'
+        volume_ref['attach_status'] = fields.VolumeAttachStatus.ATTACHED
         volume_ref.save(session=session)
-        return volume_ref
+        return (volume_ref, updated_values)
 
 
 @handle_db_data_error
@@ -1606,44 +1608,50 @@ def volume_detached(context, volume_id, attachment_id):
     """
     session = get_session()
     with session.begin():
-        attachment = None
         try:
             attachment = volume_attachment_get(context, attachment_id,
                                                session=session)
         except exception.VolumeAttachmentNotFound:
-            pass
+            attachment_updates = None
+            attachment = None
 
-        # If this is already detached, attachment will be None
         if attachment:
             now = timeutils.utcnow()
-            attachment['attach_status'] = 'detached'
-            attachment['detach_time'] = now
-            attachment['deleted'] = True
-            attachment['deleted_at'] = now
+            attachment_updates = {
+                'attach_status': fields.VolumeAttachStatus.DETACHED,
+                'detach_time': now,
+                'deleted': True,
+                'deleted_at': now,
+                'updated_at':
+                literal_column('updated_at'),
+            }
+            attachment.update(attachment_updates)
             attachment.save(session=session)
+            del attachment_updates['updated_at']
 
-        attachment_list = volume_attachment_get_all_by_volume_id(
-            context, volume_id, session=session)
-        remain_attachment = False
-        if attachment_list and len(attachment_list) > 0:
-            remain_attachment = True
-
-        volume_ref = _volume_get(context, volume_id, session=session)
-        if not remain_attachment:
+        volume_ref = _volume_get(context, volume_id,
+                                 session=session)
+        volume_updates = {'updated_at': literal_column('updated_at')}
+        if not volume_ref.volume_attachment:
             # Hide status update from user if we're performing volume migration
             # or uploading it to image
-            if ((not volume_ref['migration_status'] and
-                    not (volume_ref['status'] == 'uploading')) or
-                    volume_ref['migration_status'] in ('success', 'error')):
-                volume_ref['status'] = 'available'
+            if ((not volume_ref.migration_status and
+                    not (volume_ref.status == 'uploading')) or
+                    volume_ref.migration_status in ('success', 'error')):
+                volume_updates['status'] = 'available'
 
-            volume_ref['attach_status'] = 'detached'
-            volume_ref.save(session=session)
+            volume_updates['attach_status'] = (
+                fields.VolumeAttachStatus.DETACHED)
         else:
             # Volume is still attached
-            volume_ref['status'] = 'in-use'
-            volume_ref['attach_status'] = 'attached'
-            volume_ref.save(session=session)
+            volume_updates['status'] = 'in-use'
+            volume_updates['attach_status'] = (
+                fields.VolumeAttachStatus.ATTACHED)
+
+        volume_ref.update(volume_updates)
+        volume_ref.save(session=session)
+        del volume_updates['updated_at']
+        return (volume_updates, attachment_updates)
 
 
 @require_context
@@ -1715,7 +1723,8 @@ def volume_attachment_get_all_by_volume_id(context, volume_id, session=None):
     result = model_query(context, models.VolumeAttachment,
                          session=session).\
         filter_by(volume_id=volume_id).\
-        filter(models.VolumeAttachment.attach_status != 'detached').\
+        filter(models.VolumeAttachment.attach_status !=
+               fields.VolumeAttachStatus.DETACHED).\
         all()
     return result
 
@@ -1727,7 +1736,8 @@ def volume_attachment_get_all_by_host(context, host):
         result = model_query(context, models.VolumeAttachment,
                              session=session).\
             filter_by(attached_host=host).\
-            filter(models.VolumeAttachment.attach_status != 'detached').\
+            filter(models.VolumeAttachment.attach_status !=
+                   fields.VolumeAttachStatus.DETACHED).\
             all()
         return result
 
@@ -1740,7 +1750,8 @@ def volume_attachment_get_all_by_instance_uuid(context,
         result = model_query(context, models.VolumeAttachment,
                              session=session).\
             filter_by(instance_uuid=instance_uuid).\
-            filter(models.VolumeAttachment.attach_status != 'detached').\
+            filter(models.VolumeAttachment.attach_status !=
+                   fields.VolumeAttachStatus.DETACHED).\
             all()
         return result
 
@@ -2267,7 +2278,8 @@ def volume_has_undeletable_snapshots_filter():
 def volume_has_attachments_filter():
     return sql.exists().where(
         and_(models.Volume.id == models.VolumeAttachment.volume_id,
-             models.VolumeAttachment.attach_status != 'detached',
+             models.VolumeAttachment.attach_status !=
+             fields.VolumeAttachStatus.DETACHED,
              ~models.VolumeAttachment.deleted))
 
 
@@ -3069,7 +3081,7 @@ def _process_volume_types_filters(query, filters):
             return
         if filters.get('extra_specs') is not None:
             the_filter = []
-            searchdict = filters.get('extra_specs')
+            searchdict = filters.pop('extra_specs')
             extra_specs = getattr(models.VolumeTypes, 'extra_specs')
             for k, v in searchdict.items():
                 the_filter.extend([extra_specs.any(key=k, value=v,
@@ -3078,7 +3090,6 @@ def _process_volume_types_filters(query, filters):
                 query = query.filter(and_(*the_filter))
             else:
                 query = query.filter(the_filter[0])
-            del filters['extra_specs']
         query = query.filter_by(**filters)
     return query
 
@@ -3104,7 +3115,7 @@ def _process_group_types_filters(query, filters):
             return
         if filters.get('group_specs') is not None:
             the_filter = []
-            searchdict = filters.get('group_specs')
+            searchdict = filters.pop('group_specs')
             group_specs = getattr(models.GroupTypes, 'group_specs')
             for k, v in searchdict.items():
                 the_filter.extend([group_specs.any(key=k, value=v,
@@ -3113,7 +3124,6 @@ def _process_group_types_filters(query, filters):
                 query = query.filter(and_(*the_filter))
             else:
                 query = query.filter(the_filter[0])
-            del filters['group_specs']
         query = query.filter_by(**filters)
     return query
 
@@ -3636,7 +3646,10 @@ def volume_type_destroy(context, id):
                                   read_deleted="no",
                                   session=session).\
             filter_by(volume_type_id=id).count()
-        if results or group_count:
+        cg_count = model_query(context, models.ConsistencyGroup,
+                               session=session).filter(
+            models.ConsistencyGroup.volume_type_id.contains(id)).count()
+        if results or group_count or cg_count:
             LOG.error(_LE('VolumeType %s deletion failed, '
                           'VolumeType in use.'), id)
             raise exception.VolumeTypeInUse(volume_type_id=id)
@@ -4089,8 +4102,7 @@ def _dict_with_qos_specs(rows):
             member = {'name': row['value'], 'id': row['id']}
             if row.specs:
                 spec_dict = _dict_with_children_specs(row.specs)
-                member['consumer'] = spec_dict['consumer']
-                del spec_dict['consumer']
+                member['consumer'] = spec_dict.pop('consumer')
                 member.update(dict(specs=spec_dict))
             result.append(member)
     return result

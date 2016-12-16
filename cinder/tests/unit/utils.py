@@ -62,7 +62,7 @@ def create_volume(ctxt,
         vol['migration_status'] = migration_status
     vol['display_name'] = display_name
     vol['display_description'] = display_description
-    vol['attach_status'] = 'detached'
+    vol['attach_status'] = fields.VolumeAttachStatus.DETACHED
     vol['availability_zone'] = availability_zone
     if consistencygroup_id:
         vol['consistencygroup_id'] = consistencygroup_id
@@ -101,8 +101,10 @@ def attach_volume(ctxt, volume_id, instance_uuid, attached_host,
     values['attach_time'] = now
 
     attachment = db.volume_attach(ctxt, values)
-    return db.volume_attached(ctxt, attachment['id'], instance_uuid,
-                              attached_host, mountpoint, mode)
+    volume, updated_values = db.volume_attached(
+        ctxt, attachment['id'], instance_uuid,
+        attached_host, mountpoint, mode)
+    return volume
 
 
 def create_snapshot(ctxt,
@@ -371,6 +373,16 @@ def create_qos(ctxt, testcase_instance=None, **kwargs):
     if testcase_instance:
         testcase_instance.addCleanup(db.qos_specs_delete, ctxt, qos['id'])
     return qos
+
+
+def create_service(ctxt, binary='cinder-volume', host='host@backend',
+                   topic='topic', disabled=False, availability_zone='cinder',
+                   **kwargs):
+    kwargs.update(binary=binary, host=host, topic=topic, disabled=disabled,
+                  availability_zone=availability_zone)
+    svc = objects.Service(ctxt, **kwargs)
+    svc.create()
+    return svc
 
 
 class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):

@@ -11,6 +11,7 @@
 #    under the License.
 
 import datetime
+from iso8601 import iso8601
 import sys
 import time
 
@@ -156,21 +157,8 @@ class TestCinderVolumeCmd(test.TestCase):
     def test_main(self, log_setup, monkey_patch, service_create,
                   get_launcher):
         CONF.set_override('enabled_backends', None)
-        launcher = get_launcher.return_value
-        server = service_create.return_value
-
-        cinder_volume.main()
-
-        self.assertEqual('cinder', CONF.project)
-        self.assertEqual(CONF.version, version.version_string())
-        log_setup.assert_called_once_with(CONF, "cinder")
-        monkey_patch.assert_called_once_with()
-        get_launcher.assert_called_once_with()
-        service_create.assert_called_once_with(binary='cinder-volume',
-                                               coordination=True,
-                                               cluster=None)
-        launcher.launch_service.assert_called_once_with(server)
-        launcher.wait.assert_called_once_with()
+        self.assertRaises(SystemExit, cinder_volume.main)
+        self.assertFalse(service_create.called)
 
     @mock.patch('cinder.service.get_launcher')
     @mock.patch('cinder.service.Service.create')
@@ -233,6 +221,34 @@ class TestCinderManageCmd(test.TestCase):
         db_cmds = cinder_manage.DbCommands()
         with mock.patch('sys.stdout', new=six.StringIO()):
             self.assertRaises(exception.InvalidInput, db_cmds.sync, 1)
+
+    @mock.patch('cinder.cmd.manage.DbCommands.online_migrations',
+                (mock.Mock(side_effect=((2, 2), (0, 0)), __name__='foo'),))
+    def test_db_commands_online_data_migrations(self):
+        db_cmds = cinder_manage.DbCommands()
+        exit = self.assertRaises(SystemExit, db_cmds.online_data_migrations)
+        self.assertEqual(0, exit.code)
+        cinder_manage.DbCommands.online_migrations[0].assert_has_calls(
+            (mock.call(mock.ANY, 50, False),) * 2)
+
+    @mock.patch('cinder.cmd.manage.DbCommands.online_migrations',
+                (mock.Mock(side_effect=((2, 2), (0, 0)), __name__='foo'),))
+    def test_db_commands_online_data_migrations_ignore_state_and_max(self):
+        db_cmds = cinder_manage.DbCommands()
+        exit = self.assertRaises(SystemExit, db_cmds.online_data_migrations,
+                                 2, True)
+        self.assertEqual(1, exit.code)
+        cinder_manage.DbCommands.online_migrations[0].assert_called_once_with(
+            mock.ANY, 2, True)
+
+    @mock.patch('cinder.cmd.manage.DbCommands.online_migrations',
+                (mock.Mock(side_effect=((2, 2), (0, 0)), __name__='foo'),))
+    def test_db_commands_online_data_migrations_max_negative(self):
+        db_cmds = cinder_manage.DbCommands()
+        exit = self.assertRaises(SystemExit, db_cmds.online_data_migrations,
+                                 -1)
+        self.assertEqual(127, exit.code)
+        cinder_manage.DbCommands.online_migrations[0].assert_not_called()
 
     @mock.patch('cinder.version.version_string')
     def test_versions_commands_list(self, version_string):
@@ -587,7 +603,8 @@ class TestCinderManageCmd(test.TestCase):
         consisgroup_update.assert_called_once_with(
             ctxt, fake.CONSISTENCY_GROUP_ID, {'host': 'fake_host2'})
 
-    @mock.patch('cinder.utils.service_is_up')
+    @mock.patch('cinder.objects.service.Service.is_up',
+                new_callable=mock.PropertyMock)
     @mock.patch('cinder.db.service_get_all')
     @mock.patch('cinder.context.get_admin_context')
     def _test_service_commands_list(self, service, get_admin_context,
@@ -1548,7 +1565,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         last_completed_audit_period.assert_called_once_with()
 
     @mock.patch('cinder.volume.utils.notify_about_volume_usage')
-    @mock.patch('cinder.db.volume_get_active_by_window')
+    @mock.patch('cinder.objects.volume.VolumeList.get_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
     @mock.patch('cinder.version.version_string')
@@ -1564,13 +1581,15 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         CONF.set_override('send_actions', True)
         CONF.set_override('start_time', '2014-01-01 01:00:00')
         CONF.set_override('end_time', '2014-02-02 02:00:00')
-        begin = datetime.datetime(2014, 1, 1, 1, 0)
-        end = datetime.datetime(2014, 2, 2, 2, 0)
+        begin = datetime.datetime(2014, 1, 1, 1, 0, tzinfo=iso8601.Utc())
+        end = datetime.datetime(2014, 2, 2, 2, 0, tzinfo=iso8601.Utc())
         ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID)
         get_admin_context.return_value = ctxt
         last_completed_audit_period.return_value = (begin, end)
-        volume1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        volume1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                            tzinfo=iso8601.Utc())
+        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                            tzinfo=iso8601.Utc())
         volume1 = mock.MagicMock(id=fake.VOLUME_ID, project_id=fake.PROJECT_ID,
                                  created_at=volume1_created,
                                  deleted_at=volume1_deleted)
@@ -1611,7 +1630,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         ])
 
     @mock.patch('cinder.volume.utils.notify_about_volume_usage')
-    @mock.patch('cinder.db.volume_get_active_by_window')
+    @mock.patch('cinder.objects.volume.VolumeList.get_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
     @mock.patch('cinder.version.version_string')
@@ -1627,13 +1646,15 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         CONF.set_override('send_actions', True)
         CONF.set_override('start_time', '2014-01-01 01:00:00')
         CONF.set_override('end_time', '2014-02-02 02:00:00')
-        begin = datetime.datetime(2014, 1, 1, 1, 0)
-        end = datetime.datetime(2014, 2, 2, 2, 0)
+        begin = datetime.datetime(2014, 1, 1, 1, 0, tzinfo=iso8601.Utc())
+        end = datetime.datetime(2014, 2, 2, 2, 0, tzinfo=iso8601.Utc())
         ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID)
         get_admin_context.return_value = ctxt
         last_completed_audit_period.return_value = (begin, end)
-        volume1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        volume1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                            tzinfo=iso8601.Utc())
+        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                            tzinfo=iso8601.Utc())
         volume1 = mock.MagicMock(id=fake.VOLUME_ID, project_id=fake.PROJECT_ID,
                                  created_at=volume1_created,
                                  deleted_at=volume1_deleted)
@@ -1684,7 +1705,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
     @mock.patch('cinder.volume.utils.notify_about_snapshot_usage')
     @mock.patch('cinder.objects.snapshot.SnapshotList.get_active_by_window')
     @mock.patch('cinder.volume.utils.notify_about_volume_usage')
-    @mock.patch('cinder.db.volume_get_active_by_window')
+    @mock.patch('cinder.objects.volume.VolumeList.get_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
     @mock.patch('cinder.version.version_string')
@@ -1702,13 +1723,15 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         CONF.set_override('send_actions', True)
         CONF.set_override('start_time', '2014-01-01 01:00:00')
         CONF.set_override('end_time', '2014-02-02 02:00:00')
-        begin = datetime.datetime(2014, 1, 1, 1, 0)
-        end = datetime.datetime(2014, 2, 2, 2, 0)
+        begin = datetime.datetime(2014, 1, 1, 1, 0, tzinfo=iso8601.Utc())
+        end = datetime.datetime(2014, 2, 2, 2, 0, tzinfo=iso8601.Utc())
         ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID)
         get_admin_context.return_value = ctxt
         last_completed_audit_period.return_value = (begin, end)
-        snapshot1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        snapshot1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        snapshot1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                              tzinfo=iso8601.Utc())
+        snapshot1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                              tzinfo=iso8601.Utc())
         snapshot1 = mock.MagicMock(id=fake.VOLUME_ID,
                                    project_id=fake.PROJECT_ID,
                                    created_at=snapshot1_created,
@@ -1755,9 +1778,9 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         ])
 
     @mock.patch('cinder.volume.utils.notify_about_backup_usage')
-    @mock.patch('cinder.db.backup_get_active_by_window')
+    @mock.patch('cinder.objects.backup.BackupList.get_active_by_window')
     @mock.patch('cinder.volume.utils.notify_about_volume_usage')
-    @mock.patch('cinder.db.volume_get_active_by_window')
+    @mock.patch('cinder.objects.volume.VolumeList.get_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
     @mock.patch('cinder.version.version_string')
@@ -1772,13 +1795,15 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         CONF.set_override('send_actions', True)
         CONF.set_override('start_time', '2014-01-01 01:00:00')
         CONF.set_override('end_time', '2014-02-02 02:00:00')
-        begin = datetime.datetime(2014, 1, 1, 1, 0)
-        end = datetime.datetime(2014, 2, 2, 2, 0)
+        begin = datetime.datetime(2014, 1, 1, 1, 0, tzinfo=iso8601.Utc())
+        end = datetime.datetime(2014, 2, 2, 2, 0, tzinfo=iso8601.Utc())
         ctxt = context.RequestContext('fake-user', 'fake-project')
         get_admin_context.return_value = ctxt
         last_completed_audit_period.return_value = (begin, end)
-        backup1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        backup1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        backup1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                            tzinfo=iso8601.Utc())
+        backup1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                            tzinfo=iso8601.Utc())
         backup1 = mock.MagicMock(id=fake.BACKUP_ID,
                                  project_id=fake.PROJECT_ID,
                                  created_at=backup1_created,
@@ -1819,11 +1844,11 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
             extra_usage_info=local_extra_info_delete)
 
     @mock.patch('cinder.volume.utils.notify_about_backup_usage')
-    @mock.patch('cinder.db.backup_get_active_by_window')
+    @mock.patch('cinder.objects.backup.BackupList.get_active_by_window')
     @mock.patch('cinder.volume.utils.notify_about_snapshot_usage')
     @mock.patch('cinder.objects.snapshot.SnapshotList.get_active_by_window')
     @mock.patch('cinder.volume.utils.notify_about_volume_usage')
-    @mock.patch('cinder.db.volume_get_active_by_window')
+    @mock.patch('cinder.objects.volume.VolumeList.get_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
     @mock.patch('cinder.version.version_string')
@@ -1838,14 +1863,16 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         CONF.set_override('send_actions', True)
         CONF.set_override('start_time', '2014-01-01 01:00:00')
         CONF.set_override('end_time', '2014-02-02 02:00:00')
-        begin = datetime.datetime(2014, 1, 1, 1, 0)
-        end = datetime.datetime(2014, 2, 2, 2, 0)
+        begin = datetime.datetime(2014, 1, 1, 1, 0, tzinfo=iso8601.Utc())
+        end = datetime.datetime(2014, 2, 2, 2, 0, tzinfo=iso8601.Utc())
         ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID)
         get_admin_context.return_value = ctxt
         last_completed_audit_period.return_value = (begin, end)
 
-        volume1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        volume1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                            tzinfo=iso8601.Utc())
+        volume1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                            tzinfo=iso8601.Utc())
         volume1 = mock.MagicMock(id=fake.VOLUME_ID, project_id=fake.PROJECT_ID,
                                  created_at=volume1_created,
                                  deleted_at=volume1_deleted)
@@ -1863,8 +1890,10 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
             'audit_period_ending': str(volume1.deleted_at),
         }
 
-        snapshot1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        snapshot1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        snapshot1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                              tzinfo=iso8601.Utc())
+        snapshot1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                              tzinfo=iso8601.Utc())
         snapshot1 = mock.MagicMock(id=fake.VOLUME_ID,
                                    project_id=fake.PROJECT_ID,
                                    created_at=snapshot1_created,
@@ -1879,8 +1908,10 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
             'audit_period_ending': str(snapshot1.deleted_at),
         }
 
-        backup1_created = datetime.datetime(2014, 1, 1, 2, 0)
-        backup1_deleted = datetime.datetime(2014, 1, 1, 3, 0)
+        backup1_created = datetime.datetime(2014, 1, 1, 2, 0,
+                                            tzinfo=iso8601.Utc())
+        backup1_deleted = datetime.datetime(2014, 1, 1, 3, 0,
+                                            tzinfo=iso8601.Utc())
         backup1 = mock.MagicMock(id=fake.BACKUP_ID,
                                  project_id=fake.PROJECT_ID,
                                  created_at=backup1_created,

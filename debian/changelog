@@ -1,3 +1,17 @@
+cinder (2:10.0.0~b2-0ubuntu1) zesty; urgency=medium
+
+  [ Chuck Short ]
+  * debian/rules, debian/control, debian/cinder-api.init.in,
+    debian/tests/cinder-daemon, debian/apache2.conf: Run cinder API daemon
+    under apache2 with mod_wsgi instead of under eventlet.
+
+  [ Corey Bryant ]
+  * New upstream release.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/google-back-requirements.patch: Rebased.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 16 Dec 2016 12:08:46 -0500
+
 cinder (2:10.0.0~b1-0ubuntu1) zesty; urgency=medium
 
   [ Chuck Short ]

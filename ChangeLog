@@ -1,18 +1,112 @@
 CHANGES
 =======
 
+10.0.0.0b2
+----------
+
+* Updated from global requirements
+* Add cinder volume drivers for NEC Storage M series
+* Nexenta: Added ZFS cleanup in NexentaStor4 iSCSI driver
+* Correct reraising of exception
+* Hacking: Remove N333 oslo namespace import check
+* Adds Unity Cinder Driver
+* Added initial backend ISCSI driver for Reduxio
+* Switch default py3x to py35
+* Remove run_tests.sh wrapper
+* Do not manage VG with > 1 volume in Kaminario driver
+* HNAS: Add list manageable volume/snapshots
+* Move to hacking 0.12
+* Modify variable's usage in Log Messages
+* Route extend_volume calls to scheduler
+* Remove deprecated volume_clear shred option
+* Fix dos-style endlines
+* Add QNAP ES Storage Driver
+* Fix TypeError when execute cinder-volume-usage-audit
+* Remove anyjson test dependency
+* Non-WAN port filter issue in Kaminario iSCSI driver
+* Updated from global requirements
+* Introduce Hitachi VSP iSCSI driver
+* Remove Kaminario deprecated option
+* Introduce Hitachi VSP driver
+* Support A/A in delete actions and get_capabilities
+* Dell SC: Incorrect exceptions being returned
+* Tests: Fix invalid UUID warnings
+* Block 3.1 message with c-sch RPCAPI pinned to 3.0
+* Fix replication_status on InvalidReplicationTarget
+* Add host check on replication actions
+* Updated from global requirements
+* SolidFire QoS scaled by volume size
+* Refactor api test_common to use ddt library
+* New cinder driver to support INFINIDAT InfiniBox
+* Remove support for single backend config
+* Update detach_volume() with versionedobjects
+* Update attach_volume() with versionedobjects
+* Calculate virtual free capacity and notify
+* NetApp cDOT driver fails to clone from NFS cache
+* Admin API policy enforcement contingent on is_admin_project
+* test: fix wrong usage of config option in test_window
+* Fix wrong usage of config option gpfs_images_share_mode
+* Correct the attributes of volume which created by clone a CG
+* Swap volume type for migration started by retype
+* Replace functions 'Dict.get' and 'del' with 'Dict.pop'
+* Huawei: Mark password option as secret
+* Remove Unicode byte order mark
+* Always allow to create snapshot db record with snapshot-manage
+* [api-ref] Correct status code of backup delete
+* Add cg constraint when deleting a volume type
+* Skip more parameters when import backup record
+* Dell SC: Reject thaw call when backend is failed over
+* Dell SC: Unable to locate LV primary after LV-AFO
+* Remove nosetests i18n fix
+* Add logging to FakeLoggingVolumeDriver
+* Remove empty debug_opts
+* Add unsupported status to driver listing
+* Add is_up property to service and cluster objects
+* HNAS: Rename hnas_svcX_volume_type
+* Fix UnBoundLocalError in update_consistencygroup
+* Support A/A in attach/detach operations
+* Remove 2 unnecessary assignments
+* Show team and repo badges on README
+* HPE3PAR: handle conflict in iscsi host create
+* Fix UnableToFailOver exception message
+* Updated from global requirements
+* Create a dell_emc folder for Dell EMC drivers
+* Replace six.iteritems with dict.items()
+* Modify the position of try-except
+* Fix names in online-data-migrations release note
+* Fix typo in test_quotas.py
+* Skip test_storwize_get_host_from_connector_with_lshost_failure
+* Update v2 and v3 Volume actions documentation
+* Fix v2 volume create api-reference request parameters
+* VMware: VMDK driver performance improvements
+* VMAX driver - Create a CG from a source CG
+* Deprecate Hitachi Block Storage Driver
+* Add host check while create snapshot
+* Prevent Active-Active on drivers by default
+* Log traceback for validate_connector exception
+* Fix "wrap functions with 2 blank lines" pep8 check
+* RBD: improve readability in over provisioning tests
+* Delete the redundant expression expected_attrs
+
 10.0.0.0b1
 ----------
 
+* Remove use of timeutils.set_time_override
+* Add generic code for online data migrations
+* VMAX driver - Ensure VMAX volume matches cinder db volume
 * Updated from global requirements
 * Pass OVO instance to copy_volume_to_image
 * Drop unused parameter in class EntryCreateTask
 * Set EVENTLET_NO_GREENDNS for IPv6 and dnspython compat
 * Fix doc comments
 * Add multipath enhancement to Storwize iSCSI driver
+* Update replication doc
+* Add VolumeAttachStatus Enum
 * Dell SC: Live Volumes not cleaned up
+* Convert backup_device to OVO
 * Clean _get_cctxt method signatures
 * DB: Optimize volume_update method
+* Fix typo error
 * Fix compatibility with decorator < 4.0.x
 * Fix config generator issue with OVO decorators
 * Dell SC: Minor cleanup
@@ -35,6 +129,7 @@ CHANGES
 * Fix typos in comment
 * VMAX driver - No support for creating CG from CG source
 * Updated from global requirements
+* NetApp Data ONTAP driver enhanced support logging
 * FalconStor: Fix creating snapshot failed
 * Dell SC: AsyncTask could return incomplete
 * VNX:Add more check on replication_device keys
@@ -42,6 +137,7 @@ CHANGES
 * NetApp: Report shared blocks exhaustion
 * Allow entry created in VolumeAttachment table for 2nd and later volumes
 * storwize: get_host_from_connector optimization
+* Huawei: Fix the rest query timeout problem
 * Updated from global requirements
 * Remove logging import unused
 * Add current status to error msg in reserve_volume
@@ -87,6 +183,7 @@ CHANGES
 * Imported Translations from Zanata
 * Dell SC: Can incorrectly identify if it is failed over
 * Enable release notes translation
+* Add VERSION to ZTE driver class
 * Imported Translations from Zanata
 * Switch from tempest-lib to tempest
 * VMAX driver - Misleading logging on portgroups
@@ -218,6 +315,7 @@ CHANGES
 * Fix coerce good values in test_fields.py
 * VMAX driver - Does not honor clone volume size
 * Updated from global requirements
+* Fix glance v2 image update
 * Unit test to use vol obj instead of dictionary
 * Imported Translations from Zanata
 * Remove few Kaminario release notes

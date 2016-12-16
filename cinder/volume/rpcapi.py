@@ -14,6 +14,7 @@
 
 
 from cinder.common import constants
+from cinder import objects
 from cinder import quota
 from cinder import rpc
 from cinder.volume import utils
@@ -110,9 +111,13 @@ class VolumeAPI(rpc.RPCAPI):
         3.1  - Remove promote_replica and reenable_replication. This is
                non-backward compatible, but the user-facing API was removed
                back in Mitaka when introducing cheesecake replication.
+        3.2  - Adds support for sending objects over RPC in
+               get_backup_device().
+        3.3  - Adds support for sending objects over RPC in attach_volume().
+        3.4  - Adds support for sending objects over RPC in detach_volume().
     """
 
-    RPC_API_VERSION = '3.1'
+    RPC_API_VERSION = '3.4'
     RPC_DEFAULT_VERSION = '3.0'
     TOPIC = constants.VOLUME_TOPIC
     BINARY = 'cinder-volume'
@@ -127,7 +132,7 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt.cast(ctxt, 'create_consistencygroup', group=group)
 
     def delete_consistencygroup(self, ctxt, group):
-        cctxt = self._get_cctxt(group.host)
+        cctxt = self._get_cctxt(group.service_topic_queue)
         cctxt.cast(ctxt, 'delete_consistencygroup', group=group)
 
     def update_consistencygroup(self, ctxt, group, add_volumes=None,
@@ -151,7 +156,7 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt.cast(ctxt, 'create_cgsnapshot', cgsnapshot=cgsnapshot)
 
     def delete_cgsnapshot(self, ctxt, cgsnapshot):
-        cctxt = self._get_cctxt(cgsnapshot.consistencygroup.host)
+        cctxt = self._get_cctxt(cgsnapshot.service_topic_queue)
         cctxt.cast(ctxt, 'delete_cgsnapshot', cgsnapshot=cgsnapshot)
 
     def create_volume(self, ctxt, volume, host, request_spec,
@@ -165,7 +170,7 @@ class VolumeAPI(rpc.RPCAPI):
 
     def delete_volume(self, ctxt, volume, unmanage_only=False, cascade=False):
         volume.create_worker()
-        cctxt = self._get_cctxt(volume.host)
+        cctxt = self._get_cctxt(volume.service_topic_queue)
         msg_args = {
             'volume': volume, 'unmanage_only': unmanage_only,
             'cascade': cascade,
@@ -178,25 +183,32 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt = self._get_cctxt(volume['host'])
         cctxt.cast(ctxt, 'create_snapshot', snapshot=snapshot)
 
-    def delete_snapshot(self, ctxt, snapshot, host, unmanage_only=False):
-        cctxt = self._get_cctxt(host)
+    def delete_snapshot(self, ctxt, snapshot, unmanage_only=False):
+        cctxt = self._get_cctxt(snapshot.service_topic_queue)
         cctxt.cast(ctxt, 'delete_snapshot', snapshot=snapshot,
                    unmanage_only=unmanage_only)
 
     def attach_volume(self, ctxt, volume, instance_uuid, host_name,
                       mountpoint, mode):
-        cctxt = self._get_cctxt(volume['host'])
-        return cctxt.call(ctxt, 'attach_volume',
-                          volume_id=volume['id'],
-                          instance_uuid=instance_uuid,
-                          host_name=host_name,
-                          mountpoint=mountpoint,
-                          mode=mode)
+        msg_args = {'volume_id': volume.id,
+                    'instance_uuid': instance_uuid,
+                    'host_name': host_name,
+                    'mountpoint': mountpoint,
+                    'mode': mode,
+                    'volume': volume}
+        cctxt = self._get_cctxt(volume.service_topic_queue, ('3.3', '3.0'))
+        if not cctxt.can_send_version('3.3'):
+            msg_args.pop('volume')
+        return cctxt.call(ctxt, 'attach_volume', **msg_args)
 
     def detach_volume(self, ctxt, volume, attachment_id):
-        cctxt = self._get_cctxt(volume['host'])
-        return cctxt.call(ctxt, 'detach_volume', volume_id=volume['id'],
-                          attachment_id=attachment_id)
+        msg_args = {'volume_id': volume.id,
+                    'attachment_id': attachment_id,
+                    'volume': volume}
+        cctxt = self._get_cctxt(volume.service_topic_queue, ('3.4', '3.0'))
+        if not self.client.can_send_version('3.4'):
+            msg_args.pop('volume')
+        return cctxt.call(ctxt, 'detach_volume', **msg_args)
 
     def copy_volume_to_image(self, ctxt, volume, image_meta):
         cctxt = self._get_cctxt(volume['host'])
@@ -204,17 +216,17 @@ class VolumeAPI(rpc.RPCAPI):
                    image_meta=image_meta)
 
     def initialize_connection(self, ctxt, volume, connector):
-        cctxt = self._get_cctxt(volume['host'])
+        cctxt = self._get_cctxt(volume.service_topic_queue)
         return cctxt.call(ctxt, 'initialize_connection', connector=connector,
                           volume=volume)
 
     def terminate_connection(self, ctxt, volume, connector, force=False):
-        cctxt = self._get_cctxt(volume['host'])
+        cctxt = self._get_cctxt(volume.service_topic_queue)
         return cctxt.call(ctxt, 'terminate_connection', volume_id=volume['id'],
                           connector=connector, force=force)
 
     def remove_export(self, ctxt, volume):
-        cctxt = self._get_cctxt(volume['host'])
+        cctxt = self._get_cctxt(volume.service_topic_queue)
         cctxt.cast(ctxt, 'remove_export', volume_id=volume['id'])
 
     def publish_service_capabilities(self, ctxt):
@@ -288,14 +300,20 @@ class VolumeAPI(rpc.RPCAPI):
                    snapshot=snapshot,
                    ref=ref)
 
-    def get_capabilities(self, ctxt, host, discover):
-        cctxt = self._get_cctxt(host)
+    def get_capabilities(self, ctxt, backend_id, discover):
+        cctxt = self._get_cctxt(backend_id)
         return cctxt.call(ctxt, 'get_capabilities', discover=discover)
 
     def get_backup_device(self, ctxt, backup, volume):
-        cctxt = self._get_cctxt(volume.host)
-        backup_dict = cctxt.call(ctxt, 'get_backup_device', backup=backup)
-        return backup_dict
+        cctxt = self._get_cctxt(volume.host, ('3.2', '3.0'))
+        if cctxt.can_send_version('3.2'):
+            backup_obj = cctxt.call(ctxt, 'get_backup_device', backup=backup,
+                                    want_objects=True)
+        else:
+            backup_dict = cctxt.call(ctxt, 'get_backup_device', backup=backup)
+            backup_obj = objects.BackupDeviceInfo.from_primitive(backup_dict,
+                                                                 ctxt)
+        return backup_obj
 
     def secure_file_operations_enabled(self, ctxt, volume):
         cctxt = self._get_cctxt(volume.host)
@@ -321,7 +339,7 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt.cast(ctxt, 'create_group', group=group)
 
     def delete_group(self, ctxt, group):
-        cctxt = self._get_cctxt(group.host)
+        cctxt = self._get_cctxt(group.service_topic_queue)
         cctxt.cast(ctxt, 'delete_group', group=group)
 
     def update_group(self, ctxt, group, add_volumes=None, remove_volumes=None):
@@ -341,6 +359,6 @@ class VolumeAPI(rpc.RPCAPI):
                    group_snapshot=group_snapshot)
 
     def delete_group_snapshot(self, ctxt, group_snapshot):
-        cctxt = self._get_cctxt(group_snapshot.group.host)
+        cctxt = self._get_cctxt(group_snapshot.service_topic_queue)
         cctxt.cast(ctxt, 'delete_group_snapshot',
                    group_snapshot=group_snapshot)

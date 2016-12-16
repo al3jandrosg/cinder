@@ -16,6 +16,7 @@ import mock
 import six
 
 from cinder import objects
+from cinder.objects import fields
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_volume
 from cinder.tests.unit import objects as test_objects
@@ -34,10 +35,11 @@ class TestVolumeAttachment(test_objects.BaseObjectsTestCase):
     @mock.patch('cinder.db.volume_attachment_update')
     def test_save(self, volume_attachment_update):
         attachment = fake_volume.fake_volume_attachment_obj(self.context)
-        attachment.attach_status = 'attaching'
+        attachment.attach_status = fields.VolumeAttachStatus.ATTACHING
         attachment.save()
         volume_attachment_update.assert_called_once_with(
-            self.context, attachment.id, {'attach_status': 'attaching'})
+            self.context, attachment.id,
+            {'attach_status': fields.VolumeAttachStatus.ATTACHING})
 
     @mock.patch('cinder.db.sqlalchemy.api.volume_attachment_get')
     def test_refresh(self, attachment_get):
@@ -65,6 +67,30 @@ class TestVolumeAttachment(test_objects.BaseObjectsTestCase):
                                          call_bool,
                                          mock.call(self.context,
                                                    fake.ATTACHMENT_ID)])
+
+    @mock.patch('cinder.db.sqlalchemy.api.volume_attached')
+    def test_volume_attached(self, volume_attached):
+        attachment = fake_volume.fake_volume_attachment_obj(self.context)
+        updated_values = {'mountpoint': '/dev/sda',
+                          'attach_status': fields.VolumeAttachStatus.ATTACHED,
+                          'instance_uuid': fake.INSTANCE_ID}
+        volume_attached.return_value = (fake_volume.fake_db_volume(),
+                                        updated_values)
+        volume = attachment.finish_attach(fake.INSTANCE_ID,
+                                          'fake_host',
+                                          '/dev/sda',
+                                          'rw')
+        self.assertIsInstance(volume, objects.Volume)
+        volume_attached.assert_called_once_with(mock.ANY,
+                                                attachment.id,
+                                                fake.INSTANCE_ID,
+                                                'fake_host',
+                                                '/dev/sda',
+                                                'rw')
+        self.assertEqual('/dev/sda', attachment.mountpoint)
+        self.assertEqual(fake.INSTANCE_ID, attachment.instance_uuid)
+        self.assertEqual(fields.VolumeAttachStatus.ATTACHED,
+                         attachment.attach_status)
 
 
 class TestVolumeAttachmentList(test_objects.BaseObjectsTestCase):

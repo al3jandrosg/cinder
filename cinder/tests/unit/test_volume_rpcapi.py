@@ -16,6 +16,8 @@
 Unit Tests for cinder.volume.rpcapi
 """
 import copy
+import ddt
+import mock
 
 from oslo_config import cfg
 from oslo_serialization import jsonutils
@@ -38,6 +40,7 @@ from cinder.volume import utils
 CONF = cfg.CONF
 
 
+@ddt.ddt
 class VolumeRpcAPITestCase(test.TestCase):
 
     def setUp(self):
@@ -47,7 +50,7 @@ class VolumeRpcAPITestCase(test.TestCase):
         vol['host'] = 'fake_host'
         vol['availability_zone'] = CONF.storage_availability_zone
         vol['status'] = "available"
-        vol['attach_status'] = "detached"
+        vol['attach_status'] = fields.VolumeAttachStatus.DETACHED
         vol['metadata'] = {"test_key": "test_val"}
         vol['size'] = 1
         volume = db.volume_create(self.context, vol)
@@ -105,7 +108,7 @@ class VolumeRpcAPITestCase(test.TestCase):
         self.fake_reservations = ["RESERVATION"]
         self.fake_cg = cg
         self.fake_cg2 = cg2
-        self.fake_src_cg = jsonutils.to_primitive(source_group)
+        self.fake_src_cg = source_group
         self.fake_cgsnap = cgsnapshot
         self.fake_backup_obj = fake_backup.fake_backup_obj(self.context)
         self.fake_group = generic_group
@@ -125,12 +128,48 @@ class VolumeRpcAPITestCase(test.TestCase):
     def test_serialized_volume_has_id(self):
         self.assertIn('id', self.fake_volume)
 
+    def _get_expected_msg(self, kwargs):
+        expected_msg = copy.deepcopy(kwargs)
+        if 'volume' in expected_msg:
+            volume = expected_msg.pop('volume')
+            # NOTE(thangp): copy.deepcopy() is making oslo_versionedobjects
+            # think that 'metadata' was changed.
+            if isinstance(volume, objects.Volume):
+                volume.obj_reset_changes()
+            expected_msg['volume_id'] = volume['id']
+            expected_msg['volume'] = volume
+        if 'snapshot' in expected_msg:
+            snapshot = expected_msg['snapshot']
+            if isinstance(snapshot, objects.Snapshot) and 'volume' in snapshot:
+                snapshot.volume.obj_reset_changes()
+            expected_msg['snapshot_id'] = snapshot.id
+        if 'cgsnapshot' in expected_msg:
+            cgsnapshot = expected_msg['cgsnapshot']
+            if cgsnapshot:
+                cgsnapshot.consistencygroup
+                kwargs['cgsnapshot'].consistencygroup
+        if 'backup' in expected_msg:
+            backup = expected_msg.pop('backup')
+            expected_msg['backup_id'] = backup.id
+            expected_msg['backup'] = backup
+
+        if 'host' in expected_msg:
+            del expected_msg['host']
+        if 'dest_host' in expected_msg:
+            dest_host = expected_msg.pop('dest_host')
+            dest_host_dict = {'host': dest_host.host,
+                              'capabilities': dest_host.capabilities}
+            expected_msg['host'] = dest_host_dict
+        if 'new_volume' in expected_msg:
+            volume = expected_msg['new_volume']
+            expected_msg['new_volume_id'] = volume['id']
+        return expected_msg
+
     def _test_volume_api(self, method, rpc_method, **kwargs):
         ctxt = context.RequestContext('fake_user', 'fake_project')
 
         if 'rpcapi_class' in kwargs:
-            rpcapi_class = kwargs['rpcapi_class']
-            del kwargs['rpcapi_class']
+            rpcapi_class = kwargs.pop('rpcapi_class')
         else:
             rpcapi_class = volume_rpcapi.VolumeAPI
         rpcapi = rpcapi_class()
@@ -144,54 +183,21 @@ class VolumeRpcAPITestCase(test.TestCase):
             spec = jsonutils.to_primitive(kwargs['request_spec'])
             kwargs['request_spec'] = spec
 
-        expected_msg = copy.deepcopy(kwargs)
-        if 'volume' in expected_msg:
-            volume = expected_msg['volume']
-            # NOTE(thangp): copy.deepcopy() is making oslo_versionedobjects
-            # think that 'metadata' was changed.
-            if isinstance(volume, objects.Volume):
-                volume.obj_reset_changes()
-            del expected_msg['volume']
-            expected_msg['volume_id'] = volume['id']
-            expected_msg['volume'] = volume
-        if 'snapshot' in expected_msg:
-            snapshot = expected_msg['snapshot']
-            del expected_msg['snapshot']
-            expected_msg['snapshot_id'] = snapshot.id
-            expected_msg['snapshot'] = snapshot
-        if 'cgsnapshot' in expected_msg:
-            cgsnapshot = expected_msg['cgsnapshot']
-            if cgsnapshot:
-                cgsnapshot.consistencygroup
-                kwargs['cgsnapshot'].consistencygroup
-        if 'backup' in expected_msg:
-            backup = expected_msg['backup']
-            del expected_msg['backup']
-            expected_msg['backup_id'] = backup.id
-            expected_msg['backup'] = backup
-
-        if 'host' in expected_msg:
-            del expected_msg['host']
-        if 'dest_host' in expected_msg:
-            dest_host = expected_msg['dest_host']
-            dest_host_dict = {'host': dest_host.host,
-                              'capabilities': dest_host.capabilities}
-            del expected_msg['dest_host']
-            expected_msg['host'] = dest_host_dict
-        if 'new_volume' in expected_msg:
-            volume = expected_msg['new_volume']
-            expected_msg['new_volume_id'] = volume['id']
+        expected_msg = self._get_expected_msg(kwargs)
 
         if 'host' in kwargs:
             host = kwargs['host']
+        elif 'backend_id' in kwargs:
+            host = kwargs['backend_id']
         elif 'group' in kwargs:
-            host = kwargs['group']['host']
+            host = kwargs['group'].service_topic_queue
         elif 'volume' in kwargs:
-            host = kwargs['volume']['host']
+            vol = kwargs['volume']
+            host = vol.service_topic_queue
         elif 'snapshot' in kwargs:
             host = 'fake_host'
         elif 'cgsnapshot' in kwargs:
-            host = kwargs['cgsnapshot'].consistencygroup.host
+            host = kwargs['cgsnapshot'].consistencygroup.service_topic_queue
 
         target['server'] = utils.extract_host(host)
         target['topic'] = '%s.%s' % (constants.VOLUME_TOPIC, host)
@@ -206,6 +212,7 @@ class VolumeRpcAPITestCase(test.TestCase):
 
         def _fake_rpc_method(*args, **kwargs):
             self.fake_args = args
+            kwargs.pop('want_objects', None)
             self.fake_kwargs = kwargs
             if expected_retval is not None:
                 return expected_retval
@@ -237,7 +244,7 @@ class VolumeRpcAPITestCase(test.TestCase):
             elif isinstance(value, objects.Volume):
                 expected_volume = expected_msg[kwarg].obj_to_primitive()
                 volume = value.obj_to_primitive()
-                self.assertEqual(expected_volume, volume)
+                self.assertDictEqual(expected_volume, volume)
             elif isinstance(value, objects.Backup):
                 expected_backup = expected_msg[kwarg].obj_to_primitive()
                 backup = value.obj_to_primitive()
@@ -276,9 +283,9 @@ class VolumeRpcAPITestCase(test.TestCase):
         if 'host' in kwargs:
             host = kwargs['host']
         elif 'group' in kwargs:
-            host = kwargs['group']['host']
+            host = kwargs['group'].service_topic_queue
         elif 'group_snapshot' in kwargs:
-            host = kwargs['group_snapshot'].group.host
+            host = kwargs['group_snapshot'].service_topic_queue
 
         target['server'] = utils.extract_host(host)
         target['topic'] = '%s.%s' % (constants.VOLUME_TOPIC, host)
@@ -328,6 +335,11 @@ class VolumeRpcAPITestCase(test.TestCase):
         self._test_volume_api('delete_consistencygroup', rpc_method='cast',
                               group=self.fake_cg, version='3.0')
 
+    def test_delete_consistencygroup_cluster(self):
+        self._set_cluster()
+        self._test_volume_api('delete_consistencygroup', rpc_method='cast',
+                              group=self.fake_src_cg, version='3.0')
+
     def test_update_consistencygroup(self):
         self._test_volume_api('update_consistencygroup', rpc_method='cast',
                               group=self.fake_cg, add_volumes=['vol1'],
@@ -338,6 +350,7 @@ class VolumeRpcAPITestCase(test.TestCase):
                               cgsnapshot=self.fake_cgsnap, version='3.0')
 
     def test_delete_cgsnapshot(self):
+        self._set_cluster()
         self._test_volume_api('delete_cgsnapshot', rpc_method='cast',
                               cgsnapshot=self.fake_cgsnap, version='3.0')
 
@@ -359,6 +372,15 @@ class VolumeRpcAPITestCase(test.TestCase):
                               cascade=False,
                               version='3.0')
 
+    def test_delete_volume_cluster(self):
+        self._set_cluster()
+        self._test_volume_api('delete_volume',
+                              rpc_method='cast',
+                              volume=self.fake_volume_obj,
+                              unmanage_only=False,
+                              cascade=False,
+                              version='3.0')
+
     def test_delete_volume_cascade(self):
         self._test_volume_api('delete_volume',
                               rpc_method='cast',
@@ -370,57 +392,106 @@ class VolumeRpcAPITestCase(test.TestCase):
     def test_create_snapshot(self):
         self._test_volume_api('create_snapshot',
                               rpc_method='cast',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               snapshot=self.fake_snapshot,
                               version='3.0')
 
     def test_delete_snapshot(self):
+        self.fake_snapshot.volume
         self._test_volume_api('delete_snapshot',
                               rpc_method='cast',
                               snapshot=self.fake_snapshot,
-                              host='fake_host',
+                              unmanage_only=False,
+                              version='3.0')
+
+    def test_delete_snapshot_cluster(self):
+        self._set_cluster()
+        self.fake_snapshot.volume
+        self._test_volume_api('delete_snapshot',
+                              rpc_method='cast',
+                              snapshot=self.fake_snapshot,
                               unmanage_only=False,
                               version='3.0')
 
     def test_delete_snapshot_with_unmanage_only(self):
+        self.fake_snapshot.volume.metadata
         self._test_volume_api('delete_snapshot',
                               rpc_method='cast',
                               snapshot=self.fake_snapshot,
-                              host='fake_host',
                               unmanage_only=True,
                               version='3.0')
 
-    def test_attach_volume_to_instance(self):
+    @ddt.data('3.0', '3.3')
+    @mock.patch('oslo_messaging.RPCClient.can_send_version')
+    def test_attach_volume_to_instance(self, version, can_send_version):
+        can_send_version.return_value = (version == '3.3')
         self._test_volume_api('attach_volume',
                               rpc_method='call',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               instance_uuid='fake_uuid',
                               host_name=None,
                               mountpoint='fake_mountpoint',
                               mode='ro',
-                              version='3.0')
+                              version=version)
 
-    def test_attach_volume_to_host(self):
+    @ddt.data('3.0', '3.3')
+    @mock.patch('oslo_messaging.RPCClient.can_send_version')
+    def test_attach_volume_to_host(self, version, can_send_version):
+        can_send_version.return_value = (version == '3.3')
         self._test_volume_api('attach_volume',
                               rpc_method='call',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               instance_uuid=None,
                               host_name='fake_host',
                               mountpoint='fake_mountpoint',
                               mode='rw',
-                              version='3.0')
+                              version=version)
 
-    def test_detach_volume(self):
+    def _set_cluster(self):
+        self.fake_volume_obj.cluster_name = 'my_cluster'
+        self.fake_volume_obj.obj_reset_changes(['cluster_name'])
+        self.fake_src_cg.cluster_name = 'my_cluster'
+        self.fake_src_cg.obj_reset_changes(['my_cluster'])
+
+    @ddt.data('3.0', '3.3')
+    @mock.patch('oslo_messaging.RPCClient.can_send_version')
+    def test_attach_volume_to_cluster(self, version, can_send_version):
+        can_send_version.return_value = (version == '3.3')
+        self._set_cluster()
+        self._test_volume_api('attach_volume',
+                              rpc_method='call',
+                              volume=self.fake_volume_obj,
+                              instance_uuid=None,
+                              host_name='fake_host',
+                              mountpoint='fake_mountpoint',
+                              mode='rw',
+                              version=version)
+
+    @ddt.data('3.0', '3.4')
+    @mock.patch('oslo_messaging.RPCClient.can_send_version')
+    def test_detach_volume(self, version, can_send_version):
+        can_send_version.return_value = (version == '3.4')
         self._test_volume_api('detach_volume',
                               rpc_method='call',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               attachment_id='fake_uuid',
-                              version="3.0")
+                              version=version)
+
+    @ddt.data('3.0', '3.4')
+    @mock.patch('oslo_messaging.RPCClient.can_send_version')
+    def test_detach_volume_cluster(self, version, can_send_version):
+        can_send_version.return_value = (version == '3.4')
+        self._set_cluster()
+        self._test_volume_api('detach_volume',
+                              rpc_method='call',
+                              volume=self.fake_volume_obj,
+                              attachment_id='fake_uuid',
+                              version=version)
 
     def test_copy_volume_to_image(self):
         self._test_volume_api('copy_volume_to_image',
                               rpc_method='cast',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               image_meta={'id': 'fake_image_id',
                                           'container_format': 'fake_type',
                                           'disk_format': 'fake_type'},
@@ -433,10 +504,28 @@ class VolumeRpcAPITestCase(test.TestCase):
                               connector='fake_connector',
                               version='3.0')
 
+    @mock.patch('oslo_messaging.RPCClient.can_send_version', return_value=True)
+    def test_initialize_connection_cluster(self, mock_can_send_version):
+        self._set_cluster()
+        self._test_volume_api('initialize_connection',
+                              rpc_method='call',
+                              volume=self.fake_volume_obj,
+                              connector='fake_connector',
+                              version='3.0')
+
     def test_terminate_connection(self):
         self._test_volume_api('terminate_connection',
                               rpc_method='call',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
+                              connector='fake_connector',
+                              force=False,
+                              version='3.0')
+
+    def test_terminate_connection_cluster(self):
+        self._set_cluster()
+        self._test_volume_api('terminate_connection',
+                              rpc_method='call',
+                              volume=self.fake_volume_obj,
                               connector='fake_connector',
                               force=False,
                               version='3.0')
@@ -444,7 +533,7 @@ class VolumeRpcAPITestCase(test.TestCase):
     def test_accept_transfer(self):
         self._test_volume_api('accept_transfer',
                               rpc_method='call',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               new_user='e5565fd0-06c8-11e3-'
                                        '8ffd-0800200c9b77',
                               new_project='e4465fd0-06c8-11e3'
@@ -557,17 +646,31 @@ class VolumeRpcAPITestCase(test.TestCase):
     def test_get_capabilities(self):
         self._test_volume_api('get_capabilities',
                               rpc_method='call',
-                              host='fake_host',
+                              backend_id='fake_host',
                               discover=True,
                               version='3.0')
 
     def test_remove_export(self):
         self._test_volume_api('remove_export',
                               rpc_method='cast',
-                              volume=self.fake_volume,
+                              volume=self.fake_volume_obj,
                               version='3.0')
 
-    def test_get_backup_device(self):
+    @mock.patch('oslo_messaging.RPCClient.can_send_version',
+                return_value=True)
+    def test_get_backup_device(self, mock_can_send_version):
+        self._test_volume_api('get_backup_device',
+                              rpc_method='call',
+                              backup=self.fake_backup_obj,
+                              volume=self.fake_volume_obj,
+                              version='3.2')
+
+    @mock.patch('oslo_messaging.RPCClient.can_send_version',
+                return_value=False)
+    @mock.patch('cinder.objects.backup.BackupDeviceInfo.from_primitive',
+                return_value={})
+    def test_get_backup_device_old(self, mock_from_primitive,
+                                   mock_can_send_version):
         self._test_volume_api('get_backup_device',
                               rpc_method='call',
                               backup=self.fake_backup_obj,
@@ -586,6 +689,11 @@ class VolumeRpcAPITestCase(test.TestCase):
                              version='3.0')
 
     def test_delete_group(self):
+        self._test_group_api('delete_group', rpc_method='cast',
+                             group=self.fake_group, version='3.0')
+
+    def test_delete_group_cluster(self):
+        self.fake_group.cluster_name = 'mycluster'
         self._test_group_api('delete_group', rpc_method='cast',
                              group=self.fake_group, version='3.0')
 

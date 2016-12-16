@@ -12,6 +12,7 @@ Adalberto Medeiros <adalbas@linux.vnet.ibm.com>
 Adam Gandelman <adam.gandelman@canonical.com>
 Adam Gandelman <adamg@canonical.com>
 Adam Spiers <aspiers@suse.com>
+Adam Young <ayoung@redhat.com>
 Adelina Tuvenie <atuvenie@cloudbasesolutions.com>
 Adriano Rosso <adriano.rosso@fit-tecnologia.org.br>
 Adrien Vergé <adrien.verge@numergy.com>
@@ -64,6 +65,7 @@ Anton Frolov <anfrolov@mirantis.com>
 Arata Notsu <notsu@virtualtech.jp>
 ArkadyKanevsky <arkady_kanevsky@dell.com>
 Arne Wiebalck <Arne.Wiebalck@cern.ch>
+Arnon Yaari <arnony@infinidat.com>
 Aswad Rangnekar <aswad.rangnekar@nttdata.com>
 Atsushi SAKAI <sakaia@jp.fujitsu.com>
 Attila Fazekas <afazekas@redhat.com>
@@ -410,6 +412,7 @@ Mehdi Abaakouk <sileht@sileht.net>
 Meir Kriheli <Meir.Kriheli@emc.com>
 Michael Basnight <mbasnight@gmail.com>
 Michael Berlin <mberlin@quobyte.com>
+Michael Dovgal <mdovgal@mirantis.com>
 Michael J Fork <mjfork@us.ibm.com>
 Michael Kerrin <michael.kerrin@hp.com>
 Michael Krotscheck <krotscheck@gmail.com>
@@ -470,6 +473,7 @@ Peter Penchev <openstack-dev@storpool.com>
 Peter Pentchev <openstack-dev@storpool.com>
 Peter Wang <peter.wang13@emc.com>
 Philipp Marek <philipp.marek@linbit.com>
+Pony Chou <ponychou@qnap.com>
 Pradeep Sathasivam <psathasi@brocade.com>
 Pranali Deore <pdeore@redhat.com>
 Pranali Deore <pranali.deore@nttdata.com>
@@ -528,6 +532,7 @@ Ryosuke Mizuno <r-mizuno@rs.jp.nec.com>
 Sachi King <nakato@nakato.io>
 Sai Kiran <saikiran@techpatron.co.in>
 Sam Morrison <sorrison@gmail.com>
+Samantha Blanco <samantha.blanco@att.com>
 Samuel Matzek <smatzek@us.ibm.com>
 Santhoshkumar Kolathur <skolathu@brocade.com>
 Sascha Peilicke <saschpe@gmx.de>
@@ -563,6 +568,7 @@ Shilpa Jagannath <smanjara@redhat.com>
 Shlomi Avihou <shlomi@zadarastorage.com>
 Shlomi Sasson <shlomis@mellanox.com>
 Shuangtai Tian <shuangtai.tian@intel.com>
+Shunei Shiono <s-shiono@ti.jp.nec.com>
 Shyama Venugopal <shyvenug@in.ibm.com>
 Silvan Kaiser <silvan@quobyte.com>
 Simon Dodsley <simon@purestorage.com>
@@ -639,6 +645,7 @@ Victor A. Ying <victor.ying@purestorage.com>
 Victor Rodionov <vito.ordaz@gmail.com>
 Victor Sergeyev <vsergeyev@mirantis.com>
 Victor Stinner <vstinner@redhat.com>
+Vijay Ladani <vijay.ladani@hpe.com>
 Vilobh Meshram <vilobhmm@yahoo-inc.com>
 Vincent Hou <sbhou@cn.ibm.com>
 Vincent Hou <shou@us.ibm.com>
@@ -722,11 +729,13 @@ apoorvad <apps.desh@gmail.com>
 appsdesh <apps.desh@gmail.com>
 april <xiaolixu@cn.ibm.com>
 arsenc <arsenc@synology.com>
+bailinzhang <zhang.bailin@zte.com.cn>
 bhagyashris <bhagyashri.shewale@nttdata.com>
 binean <ting.wang@easystack.cn>
 caoyue <yue.cao@easystack.cn>
 chadlung <chad.lung@gmail.com>
 chaochin <chaochin@zhaoqin-RHEL-GPFS1.(none)>
+chenaidong1 <chen.aidong@zte.com.cn>
 cheneydc <dongc@neunn.com>
 chenying <ying.chen@huawei.com>
 chenzongliang <chenzongliang@huawei.com>
@@ -754,6 +763,7 @@ huangtianhua <huangtianhua@huawei.com>
 hussainchachuliya <hussain.chachuliya@nttdata.com>
 huyang <huyang1@huawei.com>
 iberezovskiy <iberezovskiy@mirantis.com>
+int32bit <krystism@gmail.com>
 jakedahn <jake@ansolabs.com>
 jbrogan <jbrogan@ebaysf.com>
 jenny-shieh <jenny.shieh@hp.com>
@@ -771,6 +781,7 @@ lakshman <Lakshmi.Narayana.ctr@kaminario.com>
 leseb <sebastien.han@enovance.com>
 lg.yue <yuelongguang@letv.com>
 liangjingtao <liang.jingtao@zte.com.cn>
+lijing <lijing@gohighsec.com>
 lijunli1 <lijunli@chinac.com>
 ling-yun <zengyunling@huawei.com>
 lirenke <lvhancy@163.com>
@@ -795,6 +806,7 @@ mannuray <mannu.ray@gmail.com>
 maoshuai <fwsakura@163.com>
 marcusvrn <marcus.nascimento@fit-tecnologia.org.br>
 masahiro ikeda <ikedamsh@nttdata.co.jp>
+mattanShalev <mattan@reduxio.com>
 melissaml <ma.lei@99cloud.net>
 mikhail <mikhail.khodos@nexenta.com>
 mouad benchchaoui <m.benchchaoui@cloudbau.de>
@@ -858,6 +870,7 @@ yoan desbordes <desbor_y@etna-alternance.net>
 yogeshprasad <yogesh.prasad@cloudbyte.com>
 yuriy_n <ynesenenko@mirantis.com>
 yuyafei <yu.yafei@zte.com.cn>
+zengyingzhe <zengyingzhe@huawei.com>
 zhangchao010 <zhangchao010@huawei.com>
 zhangchunlong1@huawei.com <zhangchunlong1@huawei.com>
 zhangguoqing <zhang.guoqing@99cloud.net>
@@ -865,6 +878,7 @@ zhangni <zhangni@huawei.com>
 zhangsong <zhangsong@cmss.chinamobile.com>
 zhangyanxian <zhang.yanxian@zte.com.cn>
 zhangyanzi <zhangyanzi@huawei.com>
+zhangyi <yi.zhang@easystack.cn>
 zhaohua <zhaohua.zhao@huawei.com>
 zhaoqin <chaochin@gmail.com>
 zheng yin <yin.zheng@easystack.cn>

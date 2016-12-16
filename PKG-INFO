@@ -1,12 +1,21 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 10.0.0.0b1
+Version: 10.0.0.0b2
 Summary: OpenStack Block Storage
 Home-page: http://docs.openstack.org/developer/cinder/
 Author: OpenStack
 Author-email: openstack-dev@lists.openstack.org
 License: UNKNOWN
-Description: ======
+Description: ========================
+        Team and repository tags
+        ========================
+        
+        .. image:: http://governance.openstack.org/badges/cinder.svg
+            :target: http://governance.openstack.org/reference/tags/index.html
+        
+        .. Change things from this point on
+        
+        ======
         CINDER
         ======
         

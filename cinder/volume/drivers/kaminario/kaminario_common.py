@@ -30,7 +30,7 @@ import six
 
 import cinder
 from cinder import exception
-from cinder.i18n import _, _LE, _LW, _LI
+from cinder.i18n import _, _LE, _LW
 from cinder import objects
 from cinder.objects import fields
 from cinder import utils
@@ -45,24 +45,14 @@ MAX_K2_RETRY = 5
 K2_REP_FAILED_OVER = fields.ReplicationStatus.FAILED_OVER
 LOG = logging.getLogger(__name__)
 
-kaminario1_opts = [
-    cfg.StrOpt('kaminario_nodedup_substring',
-               default='K2-nodedup',
-               help="If volume-type name contains this substring "
-                    "nodedup volume will be created, otherwise "
-                    "dedup volume wil be created.",
-               deprecated_for_removal=True,
-               deprecated_reason="This option is deprecated in favour of "
-                                 "'kaminario:thin_prov_type' in extra-specs "
-                                 "and will be removed in the next release.")]
-kaminario2_opts = [
+kaminario_opts = [
     cfg.BoolOpt('auto_calc_max_oversubscription_ratio',
                 default=False,
                 help="K2 driver will calculate max_oversubscription_ratio "
                      "on setting this option as True.")]
 
 CONF = cfg.CONF
-CONF.register_opts(kaminario1_opts)
+CONF.register_opts(kaminario_opts)
 
 K2HTTPError = requests.exceptions.HTTPError
 K2_RETRY_ERRORS = ("MC_ERR_BUSY", "MC_ERR_BUSY_SPECIFIC",
@@ -138,7 +128,7 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
     def __init__(self, *args, **kwargs):
         super(KaminarioCinderDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(san.san_opts)
-        self.configuration.append_config_values(kaminario2_opts)
+        self.configuration.append_config_values(kaminario_opts)
         self.replica = None
         self._protocol = None
         k2_lock_sfx = self.configuration.safe_get('san_ip')
@@ -990,12 +980,6 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
                 'kaminario:thin_prov_type')
             if specs_val == 'nodedup':
                 return False
-            elif CONF.kaminario_nodedup_substring in vol_type.get('name'):
-                LOG.info(_LI("'kaminario_nodedup_substring' option is "
-                             "deprecated in favour of 'kaminario:thin_prov_"
-                             "type' in extra-specs and will be removed in "
-                             "the 10.0.0 release."))
-                return False
             else:
                 return True
         else:
@@ -1026,18 +1010,28 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
         vg_new_name = self.get_volume_group_name(volume.id)
         vg_name = None
         is_dedup = self._get_is_dedup(volume.get('volume_type'))
+        reason = None
         try:
             LOG.debug("Searching volume: %s in K2.", vol_name)
             vol = self.client.search("volumes", name=vol_name).hits[0]
             vg = vol.volume_group
+            nvol = self.client.search("volumes", volume_group=vg).total
             vg_replica = self._get_replica_status(vg.name)
             vol_map = False
             if self.client.search("mappings", volume=vol).total != 0:
                 vol_map = True
-            if is_dedup != vg.is_dedup or vg_replica or vol_map:
+            if is_dedup != vg.is_dedup:
+                reason = 'dedup type mismatch for K2 volume group.'
+            elif vg_replica:
+                reason = 'replication enabled K2 volume group.'
+            elif vol_map:
+                reason = 'attached K2 volume.'
+            elif nvol != 1:
+                reason = 'multiple volumes in K2 volume group.'
+            if reason:
                 raise exception.ManageExistingInvalidReference(
                     existing_ref=existing_ref,
-                    reason=_('Manage volume type invalid.'))
+                    reason=_('Unable to manage K2 volume due to: %s') % reason)
             vol.name = new_name
             vg_name = vg.name
             LOG.debug("Manage new volume name: %s", new_name)
@@ -1046,7 +1040,11 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
             vg.save()
             LOG.debug("Manage volume: %s in K2.", vol_name)
             vol.save()
-        except Exception as ex:
+        except exception.ManageExistingInvalidReference:
+            LOG.exception(_LE("manage volume: %s failed."), vol_name)
+            raise
+        except Exception:
+            LOG.exception(_LE("manage volume: %s failed."), vol_name)
             vg_rs = self.client.search("volume_groups", name=vg_new_name)
             if hasattr(vg_rs, 'hits') and vg_rs.total != 0:
                 vg = vg_rs.hits[0]
@@ -1054,10 +1052,7 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
                     vg.name = vg_name
                     LOG.debug("Updating vg new name to old name: %s ", vg_name)
                     vg.save()
-            LOG.exception(_LE("manage volume: %s failed."), vol_name)
-            raise exception.ManageExistingInvalidReference(
-                existing_ref=existing_ref,
-                reason=six.text_type(ex.message))
+            raise
 
     @kaminario_logger
     def manage_existing_get_size(self, volume, existing_ref):

@@ -224,6 +224,13 @@ class VolumeManager(manager.CleanableManager,
             host=self.host,
             is_vol_db_empty=vol_db_empty,
             active_backend_id=curr_active_backend_id)
+
+        if self.cluster and not self.driver.SUPPORTS_ACTIVE_ACTIVE:
+            msg = _LE('Active-Active configuration is not currently supported '
+                      'by driver %s.') % volume_driver
+            LOG.error(msg)
+            raise exception.VolumeDriverException(message=msg)
+
         self.message_api = message_api.API()
 
         if CONF.profiler.enabled and profiler is not None:
@@ -632,6 +639,10 @@ class VolumeManager(manager.CleanableManager,
         LOG.info(_LI("Created volume successfully."), resource=volume)
         return volume.id
 
+    def _is_our_resource(self, resource):
+        resource_topic = vol_utils.extract_host(resource.service_topic_queue)
+        return resource_topic == self.service_topic_queue
+
     @coordination.synchronized('{volume.id}-{f_name}')
     @objects.Volume.set_workers
     def delete_volume(self, context, volume, unmanage_only=False,
@@ -661,10 +672,10 @@ class VolumeManager(manager.CleanableManager,
         else:
             project_id = context.project_id
 
-        if volume['attach_status'] == "attached":
+        if volume['attach_status'] == fields.VolumeAttachStatus.ATTACHED:
             # Volume is still attached, need to detach first
             raise exception.VolumeAttached(volume_id=volume.id)
-        if vol_utils.extract_host(volume.host) != self.host:
+        if not self._is_our_resource(volume):
             raise exception.InvalidVolume(
                 reason=_("volume is not local to this node"))
 
@@ -918,70 +929,67 @@ class VolumeManager(manager.CleanableManager,
 
     @coordination.synchronized('{volume_id}')
     def attach_volume(self, context, volume_id, instance_uuid, host_name,
-                      mountpoint, mode):
+                      mountpoint, mode, volume=None):
         """Updates db to show volume is attached."""
+        # FIXME(lixiaoy1): Remove this in v4.0 of RPC API.
+        if volume is None:
+            # For older clients, mimic the old behavior and look
+            # up the volume by its volume_id.
+            volume = objects.Volume.get_by_id(context, volume_id)
+        # Get admin_metadata. This needs admin context.
+        with volume.obj_as_admin():
+            volume_metadata = volume.admin_metadata
         # check the volume status before attaching
-        volume = self.db.volume_get(context, volume_id)
-        volume_metadata = self.db.volume_admin_metadata_get(
-            context.elevated(), volume_id)
-        if volume['status'] == 'attaching':
+        if volume.status == 'attaching':
             if (volume_metadata.get('attached_mode') and
                volume_metadata.get('attached_mode') != mode):
                 raise exception.InvalidVolume(
                     reason=_("being attached by different mode"))
 
-        if (volume['status'] == 'in-use' and not volume['multiattach']
-           and not volume['migration_status']):
+        if (volume.status == 'in-use' and not volume.multiattach
+           and not volume.migration_status):
             raise exception.InvalidVolume(
                 reason=_("volume is already attached"))
 
         host_name_sanitized = utils.sanitize_hostname(
             host_name) if host_name else None
         if instance_uuid:
-            attachments = \
-                self.db.volume_attachment_get_all_by_instance_uuid(
-                    context, instance_uuid)
+            attachments = (
+                objects.VolumeAttachmentList.get_all_by_instance_uuid(
+                    context, instance_uuid))
         else:
             attachments = (
-                self.db.volume_attachment_get_all_by_host(
-                    context,
-                    host_name_sanitized))
+                objects.VolumeAttachmentList.get_all_by_host(
+                    context, host_name_sanitized))
         if attachments:
             # check if volume<->instance mapping is already tracked in DB
             for attachment in attachments:
                 if attachment['volume_id'] == volume_id:
-                    self.db.volume_update(context, volume_id,
-                                          {'status': 'in-use'})
+                    volume.status = 'in-use'
+                    volume.save()
                     return attachment
 
         self._notify_about_volume_usage(context, volume,
                                         "attach.start")
-        values = {'volume_id': volume_id,
-                  'attach_status': 'attaching', }
 
-        attachment = self.db.volume_attach(context.elevated(), values)
-        volume_metadata = self.db.volume_admin_metadata_update(
-            context.elevated(), volume_id,
-            {"attached_mode": mode}, False)
+        attachment = volume.begin_attach(mode)
 
-        attachment_id = attachment['id']
         if instance_uuid and not uuidutils.is_uuid_like(instance_uuid):
-            self.db.volume_attachment_update(context, attachment_id,
-                                             {'attach_status':
-                                              'error_attaching'})
+            attachment.attach_status = (
+                fields.VolumeAttachStatus.ERROR_ATTACHING)
+            attachment.save()
             raise exception.InvalidUUID(uuid=instance_uuid)
 
-        volume = self.db.volume_get(context, volume_id)
-
         if volume_metadata.get('readonly') == 'True' and mode != 'ro':
-            self.db.volume_update(context, volume_id,
-                                  {'status': 'error_attaching'})
+            attachment.attach_status = (
+                fields.VolumeAttachStatus.ERROR_ATTACHING)
+            attachment.save()
             self.message_api.create(
                 context, defined_messages.ATTACH_READONLY_VOLUME,
                 context.project_id, resource_type=resource_types.VOLUME,
-                resource_uuid=volume_id)
+                resource_uuid=volume.id)
             raise exception.InvalidVolumeAttachMode(mode=mode,
-                                                    volume_id=volume_id)
+                                                    volume_id=volume.id)
 
         try:
             # NOTE(flaper87): Verify the driver is enabled
@@ -992,7 +1000,7 @@ class VolumeManager(manager.CleanableManager,
             LOG.debug('Attaching volume %(volume_id)s to instance '
                       '%(instance)s at mountpoint %(mount)s on host '
                       '%(host)s.',
-                      {'volume_id': volume_id, 'instance': instance_uuid,
+                      {'volume_id': volume.id, 'instance': instance_uuid,
                        'mount': mountpoint, 'host': host_name_sanitized},
                       resource=volume)
             self.driver.attach_volume(context,
@@ -1002,45 +1010,49 @@ class VolumeManager(manager.CleanableManager,
                                       mountpoint)
         except Exception:
             with excutils.save_and_reraise_exception():
-                self.db.volume_attachment_update(
-                    context, attachment_id,
-                    {'attach_status': 'error_attaching'})
+                attachment.attach_status = (
+                    fields.VolumeAttachStatus.ERROR_ATTACHING)
+                attachment.save()
 
-        volume = self.db.volume_attached(context.elevated(),
-                                         attachment_id,
-                                         instance_uuid,
-                                         host_name_sanitized,
-                                         mountpoint,
-                                         mode)
+        volume = attachment.finish_attach(
+            instance_uuid,
+            host_name_sanitized,
+            mountpoint,
+            mode)
+
         self._notify_about_volume_usage(context, volume, "attach.end")
         LOG.info(_LI("Attach volume completed successfully."),
                  resource=volume)
-        return self.db.volume_attachment_get(context, attachment_id)
+        return attachment
 
     @coordination.synchronized('{volume_id}-{f_name}')
-    def detach_volume(self, context, volume_id, attachment_id=None):
+    def detach_volume(self, context, volume_id, attachment_id=None,
+                      volume=None):
         """Updates db to show volume is detached."""
         # TODO(vish): refactor this into a more general "unreserve"
-        volume = self.db.volume_get(context, volume_id)
-        attachment = None
+        # FIXME(lixiaoy1): Remove this in v4.0 of RPC API.
+        if volume is None:
+            # For older clients, mimic the old behavior and look up the volume
+            # by its volume_id.
+            volume = objects.Volume.get_by_id(context, volume_id)
+
         if attachment_id:
             try:
-                attachment = self.db.volume_attachment_get(context,
-                                                           attachment_id)
+                attachment = objects.VolumeAttachment.get_by_id(context,
+                                                                attachment_id)
             except exception.VolumeAttachmentNotFound:
                 LOG.info(_LI("Volume detach called, but volume not attached."),
                          resource=volume)
                 # We need to make sure the volume status is set to the correct
                 # status.  It could be in detaching status now, and we don't
                 # want to leave it there.
-                self.db.volume_detached(context, volume_id, attachment_id)
+                volume.finish_detach(attachment_id)
                 return
         else:
             # We can try and degrade gracefully here by trying to detach
             # a volume without the attachment_id here if the volume only has
             # one attachment.  This is for backwards compatibility.
-            attachments = self.db.volume_attachment_get_all_by_volume_id(
-                context, volume_id)
+            attachments = volume.volume_attachment
             if len(attachments) > 1:
                 # There are more than 1 attachments for this volume
                 # we have to have an attachment id.
@@ -1055,9 +1067,9 @@ class VolumeManager(manager.CleanableManager,
                 # so set the status to available and move on.
                 LOG.info(_LI("Volume detach called, but volume not attached."),
                          resource=volume)
-                self.db.volume_update(context, volume_id,
-                                      {'status': 'available',
-                                       'attach_status': 'detached'})
+                volume.status = 'available'
+                volume.attach_status = fields.VolumeAttachStatus.DETACHED
+                volume.save()
                 return
 
         self._notify_about_volume_usage(context, volume, "detach.start")
@@ -1076,8 +1088,9 @@ class VolumeManager(manager.CleanableManager,
         except Exception:
             with excutils.save_and_reraise_exception():
                 self.db.volume_attachment_update(
-                    context, attachment.get('id'),
-                    {'attach_status': 'error_detaching'})
+                    context, attachment.get('id'), {
+                        'attach_status':
+                            fields.VolumeAttachStatus.ERROR_DETACHING})
 
         # NOTE(jdg): We used to do an ensure export here to
         # catch upgrades while volumes were attached (E->F)
@@ -1086,7 +1099,6 @@ class VolumeManager(manager.CleanableManager,
 
         # We're going to remove the export here
         # (delete the iscsi target)
-        volume = self.db.volume_get(context, volume_id)
         try:
             utils.require_driver_initialized(self.driver)
             self.driver.remove_export(context.elevated(), volume)
@@ -1102,11 +1114,7 @@ class VolumeManager(manager.CleanableManager,
             raise exception.RemoveExportException(volume=volume_id,
                                                   reason=six.text_type(ex))
 
-        self.db.volume_detached(context.elevated(), volume_id,
-                                attachment.get('id'))
-        self.db.volume_admin_metadata_delete(context.elevated(), volume_id,
-                                             'attached_mode')
-
+        volume.finish_detach(attachment.id)
         self._notify_about_volume_usage(context, volume, "detach.end")
         LOG.info(_LI("Detach volume completed successfully."), resource=volume)
 
@@ -1159,7 +1167,8 @@ class VolumeManager(manager.CleanableManager,
             new_vol_values = {k: volume[k] for k in set(volume.keys()) -
                               self._VOLUME_CLONE_SKIP_PROPERTIES}
             new_vol_values['volume_type_id'] = volume_type_id
-            new_vol_values['attach_status'] = 'detached'
+            new_vol_values['attach_status'] = (
+                fields.VolumeAttachStatus.DETACHED)
             new_vol_values['status'] = 'creating'
             new_vol_values['project_id'] = ctx.project_id
             new_vol_values['display_name'] = 'image-%s' % image_meta['id']
@@ -1372,7 +1381,7 @@ class VolumeManager(manager.CleanableManager,
         except Exception as err:
             err_msg = (_("Validate volume connection failed "
                          "(error: %(err)s).") % {'err': six.text_type(err)})
-            LOG.error(err_msg, resource=volume)
+            LOG.exception(err_msg, resource=volume)
             raise exception.VolumeBackendAPIException(data=err_msg)
 
         try:
@@ -1642,7 +1651,8 @@ class VolumeManager(manager.CleanableManager,
 
         # Check the backend capabilities of migration destination host.
         rpcapi = volume_rpcapi.VolumeAPI()
-        capabilities = rpcapi.get_capabilities(ctxt, dest_vol['host'],
+        capabilities = rpcapi.get_capabilities(ctxt,
+                                               dest_vol.service_topic_queue,
                                                False)
         sparse_copy_volume = bool(capabilities and
                                   capabilities.get('sparse_copy_volume',
@@ -1692,7 +1702,7 @@ class VolumeManager(manager.CleanableManager,
             context=ctxt,
             host=host['host'],
             status='creating',
-            attach_status='detached',
+            attach_status=fields.VolumeAttachStatus.DETACHED,
             migration_status='target:%s' % volume['id'],
             **new_vol_values
         )
@@ -1840,15 +1850,17 @@ class VolumeManager(manager.CleanableManager,
         # As after detach and refresh, volume_attchments will be None.
         # We keep volume_attachment for later attach.
         if orig_volume_status == 'in-use':
-            attachments = volume.volume_attachment
-        else:
-            attachments = None
-        try:
-            for attachment in attachments:
-                self.detach_volume(ctxt, volume.id, attachment['id'])
-        except Exception as ex:
-            LOG.error(_LE("Detach migration source volume failed:  %(err)s"),
-                      {'err': ex}, resource=volume)
+            for attachment in volume.volume_attachment:
+                try:
+                    self.detach_volume(ctxt, volume.id, attachment.id)
+                except Exception as ex:
+                    LOG.error(_LE("Detach migration source volume "
+                                  "%(volume.id)s from instance "
+                                  "%(instance_id)s failed: %(err)s"),
+                              {'err': ex,
+                               'volume.id': volume.id,
+                               'instance_id': attachment.id},
+                              resource=volume)
 
         # Give driver (new_volume) a chance to update things as needed
         # after a successful migration.
@@ -1867,7 +1879,7 @@ class VolumeManager(manager.CleanableManager,
                    'migration_status': 'success'}
 
         if orig_volume_status == 'in-use':
-            for attachment in attachments:
+            for attachment in volume.volume_attachment:
                 rpcapi.attach_volume(ctxt, volume,
                                      attachment['instance_uuid'],
                                      attachment['attached_host'],
@@ -2815,6 +2827,7 @@ class VolumeManager(manager.CleanableManager,
     def _update_volume_from_src(self, context, vol, update, group=None):
         try:
             snapshot_id = vol.get('snapshot_id')
+            source_volid = vol.get('source_volid')
             if snapshot_id:
                 snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
                 orig_vref = self.db.volume_get(context,
@@ -2823,6 +2836,15 @@ class VolumeManager(manager.CleanableManager,
                     update['bootable'] = True
                     self.db.volume_glance_metadata_copy_to_volume(
                         context, vol['id'], snapshot_id)
+            if source_volid:
+                source_vol = objects.Volume.get_by_id(context, source_volid)
+                if source_vol.bootable:
+                    update['bootable'] = True
+                    self.db.volume_glance_metadata_copy_from_volume_to_volume(
+                        context, source_volid, vol['id'])
+                if source_vol.multiattach:
+                    update['multiattach'] = True
+
         except exception.SnapshotNotFound:
             LOG.error(_LE("Source snapshot %(snapshot_id)s cannot be found."),
                       {'snapshot_id': vol['snapshot_id']})
@@ -2883,18 +2905,18 @@ class VolumeManager(manager.CleanableManager,
         else:
             project_id = context.project_id
 
-        volumes = self.db.volume_get_all_by_group(context, group.id)
+        volumes = objects.VolumeList.get_all_by_group(context, group.id)
 
-        for volume_ref in volumes:
-            if volume_ref['attach_status'] == "attached":
+        for volume in volumes:
+            if (volume.attach_status ==
+                    fields.VolumeAttachStatus.ATTACHED):
                 # Volume is still attached, need to detach first
-                raise exception.VolumeAttached(volume_id=volume_ref['id'])
+                raise exception.VolumeAttached(volume_id=volume.id)
             # self.host is 'host@backend'
-            # volume_ref['host'] is 'host@backend#pool'
+            # volume.host is 'host@backend#pool'
             # Extract host before doing comparison
-            if volume_ref['host']:
-                new_host = vol_utils.extract_host(volume_ref['host'])
-                if new_host != self.host:
+            if volume.host:
+                if not self._is_our_resource(volume):
                     raise exception.InvalidVolume(
                         reason=_("Volume is not local to this node"))
 
@@ -2940,8 +2962,8 @@ class VolumeManager(manager.CleanableManager,
                 # None for volumes_model_update.
                 if not volumes_model_update:
                     for vol in volumes:
-                        self.db.volume_update(
-                            context, vol['id'], {'status': 'error'})
+                        vol.status = 'error'
+                        vol.save()
 
         # Get reservations for group
         try:
@@ -2956,15 +2978,14 @@ class VolumeManager(manager.CleanableManager,
                           resource={'type': 'consistency_group',
                                     'id': group.id})
 
-        for volume_ref in volumes:
+        for volume in volumes:
             # Get reservations for volume
             try:
-                volume_id = volume_ref['id']
                 reserve_opts = {'volumes': -1,
-                                'gigabytes': -volume_ref['size']}
+                                'gigabytes': -volume.size}
                 QUOTAS.add_volume_type_opts(context,
                                             reserve_opts,
-                                            volume_ref.get('volume_type_id'))
+                                            volume.volume_type_id)
                 reservations = QUOTAS.reserve(context,
                                               project_id=project_id,
                                               **reserve_opts)
@@ -2976,15 +2997,15 @@ class VolumeManager(manager.CleanableManager,
                                         'id': group.id})
 
             # Delete glance metadata if it exists
-            self.db.volume_glance_metadata_delete_by_volume(context, volume_id)
+            self.db.volume_glance_metadata_delete_by_volume(context, volume.id)
 
-            self.db.volume_destroy(context, volume_id)
+            self.db.volume_destroy(context, volume.id)
 
             # Commit the reservations
             if reservations:
                 QUOTAS.commit(context, reservations, project_id=project_id)
 
-            self.stats['allocated_capacity_gb'] -= volume_ref['size']
+            self.stats['allocated_capacity_gb'] -= volume.size
 
         if cgreservations:
             CGQUOTAS.commit(context, cgreservations,
@@ -3020,11 +3041,10 @@ class VolumeManager(manager.CleanableManager,
             # vol_obj.host is 'host@backend#pool'
             # Extract host before doing comparison
             if vol_obj.host:
-                new_host = vol_utils.extract_host(vol_obj.host)
-                msg = (_("Volume %(vol_id)s is not local to this node "
-                         "%(host)s") % {'vol_id': vol_obj.id,
-                                        'host': self.host})
-                if new_host != self.host:
+                if not self._is_our_resource(vol_obj):
+                    backend = vol_utils.extract_host(self.service_topic_queue)
+                    msg = (_("Volume %(vol_id)s is not local to %(backend)s") %
+                           {'vol_id': vol_obj.id, 'backend': backend})
                     raise exception.InvalidVolume(reason=msg)
 
         self._notify_about_group_usage(
@@ -3186,7 +3206,7 @@ class VolumeManager(manager.CleanableManager,
                 LOG.error(_LE("Update consistency group "
                               "failed to add volume-%(volume_id)s: "
                               "VolumeNotFound."),
-                          {'volume_id': add_vol_ref['id']},
+                          {'volume_id': add_vol},
                           resource={'type': 'consistency_group',
                                     'id': group.id})
                 raise
@@ -3215,7 +3235,7 @@ class VolumeManager(manager.CleanableManager,
                 LOG.error(_LE("Update consistency group "
                               "failed to remove volume-%(volume_id)s: "
                               "VolumeNotFound."),
-                          {'volume_id': remove_vol_ref['id']},
+                          {'volume_id': remove_vol},
                           resource={'type': 'consistency_group',
                                     'id': group.id})
                 raise
@@ -4016,8 +4036,11 @@ class VolumeManager(manager.CleanableManager,
         except exception.InvalidReplicationTarget:
             LOG.exception(_LE("Invalid replication target specified "
                               "for failover"))
-            # Preserve the replication_status
-            if secondary_backend_id == "default":
+            # Preserve the replication_status: Status should be failed over if
+            # we were failing back or if we were failing over from one
+            # secondary to another secondary. In both cases active_backend_id
+            # will be set.
+            if service.active_backend_id:
                 service.replication_status = (
                     fields.ReplicationStatus.FAILED_OVER)
             else:
@@ -4192,14 +4215,18 @@ class VolumeManager(manager.CleanableManager,
         LOG.debug("Obtained capabilities list: %s.", capabilities)
         return capabilities
 
-    def get_backup_device(self, ctxt, backup):
+    def get_backup_device(self, ctxt, backup, want_objects=False):
         (backup_device, is_snapshot) = (
             self.driver.get_backup_device(ctxt, backup))
         secure_enabled = self.driver.secure_file_operations_enabled()
         backup_device_dict = {'backup_device': backup_device,
                               'secure_enabled': secure_enabled,
                               'is_snapshot': is_snapshot, }
-        return backup_device_dict
+        # TODO(sborkows): from_primitive method will be removed in O, so there
+        # is a need to clean here then.
+        return (objects.BackupDeviceInfo.from_primitive(backup_device_dict,
+                                                        ctxt)
+                if want_objects else backup_device_dict)
 
     def secure_file_operations_enabled(self, ctxt, volume):
         secure_enabled = self.driver.secure_file_operations_enabled()

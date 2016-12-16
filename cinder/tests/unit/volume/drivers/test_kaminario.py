@@ -60,6 +60,7 @@ class FakeSaveObject(FakeK2Obj):
         self.current_role = 'target'
         self.current_snapshot_progress = 100
         self.current_snapshot_id = None
+        self.wan_port = None
 
     def refresh(self):
         return
@@ -309,6 +310,12 @@ class TestKaminarioISCSI(test.TestCase):
 
     def test_manage_existing_exp(self):
         self.driver._get_replica_status = mock.Mock(return_value=True)
+        self.assertRaises(exception.ManageExistingInvalidReference,
+                          self.driver.manage_existing, self.vol,
+                          {'source-name': 'test'})
+
+    def test_manage_vg_volumes(self):
+        self.driver.nvol = 2
         self.assertRaises(exception.ManageExistingInvalidReference,
                           self.driver.manage_existing, self.vol,
                           {'source-name': 'test'})

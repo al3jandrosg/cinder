@@ -172,9 +172,12 @@ class EMCVMAXCommon(object):
         :returns: dict -- volumeDict - the volume dictionary
         """
         volumeSize = int(self.utils.convert_gb_to_bits(volume['size']))
-        volumeName = volume['id']
+        volumeId = volume['id']
         extraSpecs = self._initial_setup(volume)
         self.conn = self._get_ecom_connection()
+
+        # VolumeName naming convention is 'OS-UUID'.
+        volumeName = self.utils.get_volume_element_name(volumeId)
 
         if extraSpecs[ISV3]:
             rc, volumeDict, storageSystemName = (
@@ -1445,7 +1448,7 @@ class EMCVMAXCommon(object):
         :returns: foundVolumeinstance
         """
         foundVolumeinstance = None
-        volumename = volume['name']
+        volumename = volume['id']
 
         loc = volume['provider_location']
         if self.conn is None:
@@ -1465,12 +1468,19 @@ class EMCVMAXCommon(object):
 
             instancename = self.utils.get_instance_name(
                 name['classname'], name['keybindings'])
-            # Allow for an external app to delete the volume.
             LOG.debug("Volume instance name: %(in)s",
                       {'in': instancename})
+            # Allow for an external app to delete the volume.
             try:
                 foundVolumeinstance = self.conn.GetInstance(instancename)
-            except Exception:
+                volumeElementName = (self.utils.
+                                     get_volume_element_name(volumename))
+                if not (volumeElementName ==
+                        foundVolumeinstance['ElementName']):
+                    foundVolumeinstance = None
+            except Exception as e:
+                LOG.info(_LI("Exception in retrieving volume: %(e)s."),
+                         {'e': e})
                 foundVolumeinstance = None
 
         if foundVolumeinstance is None:
@@ -3742,7 +3752,8 @@ class EMCVMAXCommon(object):
         :returns: dict -- cloneDict
         """
         sourceName = sourceVolume['name']
-        cloneName = cloneVolume['name']
+        cloneId = cloneVolume['id']
+        cloneName = self.utils.get_volume_element_name(cloneId)
 
         try:
             rc, job = self.provision.create_element_replica(
@@ -3902,7 +3913,8 @@ class EMCVMAXCommon(object):
         :returns: int -- return code
         :returns: dict -- cloneDict
         """
-        cloneName = cloneVolume['name']
+        cloneId = cloneVolume['id']
+        cloneName = self.utils.get_volume_element_name(cloneId)
         # SyncType 7: snap, VG3R default snapshot is snapVx.
         syncType = self.utils.get_num(SNAPVX, '16')
         # Operation 9: Dissolve for snapVx.
@@ -4205,7 +4217,7 @@ class EMCVMAXCommon(object):
                 data=exceptionMessage)
 
         # Rename the volume
-        volumeId = volume['name']
+        volumeId = volume['id']
         volumeElementName = self.utils.get_volume_element_name(volumeId)
         LOG.debug("Rename volume %(vol)s to %(elementName)s.",
                   {'vol': volumeInstanceName,
@@ -4377,25 +4389,30 @@ class EMCVMAXCommon(object):
                   volumes_model_update is a list of dictionaries of volume
                   update
         """
-        if source_cg or source_vols:
-            LOG.debug("The VMAX driver does not support creating a "
-                      "consistency group from a consistency group in "
-                      "this version.")
-            raise NotImplementedError()
+        if cgsnapshot:
+            sourceCgName = self.utils.truncate_string(cgsnapshot['id'],
+                                                      TRUNCATE_8)
+            source_vols_or_snapshots = snapshots
+            source_id = cgsnapshot['consistencygroup_id']
+        elif source_cg:
+            sourceCgName = self.utils.truncate_string(source_cg['id'],
+                                                      TRUNCATE_8)
+            source_vols_or_snapshots = source_vols
+            source_id = source_cg['id']
+        else:
+            exceptionMessage = (_("Must supply either CG snaphot or "
+                                  "a source CG."))
+            raise exception.VolumeBackendAPIException(
+                data=exceptionMessage)
+
         LOG.debug("Enter EMCVMAXCommon::create_consistencygroup_from_src. "
                   "Group to be created: %(cgId)s, "
-                  "Source snapshot: %(cgSnapshot)s.",
+                  "Source : %(SourceCGId)s.",
                   {'cgId': group['id'],
-                   'cgSnapshot': cgsnapshot['consistencygroup_id']})
+                   'SourceCGId': source_id})
 
         self.create_consistencygroup(context, group)
         targetCgName = self.utils.truncate_string(group['id'], TRUNCATE_8)
-
-        if not snapshots:
-            exceptionMessage = (_("No source snapshots provided to create "
-                                  "consistency group %s.") % targetCgName)
-            raise exception.VolumeBackendAPIException(
-                data=exceptionMessage)
 
         modelUpdate = {'status': fields.ConsistencyGroupStatus.AVAILABLE}
 
@@ -4413,9 +4430,14 @@ class EMCVMAXCommon(object):
             LOG.debug("Create CG %(targetCg)s from snapshot.",
                       {'targetCg': targetCgInstanceName})
 
-            for volume, snapshot in zip(volumes, snapshots):
-                volumeSizeInbits = int(self.utils.convert_gb_to_bits(
-                    snapshot['volume_size']))
+            for volume, source_vol_or_snapshot in zip(
+                    volumes, source_vols_or_snapshots):
+                if 'size' in source_vol_or_snapshot:
+                    volumeSizeInbits = int(self.utils.convert_gb_to_bits(
+                        source_vol_or_snapshot['size']))
+                else:
+                    volumeSizeInbits = int(self.utils.convert_gb_to_bits(
+                        source_vol_or_snapshot['volume_size']))
                 targetVolumeName = 'targetVol'
                 volume = {'size': int(self.utils.convert_bits_to_gbs(
                     volumeSizeInbits))}
@@ -4432,9 +4454,9 @@ class EMCVMAXCommon(object):
                 targetVolumeInstance = self.utils.find_volume_instance(
                     self.conn, volumeDict, targetVolumeName)
                 LOG.debug("Create target volume for member snapshot. "
-                          "Source snapshot: %(snapshot)s, "
+                          "Source : %(snapshot)s, "
                           "Target volume: %(targetVol)s.",
-                          {'snapshot': snapshot['id'],
+                          {'snapshot': source_vol_or_snapshot['id'],
                            'targetVol': targetVolumeInstance.path})
 
                 self.provision.add_volume_to_cg(self.conn,
@@ -4444,13 +4466,12 @@ class EMCVMAXCommon(object):
                                                 targetCgName,
                                                 targetVolumeName,
                                                 extraSpecs)
-
             sourceCgInstanceName = self._find_consistency_group(
-                replicationService, str(cgsnapshot['id']))
+                replicationService, sourceCgName)
             if sourceCgInstanceName is None:
                 exceptionMessage = (_("Cannot find source CG instance. "
                                       "consistencygroup_id: %s.") %
-                                    cgsnapshot['consistencygroup_id'])
+                                    source_id)
                 raise exception.VolumeBackendAPIException(
                     data=exceptionMessage)
             relationName = self.utils.truncate_string(group['id'], TRUNCATE_5)
@@ -4479,11 +4500,10 @@ class EMCVMAXCommon(object):
                         self.conn, replicationService,
                         rgSyncInstanceName, extraSpecs)
         except Exception:
-            cgSnapshotId = cgsnapshot['consistencygroup_id']
             exceptionMessage = (_("Failed to create CG %(cgName)s "
-                                  "from snapshot %(cgSnapshot)s.")
+                                  "from source %(cgSnapshot)s.")
                                 % {'cgName': targetCgName,
-                                   'cgSnapshot': cgSnapshotId})
+                                   'cgSnapshot': source_id})
             LOG.exception(exceptionMessage)
             raise exception.VolumeBackendAPIException(data=exceptionMessage)
         volumes_model_update = self.utils.get_volume_model_updates(

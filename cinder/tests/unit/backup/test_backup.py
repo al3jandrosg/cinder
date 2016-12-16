@@ -127,7 +127,7 @@ class BaseBackupTest(test.TestCase):
         vol['status'] = status
         vol['display_name'] = display_name
         vol['display_description'] = display_description
-        vol['attach_status'] = 'detached'
+        vol['attach_status'] = fields.VolumeAttachStatus.DETACHED
         vol['availability_zone'] = '1'
         vol['previous_status'] = previous_status
         volume = objects.Volume(context=self.ctxt, **vol)
@@ -162,7 +162,7 @@ class BaseBackupTest(test.TestCase):
 
     def _create_volume_attach(self, volume_id):
         values = {'volume_id': volume_id,
-                  'attach_status': 'attached', }
+                  'attach_status': fields.VolumeAttachStatus.ATTACHED, }
         attachment = db.volume_attach(self.ctxt, values)
         db.volume_attached(self.ctxt, attachment['id'], None, 'testhost',
                            '/dev/vd0')
@@ -587,9 +587,13 @@ class BackupTestCase(BaseBackupTest):
         backup = self._create_backup_db_entry(volume_id=vol_id)
 
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
-        mock_get_backup_device.return_value = {'backup_device': vol,
-                                               'secure_enabled': False,
-                                               'is_snapshot': False, }
+        backup_device_dict = {'backup_device': vol, 'secure_enabled': False,
+                              'is_snapshot': False, }
+        mock_get_backup_device.return_value = (
+            objects.BackupDeviceInfo.from_primitive(backup_device_dict,
+                                                    self.ctxt,
+                                                    ['admin_metadata',
+                                                     'metadata']))
         attach_info = {'device': {'path': '/dev/null'}}
         mock_detach_device = self.mock_object(self.backup_mgr,
                                               '_detach_device')
@@ -635,9 +639,11 @@ class BackupTestCase(BaseBackupTest):
         snap = self._create_snapshot_db_entry(volume_id = vol_id)
 
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
-        mock_get_backup_device.return_value = {'backup_device': snap,
-                                               'secure_enabled': False,
-                                               'is_snapshot': True, }
+        mock_get_backup_device.return_value = (
+            objects.BackupDeviceInfo.from_primitive({
+                'backup_device': snap, 'secure_enabled': False,
+                'is_snapshot': True, },
+                self.ctxt, expected_attrs=['metadata']))
 
         # TODO(walter-boring) This is to account for the missing FakeConnector
         # in os-brick 1.6.0 and >

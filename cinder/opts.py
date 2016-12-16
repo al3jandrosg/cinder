@@ -74,6 +74,8 @@ from cinder.volume.drivers.coprhd import scaleio as \
 from cinder.volume.drivers import datera as cinder_volume_drivers_datera
 from cinder.volume.drivers.dell import dell_storagecenter_common as \
     cinder_volume_drivers_dell_dellstoragecentercommon
+from cinder.volume.drivers.dell_emc.unity import driver as \
+    cinder_volume_drivers_dell_emc_unity_driver
 from cinder.volume.drivers.disco import disco as \
     cinder_volume_drivers_disco_disco
 from cinder.volume.drivers.dothill import dothill_common as \
@@ -110,6 +112,14 @@ from cinder.volume.drivers.hitachi import hnas_nfs as \
     cinder_volume_drivers_hitachi_hnasnfs
 from cinder.volume.drivers.hitachi import hnas_utils as \
     cinder_volume_drivers_hitachi_hnasutils
+from cinder.volume.drivers.hitachi import vsp_common as \
+    cinder_volume_drivers_hitachi_vspcommon
+from cinder.volume.drivers.hitachi import vsp_fc as \
+    cinder_volume_drivers_hitachi_vspfc
+from cinder.volume.drivers.hitachi import vsp_horcm as \
+    cinder_volume_drivers_hitachi_vsphorcm
+from cinder.volume.drivers.hitachi import vsp_iscsi as \
+    cinder_volume_drivers_hitachi_vspiscsi
 from cinder.volume.drivers.hpe import hpe_3par_common as \
     cinder_volume_drivers_hpe_hpe3parcommon
 from cinder.volume.drivers.hpe import hpe_lefthand_iscsi as \
@@ -133,6 +143,7 @@ from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_fc as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvcfc
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_iscsi as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvciscsi
+from cinder.volume.drivers import infinidat as cinder_volume_drivers_infinidat
 from cinder.volume.drivers.infortrend.raidcmd_cli import common_cli as \
     cinder_volume_drivers_infortrend_raidcmd_cli_commoncli
 from cinder.volume.drivers.kaminario import kaminario_common as \
@@ -149,6 +160,7 @@ from cinder.volume.drivers import nimble as cinder_volume_drivers_nimble
 from cinder.volume.drivers.prophetstor import options as \
     cinder_volume_drivers_prophetstor_options
 from cinder.volume.drivers import pure as cinder_volume_drivers_pure
+from cinder.volume.drivers import qnap as cinder_volume_drivers_qnap
 from cinder.volume.drivers import quobyte as cinder_volume_drivers_quobyte
 from cinder.volume.drivers import rbd as cinder_volume_drivers_rbd
 from cinder.volume.drivers import remotefs as cinder_volume_drivers_remotefs
@@ -263,6 +275,7 @@ def list_opts():
                 cinder_volume_drivers_datera.d_opts,
                 cinder_volume_drivers_dell_dellstoragecentercommon.
                 common_opts,
+                cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
                 cinder_volume_drivers_disco_disco.disco_opts,
                 cinder_volume_drivers_dothill_dothillcommon.common_opts,
                 cinder_volume_drivers_dothill_dothillcommon.iscsi_opts,
@@ -284,6 +297,10 @@ def list_opts():
                 cinder_volume_drivers_hitachi_hnasiscsi.iSCSI_OPTS,
                 cinder_volume_drivers_hitachi_hnasnfs.NFS_OPTS,
                 cinder_volume_drivers_hitachi_hnasutils.drivers_common_opts,
+                cinder_volume_drivers_hitachi_vspcommon.common_opts,
+                cinder_volume_drivers_hitachi_vspfc.fc_opts,
+                cinder_volume_drivers_hitachi_vsphorcm.horcm_opts,
+                cinder_volume_drivers_hitachi_vspiscsi.iscsi_opts,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
                 cinder_volume_drivers_hpe_hpelefthandiscsi.hpelefthand_opts,
                 cinder_volume_drivers_hpe_hpexpopts.FC_VOLUME_OPTS,
@@ -302,12 +319,13 @@ def list_opts():
                 storwize_svc_fc_opts,
                 cinder_volume_drivers_ibm_storwize_svc_storwizesvciscsi.
                 storwize_svc_iscsi_opts,
+                cinder_volume_drivers_infinidat.infinidat_opts,
                 cinder_volume_drivers_infortrend_raidcmd_cli_commoncli.
                 infortrend_esds_opts,
                 cinder_volume_drivers_infortrend_raidcmd_cli_commoncli.
                 infortrend_esds_extra_opts,
                 cinder_volume_drivers_kaminario_kaminariocommon.
-                kaminario1_opts,
+                kaminario_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.common_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.iscsi_opts,
                 cinder_volume_drivers_lvm.volume_opts,
@@ -333,6 +351,7 @@ def list_opts():
                 cinder_volume_drivers_nimble.nimble_opts,
                 cinder_volume_drivers_prophetstor_options.DPL_OPTS,
                 cinder_volume_drivers_pure.PURE_OPTS,
+                cinder_volume_drivers_qnap.qnap_opts,
                 cinder_volume_drivers_quobyte.volume_opts,
                 cinder_volume_drivers_rbd.RBD_OPTS,
                 cinder_volume_drivers_remotefs.nas_opts,

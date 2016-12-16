@@ -829,8 +829,7 @@ class InvalidReplicationTarget(Invalid):
 
 
 class UnableToFailOver(CinderException):
-    message = _("Unable to failover to replication target:"
-                "%(reason)s).")
+    message = _("Unable to failover to replication target: %(reason)s).")
 
 
 class ReplicationError(CinderException):
@@ -1098,6 +1097,19 @@ class HBSDVolumeIsBusy(VolumeIsBusy):
     message = _("Volume %(volume_name)s is busy.")
 
 
+# Hitachi VSP Driver
+class VSPError(VolumeDriverException):
+    message = _("VSP error occurred. %(message)s")
+
+
+class VSPBusy(VSPError):
+    message = _("Device or resource is busy.")
+
+
+class VSPNotSupported(VSPError):
+    message = _("The function on the storage is not supported.")
+
+
 # Datera driver
 class DateraAPIException(VolumeBackendAPIException):
     message = _("Bad response from Datera API")
@@ -1309,3 +1321,12 @@ class SynoAuthError(VolumeDriverException):
 
 class SynoLUNNotExist(VolumeDriverException):
     message = _("LUN not found by UUID: %(uuid)s.")
+
+
+# Reduxio driver
+class RdxAPICommandException(VolumeDriverException):
+    message = _("Reduxio API Command Exception")
+
+
+class RdxAPIConnectionException(VolumeDriverException):
+    message = _("Reduxio API Connection Exception")

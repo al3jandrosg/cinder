@@ -394,10 +394,11 @@ class API(base.Base):
             return
 
         # Build required conditions for conditional update
-        expected = {'attach_status': db.Not('attached'),
-                    'migration_status': self.AVAILABLE_MIGRATION_STATUS,
-                    'consistencygroup_id': None,
-                    'group_id': None}
+        expected = {
+            'attach_status': db.Not(fields.VolumeAttachStatus.ATTACHED),
+            'migration_status': self.AVAILABLE_MIGRATION_STATUS,
+            'consistencygroup_id': None,
+            'group_id': None}
 
         # If not force deleting we have status conditions
         if not force:
@@ -647,7 +648,7 @@ class API(base.Base):
         # user to see that the volume is 'detaching'. Having
         # 'migration_status' set will have the same effect internally.
         expected = {'status': 'in-use',
-                    'attach_status': 'attached',
+                    'attach_status': fields.VolumeAttachStatus.ATTACHED,
                     'migration_status': self.AVAILABLE_MIGRATION_STATUS}
 
         result = volume.conditional_update({'status': 'detaching'}, expected)
@@ -671,7 +672,7 @@ class API(base.Base):
     @wrap_check_policy
     def attach(self, context, volume, instance_uuid, host_name,
                mountpoint, mode):
-        if volume['status'] == 'maintenance':
+        if volume.status == 'maintenance':
             LOG.info(_LI('Unable to attach volume, '
                          'because it is in maintenance.'), resource=volume)
             msg = _("The volume cannot be attached in maintenance mode.")
@@ -684,7 +685,7 @@ class API(base.Base):
                                                      update=False)['readonly']
         if readonly == 'True' and mode != 'ro':
             raise exception.InvalidVolumeAttachMode(mode=mode,
-                                                    volume_id=volume['id'])
+                                                    volume_id=volume.id)
 
         attach_results = self.volume_rpcapi.attach_volume(context,
                                                           volume,
@@ -770,6 +771,11 @@ class API(base.Base):
                               commit_quota=True,
                               group_snapshot_id=None):
         check_policy(context, 'create_snapshot', volume)
+
+        if not volume.host:
+            msg = _("The snapshot cannot be created because volume has "
+                    "not been scheduled to any host.")
+            raise exception.InvalidVolume(reason=msg)
 
         if volume['status'] == 'maintenance':
             LOG.info(_LI('Unable to create the snapshot for volume, '
@@ -989,10 +995,7 @@ class API(base.Base):
             LOG.error(msg)
             raise exception.InvalidSnapshot(reason=msg)
 
-        # Make RPC call to the right host
-        volume = objects.Volume.get_by_id(context, snapshot.volume_id)
-        self.volume_rpcapi.delete_snapshot(context, snapshot, volume.host,
-                                           unmanage_only=unmanage_only)
+        self.volume_rpcapi.delete_snapshot(context, snapshot, unmanage_only)
         LOG.info(_LI("Snapshot delete request issued successfully."),
                  resource=snapshot)
 
@@ -1078,7 +1081,7 @@ class API(base.Base):
 
         """
         utils.check_metadata_properties(metadata)
-        db_meta = self.db.volume_admin_metadata_update(context, volume['id'],
+        db_meta = self.db.volume_admin_metadata_update(context, volume.id,
                                                        metadata, delete, add,
                                                        update)
 
@@ -1311,8 +1314,32 @@ class API(base.Base):
             if reservations is None:
                 _roll_back_status()
 
-        self.volume_rpcapi.extend_volume(context, volume, new_size,
-                                         reservations)
+        volume_type = {}
+        if volume.volume_type_id:
+            volume_type = volume_types.get_volume_type(context.elevated(),
+                                                       volume.volume_type_id)
+
+        request_spec = {
+            'volume_properties': volume,
+            'volume_type': volume_type,
+            'volume_id': volume.id
+        }
+
+        try:
+            self.scheduler_rpcapi.extend_volume(context, volume, new_size,
+                                                reservations, request_spec)
+        except exception.ServiceTooOld as e:
+            # NOTE(erlon): During rolling upgrades scheduler and volume can
+            # have different versions. This check makes sure that a new
+            # version of the volume service won't break.
+            msg = _LW("Failed to send extend volume request to scheduler. "
+                      "Falling back to old behaviour. This is normal during a "
+                      "live-upgrade. Error: %(e)s")
+            LOG.warning(msg, {'e': e})
+            # TODO(erlon): Remove in Pike
+            self.volume_rpcapi.extend_volume(context, volume, new_size,
+                                             reservations)
+
         LOG.info(_LI("Extend volume request issued successfully."),
                  resource=volume)
 
@@ -1328,7 +1355,7 @@ class API(base.Base):
         found = False
         svc_host = volume_utils.extract_host(host, 'backend')
         for service in services:
-            if utils.service_is_up(service) and service.host == svc_host:
+            if service.is_up and service.host == svc_host:
                 found = True
                 break
         if not found:
@@ -1546,7 +1573,7 @@ class API(base.Base):
                           'service.'), resource)
             raise exception.ServiceUnavailable()
 
-        if not utils.service_is_up(service):
+        if not service.is_up:
             LOG.error(_LE('Unable to manage existing %s on a service that is '
                           'down.'), resource)
             raise exception.ServiceUnavailable()
@@ -1610,7 +1637,7 @@ class API(base.Base):
                                  metadata=None):
         service = self._get_service_by_host(context, volume.host, 'snapshot')
         snapshot_object = self.create_snapshot_in_db(context, volume, name,
-                                                     description, False,
+                                                     description, True,
                                                      metadata, None,
                                                      commit_quota=False)
         self.volume_rpcapi.manage_existing_snapshot(context, snapshot_object,

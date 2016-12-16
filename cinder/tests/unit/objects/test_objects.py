@@ -24,6 +24,7 @@ from cinder import test
 # corresponding version bump in the affected objects.
 object_data = {
     'Backup': '1.4-c50f7a68bb4c400dd53dd219685b3992',
+    'BackupDeviceInfo': '1.0-74b3950676c690538f4bc6796bd0042e',
     'BackupImport': '1.4-c50f7a68bb4c400dd53dd219685b3992',
     'BackupList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'CleanupRequest': '1.0-e7c688b893e1d5537ccf65cc3eb10a28',
@@ -40,9 +41,9 @@ object_data = {
     'ServiceList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'Snapshot': '1.2-d6a9d58f627bb2a5cf804b0dd7a12bc7',
     'SnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'Volume': '1.6-19919d8086d6a38ab9d3ab88139e70e0',
+    'Volume': '1.6-8a56256db74c0642dca1a30739d88074',
     'VolumeList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'VolumeAttachment': '1.0-b30dacf62b2030dd83d8a1603f1064ff',
+    'VolumeAttachment': '1.0-6a2216211f579ffd7fd22708703c13a3',
     'VolumeAttachmentList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'VolumeProperties': '1.1-cadac86b2bdc11eb79d1dcea988ff9e8',
     'VolumeType': '1.3-a5d8c3473db9bc3bbcdbab9313acf4d1',

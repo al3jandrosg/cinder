@@ -75,7 +75,7 @@ class NetAppNfsDriver(driver.ManageableVD,
         na_utils.validate_instantiation(**kwargs)
         self._execute = None
         self._context = None
-        self._app_version = kwargs.pop("app_version", "unknown")
+        self.app_version = kwargs.pop("app_version", "unknown")
         super(NetAppNfsDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(na_opts.netapp_connection_opts)
         self.configuration.append_config_values(na_opts.netapp_basicauth_opts)
@@ -107,6 +107,11 @@ class NetAppNfsDriver(driver.ManageableVD,
             loopingcalls.ONE_MINUTE,
             loopingcalls.ONE_MINUTE)
 
+        # Add the task that logs EMS messages
+        self.loopingcalls.add_task(
+            self._handle_ems_logging,
+            loopingcalls.ONE_HOUR)
+
     def _delete_snapshots_marked_for_deletion(self):
         volume_list = self._get_backing_flexvol_names()
         snapshots = self.zapi_client.get_snapshots_marked_for_deletion(
@@ -114,6 +119,10 @@ class NetAppNfsDriver(driver.ManageableVD,
         for snapshot in snapshots:
             self.zapi_client.delete_snapshot(
                 snapshot['volume_name'], snapshot['name'])
+
+    def _handle_ems_logging(self):
+        """Log autosupport messages."""
+        raise NotImplementedError()
 
     def get_pool(self, volume):
         """Return pool name where volume resides.
@@ -403,6 +412,8 @@ class NetAppNfsDriver(driver.ManageableVD,
                 LOG.info(_LI('Cloning from cache to destination %s'), dst)
                 self._clone_backing_file_for_volume(src, dst, volume_id=None,
                                                     share=share)
+                src_path = '%s/%s' % (dir, src)
+                os.utime(src_path, None)
         _do_clone()
 
     @utils.synchronized('clean_cache')

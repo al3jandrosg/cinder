@@ -3,7 +3,7 @@
 # Testing cinder-daemons
 #-----------------------
 set -e
-DAEMONS=('cinder-api' 'cinder-scheduler')
+DAEMONS=('apache2' 'cinder-scheduler')
 
 for daemon in "${DAEMONS[@]}"; do
     if pidof -x $daemon > /dev/null; then

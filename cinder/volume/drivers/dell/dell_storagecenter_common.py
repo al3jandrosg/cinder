@@ -1551,8 +1551,8 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
             if secondary_id == 'default':
                 LOG.debug('failing back')
                 return 'default', self.failback_volumes(volumes)
-            raise exception.VolumeBackendAPIException(
-                message='Already failed over.')
+            raise exception.InvalidReplicationTarget(
+                reason=_('Already failed over'))
 
         LOG.info(_LI('Failing backend to %s'), secondary_id)
         # basic check
@@ -1594,7 +1594,7 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
                     LOG.debug(self.replication_enabled)
                     return destssn, volume_updates
                 else:
-                    raise exception.InvalidInput(message=(
+                    raise exception.InvalidReplicationTarget(reason=(
                         _('replication_failover failed. %s not found.') %
                         secondary_id))
         # I don't think we should ever get here.
@@ -1731,3 +1731,24 @@ class DellCommonDriver(driver.ConsistencyGroupVD, driver.ManageableVD,
             # Free our snapshot.
             api.unmanage_replay(screplay)
             # Do not check our result.
+
+    def thaw_backend(self, context):
+        """Notify the backend that it's unfrozen/thawed.
+
+        This is a gate. We do not allow the backend to be thawed if
+        it is still failed over.
+
+        :param context: security context
+        :response: True on success
+        :raises Invalid: if it cannot be thawed.
+        """
+        # We shouldn't be called if we are not failed over.
+        if self.failed_over:
+            msg = _('The Dell SC array does not support thawing a failed over'
+                    ' replication. Please migrate volumes to an operational '
+                    'back-end or resolve primary system issues and '
+                    'fail back to reenable full functionality.')
+            LOG.error(msg)
+            raise exception.Invalid(reason=msg)
+
+        return True

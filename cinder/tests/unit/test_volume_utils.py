@@ -400,6 +400,70 @@ class LVMVolumeDriverTestCase(test.TestCase):
         bs = volume_utils._check_blocksize('ABM')
         self.assertEqual('1M', bs)
 
+    @mock.patch('cinder.volume.utils._usage_from_capacity')
+    @mock.patch('cinder.volume.utils.CONF')
+    @mock.patch('cinder.volume.utils.rpc')
+    def test_notify_about_capacity_usage(self, mock_rpc,
+                                         mock_conf, mock_usage):
+        mock_conf.host = 'host1'
+        output = volume_utils.notify_about_capacity_usage(
+            mock.sentinel.context,
+            mock.sentinel.capacity,
+            'test_suffix')
+        self.assertIsNone(output)
+        mock_usage.assert_called_once_with(mock.sentinel.capacity)
+        mock_rpc.get_notifier.assert_called_once_with('capacity', 'host1')
+        mock_rpc.get_notifier.return_value.info.assert_called_once_with(
+            mock.sentinel.context,
+            'capacity.test_suffix',
+            mock_usage.return_value)
+
+    @mock.patch('cinder.volume.utils._usage_from_capacity')
+    @mock.patch('cinder.volume.utils.CONF')
+    @mock.patch('cinder.volume.utils.rpc')
+    def test_notify_about_capacity_usage_with_kwargs(self, mock_rpc, mock_conf,
+                                                     mock_usage):
+        mock_conf.host = 'host1'
+        output = volume_utils.notify_about_capacity_usage(
+            mock.sentinel.context,
+            mock.sentinel.capacity,
+            'test_suffix',
+            extra_usage_info={'a': 'b', 'c': 'd'},
+            host='host2')
+        self.assertIsNone(output)
+        mock_usage.assert_called_once_with(mock.sentinel.capacity,
+                                           a='b', c='d')
+        mock_rpc.get_notifier.assert_called_once_with('capacity', 'host2')
+        mock_rpc.get_notifier.return_value.info.assert_called_once_with(
+            mock.sentinel.context,
+            'capacity.test_suffix',
+            mock_usage.return_value)
+
+    def test_usage_from_capacity(self):
+        test_capacity = {
+            'name_to_id': 'host1@backend1#pool1',
+            'type': 'pool',
+            'total': '10.01',
+            'free': '8.01',
+            'allocated': '2',
+            'provisioned': '2',
+            'virtual_free': '8.01',
+            'reported_at': '2014-12-11T10:10:00',
+        }
+
+        usage_info = volume_utils._usage_from_capacity(
+            test_capacity)
+        expected_capacity = {
+            'name_to_id': 'host1@backend1#pool1',
+            'total': '10.01',
+            'free': '8.01',
+            'allocated': '2',
+            'provisioned': '2',
+            'virtual_free': '8.01',
+            'reported_at': '2014-12-11T10:10:00',
+        }
+        self.assertEqual(expected_capacity, usage_info)
+
 
 class OdirectSupportTestCase(test.TestCase):
     @mock.patch('cinder.utils.execute')
@@ -467,7 +531,7 @@ class ClearVolumeTestCase(test.TestCase):
     @mock.patch('cinder.volume.utils.copy_volume', return_value=None)
     @mock.patch('cinder.volume.utils.CONF')
     def test_clear_volume_args(self, mock_conf, mock_copy):
-        mock_conf.volume_clear = 'shred'
+        mock_conf.volume_clear = 'should_override_with_arg'
         mock_conf.volume_clear_size = 0
         mock_conf.volume_dd_blocksize = '1M'
         mock_conf.volume_clear_ionice = '-c3'
@@ -478,37 +542,6 @@ class ClearVolumeTestCase(test.TestCase):
                                           '1M', sync=True,
                                           execute=utils.execute, ionice='-c0',
                                           throttle=None, sparse=False)
-
-    @mock.patch('cinder.utils.execute')
-    @mock.patch('cinder.volume.utils.CONF')
-    def test_clear_volume_shred(self, mock_conf, mock_exec):
-        # 'shred' now uses 'dd'.  Remove this test when
-        # support for 'volume_clear=shred' is removed.
-        mock_conf.volume_clear = 'shred'
-        mock_conf.volume_clear_size = 1
-        mock_conf.volume_clear_ionice = None
-        mock_conf.volume_dd_blocksize = '1M'
-        output = volume_utils.clear_volume(1024, 'volume_path')
-        self.assertIsNone(output)
-        mock_exec.assert_called_with(
-            'dd', 'if=/dev/zero', 'of=volume_path', 'count=1048576', 'bs=1M',
-            'iflag=count_bytes', 'oflag=direct', run_as_root=True)
-
-    @mock.patch('cinder.utils.execute')
-    @mock.patch('cinder.volume.utils.CONF')
-    def test_clear_volume_shred_not_clear_size(self, mock_conf, mock_exec):
-        # 'shred' now uses 'dd'.  Remove this test when
-        # support for 'volume_clear=shred' is removed.
-        mock_conf.volume_clear = 'shred'
-        mock_conf.volume_clear_size = None
-        mock_conf.volume_clear_ionice = None
-        mock_conf.volume_dd_blocksize = '1M'
-        mock_conf.volume_clear_size = 1
-        output = volume_utils.clear_volume(1024, 'volume_path')
-        self.assertIsNone(output)
-        mock_exec.assert_called_with(
-            'dd', 'if=/dev/zero', 'of=volume_path', 'count=1048576', 'bs=1M',
-            'iflag=count_bytes', 'oflag=direct', run_as_root=True)
 
     @mock.patch('cinder.volume.utils.CONF')
     def test_clear_volume_invalid_opt(self, mock_conf):

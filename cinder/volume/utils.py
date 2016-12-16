@@ -197,6 +197,37 @@ def notify_about_snapshot_usage(context, snapshot, event_suffix,
                                             usage_info)
 
 
+def _usage_from_capacity(capacity, **extra_usage_info):
+
+    capacity_info = {
+        'name_to_id': capacity['name_to_id'],
+        'total': capacity['total'],
+        'free': capacity['free'],
+        'allocated': capacity['allocated'],
+        'provisioned': capacity['provisioned'],
+        'virtual_free': capacity['virtual_free'],
+        'reported_at': capacity['reported_at']
+    }
+
+    capacity_info.update(extra_usage_info)
+    return capacity_info
+
+
+def notify_about_capacity_usage(context, capacity, suffix,
+                                extra_usage_info=None, host=None):
+    if not host:
+        host = CONF.host
+
+    if not extra_usage_info:
+        extra_usage_info = {}
+
+    usage_info = _usage_from_capacity(capacity, **extra_usage_info)
+
+    rpc.get_notifier('capacity', host).info(context,
+                                            'capacity.%s' % suffix,
+                                            usage_info)
+
+
 def notify_about_replication_usage(context, volume, suffix,
                                    extra_usage_info=None, host=None):
     if not host:
@@ -566,11 +597,6 @@ def clear_volume(volume_size, volume_path, volume_clear=None,
         volume_clear_ionice = CONF.volume_clear_ionice
 
     LOG.info(_LI("Performing secure delete on volume: %s"), volume_path)
-
-    if volume_clear == 'shred':
-        LOG.warning(_LW("volume_clear=shred has been deprecated and will "
-                        "be removed in the next release. Clearing with dd."))
-        volume_clear = 'zero'
 
     # We pass sparse=False explicitly here so that zero blocks are not
     # skipped in order to clear the volume.
