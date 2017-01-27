@@ -64,7 +64,8 @@ QEMU_IMG_LIMITS = processutils.ProcessLimits(
 # vdi, vmdk, vhd and vhdx disk-formats but glance doesn't support qed
 # disk-format.
 # Ref: http://docs.openstack.org/image-guide/convert-images.html
-VALID_DISK_FORMATS = ('raw', 'vmdk', 'vdi', 'qcow2', 'vhd', 'vhdx')
+VALID_DISK_FORMATS = ('raw', 'vmdk', 'vdi', 'qcow2',
+                      'vhd', 'vhdx', 'parallels')
 
 
 def validate_disk_format(disk_format):
@@ -144,7 +145,8 @@ def _convert_image(prefix, source, dest, out_format, run_as_root=True):
     if duration < 1:
         duration = 1
     try:
-        image_size = qemu_img_info(source, run_as_root=True).virtual_size
+        image_size = qemu_img_info(source,
+                                   run_as_root=run_as_root).virtual_size
     except ValueError as e:
         msg = _LI("The image was successfully converted, but image size "
                   "is unavailable. src %(src)s, dest %(dest)s. %(error)s")
@@ -391,7 +393,7 @@ def upload_volume(context, image_service, image_meta, volume_path,
                 image_service.update(context, image_id, {}, image_file)
         else:
             with utils.temporary_chown(volume_path):
-                with open(volume_path) as image_file:
+                with open(volume_path, 'rb') as image_file:
                     image_service.update(context, image_id, {}, image_file)
         return
 
@@ -490,6 +492,29 @@ def create_temporary_file(*args, **kwargs):
     return tmp
 
 
+def cleanup_temporary_file(backend_name):
+    temp_dir = CONF.image_conversion_dir
+    if (not temp_dir or not os.path.exists(temp_dir)):
+        LOG.debug("Configuration image_conversion_dir is None or the path "
+                  "doesn't exist.")
+        return
+    try:
+        # TODO(wanghao): Consider using os.scandir for better performance in
+        # future when cinder only supports Python version 3.5+.
+        files = os.listdir(CONF.image_conversion_dir)
+        # NOTE(wanghao): For multi-backend case, if one backend was slow
+        # starting but another backend is up and doing an image conversion,
+        # init_host should only clean the tmp files which belongs to its
+        # backend.
+        for tmp_file in files:
+            if tmp_file.endswith(backend_name):
+                path = os.path.join(temp_dir, tmp_file)
+                os.remove(path)
+    except OSError as e:
+        LOG.warning(_LW("Exception caught while clearing temporary image "
+                        "files: %s"), e)
+
+
 @contextlib.contextmanager
 def temporary_file(*args, **kwargs):
     tmp = None
@@ -569,9 +594,9 @@ class TemporaryImages(object):
 
     @classmethod
     @contextlib.contextmanager
-    def fetch(cls, image_service, context, image_id):
+    def fetch(cls, image_service, context, image_id, suffix=''):
         tmp_images = cls.for_image_service(image_service).temporary_images
-        with temporary_file() as tmp:
+        with temporary_file(suffix=suffix) as tmp:
             fetch_verify_image(context, image_service, image_id, tmp)
             user = context.user_id
             if not tmp_images.get(user):

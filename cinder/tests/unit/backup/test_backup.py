@@ -16,11 +16,10 @@
 
 import copy
 import ddt
-import tempfile
 import uuid
 
 import mock
-from os_brick.initiator import connector
+from os_brick.initiator.connectors import fake
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_utils import importutils
@@ -51,8 +50,6 @@ class FakeBackupException(Exception):
 class BaseBackupTest(test.TestCase):
     def setUp(self):
         super(BaseBackupTest, self).setUp()
-        vol_tmpdir = tempfile.mkdtemp()
-        self.flags(volumes_dir=vol_tmpdir)
         self.backup_mgr = importutils.import_object(CONF.backup_manager)
         self.backup_mgr.host = 'testhost'
         self.ctxt = context.get_admin_context()
@@ -291,7 +288,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertTrue(self.volume_mocks['detach_volume'].called)
 
     @mock.patch('cinder.objects.backup.BackupList.get_all_by_host')
-    @mock.patch('cinder.manager.SchedulerDependentManager._add_to_threadpool')
+    @mock.patch('cinder.manager.ThreadPoolManager._add_to_threadpool')
     def test_init_host_with_service_inithost_offload(self,
                                                      mock_add_threadpool,
                                                      mock_get_all_by_host):
@@ -645,18 +642,10 @@ class BackupTestCase(BaseBackupTest):
                 'is_snapshot': True, },
                 self.ctxt, expected_attrs=['metadata']))
 
-        # TODO(walter-boring) This is to account for the missing FakeConnector
-        # in os-brick 1.6.0 and >
-        if hasattr(connector, 'FakeConnector'):
-            conn = connector.FakeConnector(None)
-        else:
-            from os_brick.initiator.connectors import fake
-            conn = fake.FakeConnector(None)
-
         attach_info = {
             'device': {'path': '/dev/null'},
             'conn': {'data': {}},
-            'connector': conn}
+            'connector': fake.FakeConnector(None)}
         mock_detach_snapshot = self.mock_object(driver.BaseVD,
                                                 '_detach_snapshot')
         mock_attach_snapshot = self.mock_object(driver.BaseVD,

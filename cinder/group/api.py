@@ -35,6 +35,7 @@ from cinder.objects import base as objects_base
 from cinder.objects import fields as c_fields
 import cinder.policy
 from cinder import quota
+from cinder import quota_utils
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder.volume import api as volume_api
 from cinder.volume import rpcapi as volume_rpcapi
@@ -189,6 +190,19 @@ class API(base.Base):
                         group_snapshot_id=None, source_group_id=None):
         check_policy(context, 'create')
 
+        # Populate group_type_id and volume_type_ids
+        group_type_id = None
+        volume_type_ids = []
+        if group_snapshot_id:
+            grp_snap = self.get_group_snapshot(context, group_snapshot_id)
+            group_type_id = grp_snap.group_type_id
+            grp_snap_src_grp = self.get(context, grp_snap.group_id)
+            volume_type_ids = [vt.id for vt in grp_snap_src_grp.volume_types]
+        elif source_group_id:
+            source_group = self.get(context, source_group_id)
+            group_type_id = source_group.group_type_id
+            volume_type_ids = [vt.id for vt in source_group.volume_types]
+
         kwargs = {
             'user_id': context.user_id,
             'project_id': context.project_id,
@@ -197,6 +211,8 @@ class API(base.Base):
             'description': description,
             'group_snapshot_id': group_snapshot_id,
             'source_group_id': source_group_id,
+            'group_type_id': group_type_id,
+            'volume_type_ids': volume_type_ids,
         }
 
         group = None
@@ -228,6 +244,8 @@ class API(base.Base):
             msg = _("No host to create group %s.") % group.id
             LOG.error(msg)
             raise exception.InvalidGroup(reason=msg)
+
+        group.assert_not_frozen()
 
         if group_snapshot_id:
             self._create_group_from_group_snapshot(context, group,
@@ -469,10 +487,13 @@ class API(base.Base):
                                                 **reserve_opts)
             if reservations:
                 GROUP_QUOTAS.commit(context, reservations)
-        except Exception:
+        except Exception as e:
             with excutils.save_and_reraise_exception():
                 try:
                     group.destroy()
+                    if isinstance(e, exception.OverQuota):
+                        quota_utils.process_reserve_over_quota(
+                            context, e, resource='groups')
                 finally:
                     LOG.error(_LE("Failed to update quota for "
                                   "group %s."), group.id)
@@ -487,6 +508,8 @@ class API(base.Base):
             group.destroy()
 
             return
+
+        group.assert_not_frozen()
 
         if not delete_volumes and group.status not in (
                 [c_fields.GroupStatus.AVAILABLE,
@@ -753,7 +776,22 @@ class API(base.Base):
                 sort_dirs=sort_dirs)
         return groups
 
+    def reset_status(self, context, group, status):
+        """Reset status of generic group"""
+
+        check_policy(context, 'reset_status')
+        if status not in c_fields.GroupStatus.ALL:
+            msg = _("Group status: %(status)s is invalid, valid status "
+                    "are: %(valid)s.") % {'status': status,
+                                          'valid': c_fields.GroupStatus.ALL}
+            raise exception.InvalidGroupStatus(reason=msg)
+        field = {'updated_at': timeutils.utcnow(),
+                 'status': status}
+        group.update(field)
+        group.save()
+
     def create_group_snapshot(self, context, group, name, description):
+        group.assert_not_frozen()
         options = {'group_id': group.id,
                    'user_id': context.user_id,
                    'project_id': context.project_id,
@@ -792,6 +830,7 @@ class API(base.Base):
 
     def delete_group_snapshot(self, context, group_snapshot, force=False):
         check_policy(context, 'delete_group_snapshot')
+        group_snapshot.assert_not_frozen()
         values = {'status': 'deleting'}
         expected = {'status': ('available', 'error')}
         filters = [~db.group_creating_from_src(
@@ -840,3 +879,18 @@ class API(base.Base):
             group_snapshots = objects.GroupSnapshotList.get_all_by_project(
                 context.elevated(), context.project_id, search_opts)
         return group_snapshots
+
+    def reset_group_snapshot_status(self, context, gsnapshot, status):
+        """Reset status of group snapshot"""
+
+        check_policy(context, 'reset_group_snapshot_status')
+        if status not in c_fields.GroupSnapshotStatus.ALL:
+            msg = _("Group snapshot status: %(status)s is invalid, "
+                    "valid statuses are: "
+                    "%(valid)s.") % {'status': status,
+                                     'valid': c_fields.GroupSnapshotStatus.ALL}
+            raise exception.InvalidGroupSnapshotStatus(reason=msg)
+        field = {'updated_at': timeutils.utcnow(),
+                 'status': status}
+        gsnapshot.update(field)
+        gsnapshot.save()

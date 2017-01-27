@@ -143,6 +143,14 @@ def service_update(context, service_id, values):
 ###############
 
 
+def is_backend_frozen(context, host, cluster_name):
+    """Check if a storage backend is frozen based on host and cluster_name."""
+    return IMPL.is_backend_frozen(context, host, cluster_name)
+
+
+###############
+
+
 def cluster_get(context, id=None, is_up=None, get_services=False,
                 services_summary=False, read_deleted='no',
                 name_match_level=None, **filters):
@@ -336,22 +344,47 @@ def volume_attachment_update(context, attachment_id, values):
     return IMPL.volume_attachment_update(context, attachment_id, values)
 
 
-def volume_attachment_get(context, attachment_id, session=None):
-    return IMPL.volume_attachment_get(context, attachment_id, session)
+def volume_attachment_get(context, attachment_id):
+    return IMPL.volume_attachment_get(context, attachment_id)
 
 
-def volume_attachment_get_all_by_volume_id(context, volume_id):
-    return IMPL.volume_attachment_get_all_by_volume_id(context, volume_id)
+def volume_attachment_get_all_by_volume_id(context, volume_id,
+                                           session=None):
+    return IMPL.volume_attachment_get_all_by_volume_id(context,
+                                                       volume_id,
+                                                       session)
 
 
-def volume_attachment_get_all_by_host(context, host):
+def volume_attachment_get_all_by_host(context, host, filters=None):
+    # FIXME(jdg): Not using filters
     return IMPL.volume_attachment_get_all_by_host(context, host)
 
 
 def volume_attachment_get_all_by_instance_uuid(context,
-                                               instance_uuid):
+                                               instance_uuid, filters=None):
+    # FIXME(jdg): Not using filters
     return IMPL.volume_attachment_get_all_by_instance_uuid(context,
                                                            instance_uuid)
+
+
+def volume_attachment_get_all(context, filters=None, marker=None, limit=None,
+                              offset=None, sort_keys=None, sort_dirs=None):
+    return IMPL.volume_attachment_get_all(context, filters, marker, limit,
+                                          offset, sort_keys, sort_dirs)
+
+
+def volume_attachment_get_all_by_project(context, project_id, filters=None,
+                                         marker=None, limit=None, offset=None,
+                                         sort_keys=None, sort_dirs=None):
+    return IMPL.volume_attachment_get_all_by_project(context, project_id,
+                                                     filters, marker, limit,
+                                                     offset, sort_keys,
+                                                     sort_dirs)
+
+
+def attachment_destroy(context, attachment_id):
+    """Destroy the attachment or raise if it does not exist."""
+    return IMPL.attachment_destroy(context, attachment_id)
 
 
 def volume_update_status_based_on_attachment(context, volume_id):
@@ -365,6 +398,10 @@ def volume_has_snapshots_filter():
 
 def volume_has_undeletable_snapshots_filter():
     return IMPL.volume_has_undeletable_snapshots_filter()
+
+
+def volume_has_snapshots_in_a_cgsnapshot_filter():
+    return IMPL.volume_has_snapshots_in_a_cgsnapshot_filter()
 
 
 def volume_has_attachments_filter():
@@ -409,13 +446,13 @@ def snapshot_get_all_by_project(context, project_id, filters=None, marker=None,
                                             sort_dirs, offset)
 
 
-def snapshot_get_by_host(context, host, filters=None):
+def snapshot_get_all_by_host(context, host, filters=None):
     """Get all snapshots belonging to a host.
 
     :param host: Include include snapshots only for specified host.
     :param filters: Filters for the query in the form of key/value.
     """
-    return IMPL.snapshot_get_by_host(context, host, filters)
+    return IMPL.snapshot_get_all_by_host(context, host, filters)
 
 
 def snapshot_get_all_for_cgsnapshot(context, project_id):
@@ -449,12 +486,14 @@ def snapshot_data_get_for_project(context, project_id, volume_type_id=None):
                                               volume_type_id)
 
 
-def snapshot_get_active_by_window(context, begin, end=None, project_id=None):
+def snapshot_get_all_active_by_window(context, begin, end=None,
+                                      project_id=None):
     """Get all the snapshots inside the window.
 
     Specifying a project_id will filter for a certain project.
     """
-    return IMPL.snapshot_get_active_by_window(context, begin, end, project_id)
+    return IMPL.snapshot_get_all_active_by_window(context, begin, end,
+                                                  project_id)
 
 
 ####################
@@ -619,12 +658,13 @@ def volume_type_destroy(context, id):
     return IMPL.volume_type_destroy(context, id)
 
 
-def volume_get_active_by_window(context, begin, end=None, project_id=None):
+def volume_get_all_active_by_window(context, begin, end=None, project_id=None):
     """Get all the volumes inside the window.
 
     Specifying a project_id will filter for a certain project.
     """
-    return IMPL.volume_get_active_by_window(context, begin, end, project_id)
+    return IMPL.volume_get_all_active_by_window(context, begin, end,
+                                                project_id)
 
 
 def volume_type_access_get_all(context, type_id):
@@ -1029,9 +1069,9 @@ def quota_class_get(context, class_name, resource):
     return IMPL.quota_class_get(context, class_name, resource)
 
 
-def quota_class_get_default(context):
+def quota_class_get_defaults(context):
     """Retrieve all default quotas."""
-    return IMPL.quota_class_get_default(context)
+    return IMPL.quota_class_get_defaults(context)
 
 
 def quota_class_get_all_by_name(context, class_name):
@@ -1154,12 +1194,13 @@ def backup_get_all_by_volume(context, volume_id, filters=None):
                                          filters=filters)
 
 
-def backup_get_active_by_window(context, begin, end=None, project_id=None):
+def backup_get_all_active_by_window(context, begin, end=None, project_id=None):
     """Get all the backups inside the window.
 
     Specifying a project_id will filter for a certain project.
     """
-    return IMPL.backup_get_active_by_window(context, begin, end, project_id)
+    return IMPL.backup_get_all_active_by_window(context, begin, end,
+                                                project_id)
 
 
 def backup_update(context, backup_id, values):
@@ -1305,6 +1346,19 @@ def consistencygroup_include_in_cluster(context, cluster, partial_rename=True,
                                                     **filters)
 
 
+def migrate_add_message_prefix(context, max_count, force=False):
+    """Change Message event ids to start with the VOLUME_ prefix.
+
+    :param max_count: The maximum number of messages to consider in
+                      this run.
+    :param force: Ignored in this migration
+    :returns: number of messages needing migration, number of
+              messages migrated (both will always be less than
+              max_count).
+    """
+    return IMPL.migrate_add_message_prefix(context, max_count, force)
+
+
 ###################
 
 
@@ -1386,6 +1440,11 @@ def group_volume_type_mapping_create(context, group_id, volume_type_id):
     """Create a group volume_type mapping entry."""
     return IMPL.group_volume_type_mapping_create(context, group_id,
                                                  volume_type_id)
+
+
+def migrate_consistencygroups_to_groups(context, max_count, force=False):
+    """Migrage CGs to generic volume groups"""
+    return IMPL.migrate_consistencygroups_to_groups(context, max_count, force)
 
 
 ###################
@@ -1523,11 +1582,12 @@ def driver_initiator_data_get(context, initiator, namespace):
 ###################
 
 
-def image_volume_cache_create(context, host, image_id, image_updated_at,
-                              volume_id, size):
+def image_volume_cache_create(context, host, cluster_name, image_id,
+                              image_updated_at, volume_id, size):
     """Create a new image volume cache entry."""
     return IMPL.image_volume_cache_create(context,
                                           host,
+                                          cluster_name,
                                           image_id,
                                           image_updated_at,
                                           volume_id,
@@ -1539,11 +1599,11 @@ def image_volume_cache_delete(context, volume_id):
     return IMPL.image_volume_cache_delete(context, volume_id)
 
 
-def image_volume_cache_get_and_update_last_used(context, image_id, host):
+def image_volume_cache_get_and_update_last_used(context, image_id, **filters):
     """Query for an image volume cache entry."""
     return IMPL.image_volume_cache_get_and_update_last_used(context,
                                                             image_id,
-                                                            host)
+                                                            **filters)
 
 
 def image_volume_cache_get_by_volume_id(context, volume_id):
@@ -1551,9 +1611,28 @@ def image_volume_cache_get_by_volume_id(context, volume_id):
     return IMPL.image_volume_cache_get_by_volume_id(context, volume_id)
 
 
-def image_volume_cache_get_all_for_host(context, host):
+def image_volume_cache_get_all(context, **filters):
     """Query for all image volume cache entry for a host."""
-    return IMPL.image_volume_cache_get_all_for_host(context, host)
+    return IMPL.image_volume_cache_get_all(context, **filters)
+
+
+def image_volume_cache_include_in_cluster(context, cluster,
+                                          partial_rename=True, **filters):
+    """Include in cluster image volume cache entries matching the filters.
+
+    When partial_rename is set we will not set the cluster_name with cluster
+    parameter value directly, we'll replace provided cluster_name or host
+    filter value with cluster instead.
+
+    This is useful when we want to replace just the cluster name but leave
+    the backend and pool information as it is.  If we are using cluster_name
+    to filter, we'll use that same DB field to replace the cluster value and
+    leave the rest as it is.  Likewise if we use the host to filter.
+
+    Returns the number of volumes that have been changed.
+    """
+    return IMPL.image_volume_cache_include_in_cluster(
+        context, cluster, partial_rename, **filters)
 
 
 ###################
@@ -1659,6 +1738,33 @@ class Condition(object):
         if not field:
             raise ValueError(_('Condition has no field.'))
         return field
+
+###################
+
+
+def attachment_specs_get(context, attachment_id):
+    """Get all specs for an attachment."""
+    return IMPL.attachment_specs_get(context, attachment_id)
+
+
+def attachment_specs_delete(context, attachment_id, key):
+    """Delete the given attachment specs item."""
+    return IMPL.attachment_specs_delete(context, attachment_id, key)
+
+
+def attachment_specs_update_or_create(context,
+                                      attachment_id,
+                                      specs):
+    """Create or update attachment specs.
+
+    This adds or modifies the key/value pairs specified in the attachment
+    specs dict argument.
+    """
+    return IMPL.attachment_specs_update_or_create(context,
+                                                  attachment_id,
+                                                  specs)
+
+###################
 
 
 class Not(Condition):

@@ -69,6 +69,7 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
+   - tenant_id: tenant_id
    - description: description_6
    - availability_zone: availability_zone
    - volume_types: volume_types_2
@@ -122,7 +123,7 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - status: status
+   - status: status_1
    - description: description
    - availability_zone: availability_zone
    - created_at: created_at
@@ -152,7 +153,7 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - status: status
+   - status: status_1
    - user_id: user_id
    - description: description
    - cgsnapshot_id: cgsnapshot_id
@@ -223,7 +224,7 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - status: status
+   - status: status_1
    - description: description
    - availability_zone: availability_zone
    - created_at: created_at

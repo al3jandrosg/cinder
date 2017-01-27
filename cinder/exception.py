@@ -223,7 +223,7 @@ class InvalidHost(Invalid):
 # Cannot be templated as the error syntax varies.
 # msg needs to be constructed when raised.
 class InvalidParameterValue(Invalid):
-    message = _("%(err)s")
+    message = "%(err)s"
 
 
 class InvalidAuthKey(Invalid):
@@ -237,6 +237,10 @@ class InvalidConfigurationValue(Invalid):
 
 class ServiceUnavailable(Invalid):
     message = _("Service is unavailable at this time.")
+
+
+class UnavailableDuringUpgrade(Invalid):
+    message = _('Cannot perform %(action)s during system upgrade.')
 
 
 class ImageUnacceptable(Invalid):
@@ -418,12 +422,13 @@ class ImageNotFound(NotFound):
 class ServiceNotFound(NotFound):
 
     def __init__(self, message=None, **kwargs):
-        if kwargs.get('host', None):
-            self.message = _("Service %(service_id)s could not be "
-                             "found on host %(host)s.")
-        else:
-            self.message = _("Service %(service_id)s could not be found.")
-        super(ServiceNotFound, self).__init__(None, **kwargs)
+        if not message:
+            if kwargs.get('host', None):
+                self.message = _("Service %(service_id)s could not be "
+                                 "found on host %(host)s.")
+            else:
+                self.message = _("Service %(service_id)s could not be found.")
+        super(ServiceNotFound, self).__init__(message, **kwargs)
 
 
 class ServiceTooOld(Invalid):
@@ -570,12 +575,8 @@ class ParameterNotFound(NotFound):
     message = _("Could not find parameter %(param)s")
 
 
-class PasteAppNotFound(NotFound):
-    message = _("Could not load paste app '%(name)s' from %(path)s")
-
-
-class NoValidHost(CinderException):
-    message = _("No valid host was found. %(reason)s")
+class NoValidBackend(CinderException):
+    message = _("No valid backend was found. %(reason)s")
 
 
 class NoMoreTargets(CinderException):
@@ -657,6 +658,10 @@ class GroupTypeCreateFailed(CinderException):
 
 class GroupTypeUpdateFailed(CinderException):
     message = _("Cannot update group_type %(id)s")
+
+
+class GroupLimitExceeded(QuotaError):
+    message = _("Maximum number of groups allowed (%(allowed)d) exceeded")
 
 
 class UnknownCmd(VolumeDriverException):
@@ -872,8 +877,11 @@ ObjectFieldInvalid = obj_exc.ObjectFieldInvalid
 
 
 class CappedVersionUnknown(CinderException):
-    message = _('Unrecoverable Error: Versioned Objects in DB are capped to '
-                'unknown version %(version)s.')
+    message = _("Unrecoverable Error: Versioned Objects in DB are capped to "
+                "unknown version %(version)s. Most likely your environment "
+                "contains only new services and you're trying to start an "
+                "older one. Use `cinder-manage service list` to check that "
+                "and upgrade this service.")
 
 
 class VolumeGroupNotFound(CinderException):
@@ -896,6 +904,10 @@ class VolumeDeviceNotFound(CinderException):
 # Dell
 class DellDriverRetryableException(VolumeBackendAPIException):
     message = _("Retryable Dell Exception encountered")
+
+
+class DellDriverUnknownSpec(VolumeDriverException):
+    message = _("Dell driver failure: %(reason)s")
 
 
 # Pure Storage
@@ -1053,6 +1065,10 @@ class InvalidGroup(Invalid):
     message = _("Invalid Group: %(reason)s")
 
 
+class InvalidGroupStatus(Invalid):
+    message = _("Invalid Group Status: %(reason)s")
+
+
 # CgSnapshot
 class CgSnapshotNotFound(NotFound):
     message = _("CgSnapshot %(cgsnapshot_id)s could not be found.")
@@ -1069,6 +1085,10 @@ class GroupSnapshotNotFound(NotFound):
 
 class InvalidGroupSnapshot(Invalid):
     message = _("Invalid GroupSnapshot: %(reason)s")
+
+
+class InvalidGroupSnapshotStatus(Invalid):
+    message = _("Invalid GroupSnapshot Status: %(reason)s")
 
 
 # Hitachi Block Storage Driver
@@ -1133,7 +1153,7 @@ class ISCSITargetDetachFailed(CinderException):
 
 
 class ISCSITargetHelperCommandFailed(CinderException):
-    message = _("%(error_message)s")
+    message = "%(error_message)s"
 
 
 # X-IO driver exception.
@@ -1192,7 +1212,7 @@ class ZadaraInvalidAttachmentInfo(Invalid):
 
 
 class ZadaraVolumeNotFound(VolumeDriverException):
-    message = _("%(reason)s")
+    message = "%(reason)s"
 
 
 # ZFSSA NFS driver exception.
@@ -1227,11 +1247,11 @@ class DotHillInvalidBackend(VolumeDriverException):
 
 
 class DotHillConnectionError(VolumeDriverException):
-    message = _("%(message)s")
+    message = "%(message)s"
 
 
 class DotHillAuthenticationError(VolumeDriverException):
-    message = _("%(message)s")
+    message = "%(message)s"
 
 
 class DotHillNotEnoughSpace(VolumeDriverException):
@@ -1239,7 +1259,7 @@ class DotHillNotEnoughSpace(VolumeDriverException):
 
 
 class DotHillRequestError(VolumeDriverException):
-    message = _("%(message)s")
+    message = "%(message)s"
 
 
 class DotHillNotTargetPortal(VolumeDriverException):
@@ -1270,7 +1290,7 @@ class NotSupportedOperation(Invalid):
 
 # Hitachi HNAS drivers
 class HNASConnError(VolumeDriverException):
-    message = _("%(message)s")
+    message = "%(message)s"
 
 
 # Coho drivers
@@ -1285,7 +1305,7 @@ class TegileAPIException(VolumeBackendAPIException):
 
 # NexentaStor driver exception
 class NexentaException(VolumeDriverException):
-    message = _("%(message)s")
+    message = "%(message)s"
 
 
 # Google Cloud Storage(GCS) backup driver
@@ -1330,3 +1350,12 @@ class RdxAPICommandException(VolumeDriverException):
 
 class RdxAPIConnectionException(VolumeDriverException):
     message = _("Reduxio API Connection Exception")
+
+
+class AttachmentSpecsNotFound(NotFound):
+    message = _("Attachment %(attachment_id)s has no "
+                "key %(specs_key)s.")
+
+
+class InvalidAttachment(Invalid):
+    message = _("Invalid attachment: %(reason)s")

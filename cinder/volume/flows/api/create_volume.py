@@ -15,6 +15,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import timeutils
 from oslo_utils import units
+import six
 import taskflow.engines
 from taskflow.patterns import linear_flow
 from taskflow.types import failure as ft
@@ -169,7 +170,7 @@ class ExtractVolumeRequestTask(flow_utils.CinderTask):
                 raise exception.InvalidInput(reason=msg)
 
         def validate_int(size):
-            if not isinstance(size, int) or size <= 0:
+            if not isinstance(size, six.integer_types) or size <= 0:
                 msg = _("Volume size '%(size)s' must be an integer and"
                         " greater than 0") % {'size': size}
                 raise exception.InvalidInput(reason=msg)
@@ -458,9 +459,19 @@ class ExtractVolumeRequestTask(flow_utils.CinderTask):
             qos_specs = volume_types.get_volume_type_qos_specs(volume_type_id)
             if qos_specs['qos_specs']:
                 specs = qos_specs['qos_specs'].get('specs', {})
+
+            # Determine default replication status
+            extra_specs = volume_types.get_volume_type_extra_specs(
+                volume_type_id)
         if not specs:
             # to make sure we don't pass empty dict
             specs = None
+            extra_specs = None
+
+        if vol_utils.is_replicated_spec(extra_specs):
+            replication_status = fields.ReplicationStatus.ENABLED
+        else:
+            replication_status = fields.ReplicationStatus.DISABLED
 
         return {
             'size': size,
@@ -475,6 +486,7 @@ class ExtractVolumeRequestTask(flow_utils.CinderTask):
             'consistencygroup_id': consistencygroup_id,
             'cgsnapshot_id': cgsnapshot_id,
             'group_id': group_id,
+            'replication_status': replication_status,
         }
 
 
@@ -516,7 +528,6 @@ class EntryCreateTask(flow_utils.CinderTask):
             # Rename these to the internal name.
             'display_description': kwargs.pop('description'),
             'display_name': kwargs.pop('name'),
-            'replication_status': 'disabled',
             'multiattach': kwargs.pop('multiattach'),
         }
 
@@ -703,13 +714,13 @@ class VolumeCastTask(flow_utils.CinderTask):
         self.db = db
 
     def _cast_create_volume(self, context, request_spec, filter_properties):
-        source_volid = request_spec['source_volid']
-        source_replicaid = request_spec['source_replicaid']
+        source_volume_ref = None
+        source_volid = (request_spec['source_volid'] or
+                        request_spec['source_replicaid'])
         volume = request_spec['volume']
         snapshot_id = request_spec['snapshot_id']
         image_id = request_spec['image_id']
         cgroup_id = request_spec['consistencygroup_id']
-        host = None
         cgsnapshot_id = request_spec['cgsnapshot_id']
         group_id = request_spec['group_id']
         if cgroup_id:
@@ -734,19 +745,11 @@ class VolumeCastTask(flow_utils.CinderTask):
             # snapshot resides instead of passing it through the scheduler, so
             # snapshot can be copied to the new volume.
             snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
-            source_volume_ref = objects.Volume.get_by_id(context,
-                                                         snapshot.volume_id)
-            host = source_volume_ref.host
+            source_volume_ref = snapshot.volume
         elif source_volid:
-            source_volume_ref = objects.Volume.get_by_id(context,
-                                                         source_volid)
-            host = source_volume_ref.host
-        elif source_replicaid:
-            source_volume_ref = objects.Volume.get_by_id(context,
-                                                         source_replicaid)
-            host = source_volume_ref.host
+            source_volume_ref = objects.Volume.get_by_id(context, source_volid)
 
-        if not host:
+        if not source_volume_ref:
             # Cast to the scheduler and let it handle whatever is needed
             # to select the target host for this volume.
             self.scheduler_rpcapi.create_volume(
@@ -759,14 +762,14 @@ class VolumeCastTask(flow_utils.CinderTask):
         else:
             # Bypass the scheduler and send the request directly to the volume
             # manager.
-            volume.host = host
+            volume.host = source_volume_ref.host
+            volume.cluster_name = source_volume_ref.cluster_name
             volume.scheduled_at = timeutils.utcnow()
             volume.save()
             if not cgsnapshot_id:
                 self.volume_rpcapi.create_volume(
                     context,
                     volume,
-                    volume.host,
                     request_spec,
                     filter_properties,
                     allow_reschedule=False)

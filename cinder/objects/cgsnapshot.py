@@ -22,8 +22,10 @@ from oslo_versionedobjects import fields
 
 @base.CinderObjectRegistry.register
 class CGSnapshot(base.CinderPersistentObject, base.CinderObject,
-                 base.CinderObjectDictCompat):
-    VERSION = '1.0'
+                 base.CinderObjectDictCompat, base.ClusteredObject):
+    # Version 1.0: Initial version
+    # Version 1.1: Added from_group_snapshot
+    VERSION = '1.1'
 
     OPTIONAL_FIELDS = ['consistencygroup', 'snapshots']
 
@@ -41,8 +43,12 @@ class CGSnapshot(base.CinderPersistentObject, base.CinderObject,
     }
 
     @property
-    def service_topic_queue(self):
-        return self.consistencygroup.service_topic_queue
+    def host(self):
+        return self.consistencygroup.host
+
+    @property
+    def cluster_name(self):
+        return self.consistencygroup.cluster_name
 
     @classmethod
     def _from_db_object(cls, context, cgsnapshot, db_cgsnapshots,
@@ -84,6 +90,16 @@ class CGSnapshot(base.CinderPersistentObject, base.CinderObject,
 
         db_cgsnapshots = db.cgsnapshot_create(self._context, updates)
         self._from_db_object(self._context, self, db_cgsnapshots)
+
+    def from_group_snapshot(self, group_snapshot):
+        """Convert a generic volume group object to a cg object."""
+        self.id = group_snapshot.id
+        self.consistencygroup_id = group_snapshot.group_id
+        self.user_id = group_snapshot.user_id
+        self.project_id = group_snapshot.project_id
+        self.name = group_snapshot.name
+        self.description = group_snapshot.description
+        self.status = group_snapshot.status
 
     def obj_load_attr(self, attrname):
         if attrname not in self.OPTIONAL_FIELDS:

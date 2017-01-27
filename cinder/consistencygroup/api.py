@@ -33,6 +33,7 @@ from cinder import objects
 from cinder.objects import fields as c_fields
 import cinder.policy
 from cinder import quota
+from cinder import quota_utils
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder.volume import api as volume_api
 from cinder.volume import rpcapi as volume_rpcapi
@@ -210,6 +211,8 @@ class API(base.Base):
             msg = _("No host to create consistency group %s.") % group.id
             LOG.error(msg)
             raise exception.InvalidConsistencyGroup(reason=msg)
+
+        group.assert_not_frozen()
 
         if cgsnapshot_id:
             self._create_cg_from_cgsnapshot(context, group, cgsnapshot_id)
@@ -405,10 +408,13 @@ class API(base.Base):
                                             **reserve_opts)
             if reservations:
                 CGQUOTAS.commit(context, reservations)
-        except Exception:
+        except Exception as e:
             with excutils.save_and_reraise_exception():
                 try:
                     group.destroy()
+                    if isinstance(e, exception.OverQuota):
+                        quota_utils.process_reserve_over_quota(
+                            context, e, resource='groups')
                 finally:
                     LOG.error(_LE("Failed to update quota for "
                                   "consistency group %s."), group.id)
@@ -423,6 +429,8 @@ class API(base.Base):
             group.destroy()
 
             return
+
+        group.assert_not_frozen()
 
         if force:
             expected = {}
@@ -710,6 +718,7 @@ class API(base.Base):
         return groups
 
     def create_cgsnapshot(self, context, group, name, description):
+        group.assert_not_frozen()
         options = {'consistencygroup_id': group.id,
                    'user_id': context.user_id,
                    'project_id': context.project_id,
@@ -746,6 +755,7 @@ class API(base.Base):
         return cgsnapshot
 
     def delete_cgsnapshot(self, context, cgsnapshot, force=False):
+        cgsnapshot.assert_not_frozen()
         values = {'status': 'deleting'}
         expected = {'status': ('available', 'error')}
         filters = [~db.cg_creating_from_src(cgsnapshot_id=cgsnapshot.id)]

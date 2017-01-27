@@ -26,6 +26,7 @@ from cinder.i18n import _, _LE
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
+DEFAULT_CGSNAPSHOT_TYPE = "default_cgsnapshot_type"
 
 
 def create(context,
@@ -133,6 +134,32 @@ def get_default_group_type():
                           'Please check default_group_type config.'))
 
     return grp_type
+
+
+def get_default_cgsnapshot_type():
+    """Get the default group type for migrating cgsnapshots.
+
+    Get the default group type for migrating consistencygroups to
+    groups and cgsnapshots to group_snapshots.
+    """
+
+    grp_type = {}
+
+    ctxt = context.get_admin_context()
+    try:
+        grp_type = get_group_type_by_name(ctxt, DEFAULT_CGSNAPSHOT_TYPE)
+    except exception.GroupTypeNotFoundByName:
+        # Couldn't find DEFAULT_CGSNAPSHOT_TYPE group type.
+        # Record this issue and move on.
+        LOG.exception(_LE('Default cgsnapshot type %s is not found.')
+                      % DEFAULT_CGSNAPSHOT_TYPE)
+
+    return grp_type
+
+
+def is_default_cgsnapshot_type(group_type_id):
+    cgsnap_type = get_default_cgsnapshot_type()
+    return group_type_id == cgsnap_type['id']
 
 
 def get_group_type_specs(group_type_id, key=False):

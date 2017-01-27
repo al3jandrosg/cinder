@@ -35,6 +35,10 @@ class HPEXPFCDriver(driver.FibreChannelDriver):
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "XP_Storage_CI"
 
+    # TODO(smcginnis) Either remove this if CI requirements are met, or
+    # remove this driver in the Pike release per normal deprecation
+    SUPPORTED = False
+
     def __init__(self, *args, **kwargs):
         """Initialize the driver."""
         super(HPEXPFCDriver, self).__init__(*args, **kwargs)
@@ -158,13 +162,13 @@ class HPEXPFCDriver(driver.FibreChannelDriver):
         pass
 
     @utils.trace
-    @fczm_utils.AddFCZone
+    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Attach the volume to an instance."""
         return self.common.initialize_connection(volume, connector)
 
     @utils.trace
-    @fczm_utils.RemoveFCZone
+    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Detach a volume from an instance."""
         return self.common.terminate_connection(volume, connector, **kwargs)

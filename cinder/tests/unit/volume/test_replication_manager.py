@@ -16,6 +16,7 @@
 import ddt
 import mock
 
+from cinder.common import constants
 from cinder import exception
 from cinder import objects
 from cinder.objects import fields
@@ -31,7 +32,7 @@ class ReplicationTestCase(base.BaseVolumeTestCase):
         self.host = 'host@backend#pool'
         self.manager = manager.VolumeManager(host=self.host)
 
-    @mock.patch('cinder.objects.VolumeList.get_all_by_host')
+    @mock.patch('cinder.objects.VolumeList.get_all')
     @mock.patch('cinder.volume.driver.BaseVD.failover_host',
                 side_effect=exception.InvalidReplicationTarget(''))
     @ddt.data(('backend2', 'default', fields.ReplicationStatus.FAILED_OVER),
@@ -50,15 +51,33 @@ class ReplicationTestCase(base.BaseVolumeTestCase):
         """
         svc = utils.create_service(
             self.context,
-            host=self.host,
-            active_backend_id=svc_backend,
-            replication_status=fields.ReplicationStatus.FAILING_OVER)
+            {'host': self.host,
+             'binary': constants.VOLUME_BINARY,
+             'active_backend_id': svc_backend,
+             'replication_status': fields.ReplicationStatus.FAILING_OVER})
 
         self.manager.failover_host(self.context, new_backend)
-        mock_getall.assert_called_once_with(self.context, self.host)
+        mock_getall.assert_called_once_with(self.context,
+                                            filters={'host': self.host})
         mock_failover.assert_called_once_with(self.context,
                                               mock_getall.return_value,
                                               secondary_id=new_backend)
 
         db_svc = objects.Service.get_by_id(self.context, svc.id)
         self.assertEqual(expected, db_svc.replication_status)
+
+    @mock.patch('cinder.volume.driver.BaseVD.failover_host',
+                mock.Mock(side_effect=exception.VolumeDriverException('')))
+    def test_failover_host_driver_exception(self):
+        svc = utils.create_service(
+            self.context,
+            {'host': self.host,
+             'binary': constants.VOLUME_BINARY,
+             'active_backend_id': None,
+             'replication_status': fields.ReplicationStatus.FAILING_OVER})
+
+        self.manager.failover_host(self.context, mock.sentinel.backend_id)
+
+        db_svc = objects.Service.get_by_id(self.context, svc.id)
+        self.assertEqual(fields.ReplicationStatus.FAILOVER_ERROR,
+                         db_svc.replication_status)

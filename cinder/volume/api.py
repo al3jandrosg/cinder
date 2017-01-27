@@ -26,6 +26,7 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
+from oslo_utils import versionutils
 import six
 
 from cinder.api import common
@@ -85,6 +86,7 @@ CONF.import_opt('glance_core_properties', 'cinder.image.glance')
 
 LOG = logging.getLogger(__name__)
 QUOTAS = quota.QUOTAS
+AO_LIST = objects.VolumeAttachmentList
 
 
 def wrap_check_policy(func):
@@ -97,7 +99,6 @@ def wrap_check_policy(func):
     def wrapped(self, context, target_obj, *args, **kwargs):
         check_policy(context, func.__name__, target_obj)
         return func(self, context, target_obj, *args, **kwargs)
-
     return wrapped
 
 
@@ -393,6 +394,9 @@ class API(base.Base):
                                'id': volume.id})
             return
 
+        if not unmanage_only:
+            volume.assert_not_frozen()
+
         # Build required conditions for conditional update
         expected = {
             'attach_status': db.Not(fields.VolumeAttachStatus.ATTACHED),
@@ -406,12 +410,19 @@ class API(base.Base):
                                   'error_extending', 'error_managing')
 
         if cascade:
-            # Allow deletion if all snapshots are in an expected state
-            filters = [~db.volume_has_undeletable_snapshots_filter()]
+            if force:
+                # Ignore status checks, but ensure snapshots are not part
+                # of a cgsnapshot.
+                filters = [~db.volume_has_snapshots_in_a_cgsnapshot_filter()]
+            else:
+                # Allow deletion if all snapshots are in an expected state
+                filters = [~db.volume_has_undeletable_snapshots_filter()]
         else:
             # Don't allow deletion of volume with snapshots
             filters = [~db.volume_has_snapshots_filter()]
         values = {'status': 'deleting', 'terminated_at': timeutils.utcnow()}
+        if unmanage_only is True:
+            values['status'] = 'unmanaging'
         if volume.status == 'error_managing':
             values['status'] = 'error_managing_deleting'
 
@@ -427,9 +438,11 @@ class API(base.Base):
 
         if cascade:
             values = {'status': 'deleting'}
-            expected = {'status': ('available', 'error', 'deleting'),
-                        'cgsnapshot_id': None,
+            expected = {'cgsnapshot_id': None,
                         'group_snapshot_id': None}
+            if not force:
+                expected['status'] = ('available', 'error', 'deleting')
+
             snapshots = objects.snapshot.SnapshotList.get_all_for_volume(
                 context, volume.id)
             for s in snapshots:
@@ -638,7 +651,13 @@ class API(base.Base):
         value = {'status': db.Case([(db.volume_has_attachments_filter(),
                                      'in-use')],
                                    else_='available')}
-        volume.conditional_update(value, expected)
+        result = volume.conditional_update(value, expected)
+        if not result:
+            LOG.debug("Attempted to unreserve volume that was not "
+                      "reserved, nothing to do.",
+                      resource=volume)
+            return
+
         LOG.info(_LI("Unreserve volume completed successfully."),
                  resource=volume)
 
@@ -756,6 +775,7 @@ class API(base.Base):
                          force=False, metadata=None,
                          cgsnapshot_id=None,
                          group_snapshot_id=None):
+        volume.assert_not_frozen()
         snapshot = self.create_snapshot_in_db(
             context, volume, name,
             description, force, metadata, cgsnapshot_id,
@@ -977,6 +997,9 @@ class API(base.Base):
     @wrap_check_policy
     def delete_snapshot(self, context, snapshot, force=False,
                         unmanage_only=False):
+        if not unmanage_only:
+            snapshot.assert_not_frozen()
+
         # Build required conditions for conditional update
         expected = {'cgsnapshot_id': None,
                     'group_snapshot_id': None}
@@ -985,8 +1008,10 @@ class API(base.Base):
             expected['status'] = (fields.SnapshotStatus.AVAILABLE,
                                   fields.SnapshotStatus.ERROR)
 
-        result = snapshot.conditional_update(
-            {'status': fields.SnapshotStatus.DELETING}, expected)
+        values = {'status': fields.SnapshotStatus.DELETING}
+        if unmanage_only is True:
+            values['status'] = fields.SnapshotStatus.UNMANAGING
+        result = snapshot.conditional_update(values, expected)
         if not result:
             status = utils.build_or_str(expected.get('status'),
                                         _('status must be %s and'))
@@ -1344,32 +1369,47 @@ class API(base.Base):
                  resource=volume)
 
     @wrap_check_policy
-    def migrate_volume(self, context, volume, host, force_host_copy,
+    def migrate_volume(self, context, volume, host, cluster_name, force_copy,
                        lock_volume):
-        """Migrate the volume to the specified host."""
-        # Make sure the host is in the list of available hosts
+        """Migrate the volume to the specified host or cluster."""
         elevated = context.elevated()
-        topic = constants.VOLUME_TOPIC
-        services = objects.ServiceList.get_all_by_topic(
-            elevated, topic, disabled=False)
-        found = False
-        svc_host = volume_utils.extract_host(host, 'backend')
-        for service in services:
-            if service.is_up and service.host == svc_host:
-                found = True
-                break
-        if not found:
-            msg = _('No available service named %s') % host
+
+        # If we received a request to migrate to a host
+        # Look for the service - must be up and enabled
+        svc_host = host and volume_utils.extract_host(host, 'backend')
+        svc_cluster = cluster_name and volume_utils.extract_host(cluster_name,
+                                                                 'backend')
+        # NOTE(geguileo): Only svc_host or svc_cluster is set, so when we get
+        # a service from the DB we are getting either one specific service from
+        # a host or any service from a cluster that is up, which means that the
+        # cluster itself is also up.
+        try:
+            svc = objects.Service.get_by_id(elevated, None, is_up=True,
+                                            topic=constants.VOLUME_TOPIC,
+                                            host=svc_host, disabled=False,
+                                            cluster_name=svc_cluster,
+                                            backend_match_level='pool')
+        except exception.ServiceNotFound:
+            msg = _('No available service named %s') % cluster_name or host
             LOG.error(msg)
             raise exception.InvalidHost(reason=msg)
+        # Even if we were requested to do a migration to a host, if the host is
+        # in a cluster we will do a cluster migration.
+        cluster_name = svc.cluster_name
 
         # Build required conditions for conditional update
         expected = {'status': ('available', 'in-use'),
                     'migration_status': self.AVAILABLE_MIGRATION_STATUS,
                     'replication_status': (None, 'disabled'),
                     'consistencygroup_id': (None, ''),
-                    'group_id': (None, ''),
-                    'host': db.Not(host)}
+                    'group_id': (None, '')}
+
+        # We want to make sure that the migration is to another host or
+        # another cluster.
+        if cluster_name:
+            expected['cluster_name'] = db.Not(cluster_name)
+        else:
+            expected['host'] = db.Not(host)
 
         filters = [~db.volume_has_snapshots_filter()]
 
@@ -1392,8 +1432,8 @@ class API(base.Base):
         if not result:
             msg = _('Volume %s status must be available or in-use, must not '
                     'be migrating, have snapshots, be replicated, be part of '
-                    'a group and destination host must be different than the '
-                    'current host') % {'vol_id': volume.id}
+                    'a group and destination host/cluster must be different '
+                    'than the current one') % {'vol_id': volume.id}
             LOG.error(msg)
             raise exception.InvalidVolume(reason=msg)
 
@@ -1406,11 +1446,11 @@ class API(base.Base):
         request_spec = {'volume_properties': volume,
                         'volume_type': volume_type,
                         'volume_id': volume.id}
-        self.scheduler_rpcapi.migrate_volume_to_host(context,
-                                                     volume,
-                                                     host,
-                                                     force_host_copy,
-                                                     request_spec)
+        self.scheduler_rpcapi.migrate_volume(context,
+                                             volume,
+                                             cluster_name or host,
+                                             force_copy,
+                                             request_spec)
         LOG.info(_LI("Migrate volume request issued successfully."),
                  resource=volume)
 
@@ -1556,19 +1596,31 @@ class API(base.Base):
         LOG.info(_LI("Retype volume request issued successfully."),
                  resource=volume)
 
-    def _get_service_by_host(self, context, host, resource='volume'):
+    def _get_service_by_host_cluster(self, context, host, cluster_name,
+                                     resource='volume'):
         elevated = context.elevated()
+
+        svc_cluster = cluster_name and volume_utils.extract_host(cluster_name,
+                                                                 'backend')
+        svc_host = host and volume_utils.extract_host(host, 'backend')
+
+        # NOTE(geguileo): Only svc_host or svc_cluster is set, so when we get
+        # a service from the DB we are getting either one specific service from
+        # a host or any service that is up from a cluster, which means that the
+        # cluster itself is also up.
         try:
-            svc_host = volume_utils.extract_host(host, 'backend')
-            service = objects.Service.get_by_args(
-                elevated, svc_host, 'cinder-volume')
+            service = objects.Service.get_by_id(elevated, None, host=svc_host,
+                                                binary='cinder-volume',
+                                                cluster_name=svc_cluster)
         except exception.ServiceNotFound:
             with excutils.save_and_reraise_exception():
                 LOG.error(_LE('Unable to find service: %(service)s for '
-                              'given host: %(host)s.'),
-                          {'service': constants.VOLUME_BINARY, 'host': host})
+                              'given host: %(host)s and cluster %(cluster)s.'),
+                          {'service': constants.VOLUME_BINARY, 'host': host,
+                           'cluster': cluster_name})
 
-        if service.disabled:
+        if service.disabled and (not service.cluster_name or
+                                 service.cluster.disabled):
             LOG.error(_LE('Unable to manage existing %s on a disabled '
                           'service.'), resource)
             raise exception.ServiceUnavailable()
@@ -1580,15 +1632,16 @@ class API(base.Base):
 
         return service
 
-    def manage_existing(self, context, host, ref, name=None, description=None,
-                        volume_type=None, metadata=None,
+    def manage_existing(self, context, host, cluster_name, ref, name=None,
+                        description=None, volume_type=None, metadata=None,
                         availability_zone=None, bootable=False):
         if volume_type and 'extra_specs' not in volume_type:
             extra_specs = volume_types.get_volume_type_extra_specs(
                 volume_type['id'])
             volume_type['extra_specs'] = extra_specs
 
-        service = self._get_service_by_host(context, host)
+        service = self._get_service_by_host_cluster(context, host,
+                                                    cluster_name)
 
         if availability_zone is None:
             availability_zone = service.availability_zone
@@ -1597,7 +1650,8 @@ class API(base.Base):
             'context': context,
             'name': name,
             'description': description,
-            'host': host,
+            'host': service.host,
+            'cluster_name': service.cluster_name,
             'ref': ref,
             'volume_type': volume_type,
             'metadata': metadata,
@@ -1624,10 +1678,11 @@ class API(base.Base):
                      resource=vol_ref)
             return vol_ref
 
-    def get_manageable_volumes(self, context, host, marker=None, limit=None,
-                               offset=None, sort_keys=None, sort_dirs=None):
-        self._get_service_by_host(context, host)
-        return self.volume_rpcapi.get_manageable_volumes(context, host,
+    def get_manageable_volumes(self, context, host, cluster_name, marker=None,
+                               limit=None, offset=None, sort_keys=None,
+                               sort_dirs=None):
+        svc = self._get_service_by_host_cluster(context, host, cluster_name)
+        return self.volume_rpcapi.get_manageable_volumes(context, svc,
                                                          marker, limit,
                                                          offset, sort_keys,
                                                          sort_dirs)
@@ -1635,87 +1690,159 @@ class API(base.Base):
     def manage_existing_snapshot(self, context, ref, volume,
                                  name=None, description=None,
                                  metadata=None):
-        service = self._get_service_by_host(context, volume.host, 'snapshot')
+        service = self._get_service_by_host_cluster(context, volume.host,
+                                                    volume.cluster_name,
+                                                    'snapshot')
+
         snapshot_object = self.create_snapshot_in_db(context, volume, name,
                                                      description, True,
                                                      metadata, None,
                                                      commit_quota=False)
-        self.volume_rpcapi.manage_existing_snapshot(context, snapshot_object,
-                                                    ref, service.host)
+        self.volume_rpcapi.manage_existing_snapshot(
+            context, snapshot_object, ref, service.service_topic_queue)
         return snapshot_object
 
-    def get_manageable_snapshots(self, context, host, marker=None, limit=None,
-                                 offset=None, sort_keys=None, sort_dirs=None):
-        self._get_service_by_host(context, host, resource='snapshot')
-        return self.volume_rpcapi.get_manageable_snapshots(context, host,
+    def get_manageable_snapshots(self, context, host, cluster_name,
+                                 marker=None, limit=None, offset=None,
+                                 sort_keys=None, sort_dirs=None):
+        svc = self._get_service_by_host_cluster(context, host, cluster_name,
+                                                'snapshot')
+        return self.volume_rpcapi.get_manageable_snapshots(context, svc,
                                                            marker, limit,
                                                            offset, sort_keys,
                                                            sort_dirs)
 
+    def _get_cluster_and_services_for_replication(self, ctxt, host,
+                                                  cluster_name):
+        services = objects.ServiceList.get_all(
+            ctxt, filters={'host': host, 'cluster_name': cluster_name,
+                           'binary': constants.VOLUME_BINARY})
+
+        if not services:
+            msg = _('No service found with ') + (
+                'host=%(host)s' if host else 'cluster=%(cluster_name)s')
+            raise exception.ServiceNotFound(msg, host=host,
+                                            cluster_name=cluster_name)
+
+        cluster = services[0].cluster
+        # Check that the host or cluster we received only results in 1 host or
+        # hosts from the same cluster.
+        if cluster_name:
+            check_attribute = 'cluster_name'
+            expected = cluster.name
+        else:
+            check_attribute = 'host'
+            expected = services[0].host
+        if any(getattr(s, check_attribute) != expected for s in services):
+            msg = _('Services from different clusters found.')
+            raise exception.InvalidParameterValue(msg)
+
+        # If we received host parameter but host belongs to a cluster we have
+        # to change all the services in the cluster, not just one host
+        if host and cluster:
+            services = cluster.services
+
+        return cluster, services
+
+    def _replication_db_change(self, ctxt, field, expected_value, new_value,
+                               host, cluster_name, check_up=False):
+        def _error_msg(service):
+            expected = utils.build_or_str(six.text_type(expected_value))
+            up_msg = 'and must be up ' if check_up else ''
+            msg = (_('%(field)s in %(service)s must be %(expected)s '
+                     '%(up_msg)sto failover.')
+                   % {'field': field, 'service': service,
+                      'expected': expected, 'up_msg': up_msg})
+            LOG.error(msg)
+            return msg
+
+        cluster, services = self._get_cluster_and_services_for_replication(
+            ctxt, host, cluster_name)
+
+        expect = {field: expected_value}
+        change = {field: new_value}
+
+        if cluster:
+            old_value = getattr(cluster, field)
+            if ((check_up and not cluster.is_up)
+                    or not cluster.conditional_update(change, expect)):
+                msg = _error_msg(cluster.name)
+                raise exception.InvalidInput(reason=msg)
+
+        changed = []
+        not_changed = []
+        for service in services:
+            if ((not check_up or service.is_up)
+                    and service.conditional_update(change, expect)):
+                changed.append(service)
+            else:
+                not_changed.append(service)
+
+        # If there were some services that couldn't be changed we should at
+        # least log the error.
+        if not_changed:
+            msg = _error_msg([s.host for s in not_changed])
+            # If we couldn't change any of the services
+            if not changed:
+                # Undo the cluster change
+                if cluster:
+                    setattr(cluster, field, old_value)
+                    cluster.save()
+                raise exception.InvalidInput(
+                    reason=_('No service could be changed: %s') % msg)
+            LOG.warning(_LW('Some services could not be changed: %s'), msg)
+
+        return cluster, services
+
     # FIXME(jdg): Move these Cheesecake methods (freeze, thaw and failover)
     # to a services API because that's what they are
-    def failover_host(self,
-                      ctxt,
-                      host,
-                      secondary_id=None):
-
+    def failover(self, ctxt, host, cluster_name, secondary_id=None):
         check_policy(ctxt, 'failover_host')
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
-        svc_host = volume_utils.extract_host(host, 'backend')
 
-        service = objects.Service.get_by_args(
-            ctxt, svc_host, constants.VOLUME_BINARY)
-        expected = {'replication_status': [fields.ReplicationStatus.ENABLED,
-                    fields.ReplicationStatus.FAILED_OVER]}
-        result = service.conditional_update(
-            {'replication_status': fields.ReplicationStatus.FAILING_OVER},
-            expected)
-        if not result:
-            expected_status = utils.build_or_str(
-                expected['replication_status'])
-            msg = (_('Host replication_status must be %s to failover.')
-                   % expected_status)
-            LOG.error(msg)
-            raise exception.InvalidInput(reason=msg)
-        self.volume_rpcapi.failover_host(ctxt, host, secondary_id)
+        # TODO(geguileo): In P - Remove this version check
+        rpc_version = self.volume_rpcapi.determine_rpc_version_cap()
+        rpc_version = versionutils.convert_version_to_tuple(rpc_version)
+        if cluster_name and rpc_version < (3, 5):
+            msg = _('replication operations with cluster field')
+            raise exception.UnavailableDuringUpgrade(action=msg)
 
-    def freeze_host(self, ctxt, host):
+        rep_fields = fields.ReplicationStatus
+        expected_values = [rep_fields.ENABLED, rep_fields.FAILED_OVER]
+        new_value = rep_fields.FAILING_OVER
 
+        cluster, services = self._replication_db_change(
+            ctxt, 'replication_status', expected_values, new_value, host,
+            cluster_name, check_up=True)
+
+        self.volume_rpcapi.failover(ctxt, services[0], secondary_id)
+
+    def freeze_host(self, ctxt, host, cluster_name):
         check_policy(ctxt, 'freeze_host')
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
-        svc_host = volume_utils.extract_host(host, 'backend')
 
-        service = objects.Service.get_by_args(
-            ctxt, svc_host, constants.VOLUME_BINARY)
-        expected = {'frozen': False}
-        result = service.conditional_update(
-            {'frozen': True}, expected)
-        if not result:
-            msg = _('Host is already Frozen.')
-            LOG.error(msg)
-            raise exception.InvalidInput(reason=msg)
+        expected = False
+        new_value = True
+        cluster, services = self._replication_db_change(
+            ctxt, 'frozen', expected, new_value, host, cluster_name,
+            check_up=False)
 
         # Should we set service status to disabled to keep
         # scheduler calls from being sent? Just use existing
         # `cinder service-disable reason=freeze`
-        self.volume_rpcapi.freeze_host(ctxt, host)
+        self.volume_rpcapi.freeze_host(ctxt, services[0])
 
-    def thaw_host(self, ctxt, host):
-
+    def thaw_host(self, ctxt, host, cluster_name):
         check_policy(ctxt, 'thaw_host')
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
-        svc_host = volume_utils.extract_host(host, 'backend')
 
-        service = objects.Service.get_by_args(
-            ctxt, svc_host, constants.VOLUME_BINARY)
-        expected = {'frozen': True}
-        result = service.conditional_update(
-            {'frozen': False}, expected)
-        if not result:
-            msg = _('Host is NOT Frozen.')
-            LOG.error(msg)
-            raise exception.InvalidInput(reason=msg)
-        if not self.volume_rpcapi.thaw_host(ctxt, host):
+        expected = True
+        new_value = False
+        cluster, services = self._replication_db_change(
+            ctxt, 'frozen', expected, new_value, host, cluster_name,
+            check_up=False)
+
+        if not self.volume_rpcapi.thaw_host(ctxt, services[0]):
             return "Backend reported error during thaw_host operation."
 
     def check_volume_filters(self, filters, strict=False):
@@ -1778,6 +1905,98 @@ class API(base.Base):
                 return True
             else:
                 return bool(val)
+
+    def _attachment_reserve(self, ctxt, vref, instance_uuid=None):
+        # NOTE(jdg): Reserved is a special case, we're avoiding allowing
+        # creation of other new reserves/attachments while in this state
+        # so we avoid contention issues with shared connections
+
+        # FIXME(JDG):  We want to be able to do things here like reserve a
+        # volume for Nova to do BFV WHILE the volume may be in the process of
+        # downloading image, we add downloading here; that's easy enough but
+        # we've got a race inbetween with the attaching/detaching that we do
+        # locally on the Cinder node.  Just come up with an easy way to
+        # determine if we're attaching to the Cinder host for some work or if
+        # we're being used by the outside world.
+        expected = {'multiattach': vref.multiattach,
+                    'status': (('available', 'in-use', 'downloading')
+                               if vref.multiattach
+                               else ('available', 'downloading'))}
+        result = vref.conditional_update({'status': 'reserved'}, expected)
+        if not result:
+            msg = (_('Volume %(vol_id)s status must be %(statuses)s') %
+                   {'vol_id': vref.id,
+                    'statuses': utils.build_or_str(expected['status'])})
+            raise exception.InvalidVolume(reason=msg)
+
+        values = {'volume_id': vref.id,
+                  'volume_host': vref.host,
+                  'attach_status': 'reserved',
+                  'instance_uuid': instance_uuid}
+        db_ref = self.db.volume_attach(ctxt.elevated(), values)
+        return objects.VolumeAttachment.get_by_id(ctxt, db_ref['id'])
+
+    @wrap_check_policy
+    def attachment_create(self,
+                          ctxt,
+                          volume_ref,
+                          instance_uuid,
+                          connector=None):
+        """Create an attachment record for the specified volume."""
+        connection_info = {}
+        attachment_ref = self._attachment_reserve(ctxt,
+                                                  volume_ref,
+                                                  instance_uuid)
+        if connector:
+            connection_info = (
+                self.volume_rpcapi.attachment_update(ctxt,
+                                                     volume_ref,
+                                                     connector,
+                                                     attachment_ref.id))
+        attachment_ref.connection_info = connection_info
+        attachment_ref.save()
+        return attachment_ref
+
+    @wrap_check_policy
+    def attachment_update(self, ctxt, attachment_ref, connector):
+        """Update an existing attachment record."""
+        # Valid items to update (connector includes mode and mountpoint):
+        #   1. connector (required)
+        #     a. mode (if None use value from attachment_ref)
+        #     b. mountpoint (if None use value from attachment_ref)
+        #     c. instance_uuid(if None use value from attachment_ref)
+
+        # We fetch the volume object and pass it to the rpc call because we
+        # need to direct this to the correct host/backend
+
+        volume_ref = objects.Volume.get_by_id(ctxt, attachment_ref.volume_id)
+        connection_info = (
+            self.volume_rpcapi.attachment_update(ctxt,
+                                                 volume_ref,
+                                                 connector,
+                                                 attachment_ref.id))
+        attachment_ref.connection_info = connection_info
+        attachment_ref.save()
+        return attachment_ref
+
+    @wrap_check_policy
+    def attachment_delete(self, ctxt, attachment):
+        volume = objects.Volume.get_by_id(ctxt, attachment.volume_id)
+        if attachment.attach_status == 'reserved':
+            attachment.destroy()
+        else:
+            self.volume_rpcapi.attachment_delete(ctxt,
+                                                 attachment.id,
+                                                 volume)
+        remaining_attachments = AO_LIST.get_all_by_volume_id(ctxt, volume.id)
+
+        # TODO(jdg): Make this check attachments_by_volume_id when we
+        # implement multi-attach for real
+        if len(remaining_attachments) < 1:
+            volume.status = 'available'
+            volume.attach_status = 'detached'
+            volume.save()
+        return remaining_attachments
 
 
 class HostAPI(base.Base):

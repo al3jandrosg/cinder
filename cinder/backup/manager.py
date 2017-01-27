@@ -78,14 +78,14 @@ CONF.import_opt('num_volume_device_scan_tries', 'cinder.volume.driver')
 QUOTAS = quota.QUOTAS
 
 
-class BackupManager(manager.SchedulerDependentManager):
+class BackupManager(manager.ThreadPoolManager):
     """Manages backup of block storage devices."""
 
     RPC_API_VERSION = backup_rpcapi.BackupAPI.RPC_API_VERSION
 
     target = messaging.Target(version=RPC_API_VERSION)
 
-    def __init__(self, service_name=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.service = importutils.import_module(self.driver_name)
         self.az = CONF.storage_availability_zone
         self.volume_managers = {}
@@ -99,8 +99,7 @@ class BackupManager(manager.SchedulerDependentManager):
             self._setup_volume_drivers()
         self.backup_rpcapi = backup_rpcapi.BackupAPI()
         self.volume_rpcapi = volume_rpcapi.VolumeAPI()
-        super(BackupManager, self).__init__(service_name='backup',
-                                            *args, **kwargs)
+        super(BackupManager, self).__init__(*args, **kwargs)
 
     def _get_volume_backend(self, host=None, allow_null_host=False):
         if host is None:
@@ -742,7 +741,6 @@ class BackupManager(manager.SchedulerDependentManager):
                 'container',
                 'size',
                 'service_metadata',
-                'service',
                 'object_count',
                 'id'
             }
@@ -949,12 +947,11 @@ class BackupManager(manager.SchedulerDependentManager):
     def _detach_device(self, context, attach_info, device,
                        properties, is_snapshot=False, force=False):
         """Disconnect the volume or snapshot from the host. """
-        connector = attach_info['connector']
-        connector.disconnect_volume(attach_info['conn']['data'],
-                                    attach_info['device'])
-
-        rpcapi = self.volume_rpcapi
         if not is_snapshot:
+            connector = attach_info['connector']
+            connector.disconnect_volume(attach_info['conn']['data'],
+                                        attach_info['device'])
+            rpcapi = self.volume_rpcapi
             rpcapi.terminate_connection(context, device, properties,
                                         force=force)
             rpcapi.remove_export(context, device)

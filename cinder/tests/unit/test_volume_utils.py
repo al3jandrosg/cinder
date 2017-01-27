@@ -21,6 +21,7 @@ import io
 import mock
 import six
 
+import ddt
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_utils import units
@@ -158,13 +159,13 @@ class NotifyUsageTestCase(test.TestCase):
             'volume_size': 1,
             'snapshot_id': fake.SNAPSHOT_ID,
             'display_name': '11',
-            'created_at': 'DONTCARE',
+            'created_at': mock.ANY,
             'status': fields.SnapshotStatus.ERROR,
             'deleted': '',
             'metadata': six.text_type({'fake_snap_meta_key':
                                       u'fake_snap_meta_value'}),
         }
-        self.assertDictMatch(expected_snapshot, usage_info)
+        self.assertDictEqual(expected_snapshot, usage_info)
 
     @mock.patch('cinder.objects.Volume.get_by_id')
     def test_usage_from_deleted_snapshot(self, volume_get_by_id):
@@ -199,18 +200,18 @@ class NotifyUsageTestCase(test.TestCase):
         expected_snapshot = {
             'tenant_id': fake.PROJECT_ID,
             'user_id': fake.USER_ID,
-            'availability_zone': '',
+            'availability_zone': 'nova',
             'volume_id': fake.VOLUME_ID,
             'volume_size': 1,
             'snapshot_id': fake.SNAPSHOT_ID,
             'display_name': '11',
-            'created_at': 'DONTCARE',
+            'created_at': mock.ANY,
             'status': fields.SnapshotStatus.ERROR,
             'deleted': '',
             'metadata': six.text_type({'fake_snap_meta_key':
                                       u'fake_snap_meta_value'}),
         }
-        self.assertDictMatch(expected_snapshot, usage_info)
+        self.assertDictEqual(expected_snapshot, usage_info)
 
     @mock.patch('cinder.db.volume_glance_metadata_get')
     @mock.patch('cinder.db.volume_attachment_get_all_by_volume_id')
@@ -372,7 +373,7 @@ class NotifyUsageTestCase(test.TestCase):
             six.text_type(expected_backup['created_at']) + '+00:00')
 
         usage_info = volume_utils._usage_from_backup(backup_obj)
-        self.assertDictMatch(expected_backup, usage_info)
+        self.assertDictEqual(expected_backup, usage_info)
 
 
 class LVMVolumeDriverTestCase(test.TestCase):
@@ -688,6 +689,7 @@ class CopyVolumeTestCase(test.TestCase):
                                               1073741824, mock.ANY)
 
 
+@ddt.ddt
 class VolumeUtilsTestCase(test.TestCase):
     def test_null_safe_str(self):
         self.assertEqual('', volume_utils.null_safe_str(None))
@@ -799,13 +801,6 @@ class VolumeUtilsTestCase(test.TestCase):
         self.assertRaises(exception.InvalidVolume,
                           volume_utils.extract_host,
                           None)
-
-    def test_get_volume_rpc_host(self):
-        host = 'Host@backend'
-        # default level is 'backend'
-        # check if host with backend is returned
-        self.assertEqual(volume_utils.extract_host(host),
-                         volume_utils.get_volume_rpc_host(host))
 
     def test_append_host(self):
         host = 'Host'
@@ -1000,3 +995,18 @@ class VolumeUtilsTestCase(test.TestCase):
         create_key.assert_called_once_with(ctxt,
                                            algorithm='aes',
                                            length=256)
+
+    @ddt.data('<is> True', '<is> true', '<is> yes')
+    def test_is_replicated_spec_true(self, enabled):
+        res = volume_utils.is_replicated_spec({'replication_enabled': enabled})
+        self.assertTrue(res)
+
+    @ddt.data({}, None, {'key': 'value'})
+    def test_is_replicated_no_specs(self, extra_specs):
+        res = volume_utils.is_replicated_spec(extra_specs)
+        self.assertFalse(res)
+
+    @ddt.data('<is> False', '<is> false', '<is> f', 'baddata', 'bad data')
+    def test_is_replicated_spec_false(self, enabled):
+        res = volume_utils.is_replicated_spec({'replication_enabled': enabled})
+        self.assertFalse(res)

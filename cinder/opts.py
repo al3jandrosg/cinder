@@ -19,7 +19,6 @@ objects.register_all()
 
 from cinder.api import common as cinder_api_common
 from cinder.api.middleware import auth as cinder_api_middleware_auth
-from cinder.api.middleware import sizelimit as cinder_api_middleware_sizelimit
 from cinder.api.views import versions as cinder_api_views_versions
 from cinder.backup import api as cinder_backup_api
 from cinder.backup import chunkeddriver as cinder_backup_chunkeddriver
@@ -71,11 +70,18 @@ from cinder.volume.drivers.coprhd import common as \
     cinder_volume_drivers_coprhd_common
 from cinder.volume.drivers.coprhd import scaleio as \
     cinder_volume_drivers_coprhd_scaleio
-from cinder.volume.drivers import datera as cinder_volume_drivers_datera
+from cinder.volume.drivers.datera import datera_iscsi as \
+    cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell import dell_storagecenter_common as \
     cinder_volume_drivers_dell_dellstoragecentercommon
+from cinder.volume.drivers.dell_emc.scaleio import driver as \
+    cinder_volume_drivers_dell_emc_scaleio_driver
 from cinder.volume.drivers.dell_emc.unity import driver as \
     cinder_volume_drivers_dell_emc_unity_driver
+from cinder.volume.drivers.dell_emc.vnx import common as \
+    cinder_volume_drivers_dell_emc_vnx_common
+from cinder.volume.drivers.dell_emc import xtremio as \
+    cinder_volume_drivers_dell_emc_xtremio
 from cinder.volume.drivers.disco import disco as \
     cinder_volume_drivers_disco_disco
 from cinder.volume.drivers.dothill import dothill_common as \
@@ -84,12 +90,6 @@ from cinder.volume.drivers import drbdmanagedrv as \
     cinder_volume_drivers_drbdmanagedrv
 from cinder.volume.drivers.emc import emc_vmax_common as \
     cinder_volume_drivers_emc_emcvmaxcommon
-from cinder.volume.drivers.emc import scaleio as \
-    cinder_volume_drivers_emc_scaleio
-from cinder.volume.drivers.emc.vnx import common as \
-    cinder_volume_drivers_emc_vnx_common
-from cinder.volume.drivers.emc import xtremio as \
-    cinder_volume_drivers_emc_xtremio
 from cinder.volume.drivers import eqlx as cinder_volume_drivers_eqlx
 from cinder.volume.drivers.falconstor import fss_common as \
     cinder_volume_drivers_falconstor_fsscommon
@@ -135,8 +135,10 @@ from cinder.volume.drivers.ibm import flashsystem_fc as \
 from cinder.volume.drivers.ibm import flashsystem_iscsi as \
     cinder_volume_drivers_ibm_flashsystemiscsi
 from cinder.volume.drivers.ibm import gpfs as cinder_volume_drivers_ibm_gpfs
-from cinder.volume.drivers.ibm import ibm_storage as \
-    cinder_volume_drivers_ibm_ibmstorage
+from cinder.volume.drivers.ibm.ibm_storage import ds8k_proxy as \
+    cinder_volume_drivers_ibm_ibm_storage_ds8kproxy
+from cinder.volume.drivers.ibm.ibm_storage import ibm_storage as \
+    cinder_volume_drivers_ibm_ibm_storage_ibmstorage
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_common as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvccommon
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_fc as \
@@ -167,7 +169,6 @@ from cinder.volume.drivers import remotefs as cinder_volume_drivers_remotefs
 from cinder.volume.drivers.san.hp import hpmsa_common as \
     cinder_volume_drivers_san_hp_hpmsacommon
 from cinder.volume.drivers.san import san as cinder_volume_drivers_san_san
-from cinder.volume.drivers import scality as cinder_volume_drivers_scality
 from cinder.volume.drivers import sheepdog as cinder_volume_drivers_sheepdog
 from cinder.volume.drivers import smbfs as cinder_volume_drivers_smbfs
 from cinder.volume.drivers import solidfire as cinder_volume_drivers_solidfire
@@ -215,7 +216,6 @@ def list_opts():
             itertools.chain(
                 cinder_api_common.api_common_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
-                [cinder_api_middleware_sizelimit.max_request_body_size_opt],
                 cinder_api_views_versions.versions_opts,
                 cinder_backup_api.backup_api_opts,
                 cinder_backup_chunkeddriver.chunkedbackup_service_opts,
@@ -272,18 +272,18 @@ def list_opts():
                 cinder_volume_drivers_coho.coho_opts,
                 cinder_volume_drivers_coprhd_common.volume_opts,
                 cinder_volume_drivers_coprhd_scaleio.scaleio_opts,
-                cinder_volume_drivers_datera.d_opts,
+                cinder_volume_drivers_datera_dateraiscsi.d_opts,
                 cinder_volume_drivers_dell_dellstoragecentercommon.
                 common_opts,
+                cinder_volume_drivers_dell_emc_scaleio_driver.scaleio_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
+                cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
+                cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_disco_disco.disco_opts,
                 cinder_volume_drivers_dothill_dothillcommon.common_opts,
                 cinder_volume_drivers_dothill_dothillcommon.iscsi_opts,
                 cinder_volume_drivers_drbdmanagedrv.drbd_opts,
                 cinder_volume_drivers_emc_emcvmaxcommon.emc_opts,
-                cinder_volume_drivers_emc_scaleio.scaleio_opts,
-                cinder_volume_drivers_emc_vnx_common.EMC_VNX_OPTS,
-                cinder_volume_drivers_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_eqlx.eqlx_opts,
                 cinder_volume_drivers_falconstor_fsscommon.FSS_OPTS,
                 cinder_volume_drivers_fujitsu_eternusdxcommon.
@@ -312,7 +312,8 @@ def list_opts():
                 cinder_volume_drivers_ibm_flashsystemiscsi.
                 flashsystem_iscsi_opts,
                 cinder_volume_drivers_ibm_gpfs.gpfs_opts,
-                cinder_volume_drivers_ibm_ibmstorage.driver_opts,
+                cinder_volume_drivers_ibm_ibm_storage_ds8kproxy.ds8k_opts,
+                cinder_volume_drivers_ibm_ibm_storage_ibmstorage.driver_opts,
                 cinder_volume_drivers_ibm_storwize_svc_storwizesvccommon.
                 storwize_svc_opts,
                 cinder_volume_drivers_ibm_storwize_svc_storwizesvcfc.
@@ -359,7 +360,6 @@ def list_opts():
                 cinder_volume_drivers_san_hp_hpmsacommon.common_opts,
                 cinder_volume_drivers_san_hp_hpmsacommon.iscsi_opts,
                 cinder_volume_drivers_san_san.san_opts,
-                cinder_volume_drivers_scality.volume_opts,
                 cinder_volume_drivers_sheepdog.sheepdog_opts,
                 cinder_volume_drivers_smbfs.volume_opts,
                 cinder_volume_drivers_solidfire.sf_opts,

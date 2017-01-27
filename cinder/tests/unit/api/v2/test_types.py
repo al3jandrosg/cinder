@@ -300,7 +300,7 @@ class VolumeTypesApiTest(test.TestCase):
             is_public=True,
             id=42,
         )
-        self.assertDictMatch(expected_volume_type, output['volume_type'])
+        self.assertDictEqual(expected_volume_type, output['volume_type'])
 
     def test_view_builder_show_admin(self):
         view_builder = views_types.ViewBuilder()
@@ -331,7 +331,7 @@ class VolumeTypesApiTest(test.TestCase):
             extra_specs={},
             id=42,
         )
-        self.assertDictMatch(expected_volume_type, output['volume_type'])
+        self.assertDictEqual(expected_volume_type, output['volume_type'])
 
     def test_view_builder_show_qos_specs_id_policy(self):
         with mock.patch.object(common,
@@ -363,7 +363,7 @@ class VolumeTypesApiTest(test.TestCase):
                 is_public=True,
                 id=42,
             )
-            self.assertDictMatch(expected_volume_type, output['volume_type'])
+            self.assertDictEqual(expected_volume_type, output['volume_type'])
 
     def test_view_builder_show_extra_specs_policy(self):
         with mock.patch.object(common,
@@ -395,7 +395,37 @@ class VolumeTypesApiTest(test.TestCase):
                 is_public=True,
                 id=42,
             )
-            self.assertDictMatch(expected_volume_type, output['volume_type'])
+            self.assertDictEqual(expected_volume_type, output['volume_type'])
+
+        with mock.patch.object(common,
+                               'validate_policy',
+                               side_effect=[False, False]):
+            view_builder = views_types.ViewBuilder()
+            now = timeutils.utcnow().isoformat()
+            raw_volume_type = dict(
+                name='new_type',
+                description='new_type_desc',
+                qos_specs_id='new_id',
+                is_public=True,
+                deleted=False,
+                created_at=now,
+                updated_at=now,
+                extra_specs={},
+                deleted_at=None,
+                id=42,
+            )
+
+            request = fakes.HTTPRequest.blank("/v2")
+            output = view_builder.show(request, raw_volume_type)
+
+            self.assertIn('volume_type', output)
+            expected_volume_type = dict(
+                name='new_type',
+                description='new_type_desc',
+                is_public=True,
+                id=42,
+            )
+            self.assertDictEqual(expected_volume_type, output['volume_type'])
 
     def test_view_builder_show_pass_all_policy(self):
         with mock.patch.object(common,
@@ -428,7 +458,7 @@ class VolumeTypesApiTest(test.TestCase):
                 is_public=True,
                 id=42,
             )
-            self.assertDictMatch(expected_volume_type, output['volume_type'])
+            self.assertDictEqual(expected_volume_type, output['volume_type'])
 
     def test_view_builder_list(self):
         view_builder = views_types.ViewBuilder()
@@ -462,7 +492,7 @@ class VolumeTypesApiTest(test.TestCase):
                 is_public=True,
                 id=42 + i
             )
-            self.assertDictMatch(expected_volume_type,
+            self.assertDictEqual(expected_volume_type,
                                  output['volume_types'][i])
 
     def test_view_builder_list_admin(self):
@@ -499,5 +529,5 @@ class VolumeTypesApiTest(test.TestCase):
                 extra_specs={},
                 id=42 + i
             )
-            self.assertDictMatch(expected_volume_type,
+            self.assertDictEqual(expected_volume_type,
                                  output['volume_types'][i])

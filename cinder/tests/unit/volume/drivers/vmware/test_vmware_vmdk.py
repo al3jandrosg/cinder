@@ -17,8 +17,6 @@
 Test suite for VMware vCenter VMDK driver.
 """
 
-from distutils import version as ver
-
 import ddt
 import mock
 from oslo_utils import units
@@ -30,6 +28,7 @@ import six
 from cinder import context
 from cinder import exception as cinder_exceptions
 from cinder import test
+from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.volume import configuration
 from cinder.volume.drivers.vmware import datastore as hub
@@ -263,11 +262,13 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops.get_backing.return_value = None
 
         volume = self._create_volume_dict()
-        snapshot = self._create_snapshot_dict(volume)
+        snapshot = fake_snapshot.fake_snapshot_obj(self._context,
+                                                   volume=volume)
         self._driver.delete_snapshot(snapshot)
 
-        vops.get_backing.assert_called_once_with(snapshot['volume_name'])
-        self.assertFalse(vops.delete_snapshot.called)
+        vops.get_backing.assert_called_once_with(snapshot.volume_name)
+        vops.get_snapshot.assert_not_called()
+        vops.delete_snapshot.assert_not_called()
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     def test_delete_snapshot_with_backing(self, vops):
@@ -275,19 +276,39 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops.get_backing.return_value = backing
 
         volume = self._create_volume_dict()
-        snapshot = self._create_snapshot_dict(volume)
+        snapshot = fake_snapshot.fake_snapshot_obj(self._context,
+                                                   volume=volume)
         self._driver.delete_snapshot(snapshot)
 
-        vops.get_backing.assert_called_once_with(snapshot['volume_name'])
+        vops.get_backing.assert_called_once_with(snapshot.volume_name)
+        vops.get_snapshot.assert_called_once_with(backing, snapshot.name)
         vops.delete_snapshot.assert_called_once_with(
-            backing, snapshot['name'])
+            backing, snapshot.name)
 
-    def test_delete_snapshot_when_attached(self):
+    @mock.patch.object(VMDK_DRIVER, 'volumeops')
+    def test_delete_snapshot_when_attached(self, vops):
         volume = self._create_volume_dict(status='in-use')
-        snapshot = self._create_snapshot_dict(volume)
+        snapshot = fake_snapshot.fake_snapshot_obj(self._context,
+                                                   volume=volume)
 
-        self.assertRaises(cinder_exceptions.InvalidVolume,
+        self.assertRaises(cinder_exceptions.InvalidSnapshot,
                           self._driver.delete_snapshot, snapshot)
+
+    @mock.patch.object(VMDK_DRIVER, 'volumeops')
+    def test_delete_snapshot_without_backend_snapshot(self, vops):
+        backing = mock.sentinel.backing
+        vops.get_backing.return_value = backing
+
+        vops.get_snapshot.return_value = None
+
+        volume = self._create_volume_dict(status='in-use')
+        snapshot = fake_snapshot.fake_snapshot_obj(self._context,
+                                                   volume=volume)
+        self._driver.delete_snapshot(snapshot)
+
+        vops.get_backing.assert_called_once_with(snapshot.volume_name)
+        vops.get_snapshot.assert_called_once_with(backing, snapshot.name)
+        vops.delete_snapshot.assert_not_called()
 
     @ddt.data('vmdk', 'VMDK', None)
     def test_validate_disk_format(self, disk_format):
@@ -496,7 +517,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             create_backing.assert_called_once_with(
                 volume,
                 create_params={vmdk.CREATE_PARAM_DISK_LESS: True,
-                               vmdk.CREATE_PARAM_BACKING_NAME: disk_name})
+                               vmdk.CREATE_PARAM_BACKING_NAME: disk_name,
+                               vmdk.CREATE_PARAM_TEMP_BACKING: True})
         else:
             create_backing.assert_called_once_with(
                 volume, create_params={vmdk.CREATE_PARAM_DISK_LESS: True})
@@ -517,10 +539,12 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         if disk_conversion:
             select_ds_for_volume.assert_called_once_with(volume)
+            extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                            volumeops.BACKING_UUID_KEY: volume['id']}
             vops.clone_backing.assert_called_once_with(
                 volume['name'], backing, None, volumeops.FULL_CLONE_TYPE,
                 datastore, disk_type=disk_type, host=host, resource_pool=rp,
-                folder=folder)
+                extra_config=extra_config, folder=folder)
             delete_tmp_backing.assert_called_once_with(backing)
             vops.update_backing_disk_uuid(clone, volume['id'])
         else:
@@ -1211,6 +1235,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                              vops.rename_backing.call_args_list)
         else:
             vops.rename_backing.assert_called_once_with(backing, uuid)
+            vops.update_backing_uuid.assert_called_once_with(
+                new_backing, volume['id'])
             vops.update_backing_disk_uuid.assert_called_once_with(
                 new_backing, volume['id'])
             delete_temp_backing.assert_called_once_with(backing)
@@ -1520,7 +1546,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             context, name, volume, tmp_file_path, file_size_bytes)
 
         self.assertEqual(vm_ref, ret)
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id']}
+        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                        volumeops.BACKING_UUID_KEY: volume['id']}
         vops.get_create_spec.assert_called_once_with(
             name, 0, disk_type, summary.name, profileId=profile_id,
             extra_config=extra_config)
@@ -1551,7 +1578,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         version = self._driver._get_vc_version()
 
-        self.assertEqual(ver.LooseVersion(version_str), version)
+        self.assertEqual(version_str, version)
         get_vc_version.assert_called_once_with(session)
 
     @mock.patch('oslo_vmware.vim_util.get_vc_version')
@@ -1559,7 +1586,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         version = self._driver._get_vc_version()
 
         self.assertEqual(
-            ver.LooseVersion(self._driver.configuration.vmware_host_version),
+            self._driver.configuration.vmware_host_version,
             version)
         get_vc_version.assert_not_called()
 
@@ -1567,7 +1594,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     @ddt.data('5.1', '5.5')
     def test_validate_vcenter_version(self, version, log):
         # vCenter versions 5.1 and above should pass validation.
-        self._driver._validate_vcenter_version(ver.LooseVersion(version))
+        self._driver._validate_vcenter_version(version)
         # Deprecation warning should be logged for vCenter version 5.1.
         if version == '5.1':
             log.warning.assert_called_once()
@@ -1576,11 +1603,10 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
     def test_validate_vcenter_version_with_less_than_min_supported_version(
             self):
-        vc_version = ver.LooseVersion('5.0')
         # Validation should fail for vCenter version less than 5.1.
         self.assertRaises(exceptions.VMwareDriverException,
                           self._driver._validate_vcenter_version,
-                          vc_version)
+                          '5.0')
 
     @mock.patch.object(VMDK_DRIVER, '_validate_params')
     @mock.patch.object(VMDK_DRIVER, '_get_vc_version')
@@ -1600,8 +1626,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             get_pbm_wsdl_loc.return_value = pbm_wsdl
         else:
             ver_str = '5.1'
-        vc_version = ver.LooseVersion(ver_str)
-        get_vc_version.return_value = vc_version
+        get_vc_version.return_value = ver_str
 
         cls_1 = mock.sentinel.cls_1
         cls_2 = mock.sentinel.cls_2
@@ -1612,7 +1637,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         validate_params.assert_called_once_with()
         get_vc_version.assert_called_once_with()
-        validate_vc_version.assert_called_once_with(vc_version)
+        validate_vc_version.assert_called_once_with(ver_str)
         if enable_pbm:
             get_pbm_wsdl_loc.assert_called_once_with(ver_str)
             self.assertEqual(pbm_wsdl, self._driver.pbm_wsdl)
@@ -1644,8 +1669,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             self, get_pbm_wsdl_loc, validate_vc_version, get_vc_version,
             validate_params):
         ver_str = '5.5'
-        vc_version = ver.LooseVersion(ver_str)
-        get_vc_version.return_value = vc_version
+        get_vc_version.return_value = ver_str
 
         get_pbm_wsdl_loc.return_value = None
 
@@ -1655,7 +1679,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         validate_params.assert_called_once_with()
         get_vc_version.assert_called_once_with()
-        validate_vc_version.assert_called_once_with(vc_version)
+        validate_vc_version.assert_called_once_with(ver_str)
         get_pbm_wsdl_loc.assert_called_once_with(ver_str)
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
@@ -1669,7 +1693,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         rp_2 = mock.Mock(value='rp-2')
         self.assertEqual(dc_1, self._driver._get_dc(rp_1))
         self.assertEqual(dc_2, self._driver._get_dc(rp_2))
-        self.assertDictMatch({'rp-1': dc_1, 'rp-2': dc_2},
+        self.assertDictEqual({'rp-1': dc_1, 'rp-2': dc_2},
                              self._driver._dc_cache)
 
         # cache hit
@@ -1880,7 +1904,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         """Test _clone_backing with clone type - linked."""
         clone = mock.sentinel.clone
         volume_ops.clone_backing.return_value = clone
-        self._driver._vc_version = ver.LooseVersion('5.5')
+        self._driver._vc_version = '5.5'
 
         fake_size = 3
         fake_volume = {'volume_type_id': None, 'name': 'fake_name',
@@ -1895,7 +1919,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                     volumeops.LINKED_CLONE_TYPE,
                                     fake_snapshot['volume_size'])
 
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: fake_volume['id']}
+        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: fake_volume['id'],
+                        volumeops.BACKING_UUID_KEY: fake_volume['id']}
         volume_ops.clone_backing.assert_called_with(fake_volume['name'],
                                                     fake_backing,
                                                     fake_snapshot,
@@ -1924,7 +1949,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     def test_clone_backing_linked_vc60(self, vops):
-        self._driver._vc_version = ver.LooseVersion('6.0')
+        self._driver._vc_version = '6.0'
 
         volume = self._create_volume_dict()
         snapshot_ref = mock.sentinel.snapshot_moref
@@ -1933,7 +1958,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             volume, backing, snapshot_ref, volumeops.LINKED_CLONE_TYPE,
             volume['size'])
 
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id']}
+        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                        volumeops.BACKING_UUID_KEY: volume['id']}
         vops.clone_backing.assert_called_once_with(
             volume['name'], backing, snapshot_ref, volumeops.LINKED_CLONE_TYPE,
             None, host=None, resource_pool=None, extra_config=extra_config,
@@ -1971,7 +1997,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                     fake_snapshot['volume_size'])
 
         _select_ds_for_volume.assert_called_with(fake_volume)
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: fake_volume['id']}
+        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: fake_volume['id'],
+                        volumeops.BACKING_UUID_KEY: fake_volume['id']}
         volume_ops.clone_backing.assert_called_with(
             fake_volume['name'],
             fake_backing,
@@ -2315,7 +2342,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         ret = self._driver._create_backing(volume, host, create_params)
 
         self.assertEqual(backing, ret)
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id']}
+        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                        volumeops.BACKING_UUID_KEY: volume['id']}
         vops.create_backing_disk_less.assert_called_once_with(
             'vol-1',
             folder,
@@ -2736,7 +2764,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         vops.get_backing.assert_called_once_with(volume['name'])
         vops.update_backing_extra_config.assert_called_once_with(
-            backing, {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: ''})
+            backing, {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: '',
+                      volumeops.BACKING_UUID_KEY: ''})
 
     @mock.patch('oslo_vmware.api.VMwareAPISession')
     def test_session(self, apiSession):
@@ -2839,6 +2868,30 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         self.assertRaises(exceptions.VimException, self._driver.extend_volume,
                           volume, new_size)
         extend_backing.assert_called_once_with(backing, new_size)
+
+    @mock.patch.object(VMDK_DRIVER, 'volumeops')
+    @mock.patch.object(VMDK_DRIVER, '_get_volume_group_folder')
+    def test_accept_transfer(self, get_volume_group_folder, vops):
+        backing = mock.sentinel.backing
+        vops.get_backing.return_value = backing
+
+        dc = mock.sentinel.dc
+        vops.get_dc.return_value = dc
+
+        new_folder = mock.sentinel.new_folder
+        get_volume_group_folder.return_value = new_folder
+
+        context = mock.sentinel.context
+        volume = self._create_volume_obj()
+        new_project = mock.sentinel.new_project
+        self._driver.accept_transfer(context, volume, mock.sentinel.new_user,
+                                     new_project)
+
+        vops.get_backing.assert_called_once_with(volume.name)
+        vops.get_dc.assert_called_once_with(backing)
+        get_volume_group_folder.assert_called_once_with(dc, new_project)
+        vops.move_backing_to_folder.assert_called_once_with(backing,
+                                                            new_folder)
 
 
 class ImageDiskTypeTest(test.TestCase):

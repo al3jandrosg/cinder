@@ -36,15 +36,7 @@ MSG = utils.VSPMsg
 
 
 class VSPHORCMFC(horcm.VSPHORCM):
-    """HORCM interface fibre channel class for Hitachi VSP Driver.
-
-    Version history:
-
-    .. code-block:: none
-
-    1.0.0 - Initial driver.
-
-    """
+    """HORCM interface fibre channel class for Hitachi VSP Driver."""
 
     def __init__(self, conf, storage_protocol, db):
         """Initialize instance variables."""
@@ -163,7 +155,7 @@ class VSPHORCMFC(horcm.VSPHORCM):
 
         return nr_not_found
 
-    @fczm_utils.AddFCZone
+    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initialize connection between the server and the volume."""
         conn_info = super(VSPHORCMFC, self).initialize_connection(
@@ -172,7 +164,7 @@ class VSPHORCMFC(horcm.VSPHORCM):
             utils.update_conn_info(conn_info, connector, self._lookup_service)
         return conn_info
 
-    @fczm_utils.RemoveFCZone
+    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector):
         """Terminate connection between the server and the volume."""
         conn_info = super(VSPHORCMFC, self).terminate_connection(

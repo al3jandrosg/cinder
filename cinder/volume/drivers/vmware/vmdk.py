@@ -23,7 +23,6 @@ machine is never powered on and is often referred as the shadow VM.
 """
 
 import contextlib
-import distutils.version as dist_version  # pylint: disable=E0611
 import math
 import os
 import tempfile
@@ -34,12 +33,12 @@ from oslo_utils import excutils
 from oslo_utils import fileutils
 from oslo_utils import units
 from oslo_utils import uuidutils
+from oslo_utils import versionutils
 from oslo_vmware import api
 from oslo_vmware import exceptions
 from oslo_vmware import image_transfer
 from oslo_vmware import pbm
 from oslo_vmware import vim_util
-import six
 
 from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
@@ -60,6 +59,7 @@ CREATE_PARAM_ADAPTER_TYPE = 'adapter_type'
 CREATE_PARAM_DISK_LESS = 'disk_less'
 CREATE_PARAM_BACKING_NAME = 'name'
 CREATE_PARAM_DISK_SIZE = 'disk_size'
+CREATE_PARAM_TEMP_BACKING = 'temp_backing'
 
 TMP_IMAGES_DATASTORE_FOLDER_PATH = "cinder_temp/"
 
@@ -229,11 +229,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     CI_WIKI_NAME = "VMware_CI"
 
     # Minimum supported vCenter version.
-    MIN_SUPPORTED_VC_VERSION = dist_version.LooseVersion('5.1')
-    NEXT_MIN_SUPPORTED_VC_VERSION = dist_version.LooseVersion('5.5')
+    MIN_SUPPORTED_VC_VERSION = '5.1'
+    NEXT_MIN_SUPPORTED_VC_VERSION = '5.5'
 
     # PBM is enabled only for vCenter versions 5.5 and above
-    PBM_ENABLED_VC_VERSION = dist_version.LooseVersion('5.5')
+    PBM_ENABLED_VC_VERSION = '5.5'
 
     def __init__(self, *args, **kwargs):
         super(VMwareVcVmdkDriver, self).__init__(*args, **kwargs)
@@ -393,7 +393,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         return profile_id
 
     def _get_extra_config(self, volume):
-        return {EXTRA_CONFIG_VOLUME_ID_KEY: volume['id']}
+        return {EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                volumeops.BACKING_UUID_KEY: volume['id']}
 
     def _create_backing(self, volume, host=None, create_params=None):
         """Create volume backing under the given host.
@@ -418,6 +419,9 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                                          volume['name'])
 
         extra_config = self._get_extra_config(volume)
+        # We shoudln't set backing UUID to volume UUID for temporary backing.
+        if create_params.get(CREATE_PARAM_TEMP_BACKING):
+            del extra_config[volumeops.BACKING_UUID_KEY]
 
         # default is a backing with single disk
         disk_less = create_params.get(CREATE_PARAM_DISK_LESS, False)
@@ -666,26 +670,24 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         """Delete snapshot.
 
         If the volume does not have a backing or the snapshot does not exist
-        then simply pass, else delete the snapshot.
-        Snapshot deletion of only available volume is supported.
+        then simply pass, else delete the snapshot. Snapshot deletion of only
+        available volume is supported.
 
         :param snapshot: Snapshot object
         """
-
-        volume = snapshot['volume']
-        if volume['status'] != 'available':
-            msg = _("Delete snapshot of volume not supported in "
-                    "state: %s.") % volume['status']
-            LOG.error(msg)
-            raise exception.InvalidVolume(msg)
-        backing = self.volumeops.get_backing(snapshot['volume_name'])
+        backing = self.volumeops.get_backing(snapshot.volume_name)
         if not backing:
-            LOG.info(_LI("There is no backing, and so there is no "
-                         "snapshot: %s."), snapshot['name'])
+            LOG.debug("Backing does not exist for volume.",
+                      resource=snapshot.volume)
+        elif not self.volumeops.get_snapshot(backing, snapshot.name):
+            LOG.debug("Snapshot does not exist in backend.", resource=snapshot)
+        elif snapshot.volume.status != 'available':
+            msg = _("Delete snapshot of volume not supported in "
+                    "state: %s.") % snapshot.volume.status
+            LOG.error(msg)
+            raise exception.InvalidSnapshot(reason=msg)
         else:
-            self.volumeops.delete_snapshot(backing, snapshot['name'])
-            LOG.info(_LI("Successfully deleted snapshot: %s."),
-                     snapshot['name'])
+            self.volumeops.delete_snapshot(backing, snapshot.name)
 
     def delete_snapshot(self, snapshot):
         """Delete snapshot.
@@ -954,6 +956,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             # for clone operation.
             disk_name = uuidutils.generate_uuid()
             create_params[CREATE_PARAM_BACKING_NAME] = disk_name
+            create_params[CREATE_PARAM_TEMP_BACKING] = True
         else:
             disk_name = volume['name']
 
@@ -1006,6 +1009,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                 datastore = summary.datastore
                 LOG.debug("Cloning temporary backing: %s for disk type "
                           "conversion.", backing)
+                extra_config = self._get_extra_config(volume)
                 clone = self.volumeops.clone_backing(volume['name'],
                                                      backing,
                                                      None,
@@ -1014,9 +1018,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                                                      disk_type=disk_type,
                                                      host=host,
                                                      resource_pool=rp,
+                                                     extra_config=extra_config,
                                                      folder=folder)
                 self._delete_temp_backing(backing)
                 backing = clone
+
             self.volumeops.update_backing_disk_uuid(backing, volume['id'])
         except Exception:
             # Delete backing and virtual disk created from image.
@@ -1379,17 +1385,18 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                         volumeops.FULL_CLONE_TYPE, datastore,
                         disk_type=new_disk_type, host=host,
                         resource_pool=rp, folder=folder)
-                    self.volumeops.update_backing_disk_uuid(new_backing,
-                                                            volume['id'])
                     self._delete_temp_backing(backing)
                     backing = new_backing
+                    self.volumeops.update_backing_uuid(backing, volume['id'])
+                    self.volumeops.update_backing_disk_uuid(backing,
+                                                            volume['id'])
                 except exceptions.VimException:
                     with excutils.save_and_reraise_exception():
                         LOG.exception(_LE("Error occurred while cloning "
                                           "backing:"
                                           " %s during retype."),
                                       backing)
-                        if renamed:
+                        if renamed and not new_backing:
                             LOG.debug("Undo rename of backing: %(backing)s; "
                                       "changing name from %(new_name)s to "
                                       "%(old_name)s.",
@@ -1849,23 +1856,18 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         else:
             version_str = vim_util.get_vc_version(self.session)
             LOG.info(_LI("Fetched vCenter server version: %s"), version_str)
-        # Convert version_str to LooseVersion and return.
-        version = None
-        try:
-            version = dist_version.LooseVersion(version_str)
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.exception(_LE("Version string '%s' is not parseable"),
-                              version_str)
-        return version
+        return version_str
 
     def _validate_vcenter_version(self, vc_version):
-        if vc_version < self.MIN_SUPPORTED_VC_VERSION:
+        if not versionutils.is_compatible(
+                self.MIN_SUPPORTED_VC_VERSION, vc_version, same_major=False):
             msg = _('Running Cinder with a VMware vCenter version less than '
                     '%s is not allowed.') % self.MIN_SUPPORTED_VC_VERSION
             LOG.error(msg)
             raise exceptions.VMwareDriverException(message=msg)
-        elif vc_version < self.NEXT_MIN_SUPPORTED_VC_VERSION:
+        elif not versionutils.is_compatible(self.NEXT_MIN_SUPPORTED_VC_VERSION,
+                                            vc_version,
+                                            same_major=False):
             # TODO(vbala): enforce vCenter version 5.5 in Pike release.
             LOG.warning(_LW('Running Cinder with a VMware vCenter version '
                             'less than %(ver)s is deprecated. The minimum '
@@ -1883,9 +1885,10 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         # Enable pbm only if vCenter version is 5.5+.
         if (self._vc_version and
-                self._vc_version >= self.PBM_ENABLED_VC_VERSION):
-            self.pbm_wsdl = pbm.get_pbm_wsdl_location(
-                six.text_type(self._vc_version))
+                versionutils.is_compatible(self.PBM_ENABLED_VC_VERSION,
+                                           self._vc_version,
+                                           same_major=False)):
+            self.pbm_wsdl = pbm.get_pbm_wsdl_location(self._vc_version)
             if not self.pbm_wsdl:
                 LOG.error(_LE("Not able to configure PBM for vCenter server: "
                               "%s"), self._vc_version)
@@ -2032,7 +2035,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         # vCenter 6.0+ does not allow changing the UUID of delta disk created
         # during linked cloning; skip setting UUID for vCenter 6.0+.
         if (clone_type == volumeops.LINKED_CLONE_TYPE and
-                self._vc_version >= dist_version.LooseVersion('6.0')):
+                versionutils.is_compatible(
+                    '6.0', self._vc_version, same_major=False)):
             LOG.debug("Not setting vmdk UUID for volume: %s.", volume['id'])
         else:
             self.volumeops.update_backing_disk_uuid(clone, volume['id'])
@@ -2123,3 +2127,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param src_vref: Source Volume object
         """
         self._create_cloned_volume(volume, src_vref)
+
+    def accept_transfer(self, context, volume, new_user, new_project):
+        """Accept the transfer of a volume for a new user/project."""
+        backing = self.volumeops.get_backing(volume.name)
+        if backing:
+            dc = self.volumeops.get_dc(backing)
+            new_folder = self._get_volume_group_folder(dc, new_project)
+            self.volumeops.move_backing_to_folder(backing, new_folder)

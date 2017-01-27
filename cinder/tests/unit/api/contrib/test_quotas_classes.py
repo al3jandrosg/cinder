@@ -25,6 +25,7 @@ import webob.exc
 
 from cinder.api.contrib import quota_classes
 from cinder import context
+from cinder import exception
 from cinder import quota
 from cinder import test
 from cinder.tests.unit import fake_constants as fake
@@ -93,13 +94,13 @@ class QuotaClassSetsControllerTest(test.TestCase):
     def test_show(self):
         volume_types.create(self.ctxt, 'fake_type')
         result = self.controller.show(self.req, fake.PROJECT_ID)
-        self.assertDictMatch(make_body(), result)
+        self.assertDictEqual(make_body(), result)
 
     def test_show_not_authorized(self):
         self.req.environ['cinder.context'].is_admin = False
         self.req.environ['cinder.context'].user_id = fake.USER_ID
         self.req.environ['cinder.context'].project_id = fake.PROJECT_ID
-        self.assertRaises(webob.exc.HTTPForbidden, self.controller.show,
+        self.assertRaises(exception.PolicyNotAuthorized, self.controller.show,
                           self.req, fake.PROJECT_ID)
 
     def test_update(self):
@@ -107,7 +108,7 @@ class QuotaClassSetsControllerTest(test.TestCase):
         body = make_body(gigabytes=2000, snapshots=15,
                          volumes=5, tenant_id=None)
         result = self.controller.update(self.req, fake.PROJECT_ID, body)
-        self.assertDictMatch(body, result)
+        self.assertDictEqual(body, result)
 
     @mock.patch('cinder.api.openstack.wsgi.Controller.validate_string_length')
     @mock.patch('cinder.utils.validate_integer')
@@ -124,7 +125,7 @@ class QuotaClassSetsControllerTest(test.TestCase):
         volume_types.create(self.ctxt, 'fake_type')
         body = {'quota_class_set': {'bad': 'bad'}}
         result = self.controller.update(self.req, fake.PROJECT_ID, body)
-        self.assertDictMatch(make_body(tenant_id=None), result)
+        self.assertDictEqual(make_body(tenant_id=None), result)
 
     def test_update_invalid_key_value(self):
         body = {'quota_class_set': {'gigabytes': "should_be_int"}}
@@ -138,8 +139,9 @@ class QuotaClassSetsControllerTest(test.TestCase):
 
     def test_update_no_admin(self):
         self.req.environ['cinder.context'].is_admin = False
-        self.assertRaises(webob.exc.HTTPForbidden, self.controller.update,
-                          self.req, fake.PROJECT_ID, make_body(tenant_id=None))
+        self.assertRaises(exception.PolicyNotAuthorized,
+                          self.controller.update, self.req, fake.PROJECT_ID,
+                          make_body(tenant_id=None))
 
     def test_update_with_more_volume_types(self):
         volume_types.create(self.ctxt, 'fake_type_1')
@@ -147,7 +149,7 @@ class QuotaClassSetsControllerTest(test.TestCase):
         body = {'quota_class_set': {'gigabytes_fake_type_1': 1111,
                                     'volumes_fake_type_2': 2222}}
         result = self.controller.update(self.req, fake.PROJECT_ID, body)
-        self.assertDictMatch(make_response_body(ctxt=self.ctxt,
+        self.assertDictEqual(make_response_body(ctxt=self.ctxt,
                                                 quota_class=fake.PROJECT_ID,
                                                 request_body=body,
                                                 tenant_id=None),

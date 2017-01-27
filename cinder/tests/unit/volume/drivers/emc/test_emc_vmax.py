@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import ast
 import os
 import shutil
 import sys
@@ -31,6 +32,7 @@ from cinder.objects import consistencygroup
 from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit import utils
+from cinder import utils as cinder_utils
 
 from cinder.volume import configuration as conf
 from cinder.volume.drivers.emc import emc_vmax_common
@@ -44,6 +46,8 @@ from cinder.volume.drivers.emc import emc_vmax_utils
 from cinder.volume import volume_types
 
 CINDER_EMC_CONFIG_DIR = '/etc/cinder/'
+emc_vmax_utils.JOB_RETRIES = 0
+emc_vmax_utils.INTERVAL_10_SEC = 0
 
 
 class EMC_StorageVolume(dict):
@@ -95,6 +99,14 @@ class EMC_StorageHardwareID(dict):
 
 
 class CIM_IPProtocolEndpoint(dict):
+    pass
+
+
+class Symm_ArrayChassis(dict):
+    pass
+
+
+class CIM_ConnectivityCollection(dict):
     pass
 
 
@@ -251,6 +263,10 @@ class EMCVMAXCommonData(object):
     fabric_name_prefix = "fakeFabric"
     end_point_map = {connector['wwpns'][0]: [target_wwns[0]],
                      connector['wwpns'][1]: [target_wwns[1]]}
+    zoning_mappings = {'port_group': None,
+                       'initiator_group': None,
+                       'target_wwns': target_wwns,
+                       'init_targ_map': end_point_map}
     device_map = {}
     for wwn in connector['wwpns']:
         fabric_name = ''.join([fabric_name_prefix,
@@ -275,6 +291,16 @@ class EMCVMAXCommonData(object):
         'SYMMETRIX+000195900551+OS-fakehost-gold-I-MV')
     lunmaskctrl_name = (
         'OS-fakehost-gold-I-MV')
+
+    rdf_group = 'test_rdf'
+    srdf_group_instance = (
+        '//10.73.28.137/root/emc:Symm_RemoteReplicationCollection.'
+        'InstanceID="SYMMETRIX-+-000197200056-+-8-+-000195900551-+-8"')
+    rg_instance_name = {
+        'CreationClassName': 'CIM_DeviceMaskingGroup',
+        'ElementName': 'OS-SRP_1-gold-DSS-RE-SG',
+        'SystemName': 'SYMMETRIX+000197200056'
+    }
 
     initiatorgroup_id = (
         'SYMMETRIX+000195900551+OS-fakehost-IG')
@@ -304,6 +330,7 @@ class EMCVMAXCommonData(object):
     storagepoolid = 'SYMMETRIX+000195900551+U+gold'
     storagegroupname = 'OS-fakehost-gold-I-SG'
     defaultstoragegroupname = 'OS_default_GOLD1_SG'
+    re_storagegroup = 'OS-SRP_1-gold-DSS-RE-SG'
     storagevolume_creationclass = 'EMC_StorageVolume'
     policyrule = 'gold'
     poolname = 'gold'
@@ -317,6 +344,8 @@ class EMCVMAXCommonData(object):
     fake_host = 'HostX@Backend#gold+1234567891011'
     fake_host_v3 = 'HostX@Backend#Bronze+SRP_1+1234567891011'
     fake_host_2_v3 = 'HostY@Backend#SRP_1+1234567891011'
+    fake_host_3_v3 = 'HostX@Backend#Bronze+DSS+SRP_1+1234567891011'
+    fake_host_4_v3 = 'HostX@Backend#Silver+None+SRP_1+1234567891011'
 
     unit_creationclass = 'CIM_ProtocolControllerForUnit'
     storage_type = 'gold'
@@ -333,8 +362,13 @@ class EMCVMAXCommonData(object):
                     'SystemName': u'SYMMETRIX+000195900551',
                     'DeviceID': u'10',
                     'SystemCreationClassName': u'Symm_StorageSystem'}
+    re_keybindings = {'CreationClassName': u'Symm_StorageVolume',
+                      'SystemName': u'SYMMETRIX+000195900551',
+                      'DeviceID': u'1',
+                      'SystemCreationClassName': u'Symm_StorageSystem'}
     provider_location = {'classname': 'Symm_StorageVolume',
-                         'keybindings': keybindings}
+                         'keybindings': keybindings,
+                         'version': '2.5.0'}
     provider_location2 = {'classname': 'Symm_StorageVolume',
                           'keybindings': keybindings2}
     provider_location3 = {'classname': 'Symm_StorageVolume',
@@ -342,6 +376,7 @@ class EMCVMAXCommonData(object):
     provider_location_multi_pool = {'classname': 'Symm_StorageVolume',
                                     'keybindings': keybindings,
                                     'version': '2.2.0'}
+    replication_driver_data = re_keybindings
     block_size = 512
     majorVersion = 1
     minorVersion = 2
@@ -406,6 +441,24 @@ class EMCVMAXCommonData(object):
                       'host': fake_host_v3,
                       'NumberOfBlocks': 100,
                       'BlockSize': block_size
+                      }
+
+    test_volume_v4 = {'name': 'vol1',
+                      'size': 1,
+                      'volume_name': 'vol1',
+                      'id': '1',
+                      'device_id': '1',
+                      'provider_auth': None,
+                      'project_id': 'project',
+                      'display_name': 'vol1',
+                      'display_description': 'test volume',
+                      'volume_type_id': 'abc',
+                      'provider_location': six.text_type(provider_location),
+                      'status': 'available',
+                      'host': fake_host_3_v3,
+                      'NumberOfBlocks': 100,
+                      'BlockSize': block_size,
+                      'pool_name': 'Bronze+DSS+SRP_1+1234567891011'
                       }
 
     test_volume_CG = {'name': 'volInCG',
@@ -491,6 +544,59 @@ class EMCVMAXCommonData(object):
                              six.text_type(provider_location3),
                              'display_description': 'snapshot source volume'}
 
+    test_source_volume_1_v3 = {'size': 1,
+                               'volume_type_id': 'sourceid',
+                               'display_name': 'sourceVolume',
+                               'name': 'sourceVolume',
+                               'id': 'sourceVolume',
+                               'device_id': '10',
+                               'volume_name': 'vmax-154326',
+                               'provider_auth': None,
+                               'project_id': 'project',
+                               'host': fake_host_4_v3,
+                               'NumberOfBlocks': 100,
+                               'BlockSize': block_size,
+                               'provider_location':
+                                   six.text_type(provider_location),
+                               'display_description': 'snapshot source volume'}
+
+    test_volume_re = {'name': 'vol1',
+                      'size': 1,
+                      'volume_name': 'vol1',
+                      'id': '1',
+                      'device_id': '1',
+                      'provider_auth': None,
+                      'project_id': 'project',
+                      'display_name': 'vol1',
+                      'display_description': 'test volume',
+                      'volume_type_id': 'abc',
+                      'provider_location': six.text_type(
+                          provider_location),
+                      'status': 'available',
+                      'replication_status': fields.ReplicationStatus.ENABLED,
+                      'host': fake_host,
+                      'NumberOfBlocks': 100,
+                      'BlockSize': block_size,
+                      'replication_driver_data': six.text_type(
+                          replication_driver_data)}
+
+    test_failed_re_volume = {'name': 'vol1',
+                             'size': 1,
+                             'volume_name': 'vol1',
+                             'id': '1',
+                             'device_id': '1',
+                             'display_name': 'vol1',
+                             'volume_type_id': 'abc',
+                             'provider_location': six.text_type(
+                                 {'keybindings': 'fake_keybindings'}),
+                             'replication_status': (
+                                 fields.ReplicationStatus.ENABLED),
+                             'replication_driver_data': 'fake_data',
+                             'host': fake_host,
+                             'NumberOfBlocks': 100,
+                             'BlockSize': block_size
+                             }
+
     test_CG = consistencygroup.ConsistencyGroup(
         context=None, name='myCG1', id='12345abcde',
         volume_type_id='abc', status=fields.ConsistencyGroupStatus.AVAILABLE)
@@ -512,6 +618,13 @@ class EMCVMAXCommonData(object):
                         'volume': test_source_volume_v3,
                         'provider_location': six.text_type(provider_location)
                         }
+    test_snapshot_1_v3 = {'name': 'mySnap',
+                          'id': '1',
+                          'status': 'available',
+                          'host': fake_host_4_v3,
+                          'volume': test_source_volume_1_v3,
+                          'provider_location': six.text_type(provider_location)
+                          }
     test_CG_snapshot = {'name': 'testSnap',
                         'id': '12345abcde',
                         'consistencygroup_id': '123456789',
@@ -527,19 +640,34 @@ class EMCVMAXCommonData(object):
                  'host': 'fake_host'}
     test_host_v3 = {'capabilities': location_info_v3,
                     'host': fake_host_2_v3}
+    test_host_1_v3 = {'capabilities': location_info_v3,
+                      'host': fake_host_4_v3}
     initiatorNames = ["123456789012345", "123456789054321"]
     storagegroups = [{'CreationClassName': storagegroup_creationclass,
                       'ElementName': storagegroupname},
                      {'CreationClassName': storagegroup_creationclass,
                       'ElementName': 'OS-SRP_1-Bronze-DSS-SG'}]
+    iqn = u'iqn.1992-04.com.emc:600009700bca30c01e3e012e00000001,t,0x0001'
+    iscsi_device_info = {'maskingview': u'OS-host-SRP_1-Diamond-NONE-MV',
+                         'ip_and_iqn': [{'ip': u'123.456.7.8',
+                                         'iqn': iqn}],
+                         'is_multipath': False,
+                         'storagesystem': u'SYMMETRIX-+-012345678901',
+                         'controller': {'host': '10.00.00.00'},
+                         'hostlunid': 3}
+    fc_device_info = {'maskingview': u'OS-host-SRP_1-Diamond-NONE-MV',
+                      'storagesystem': u'SYMMETRIX-+-012345678901',
+                      'controller': {'host': '10.00.00.00'},
+                      'hostlunid': 3}
     test_ctxt = {}
-    new_type = {}
+    new_type = {'extra_specs': {}}
     diff = {}
     extra_specs = {'storagetype:pool': u'SRP_1',
                    'volume_backend_name': 'V3_BE',
                    'storagetype:workload': u'DSS',
                    'storagetype:slo': u'Bronze',
                    'storagetype:array': u'1234567891011',
+                   'MultiPoolSupport': False,
                    'isV3': True,
                    'portgroupname': u'OS-portgroup-PG'}
     extra_specs_no_slo = {'storagetype:pool': 'SRP_1',
@@ -549,9 +677,30 @@ class EMCVMAXCommonData(object):
                           'storagetype:array': '1234567891011',
                           'isV3': True,
                           'portgroupname': 'OS-portgroup-PG'}
+
+    multi_pool_extra_specs = {'storagetype:pool': u'SRP_1',
+                              'volume_backend_name': 'MULTI_POOL_BE',
+                              'storagetype:workload': u'DSS',
+                              'storagetype:slo': u'Bronze',
+                              'storagetype:array': u'1234567891011',
+                              'isV3': True,
+                              'portgroupname': u'OS-portgroup-PG',
+                              'pool_name': u'Bronze+DSS+SRP_1+1234567891011'}
+
+    extra_specs_is_re = {'storagetype:pool': u'SRP_1',
+                         'volume_backend_name': 'VMAXReplication',
+                         'storagetype:workload': u'DSS',
+                         'storagetype:slo': u'Bronze',
+                         'storagetype:array': u'1234567891011',
+                         'isV3': True,
+                         'portgroupname': u'OS-portgroup-PG',
+                         'replication_enabled': True,
+                         'MultiPoolSupport': False}
+
     remainingSLOCapacity = '123456789'
     SYNCHRONIZED = 4
     UNSYNCHRONIZED = 3
+    multiPoolSupportEnabled = True
 
 
 class FakeLookupService(object):
@@ -570,11 +719,11 @@ class FakeEcomConnection(object):
                      Operation=None, Synchronization=None,
                      TheElements=None, TheElement=None,
                      LUNames=None, InitiatorPortIDs=None, DeviceAccesses=None,
-                     ProtocolControllers=None,
+                     ProtocolControllers=None, ConnectivityCollection=None,
                      MaskingGroup=None, Members=None,
                      HardwareId=None, ElementSource=None, EMCInPools=None,
                      CompositeType=None, EMCNumberOfMembers=None,
-                     EMCBindElements=None,
+                     EMCBindElements=None, Mode=None,
                      InElements=None, TargetPool=None, RequestedState=None,
                      ReplicationGroup=None, ReplicationType=None,
                      ReplicationSettingData=None, GroupName=None, Force=None,
@@ -704,6 +853,8 @@ class FakeEcomConnection(object):
             result = self._enum_storageSyncSvSv()
         elif name == 'Symm_SRPStoragePool':
             result = self._enum_srpstoragepool()
+        elif name == 'Symm_ArrayChassis':
+            result = self._enum_arraychassis()
         else:
             result = self._default_enum()
         return result
@@ -787,6 +938,8 @@ class FakeEcomConnection(object):
             result = self._assoc_lunmaskctrls()
         elif ResultClass == 'CIM_TargetMaskingGroup':
             result = self._assoc_portgroup()
+        elif ResultClass == 'CIM_ConnectivityCollection':
+            result = self._assoc_rdfgroup()
         else:
             result = self._default_assoc(objectpath)
         return result
@@ -881,6 +1034,8 @@ class FakeEcomConnection(object):
         result = None
         if ResultClass == 'CIM_ProtocolControllerForUnit':
             result = self._ref_unitnames2()
+        elif ResultClass == 'SE_StorageSynchronized_SV_SV':
+            result = self._enum_storageSyncSvSv()
         else:
             result = self._default_ref(objectpath)
         return result
@@ -1064,6 +1219,14 @@ class FakeEcomConnection(object):
             classcimproperty.fake_getIsCompositeCIMProperty())
         properties = {u'IsConcatenated': isConcatenatedcimproperty}
         assoc.properties = properties
+        assocs.append(assoc)
+        return assocs
+
+    def _assoc_rdfgroup(self):
+        assocs = []
+        assoc = CIM_ConnectivityCollection()
+        assoc['ElementName'] = self.data.rdf_group
+        assoc.path = self.data.srdf_group_instance
         assocs.append(assoc)
         return assocs
 
@@ -1731,13 +1894,17 @@ class FakeEcomConnection(object):
         sourceVolume['CreationClassName'] = 'Symm_StorageVolume'
         sourceVolume['DeviceID'] = self.data.test_volume['device_id']
         sourceInstanceName = conn.GetInstance(sourceVolume)
+        targetVolume = {}
+        targetVolume['CreationClassName'] = 'Symm_StorageVolume'
+        targetVolume['DeviceID'] = self.data.test_volume['device_id']
+        targetInstanceName = conn.GetInstance(sourceVolume)
         svInstances = []
         svInstance = {}
-        svInstance['SyncedElement'] = 'SyncedElement'
+        svInstance['SyncedElement'] = targetInstanceName
         svInstance['SystemElement'] = sourceInstanceName
         svInstance['CreationClassName'] = 'SE_StorageSynchronized_SV_SV'
         svInstance['PercentSynced'] = 100
-        svInstance['CopyState'] = self.data.UNSYNCHRONIZED
+        svInstance['CopyState'] = 7
         svInstances.append(svInstance)
         return svInstances
 
@@ -1775,6 +1942,20 @@ class FakeEcomConnection(object):
         ipprotocolendpoints.append(iqnprotocolendpoint)
         return ipprotocolendpoints
 
+    def _enum_arraychassis(self):
+        arraychassiss = []
+        arraychassis = Symm_ArrayChassis()
+        arraychassis['CreationClassName'] = (
+            'Symm_ArrayChassis')
+        arraychassis['SystemName'] = self.data.storage_system_v3
+        arraychassis['Tag'] = self.data.storage_system_v3
+        cimproperty = Fake_CIMProperty()
+        cimproperty.value = 'VMAX250F'
+        properties = {u'Model': cimproperty}
+        arraychassis.properties = properties
+        arraychassiss.append(arraychassis)
+        return arraychassiss
+
     def _default_enum(self):
         names = []
         name = {}
@@ -1809,6 +1990,10 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
                          instancename.fake_getinstancename)
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
                          self.fake_is_v3)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, '_is_sync_complete',
+                         return_value=True)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
         driver = emc_vmax_iscsi.EMCVMAXISCSIDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
@@ -2008,81 +2193,6 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         if bExists:
             os.remove(config_file)
 
-    def populate_masking_dict_setup(self):
-        extraSpecs = {'storagetype:pool': u'gold_pool',
-                      'volume_backend_name': 'GOLD_POOL_BE',
-                      'storagetype:array': u'1234567891011',
-                      'isV3': False,
-                      'portgroupname': u'OS-portgroup-PG',
-                      'storagetype:fastpolicy': u'GOLD'}
-        vol = {'SystemName': self.data.storage_system}
-        self.driver.common._find_lun = mock.Mock(
-            return_value=vol)
-        self.driver.common.utils.find_controller_configuration_service = (
-            mock.Mock(return_value=None))
-        return extraSpecs
-
-    def test_populate_masking_dict_fast(self):
-        extraSpecs = self.populate_masking_dict_setup()
-        # If fast is enabled it will uniquely determine the SG and MV
-        # on the host along with the protocol(iSCSI) e.g. I
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, self.data.connector, extraSpecs)
-        self.assertEqual(
-            'OS-fakehost-GOLD-FP-I-SG', maskingViewDict['sgGroupName'])
-        self.assertEqual(
-            'OS-fakehost-GOLD-FP-I-MV', maskingViewDict['maskingViewName'])
-
-    def test_populate_masking_dict_fast_more_than_14chars(self):
-        # If the length of the FAST policy name is greater than 14 chars
-        extraSpecs = self.populate_masking_dict_setup()
-        extraSpecs['storagetype:fastpolicy'] = 'GOLD_MORE_THAN_FOURTEEN_CHARS'
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, self.data.connector, extraSpecs)
-        self.assertEqual(
-            'OS-fakehost-GOLD_MO__CHARS-FP-I-SG',
-            maskingViewDict['sgGroupName'])
-        self.assertEqual(
-            'OS-fakehost-GOLD_MO__CHARS-FP-I-MV',
-            maskingViewDict['maskingViewName'])
-
-    def test_populate_masking_dict_no_fast(self):
-        # If fast isn't enabled the pool will uniquely determine the SG and MV
-        # on the host along with the protocol(iSCSI) e.g. I
-        extraSpecs = self.populate_masking_dict_setup()
-        extraSpecs['storagetype:fastpolicy'] = None
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, self.data.connector, extraSpecs)
-        self.assertEqual(
-            'OS-fakehost-gold_pool-I-SG', maskingViewDict['sgGroupName'])
-        self.assertEqual(
-            'OS-fakehost-gold_pool-I-MV', maskingViewDict['maskingViewName'])
-
-    def test_populate_masking_dict_fast_both_exceeding(self):
-        # If the length of the FAST policy name is greater than 14 chars and
-        # the length of the short host is more than 38 characters
-        extraSpecs = self.populate_masking_dict_setup()
-        connector = {'host': 'SHORT_HOST_MORE_THEN THIRTY_EIGHT_CHARACTERS'}
-        extraSpecs['storagetype:fastpolicy'] = (
-            'GOLD_MORE_THAN_FOURTEEN_CHARACTERS')
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, connector, extraSpecs)
-        self.assertLessEqual(len(maskingViewDict['sgGroupName']), 64)
-        self.assertLessEqual(len(maskingViewDict['maskingViewName']), 64)
-
-    def test_populate_masking_dict_no_fast_both_exceeding(self):
-        # If the length of the FAST policy name is greater than 14 chars and
-        # the length of the short host is more than 38 characters
-        extraSpecs = self.populate_masking_dict_setup()
-        connector = {'host': 'SHORT_HOST_MORE_THEN THIRTY_EIGHT_CHARACTERS'}
-        extraSpecs['storagetype:pool'] = (
-            'GOLD_POOL_MORE_THAN_SIXTEEN_CHARACTERS')
-        extraSpecs['storagetype:fastpolicy'] = None
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, connector, extraSpecs)
-        self.assertLessEqual(len(maskingViewDict['sgGroupName']), 64)
-        self.assertLessEqual(len(maskingViewDict['maskingViewName']), 64)
-
     def test_filter_list(self):
         portgroupnames = ['pg3', 'pg1', 'pg4', 'pg2']
         portgroupnames = (
@@ -2105,12 +2215,12 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
     def test_get_random_pg_from_list(self):
         portGroupNames = ['pg1', 'pg2', 'pg3', 'pg4']
         portGroupName = (
-            self.driver.common.utils._get_random_pg_from_list(portGroupNames))
+            self.driver.common.utils.get_random_pg_from_list(portGroupNames))
         self.assertIn('pg', portGroupName)
 
         portGroupNames = ['pg1']
         portGroupName = (
-            self.driver.common.utils._get_random_pg_from_list(portGroupNames))
+            self.driver.common.utils.get_random_pg_from_list(portGroupNames))
         self.assertEqual('pg1', portGroupName)
 
     def test_get_random_portgroup(self):
@@ -2160,14 +2270,6 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         dom = minidom.parseString(data)
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.common.utils._get_random_portgroup, dom)
-
-    def test_is_sync_complete(self):
-        conn = self.fake_ecom_connection()
-        syncname = SE_ConcreteJob()
-        syncname.classname = 'SE_StorageSynchronized_SV_SV'
-        syncname['CopyState'] = self.data.UNSYNCHRONIZED
-        issynched = self.driver.common.utils._is_sync_complete(conn, syncname)
-        self.assertFalse(issynched)
 
     def test_get_correct_port_group(self):
         self.driver.common.conn = self.fake_ecom_connection()
@@ -3088,9 +3190,10 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         poolRec = self.driver.utils.extract_record(arrayInfo, pool)
         extraSpecs = self.driver.common._set_v2_extra_specs(extraSpecs,
                                                             poolRec)
-        self.assertEqual(60,
+        # Set JOB_RETRIES and INTERVAL_10_SEC to 0 to avoid timeout
+        self.assertEqual(0,
                          self.driver.utils._get_max_job_retries(extraSpecs))
-        self.assertEqual(10,
+        self.assertEqual(0,
                          self.driver.utils._get_interval_in_secs(extraSpecs))
 
     def test_interval_only(self):
@@ -3102,7 +3205,8 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         poolRec = self.driver.utils.extract_record(arrayInfo, pool)
         extraSpecs = self.driver.common._set_v2_extra_specs(extraSpecs,
                                                             poolRec)
-        self.assertEqual(60,
+        # Set JOB_RETRIES 0 to avoid timeout
+        self.assertEqual(0,
                          self.driver.utils._get_max_job_retries(extraSpecs))
         self.assertEqual(20,
                          self.driver.utils._get_interval_in_secs(extraSpecs))
@@ -3122,13 +3226,18 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
                                                             poolRec)
         self.assertEqual(70,
                          self.driver.utils._get_max_job_retries(extraSpecs))
-        self.assertEqual(10,
+        # Set INTERVAL_10_SEC to 0 to avoid timeout
+        self.assertEqual(0,
                          self.driver.utils._get_interval_in_secs(extraSpecs))
 
         bExists = os.path.exists(file_name)
         if bExists:
             os.remove(file_name)
 
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
         'isArrayV3',
@@ -3149,8 +3258,18 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
                                       mock_storage_system,
                                       mock_is_fast_enabled,
                                       mock_capacity,
-                                      mock_is_v3):
+                                      mock_is_v3,
+                                      mock_or):
+        self.driver.common.pool_info['arrays_info'] = (
+            [{'EcomServerIp': '1.1.1.1',
+              'EcomServerPort': '5989',
+              'EcomUserName': 'name',
+              'EcomPassword': 'password',
+              'SerialNumber': '1234567890',
+              'PoolName': 'v2_pool',
+              'FastPolicy': 'gold'}])
         self.driver.get_volume_stats(True)
+        self.driver.common.pool_info['arrays_info'] = []
 
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
@@ -3458,7 +3577,11 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
             mock.Mock(return_value=volumeDict))
         self.driver.create_snapshot(self.data.test_snapshot)
 
-    def test_create_snapshot_no_fast_failed(self):
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'parse_file_to_get_array_map',
+        return_value=None)
+    def test_create_snapshot_no_fast_failed(self, mock_pool):
         self.data.test_volume['volume_name'] = "vmax-1234567"
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_snapshot,
@@ -3479,7 +3602,7 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         return_value=[EMCVMAXCommonData.test_volume])
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     @mock.patch.object(
         volume_types,
@@ -3552,7 +3675,7 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         'create_element_replica')
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     def test_create_clone_assert_clean_up_target_volume(
             self, mock_sync, mock_create_replica, mock_volume_type,
@@ -3588,20 +3711,6 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
     def test_migrate_volume_no_fast_success(self, _mock_volume_type):
         self.driver.migrate_volume(self.data.test_ctxt, self.data.test_volume,
                                    self.data.test_host)
-
-    @mock.patch.object(
-        emc_vmax_utils.EMCVMAXUtils,
-        'parse_pool_instance_id',
-        return_value=('silver', 'SYMMETRIX+000195900551'))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'ISCSINoFAST'})
-    def test_retype_volume_no_fast_success(
-            self, _mock_volume_type, mock_values):
-        self.driver.retype(
-            self.data.test_ctxt, self.data.test_volume, self.data.new_type,
-            self.data.diff, self.data.test_host)
 
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
@@ -3658,7 +3767,10 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -3943,7 +4055,10 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -3975,7 +4090,7 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(EMCVMAXCommonData.test_CG, EMCVMAXCommonData.test_CG))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -4000,7 +4115,18 @@ class EMCVMAXISCSIDriverNoFastTestCase(test.TestCase):
         emc_vmax_common.EMCVMAXCommon,
         '_update_pool_stats',
         return_value={1, 2, 3, 4, 5})
-    def test_ssl_support(self, pool_stats):
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=1.0)
+    def test_ssl_support(self, mock_ratio, pool_stats):
+        self.driver.common.pool_info['arrays_info'] = (
+            [{'EcomServerIp': '1.1.1.1',
+              'EcomServerPort': '5989',
+              'EcomUserName': 'name',
+              'EcomPassword': 'password',
+              'SerialNumber': '1234567890',
+              'PoolName': 'v2_pool'}])
         self.driver.common.update_volume_stats()
         self.assertTrue(self.driver.common.ecomUseSSL)
 
@@ -4035,6 +4161,8 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
                          instancename.fake_getinstancename)
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
                          self.fake_is_v3)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
         driver = emc_vmax_iscsi.EMCVMAXISCSIDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
@@ -4113,6 +4241,10 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
         return False
 
     @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
+    @mock.patch.object(
         emc_vmax_fast.EMCVMAXFast,
         'get_capacities_associated_to_policy',
         return_value=(1234, 1200, 1200, 1))
@@ -4137,8 +4269,18 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
                                    mock_is_fast_enabled,
                                    mock_get_policy,
                                    mock_pool_capacities,
-                                   mock_capacities_associated_to_policy):
+                                   mock_capacities_associated_to_policy,
+                                   mock_or):
+        self.driver.common.pool_info['arrays_info'] = (
+            [{'EcomServerIp': '1.1.1.1',
+              'EcomServerPort': '5989',
+              'EcomUserName': 'name',
+              'EcomPassword': 'password',
+              'SerialNumber': '1234567890',
+              'PoolName': 'v2_pool',
+              'FastPolicy': 'gold'}])
         self.driver.get_volume_stats(True)
+        self.driver.common.pool_info['arrays_info'] = []
 
     @mock.patch.object(
         emc_vmax_fast.EMCVMAXFast,
@@ -4391,7 +4533,11 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
             mock.Mock(return_value=True))
         self.driver.create_snapshot(self.data.test_snapshot)
 
-    def test_create_snapshot_fast_failed(self):
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'parse_file_to_get_array_map',
+        return_value=None)
+    def test_create_snapshot_fast_failed(self, mock_pool):
         self.data.test_volume['volume_name'] = "vmax-1234567"
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_snapshot,
@@ -4416,7 +4562,7 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
         return_value=[EMCVMAXCommonData.test_volume])
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     @mock.patch.object(
         volume_types,
@@ -4433,7 +4579,11 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
 
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'is_clone_licensed',
+        return_value=False)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
@@ -4446,7 +4596,7 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
                       'FASTPOLICY': 'FC_GOLD1'})
     def test_create_volume_from_snapshot_fast_failed(
             self, mock_volume_type,
-            mock_rep_service, mock_sync_sv):
+            mock_rep_service, mock_sync_sv, mock_license):
         self.data.test_volume['volume_name'] = "vmax-1234567"
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_volume_from_snapshot,
@@ -4569,7 +4719,10 @@ class EMCVMAXISCSIDriverFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -4672,7 +4825,10 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
                          instancename.fake_getinstancename)
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
                          self.fake_is_v3)
-
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, '_is_sync_complete',
+                         return_value=True)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
         driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=configuration)
         driver.db = FakeDB()
         driver.common.conn = FakeEcomConnection()
@@ -4746,6 +4902,10 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
 
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
         'get_pool_capacities',
         return_value=(1234, 1200, 1200, 1))
     @mock.patch.object(
@@ -4759,7 +4919,8 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
     def test_get_volume_stats_no_fast(self,
                                       mock_storage_system,
                                       mock_is_fast_enabled,
-                                      mock_capacity):
+                                      mock_capacity,
+                                      mock_or):
         self.driver.get_volume_stats(True)
 
     @mock.patch.object(
@@ -4973,20 +5134,6 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
                                    self.data.test_host)
 
     @mock.patch.object(
-        emc_vmax_utils.EMCVMAXUtils,
-        'parse_pool_instance_id',
-        return_value=('silver', 'SYMMETRIX+000195900551'))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'FCNoFAST'})
-    def test_retype_volume_no_fast_success(
-            self, _mock_volume_type, mock_values):
-        self.driver.retype(
-            self.data.test_ctxt, self.data.test_volume, self.data.new_type,
-            self.data.diff, self.data.test_host)
-
-    @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
@@ -5041,7 +5188,10 @@ class EMCVMAXFCDriverNoFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -5232,6 +5382,10 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
                          instancename.fake_getinstancename)
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
                          self.fake_is_v3)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, '_is_sync_complete',
+                         return_value=True)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
         driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=configuration)
         driver.db = FakeDB()
         driver.common.conn = FakeEcomConnection()
@@ -5310,6 +5464,10 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
         return False
 
     @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
+    @mock.patch.object(
         emc_vmax_fast.EMCVMAXFast,
         'get_capacities_associated_to_policy',
         return_value=(1234, 1200, 1200, 1))
@@ -5334,7 +5492,8 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
                                    mock_is_fast_enabled,
                                    mock_get_policy,
                                    mock_pool_capacities,
-                                   mock_capacities_associated_to_policy):
+                                   mock_capacities_associated_to_policy,
+                                   mock_or):
         self.driver.get_volume_stats(True)
 
     @mock.patch.object(
@@ -5605,9 +5764,9 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
         self.driver.create_snapshot(self.data.test_snapshot)
 
     @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_validate_pool',
-        return_value=('Bogus_Pool'))
+        emc_vmax_utils.EMCVMAXUtils,
+        'parse_file_to_get_array_map',
+        return_value=None)
     def test_create_snapshot_fast_failed(self, mock_pool):
         self.data.test_volume['volume_name'] = "vmax-1234567"
         self.assertRaises(exception.VolumeBackendAPIException,
@@ -5629,7 +5788,7 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
         return_value=[EMCVMAXCommonData.test_volume])
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     @mock.patch.object(
         volume_types,
@@ -5646,7 +5805,11 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
 
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'is_clone_licensed',
+        return_value=False)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
@@ -5658,7 +5821,8 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
         return_value={'volume_backend_name': 'FCFAST',
                       'FASTPOLICY': 'FC_GOLD1'})
     def test_create_volume_from_snapshot_fast_failed(
-            self, mock_volume_type, mock_rep_service, mock_sync_sv):
+            self, mock_volume_type, mock_rep_service, mock_sync_sv,
+            mock_license):
         self.data.test_volume['volume_name'] = "vmax-1234567"
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_volume_from_snapshot,
@@ -5733,24 +5897,6 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
                                    self.data.test_host)
 
     @mock.patch.object(
-        emc_vmax_masking.EMCVMAXMasking,
-        '_wrap_get_storage_group_from_volume',
-        return_value=None)
-    @mock.patch.object(
-        emc_vmax_utils.EMCVMAXUtils,
-        'parse_pool_instance_id',
-        return_value=('silver', 'SYMMETRIX+000195900551'))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'FCFAST'})
-    def test_retype_volume_fast_success(
-            self, _mock_volume_type, mock_values, mock_wrap):
-        self.driver.retype(
-            self.data.test_ctxt, self.data.test_volume, self.data.new_type,
-            self.data.diff, self.data.test_host)
-
-    @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
@@ -5805,7 +5951,10 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -5834,13 +5983,15 @@ class EMCVMAXFCDriverFastTestCase(test.TestCase):
             self.data.test_ctxt, self.data.test_CG_snapshot, [])
 
     # Bug 1385450
-    def test_create_clone_without_license(self):
-        mockRepServCap = {}
-        mockRepServCap['InstanceID'] = 'SYMMETRIX+1385450'
-        self.driver.utils.find_replication_service_capabilities = (
-            mock.Mock(return_value=mockRepServCap))
-        self.driver.utils.is_clone_licensed = (
-            mock.Mock(return_value=False))
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'is_clone_licensed',
+        return_value=False)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'find_replication_service_capabilities',
+        return_value={'InstanceID': 'SYMMETRIX+1385450'})
+    def test_create_clone_without_license(self, mock_service, mock_license):
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_cloned_volume,
                           self.data.test_volume,
@@ -5880,23 +6031,24 @@ class EMCV3DriverTestCase(test.TestCase):
         self.data = EMCVMAXCommonData()
 
         self.data.storage_system = 'SYMMETRIX-+-000197200056'
-        self.flags(rpc_backend='oslo_messaging._drivers.impl_fake')
 
         self.tempdir = tempfile.mkdtemp()
         super(EMCV3DriverTestCase, self).setUp()
         self.config_file_path = None
         self.create_fake_config_file_v3()
         self.addCleanup(self._cleanup)
+        self.flags(rpc_backend='oslo_messaging._drivers.impl_fake')
         self.set_configuration()
 
     def set_configuration(self):
-        configuration = mock.Mock()
+        configuration = mock.MagicMock()
         configuration.cinder_emc_config_file = self.config_file_path
-        configuration.safe_get.return_value = 3
         configuration.config_group = 'V3'
 
         self.mock_object(emc_vmax_common.EMCVMAXCommon, '_get_ecom_connection',
                          self.fake_ecom_connection)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
         instancename = FakeCIMInstanceName()
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
                          instancename.fake_getinstancename)
@@ -5985,6 +6137,9 @@ class EMCV3DriverTestCase(test.TestCase):
     def fake_is_v3(self, conn, serialNumber):
         return True
 
+    def fake_gather_info(self):
+        return
+
     def default_extraspec(self):
         return {'storagetype:pool': 'SRP_1',
                 'volume_backend_name': 'V3_BE',
@@ -6016,41 +6171,6 @@ class EMCV3DriverTestCase(test.TestCase):
             self.data.storagegroup_creationclass)
         storagegroup['ElementName'] = 'no_masking_view'
         return storagegroup
-
-    def test_populate_masking_dict_no_slo(self):
-        extraSpecs = {'storagetype:pool': 'SRP_1',
-                      'volume_backend_name': 'V3_BE',
-                      'storagetype:workload': None,
-                      'storagetype:slo': None,
-                      'storagetype:array': '1234567891011',
-                      'isV3': True,
-                      'portgroupname': 'OS-portgroup-PG'}
-        # If fast is enabled it will uniquely determine the SG and MV
-        # on the host along with the protocol(iSCSI) e.g. I
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, self.data.connector, extraSpecs)
-        self.assertEqual(
-            'OS-fakehost-No_SLO-SG', maskingViewDict['sgGroupName'])
-        self.assertEqual(
-            'OS-fakehost-No_SLO-MV', maskingViewDict['maskingViewName'])
-
-    def test_populate_masking_dict_slo_NONE(self):
-        extraSpecs = {'storagetype:pool': 'SRP_1',
-                      'volume_backend_name': 'V3_BE',
-                      'storagetype:workload': 'NONE',
-                      'storagetype:slo': 'NONE',
-                      'storagetype:array': '1234567891011',
-                      'isV3': True,
-                      'portgroupname': 'OS-portgroup-PG'}
-        # If fast is enabled it will uniquely determine the SG and MV
-        # on the host along with the protocol(iSCSI) e.g. I
-        maskingViewDict = self.driver.common._populate_masking_dict(
-            self.data.test_volume, self.data.connector, extraSpecs)
-        self.assertEqual(
-            'OS-fakehost-SRP_1-NONE-NONE-SG', maskingViewDict['sgGroupName'])
-        self.assertEqual(
-            'OS-fakehost-SRP_1-NONE-NONE-MV',
-            maskingViewDict['maskingViewName'])
 
     def test_last_vol_in_SG_with_MV(self):
         conn = self.fake_ecom_connection()
@@ -6110,11 +6230,17 @@ class EMCV3DriverTestCase(test.TestCase):
 
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
         'find_storageSystem',
         return_value={'Name': EMCVMAXCommonData.storage_system_v3})
     def test_get_volume_stats_v3(
-            self, mock_storage_system):
+            self, mock_storage_system, mock_or):
+        self.driver.common.pool_info['reserved_percentage'] = 5
         self.driver.get_volume_stats(True)
+        self.driver.common.pool_info['reserved_percentage'] = 0
 
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
@@ -6423,7 +6549,10 @@ class EMCV3DriverTestCase(test.TestCase):
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_find_consistency_group',
-        return_value=(None, EMCVMAXCommonData.test_CG))
+        return_value=(
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG['name'] + "_" + (
+                EMCVMAXCommonData.test_CG['id'])))
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
@@ -6442,8 +6571,8 @@ class EMCV3DriverTestCase(test.TestCase):
         repServ = self.conn.EnumerateInstanceNames("EMC_ReplicationService")[0]
         provisionv3.create_group_replica.assert_called_once_with(
             self.conn, repServ,
-            (None, EMCVMAXCommonData.test_CG),
-            (None, EMCVMAXCommonData.test_CG), '12de',
+            EMCVMAXCommonData.test_CG,
+            EMCVMAXCommonData.test_CG, '12de',
             EMCVMAXCommonData.extra_specs)
 
     @mock.patch.object(
@@ -6623,7 +6752,7 @@ class EMCV3DriverTestCase(test.TestCase):
         'create_element_replica')
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
-        'find_sync_sv_by_target',
+        'find_sync_sv_by_volume',
         return_value=(None, None))
     def test_create_clone_v3_assert_clean_up_target_volume(
             self, mock_sync, mock_create_replica, mock_volume_db,
@@ -6753,495 +6882,398 @@ class EMCV3DriverTestCase(test.TestCase):
         shutil.rmtree(self.tempdir)
 
 
-class EMCV2MultiPoolDriverTestCase(test.TestCase):
-
+class EMCV3MultiPoolDriverTestCase(test.TestCase):
     def setUp(self):
         self.data = EMCVMAXCommonData()
-        self.vol_v2 = self.data.test_volume_v2
-        self.vol_v2['provider_location'] = (
-            six.text_type(self.data.provider_location_multi_pool))
-        self.tempdir = tempfile.mkdtemp()
-        super(EMCV2MultiPoolDriverTestCase, self).setUp()
-        self.config_file_path = None
-        self.create_fake_config_file_multi_pool()
-        self.addCleanup(self._cleanup)
-
-        configuration = mock.Mock()
-        configuration.safe_get.return_value = 'MULTI_POOL'
-        configuration.cinder_emc_config_file = self.config_file_path
-        configuration.config_group = 'MULTI_POOL'
-
-        self.mock_object(emc_vmax_common.EMCVMAXCommon, '_get_ecom_connection',
-                         self.fake_ecom_connection)
-        instancename = FakeCIMInstanceName()
-        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
-                         instancename.fake_getinstancename)
-        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
-                         self.fake_is_v3)
-        driver = emc_vmax_iscsi.EMCVMAXISCSIDriver(configuration=configuration)
-        driver.db = FakeDB()
-        self.driver = driver
-        self.driver.utils = emc_vmax_utils.EMCVMAXUtils(object)
-
-    def create_fake_config_file_multi_pool(self):
-        doc = minidom.Document()
-        emc = doc.createElement("EMC")
-        doc.appendChild(emc)
-
-        eComServers = doc.createElement("EcomServers")
-        emc.appendChild(eComServers)
-
-        eComServer = doc.createElement("EcomServer")
-        eComServers.appendChild(eComServer)
-
-        ecomserverip = doc.createElement("EcomServerIp")
-        eComServer.appendChild(ecomserverip)
-        ecomserveriptext = doc.createTextNode("1.1.1.1")
-        ecomserverip.appendChild(ecomserveriptext)
-
-        ecomserverport = doc.createElement("EcomServerPort")
-        eComServer.appendChild(ecomserverport)
-        ecomserverporttext = doc.createTextNode("10")
-        ecomserverport.appendChild(ecomserverporttext)
-
-        ecomusername = doc.createElement("EcomUserName")
-        eComServer.appendChild(ecomusername)
-        ecomusernametext = doc.createTextNode("user")
-        ecomusername.appendChild(ecomusernametext)
-
-        ecompassword = doc.createElement("EcomPassword")
-        eComServer.appendChild(ecompassword)
-        ecompasswordtext = doc.createTextNode("pass")
-        ecompassword.appendChild(ecompasswordtext)
-
-        arrays = doc.createElement("Arrays")
-        eComServer.appendChild(arrays)
-
-        array = doc.createElement("Array")
-        arrays.appendChild(array)
-
-        serialNo = doc.createElement("SerialNumber")
-        array.appendChild(serialNo)
-        serialNoText = doc.createTextNode("1234567891011")
-        serialNo.appendChild(serialNoText)
-
-        portgroups = doc.createElement("PortGroups")
-        array.appendChild(portgroups)
-
-        portgroup = doc.createElement("PortGroup")
-        portgroups.appendChild(portgroup)
-        portgrouptext = doc.createTextNode(self.data.port_group)
-        portgroup.appendChild(portgrouptext)
-
-        pools = doc.createElement("Pools")
-        array.appendChild(pools)
-
-        pool = doc.createElement("Pool")
-        pools.appendChild(pool)
-        poolName = doc.createElement("PoolName")
-        pool.appendChild(poolName)
-        poolNameText = doc.createTextNode("gold")
-        poolName.appendChild(poolNameText)
-
-        pool2 = doc.createElement("Pool")
-        pools.appendChild(pool2)
-        pool2Name = doc.createElement("PoolName")
-        pool2.appendChild(pool2Name)
-        pool2NameText = doc.createTextNode("SATA_BRONZE1")
-        pool2Name.appendChild(pool2NameText)
-        pool2FastPolicy = doc.createElement("FastPolicy")
-        pool2.appendChild(pool2FastPolicy)
-        pool2FastPolicyText = doc.createTextNode("BRONZE1")
-        pool2FastPolicy.appendChild(pool2FastPolicyText)
-
-        filename = 'cinder_emc_config_V2_MULTI_POOL.xml'
-        self.config_file_path = self.tempdir + '/' + filename
-
-        f = open(self.config_file_path, 'w')
-        doc.writexml(f)
-        f.close()
-
-    def fake_ecom_connection(self):
-        self.conn = FakeEcomConnection()
-        return self.conn
-
-    def fake_is_v3(self, conn, serialNumber):
-        return False
-
-    def default_extraspec(self):
-        return {'storagetype:pool': u'gold',
-                'volume_backend_name': 'MULTI_POOL_BE',
-                'storagetype:fastpolicy': None,
-                'storagetype:compositetype': u'concatenated',
-                'storagetype:membercount': 1,
-                'storagetype:array': u'1234567891011',
-                'isV3': False,
-                'portgroupname': u'OS-portgroup-PG'}
-
-    def test_validate_pool(self):
-        v2_valid_pool = self.data.test_volume_v2.copy()
-        # Pool aware scheduler enabled
-        v2_valid_pool['host'] = self.data.fake_host
-        pool = self.driver.common._validate_pool(v2_valid_pool)
-        self.assertEqual('gold+1234567891011', pool)
-
-        # Cannot get the pool from the host
-        v2_valid_pool['host'] = 'HostX@Backend'
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.driver.common._validate_pool,
-                          v2_valid_pool)
-
-        # Legacy test. Provider Location does not have the version
-        v2_valid_pool['host'] = self.data.fake_host
-        v2_valid_pool['provider_location'] = self.data.provider_location
-        pool = self.driver.common._validate_pool(v2_valid_pool)
-        self.assertIsNone(pool)
-
-    def test_array_info_multi_pool(self):
-
-        arrayInfo = self.driver.utils.parse_file_to_get_array_map(
-            self.config_file_path)
-        self.assertEqual(2, len(arrayInfo))
-        for arrayInfoRec in arrayInfo:
-            self.assertEqual(
-                '1234567891011', arrayInfoRec['SerialNumber'])
-            self.assertIn(self.data.port_group, arrayInfoRec['PortGroup'])
-            self.assertTrue(
-                self.data.poolname in arrayInfoRec['PoolName'] or
-                'SATA_BRONZE1' in arrayInfoRec['PoolName'])
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_create_volume_multi_pool_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.vol_v2['provider_location'] = None
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.create_volume(self.vol_v2)
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_delete_volume_multi_pool_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.delete_volume(self.vol_v2)
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_create_volume_in_CG_multi_pool_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.data.test_volume_CG['provider_location'] = None
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.create_volume(self.data.test_volume_CG)
-
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_retype_volume_multi_pool_success(
-            self, _mock_volume_type):
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.retype(
-            self.data.test_ctxt, self.vol_v2, self.data.new_type,
-            self.data.diff, self.data.test_host)
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    # There is only one unique array in the conf file
-    def test_create_CG_multi_pool_success(
-            self, _mock_volume_type, _mock_storage_system):
-        self.driver.create_consistencygroup(
-            self.data.test_ctxt, self.data.test_CG)
-
-    @mock.patch.object(
-        FakeDB,
-        'volume_get_all_by_group',
-        return_value=None)
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_delete_CG_no_volumes_multi_pool_success(
-            self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes):
-        self.driver.delete_consistencygroup(
-            self.data.test_ctxt, self.data.test_CG, [])
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_POOL_BE'})
-    def test_delete_CG_with_volumes_multi_pool_success(
-            self, _mock_volume_type, _mock_storage_system):
-        self.driver.delete_consistencygroup(
-            self.data.test_ctxt, self.data.test_CG, [])
-
-    def _cleanup(self):
-        bExists = os.path.exists(self.config_file_path)
-        if bExists:
-            os.remove(self.config_file_path)
-        shutil.rmtree(self.tempdir)
-
-
-class EMCV3MultiSloDriverTestCase(test.TestCase):
-
-    def setUp(self):
-        self.data = EMCVMAXCommonData()
-        self.vol_v3 = self.data.test_volume_v3
+        self.vol_v3 = self.data.test_volume_v4
         self.vol_v3['provider_location'] = (
             six.text_type(self.data.provider_location_multi_pool))
 
-        self.tempdir = tempfile.mkdtemp()
-        super(EMCV3MultiSloDriverTestCase, self).setUp()
-        self.config_file_path = None
-        self.create_fake_config_file_multi_slo_v3()
-        self.addCleanup(self._cleanup)
+        super(EMCV3MultiPoolDriverTestCase, self).setUp()
         self.set_configuration()
 
     def set_configuration(self):
         configuration = mock.Mock()
-        configuration.safe_get.return_value = 'MULTI_SLO_V3'
-        configuration.cinder_emc_config_file = self.config_file_path
-        configuration.config_group = 'MULTI_SLO_V3'
-
+        configuration.safe_get.return_value = 'MULTI_POOL_V3'
+        configuration.config_group = 'MULTI_POOL_V3'
         self.mock_object(emc_vmax_common.EMCVMAXCommon, '_get_ecom_connection',
                          self.fake_ecom_connection)
+        self.mock_object(emc_vmax_common.EMCVMAXCommon, '_gather_info',
+                         self.fake_gather_info)
         instancename = FakeCIMInstanceName()
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
                          instancename.fake_getinstancename)
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
-                         self.fake_is_v3)
-
+                         return_value=True)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, '_is_sync_complete',
+                         return_value=True)
+        self.mock_object(emc_vmax_common.EMCVMAXCommon,
+                         '_get_multi_pool_support_enabled_flag',
+                         return_value=True)
+        volume_types.get_volume_type_extra_specs = mock.Mock(
+            return_value={'volume_backend_name': 'MULTI_POOL_BE',
+                          'pool_name': 'Bronze+DSS+SRP_1+1234567891011'})
         driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
         self.driver.utils = emc_vmax_utils.EMCVMAXUtils(object)
 
-    def create_fake_config_file_multi_slo_v3(self):
+    def create_fake_config_file_multi_pool_v3(self, tempdir):
         doc = minidom.Document()
         emc = doc.createElement("EMC")
         doc.appendChild(emc)
 
-        eComServers = doc.createElement("EcomServers")
-        emc.appendChild(eComServers)
-
-        eComServer = doc.createElement("EcomServer")
-        eComServers.appendChild(eComServer)
-
         ecomserverip = doc.createElement("EcomServerIp")
-        eComServer.appendChild(ecomserverip)
         ecomserveriptext = doc.createTextNode("1.1.1.1")
+        emc.appendChild(ecomserverip)
         ecomserverip.appendChild(ecomserveriptext)
 
         ecomserverport = doc.createElement("EcomServerPort")
-        eComServer.appendChild(ecomserverport)
         ecomserverporttext = doc.createTextNode("10")
+        emc.appendChild(ecomserverport)
         ecomserverport.appendChild(ecomserverporttext)
 
         ecomusername = doc.createElement("EcomUserName")
-        eComServer.appendChild(ecomusername)
         ecomusernametext = doc.createTextNode("user")
+        emc.appendChild(ecomusername)
         ecomusername.appendChild(ecomusernametext)
 
         ecompassword = doc.createElement("EcomPassword")
-        eComServer.appendChild(ecompassword)
         ecompasswordtext = doc.createTextNode("pass")
+        emc.appendChild(ecompassword)
         ecompassword.appendChild(ecompasswordtext)
 
-        arrays = doc.createElement("Arrays")
-        eComServer.appendChild(arrays)
-
-        array = doc.createElement("Array")
-        arrays.appendChild(array)
-
-        serialNo = doc.createElement("SerialNumber")
-        array.appendChild(serialNo)
-        serialNoText = doc.createTextNode("1234567891011")
-        serialNo.appendChild(serialNoText)
-
-        portgroups = doc.createElement("PortGroups")
-        array.appendChild(portgroups)
-
         portgroup = doc.createElement("PortGroup")
-        portgroups.appendChild(portgroup)
         portgrouptext = doc.createTextNode(self.data.port_group)
         portgroup.appendChild(portgrouptext)
 
-        vpools = doc.createElement("Pools")
-        array.appendChild(vpools)
-        vpool = doc.createElement("Pool")
-        vpools.appendChild(vpool)
-        poolName = doc.createElement("PoolName")
-        vpool.appendChild(poolName)
-        poolNameText = doc.createTextNode("SRP_1")
-        poolName.appendChild(poolNameText)
-        poolslo = doc.createElement("ServiceLevel")
-        vpool.appendChild(poolslo)
-        poolsloText = doc.createTextNode("Bronze")
-        poolslo.appendChild(poolsloText)
-        poolworkload = doc.createElement("Workload")
-        vpool.appendChild(poolworkload)
-        poolworkloadText = doc.createTextNode("DSS")
-        poolworkload.appendChild(poolworkloadText)
+        pool = doc.createElement("Pool")
+        pooltext = doc.createTextNode("SRP_1")
+        emc.appendChild(pool)
+        pool.appendChild(pooltext)
 
-        vpool2 = doc.createElement("Pool")
-        vpools.appendChild(vpool2)
-        pool2Name = doc.createElement("PoolName")
-        vpool2.appendChild(pool2Name)
-        pool2NameText = doc.createTextNode("SRP_1")
-        pool2Name.appendChild(pool2NameText)
-        pool2slo = doc.createElement("ServiceLevel")
-        vpool2.appendChild(pool2slo)
-        pool2sloText = doc.createTextNode("Silver")
-        pool2slo.appendChild(pool2sloText)
-        pool2workload = doc.createElement("Workload")
-        vpool.appendChild(pool2workload)
-        pool2workloadText = doc.createTextNode("OLTP")
-        pool2workload.appendChild(pool2workloadText)
+        array = doc.createElement("Array")
+        arraytext = doc.createTextNode("1234567891011")
+        emc.appendChild(array)
+        array.appendChild(arraytext)
 
-        filename = 'cinder_emc_config_MULTI_SLO_V3.xml'
-        self.config_file_path = self.tempdir + '/' + filename
+        portgroups = doc.createElement("PortGroups")
+        portgroups.appendChild(portgroup)
+        emc.appendChild(portgroups)
 
-        f = open(self.config_file_path, 'w')
+        timeout = doc.createElement("Timeout")
+        timeouttext = doc.createTextNode("0")
+        emc.appendChild(timeout)
+        timeout.appendChild(timeouttext)
+
+        filename = 'cinder_emc_config_V3.xml'
+
+        config_file_path = tempdir + '/' + filename
+
+        f = open(config_file_path, 'w')
         doc.writexml(f)
         f.close()
+        return config_file_path
+
+    def create_fake_config_file_legacy_v3(self, tempdir):
+
+        doc = minidom.Document()
+        emc = doc.createElement("EMC")
+        doc.appendChild(emc)
+
+        ecomserverip = doc.createElement("EcomServerIp")
+        ecomserveriptext = doc.createTextNode("1.1.1.1")
+        emc.appendChild(ecomserverip)
+        ecomserverip.appendChild(ecomserveriptext)
+
+        ecomserverport = doc.createElement("EcomServerPort")
+        ecomserverporttext = doc.createTextNode("10")
+        emc.appendChild(ecomserverport)
+        ecomserverport.appendChild(ecomserverporttext)
+
+        ecomusername = doc.createElement("EcomUserName")
+        ecomusernametext = doc.createTextNode("user")
+        emc.appendChild(ecomusername)
+        ecomusername.appendChild(ecomusernametext)
+
+        ecompassword = doc.createElement("EcomPassword")
+        ecompasswordtext = doc.createTextNode("pass")
+        emc.appendChild(ecompassword)
+        ecompassword.appendChild(ecompasswordtext)
+
+        portgroup = doc.createElement("PortGroup")
+        portgrouptext = doc.createTextNode(self.data.port_group)
+        portgroup.appendChild(portgrouptext)
+
+        pool = doc.createElement("Pool")
+        pooltext = doc.createTextNode("SRP_1")
+        emc.appendChild(pool)
+        pool.appendChild(pooltext)
+
+        array = doc.createElement("Array")
+        arraytext = doc.createTextNode("1234567891011")
+        emc.appendChild(array)
+        array.appendChild(arraytext)
+
+        slo = doc.createElement("ServiceLevel")
+        slotext = doc.createTextNode("Silver")
+        emc.appendChild(slo)
+        slo.appendChild(slotext)
+
+        workload = doc.createElement("Workload")
+        workloadtext = doc.createTextNode("OLTP")
+        emc.appendChild(workload)
+        workload.appendChild(workloadtext)
+
+        portgroups = doc.createElement("PortGroups")
+        portgroups.appendChild(portgroup)
+        emc.appendChild(portgroups)
+
+        timeout = doc.createElement("Timeout")
+        timeouttext = doc.createTextNode("0")
+        emc.appendChild(timeout)
+        timeout.appendChild(timeouttext)
+
+        filename = 'cinder_emc_config_V3.xml'
+
+        config_file_path = tempdir + '/' + filename
+
+        f = open(config_file_path, 'w')
+        doc.writexml(f)
+        f.close()
+        return config_file_path
 
     def fake_ecom_connection(self):
         self.conn = FakeEcomConnection()
         return self.conn
 
-    def fake_is_v3(self, conn, serialNumber):
-        return True
+    def fake_gather_info(self):
+        return
 
-    def default_extraspec(self):
-        return {'storagetype:pool': u'SRP_1',
-                'volume_backend_name': 'MULTI_SLO_BE',
-                'storagetype:workload': u'DSS',
-                'storagetype:slo': u'Bronze',
-                'storagetype:array': u'1234567891011',
-                'isV3': True,
-                'portgroupname': u'OS-portgroup-PG'}
+    def default_array_info_list(self):
+        return [{'EcomServerIp': u'1.1.1.1',
+                 'EcomServerPort': 10,
+                 'EcomUserName': u'user',
+                 'EcomPassword': u'pass',
+                 'PoolName': u'SRP_1',
+                 'PortGroup': u'OS-portgroup-PG',
+                 'SerialNumber': 1234567891011,
+                 'SLO': u'Bronze',
+                 'Workload': u'DSS'}]
+
+    def multiple_array_info_list(self):
+        return [{'EcomServerIp': u'1.1.1.1',
+                 'EcomServerPort': 10,
+                 'EcomUserName': u'user',
+                 'EcomPassword': u'pass',
+                 'PoolName': u'SRP_1',
+                 'PortGroup': u'OS-portgroup-PG',
+                 'SerialNumber': 1234567891011,
+                 'SLO': u'Bronze',
+                 'Workload': u'DSS'},
+                {'EcomServerIp': u'1.1.1.1',
+                 'EcomServerPort': 10,
+                 'EcomUserName': u'user',
+                 'EcomPassword': u'pass',
+                 'PoolName': u'SRP_1',
+                 'PortGroup': u'OS-portgroup-PG',
+                 'SerialNumber': 1234567891011,
+                 'SLO': u'Silver',
+                 'Workload': u'OLTP'}]
+
+    def test_initial_setup(self):
+        tempdir = tempfile.mkdtemp()
+        config_file_path = self.create_fake_config_file_multi_pool_v3(tempdir)
+        with mock.patch.object(
+                self.driver.common, '_register_config_file_from_config_group',
+                return_value=config_file_path):
+            extraSpecs = self.driver.common._initial_setup(self.vol_v3)
+        self.assertEqual('SRP_1', extraSpecs['storagetype:pool'])
+        self.assertEqual('DSS', extraSpecs['storagetype:workload'])
+        self.assertEqual('Bronze', extraSpecs['storagetype:slo'])
+        self.assertEqual('1234567891011', extraSpecs['storagetype:array'])
+        self.assertEqual('OS-portgroup-PG', extraSpecs['portgroupname'])
+        self.assertTrue(extraSpecs['isV3'])
+        self.assertTrue(extraSpecs['MultiPoolSupport'])
+        self.assertEqual('Bronze+DSS+SRP_1+1234567891011',
+                         extraSpecs['pool_name'])
+        self._cleanup(tempdir, config_file_path)
+
+    def test_initial_setup_with_legacy_file(self):
+        # Test with legacy config file and verify
+        # if the values for SLO and workload are used from
+        # the pool_name and not the config file
+        tempdir = tempfile.mkdtemp()
+        config_file_path = self.create_fake_config_file_legacy_v3(tempdir)
+        with mock.patch.object(
+                self.driver.common, '_register_config_file_from_config_group',
+                return_value=config_file_path):
+            extraSpecs = self.driver.common._initial_setup(self.vol_v3)
+        self.assertEqual('DSS', extraSpecs['storagetype:workload'])
+        self.assertEqual('Bronze', extraSpecs['storagetype:slo'])
+        self._cleanup(tempdir, config_file_path)
+
+    def test_initial_setup_invalid_volume(self):
+        # Test with volume which don't have pool_name
+        tempdir = tempfile.mkdtemp()
+        config_file_path = self.create_fake_config_file_multi_pool_v3(tempdir)
+        with mock.patch.object(
+                self.driver.common, '_register_config_file_from_config_group',
+                return_value=config_file_path):
+            invalid_vol_v3 = self.data.test_volume_v4.copy()
+            invalid_vol_v3.pop('host', None)
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.driver.common._initial_setup,
+                              invalid_vol_v3)
+        self._cleanup(tempdir, config_file_path)
 
     def test_validate_pool(self):
-        v3_valid_pool = self.data.test_volume_v3.copy()
+        v3_valid_pool = self.data.test_volume_v4.copy()
         # Pool aware scheduler enabled
-        v3_valid_pool['host'] = self.data.fake_host_v3
-        pool = self.driver.common._validate_pool(v3_valid_pool)
-        self.assertEqual('Bronze+SRP_1+1234567891011', pool)
+        v3_valid_pool['host'] = self.data.fake_host_3_v3
+        # Validate pool uses extraSpecs as a new argument
+        # Use default extraSpecs as the argument
+        pool = self.driver.common._validate_pool(
+            v3_valid_pool, self.data.multi_pool_extra_specs)
+        self.assertEqual('Bronze+DSS+SRP_1+1234567891011', pool)
 
+    def test_validate_pool_invalid_pool_name(self):
+        # Validate using older volume dictionary
+        # and check if a exception is raised if multi_pool_support
+        # is enabled and pool_name is not specified
+        extraSpecs = self.data.multi_pool_extra_specs
+        invalid_pool_name = extraSpecs.copy()
+        invalid_pool_name['pool_name'] = 'not_valid'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.common._validate_pool,
+                          self.data.test_volume_v4, invalid_pool_name)
+
+    def test_validate_pool_invalid_host(self):
         # Cannot get the pool from the host
+        v3_valid_pool = self.data.test_volume_v4.copy()
         v3_valid_pool['host'] = 'HostX@Backend'
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.common._validate_pool,
                           v3_valid_pool)
+
+    def test_validate_pool_legacy(self):
         # Legacy test. Provider Location does not have the version
-        v3_valid_pool['host'] = self.data.fake_host_v3
+        v3_valid_pool = self.data.test_volume_v4.copy()
+        v3_valid_pool['host'] = self.data.fake_host_3_v3
         v3_valid_pool['provider_location'] = self.data.provider_location
         pool = self.driver.common._validate_pool(v3_valid_pool)
         self.assertIsNone(pool)
 
-    def test_array_info_multi_slo(self):
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'override_ratio',
+        return_value=2.0)
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'find_storageSystem',
+        return_value={'Name': EMCVMAXCommonData.storage_system_v3})
+    def test_get_volume_stats_v3(
+            self, mock_storage_system, mock_or):
+        self.driver.common.pool_info['reserved_percentage'] = 5
+        self.driver.get_volume_stats(True)
+        self.driver.common.pool_info['reserved_percentage'] = 0
 
-        arrayInfo = self.driver.utils.parse_file_to_get_array_map(
-            self.config_file_path)
-        self.assertEqual(2, len(arrayInfo))
-        for arrayInfoRec in arrayInfo:
-            self.assertEqual(
-                '1234567891011', arrayInfoRec['SerialNumber'])
-            self.assertIn(self.data.port_group, arrayInfoRec['PortGroup'])
-            self.assertIn('SRP_1', arrayInfoRec['PoolName'])
-            self.assertTrue(
-                'Bronze' in arrayInfoRec['SLO'] or
-                'Silver' in arrayInfoRec['SLO'])
-
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_or_create_storage_group_v3',
+        return_value=EMCVMAXCommonData.default_sg_instance_name)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     def test_create_volume_multi_slo_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.vol_v3['host'] = self.data.fake_host_v3
+            self, mock_storage_system, mock_sg, mock_is):
+        self.vol_v3['host'] = self.data.fake_host_3_v3
         self.vol_v3['provider_location'] = None
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.common._get_or_create_storage_group_v3 = mock.Mock(
-            return_value = self.data.default_sg_instance_name)
-        self.driver.create_volume(self.vol_v3)
+        model_update = self.driver.create_volume(self.vol_v3)
+        # Verify if the device id is provided in the output
+        provider_location = model_update['provider_location']
+        provider_location = ast.literal_eval(provider_location)
+        keybindings = provider_location['keybindings']
+        device_id = keybindings['DeviceID']
+        self.assertEqual('1', device_id)
 
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        'get_associated_masking_groups_from_device',
+        return_value=EMCVMAXCommonData.storagegroups)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     def test_delete_volume_multi_slo_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
+            self, mock_storage_system, mock_is, mock_mv):
+        provider_location = (
+            {'classname': 'Symm_StorageVolume',
+             'keybindings':
+             {'CreationClassName': 'Symm_StorageVolume',
+              'SystemName': 'SYMMETRIX+000195900551',
+              'DeviceID': '1',
+              'SystemCreationClassName': 'Symm_StorageSystem'
+              }
+             })
+        volumeInstanceName = (
+            {'NumberOfBlocks': 100,
+             'ElementName': '1',
+             'Name': 'vol1',
+             'BlockSize': 512,
+             'provider_location': six.text_type(provider_location),
+             'SystemName': 'SYMMETRIX+000195900551',
+             'DeviceID': '1',
+             'CreationClassName': 'Symm_StorageVolume',
+             'Id': '1',
+             'SystemCreationClassName': 'Symm_StorageSystem'})
         self.driver.delete_volume(self.vol_v3)
+        masking = self.driver.common.masking
+        get_groups_from_device = (
+            masking.get_associated_masking_groups_from_device)
+        get_groups_from_device.assert_called_once_with(
+            self.conn, volumeInstanceName)
 
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_or_create_storage_group_v3',
+        return_value=EMCVMAXCommonData.default_sg_instance_name)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     def test_create_volume_in_CG_multi_slo_success(
-            self, _mock_volume_type, mock_storage_system):
+            self, mock_storage_system, mock_is, mock_sg):
         self.data.test_volume_CG_v3['provider_location'] = None
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.common._get_or_create_storage_group_v3 = mock.Mock(
-            return_value = self.data.default_sg_instance_name)
-        self.driver.create_volume(self.data.test_volume_CG_v3)
+        model_update = self.driver.create_volume(self.data.test_volume_CG_v3)
+        # Verify if the device id is provided in the output
+        provider_location = model_update['provider_location']
+        provider_location = ast.literal_eval(provider_location)
+        keybindings = provider_location['keybindings']
+        device_id = keybindings['DeviceID']
+        self.assertEqual('1', device_id)
 
     @mock.patch.object(
         emc_vmax_utils.EMCVMAXUtils,
         'get_volume_element_name',
         return_value='1')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_provision_v3.EMCVMAXProvisionV3,
         '_find_new_storage_group',
@@ -7254,315 +7286,31 @@ class EMCV3MultiSloDriverTestCase(test.TestCase):
         emc_vmax_utils.EMCVMAXUtils,
         '_get_fast_settings_from_storage_group',
         return_value='Gold+DSS_REP')
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     def test_retype_volume_multi_slo_success(
-            self, _mock_volume_type, mock_fast_settings,
-            mock_storage_group, mock_found_SG, mock_element_name):
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
+            self, mock_fast_settings,
+            mock_storage_group, mock_found_SG, mock_is, mock_element_name):
         self.assertTrue(self.driver.retype(
-            self.data.test_ctxt, self.data.test_volume_v3, self.data.new_type,
-            self.data.diff, self.data.test_host_v3))
+            self.data.test_ctxt, self.data.test_volume_v4, self.data.new_type,
+            self.data.diff, self.data.test_host_1_v3))
 
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
     # There is only one unique array in the conf file
     def test_create_CG_multi_slo_success(
-            self, _mock_volume_type, _mock_storage_system):
-        self.driver.common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
+            self, _mock_storage_system, mock_is):
         self.driver.create_consistencygroup(
             self.data.test_ctxt, self.data.test_CG)
 
     @mock.patch.object(
-        FakeDB,
-        'volume_get_all_by_group',
-        return_value=None)
-    @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
-    def test_delete_CG_no_volumes_multi_slo_success(
-            self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes):
-        self.driver.delete_consistencygroup(
-            self.data.test_ctxt, self.data.test_CG, [])
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_SLO_BE'})
-    def test_delete_CG_with_volumes_multi_slo_success(
-            self, _mock_volume_type, _mock_storage_system):
-        self.driver.delete_consistencygroup(
-            self.data.test_ctxt, self.data.test_CG, [])
-
-    def _cleanup(self):
-        bExists = os.path.exists(self.config_file_path)
-        if bExists:
-            os.remove(self.config_file_path)
-        shutil.rmtree(self.tempdir)
-
-
-class EMCV2MultiPoolDriverMultipleEcomsTestCase(test.TestCase):
-
-    def setUp(self):
-
-        self.data = EMCVMAXCommonData()
-        self.vol_v2 = self.data.test_volume_v2
-        self.vol_v2['provider_location'] = (
-            six.text_type(self.data.provider_location_multi_pool))
-
-        self.tempdir = tempfile.mkdtemp()
-        super(EMCV2MultiPoolDriverMultipleEcomsTestCase, self).setUp()
-        self.config_file_path = None
-        self.create_fake_config_file_multi_ecom()
-        self.addCleanup(self._cleanup)
-
-        configuration = mock.Mock()
-        configuration.cinder_emc_config_file = self.config_file_path
-        configuration.safe_get.return_value = 'MULTI_ECOM'
-        configuration.config_group = 'MULTI_ECOM'
-
-        self.mock_object(emc_vmax_common.EMCVMAXCommon, '_get_ecom_connection',
-                         self.fake_ecom_connection)
-        instancename = FakeCIMInstanceName()
-        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
-                         instancename.fake_getinstancename)
-        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
-                         self.fake_is_v3)
-        driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=configuration)
-        driver.db = FakeDB()
-        driver.common.conn = FakeEcomConnection()
-        driver.zonemanager_lookup_service = FakeLookupService()
-        self.driver = driver
-        self.driver.utils = emc_vmax_utils.EMCVMAXUtils(object)
-
-    def create_fake_config_file_multi_ecom(self):
-        doc = minidom.Document()
-        emc = doc.createElement("EMC")
-        doc.appendChild(emc)
-
-        eComServers = doc.createElement("EcomServers")
-        emc.appendChild(eComServers)
-
-        eComServer = doc.createElement("EcomServer")
-        eComServers.appendChild(eComServer)
-
-        ecomserverip = doc.createElement("EcomServerIp")
-        eComServer.appendChild(ecomserverip)
-        ecomserveriptext = doc.createTextNode("1.1.1.1")
-        ecomserverip.appendChild(ecomserveriptext)
-
-        ecomserverport = doc.createElement("EcomServerPort")
-        eComServer.appendChild(ecomserverport)
-        ecomserverporttext = doc.createTextNode("10")
-        ecomserverport.appendChild(ecomserverporttext)
-
-        ecomusername = doc.createElement("EcomUserName")
-        eComServer.appendChild(ecomusername)
-        ecomusernametext = doc.createTextNode("user")
-        ecomusername.appendChild(ecomusernametext)
-
-        ecompassword = doc.createElement("EcomPassword")
-        eComServer.appendChild(ecompassword)
-        ecompasswordtext = doc.createTextNode("pass")
-        ecompassword.appendChild(ecompasswordtext)
-
-        arrays = doc.createElement("Arrays")
-        eComServer.appendChild(arrays)
-
-        array = doc.createElement("Array")
-        arrays.appendChild(array)
-
-        serialNo = doc.createElement("SerialNumber")
-        array.appendChild(serialNo)
-        serialNoText = doc.createTextNode("1110987654321")
-        serialNo.appendChild(serialNoText)
-
-        portgroups = doc.createElement("PortGroups")
-        array.appendChild(portgroups)
-
-        portgroup = doc.createElement("PortGroup")
-        portgroups.appendChild(portgroup)
-        portgrouptext = doc.createTextNode(self.data.port_group)
-        portgroup.appendChild(portgrouptext)
-
-        pools = doc.createElement("Pools")
-        array.appendChild(pools)
-
-        pool = doc.createElement("Pool")
-        pools.appendChild(pool)
-        poolName = doc.createElement("PoolName")
-        pool.appendChild(poolName)
-        poolNameText = doc.createTextNode("gold")
-        poolName.appendChild(poolNameText)
-
-        pool2 = doc.createElement("Pool")
-        pools.appendChild(pool2)
-        pool2Name = doc.createElement("PoolName")
-        pool2.appendChild(pool2Name)
-        pool2NameText = doc.createTextNode("SATA_BRONZE1")
-        pool2Name.appendChild(pool2NameText)
-        pool2FastPolicy = doc.createElement("FastPolicy")
-        pool2.appendChild(pool2FastPolicy)
-        pool2FastPolicyText = doc.createTextNode("BRONZE1")
-        pool2FastPolicy.appendChild(pool2FastPolicyText)
-
-        eComServer = doc.createElement("EcomServer")
-        eComServers.appendChild(eComServer)
-
-        ecomserverip = doc.createElement("EcomServerIp")
-        eComServer.appendChild(ecomserverip)
-        ecomserveriptext = doc.createTextNode("1.1.1.1")
-        ecomserverip.appendChild(ecomserveriptext)
-
-        ecomserverport = doc.createElement("EcomServerPort")
-        eComServer.appendChild(ecomserverport)
-        ecomserverporttext = doc.createTextNode("10")
-        ecomserverport.appendChild(ecomserverporttext)
-
-        ecomusername = doc.createElement("EcomUserName")
-        eComServer.appendChild(ecomusername)
-        ecomusernametext = doc.createTextNode("user")
-        ecomusername.appendChild(ecomusernametext)
-
-        ecompassword = doc.createElement("EcomPassword")
-        eComServer.appendChild(ecompassword)
-        ecompasswordtext = doc.createTextNode("pass")
-        ecompassword.appendChild(ecompasswordtext)
-
-        arrays = doc.createElement("Arrays")
-        eComServer.appendChild(arrays)
-
-        array = doc.createElement("Array")
-        arrays.appendChild(array)
-
-        serialNo = doc.createElement("SerialNumber")
-        array.appendChild(serialNo)
-        serialNoText = doc.createTextNode("1234567891011")
-        serialNo.appendChild(serialNoText)
-
-        portgroups = doc.createElement("PortGroups")
-        array.appendChild(portgroups)
-
-        portgroup = doc.createElement("PortGroup")
-        portgroups.appendChild(portgroup)
-        portgrouptext = doc.createTextNode(self.data.port_group)
-        portgroup.appendChild(portgrouptext)
-
-        pools = doc.createElement("Pools")
-        array.appendChild(pools)
-
-        pool = doc.createElement("Pool")
-        pools.appendChild(pool)
-        poolName = doc.createElement("PoolName")
-        pool.appendChild(poolName)
-        poolNameText = doc.createTextNode("gold")
-        poolName.appendChild(poolNameText)
-
-        pool2 = doc.createElement("Pool")
-        pools.appendChild(pool2)
-        pool2Name = doc.createElement("PoolName")
-        pool2.appendChild(pool2Name)
-        pool2NameText = doc.createTextNode("SATA_BRONZE1")
-        pool2Name.appendChild(pool2NameText)
-        pool2FastPolicy = doc.createElement("FastPolicy")
-        pool2.appendChild(pool2FastPolicy)
-        pool2FastPolicyText = doc.createTextNode("BRONZE1")
-        pool2FastPolicy.appendChild(pool2FastPolicyText)
-
-        filename = 'cinder_emc_config_V2_MULTI_ECOM.xml'
-        self.config_file_path = self.tempdir + '/' + filename
-
-        f = open(self.config_file_path, 'w')
-        doc.writexml(f)
-        f.close()
-
-    def fake_ecom_connection(self):
-        self.conn = FakeEcomConnection()
-        return self.conn
-
-    def fake_is_v3(self, conn, serialNumber):
-        return False
-
-    def test_array_info_multi_ecom_no_fast(self):
-        pool = 'gold+1234567891011'
-        arrayInfo = self.driver.utils.parse_file_to_get_array_map(
-            self.config_file_path)
-        self.assertEqual(4, len(arrayInfo))
-        poolRec = self.driver.utils.extract_record(arrayInfo, pool)
-
-        self.assertEqual('1234567891011', poolRec['SerialNumber'])
-        self.assertEqual(self.data.port_group, poolRec['PortGroup'])
-        self.assertEqual(self.data.poolname, poolRec['PoolName'])
-        self.assertEqual('user', poolRec['EcomUserName'])
-        self.assertEqual('pass', poolRec['EcomPassword'])
-        self.assertIsNone(poolRec['FastPolicy'])
-        self.assertFalse(poolRec['EcomUseSSL'])
-
-    def test_array_info_multi_ecom_fast(self):
-        pool = 'SATA_BRONZE1+1234567891011'
-
-        arrayInfo = self.driver.utils.parse_file_to_get_array_map(
-            self.config_file_path)
-        self.assertEqual(4, len(arrayInfo))
-        poolRec = self.driver.utils.extract_record(arrayInfo, pool)
-
-        self.assertEqual('1234567891011', poolRec['SerialNumber'])
-        self.assertEqual(self.data.port_group, poolRec['PortGroup'])
-        self.assertEqual('SATA_BRONZE1', poolRec['PoolName'])
-        self.assertEqual('user', poolRec['EcomUserName'])
-        self.assertEqual('pass', poolRec['EcomPassword'])
-        self.assertEqual('BRONZE1', poolRec['FastPolicy'])
-        self.assertFalse(poolRec['EcomUseSSL'])
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_ECOM_BE'})
-    def test_create_volume_multi_ecom_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.vol_v2['provider_location'] = None
-        self.driver.create_volume(self.vol_v2)
-
-    @mock.patch.object(
-        emc_vmax_common.EMCVMAXCommon,
-        '_get_pool_and_storage_system',
-        return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_ECOM_BE'})
-    # If there are more than one unique arrays in conf file
-    def test_create_CG_multi_array_failure(
-            self, _mock_volume_type, _mock_storage_system):
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.driver.create_consistencygroup,
-                          self.data.test_ctxt,
-                          self.data.test_CG)
-
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_members_of_replication_group',
@@ -7575,38 +7323,176 @@ class EMCV2MultiPoolDriverMultipleEcomsTestCase(test.TestCase):
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_ECOM_BE'})
-    # There is more than one unique arrays in the conf file
-    def test_delete_CG_no_volumes_multi_array_failure(
-            self, _mock_volume_type, _mock_storage_system,
-            _mock_db_volumes, _mock_members):
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.driver.delete_consistencygroup,
-                          self.data.test_ctxt,
-                          self.data.test_CG,
-                          [])
+    def test_delete_CG_no_volumes_multi_slo_success(
+            self, _mock_storage_system,
+            _mock_db_volumes, _mock_members, mock_is):
+        # This is a CG delete with no volumes
+        # there won't be a deleted status
+        model_update = {}
+        ret_model_update, ret_volumes_model_update = (
+            self.driver.delete_consistencygroup(self.data.test_ctxt,
+                                                self.data.test_CG, []))
+        self.assertEqual(model_update, ret_model_update)
 
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
         '_get_pool_and_storage_system',
         return_value=(None, EMCVMAXCommonData.storage_system))
-    @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'MULTI_ECOM_BE'})
-    def test_create_volume_in_CG_multi_ecom_success(
-            self, _mock_volume_type, mock_storage_system):
-        self.data.test_volume_CG['provider_location'] = None
-        self.driver.create_volume(self.data.test_volume_CG)
+    def test_delete_CG_with_volumes_multi_slo_success(
+            self, _mock_storage_system, mock_is):
+        # Check for the status deleted after a successful delete CG
+        model_update = {'status': 'deleted'}
+        ret_model_update, ret_volumes_model_update = (
+            self.driver.delete_consistencygroup(self.data.test_ctxt,
+                                                self.data.test_CG, []))
+        self.assertEqual(model_update, ret_model_update)
 
-    def _cleanup(self):
-        bExists = os.path.exists(self.config_file_path)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
+    def test_migrate_volume_v3_success(self, mock_is):
+        retVal, retList = self.driver.migrate_volume(
+            self.data.test_ctxt, self.data.test_volume_v4,
+            self.data.test_host_1_v3)
+        self.assertTrue(retVal)
+
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'get_volume_element_name',
+        return_value='1')
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'get_v3_default_sg_instance_name',
+        return_value=(None, None, EMCVMAXCommonData.default_sg_instance_name))
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'is_clone_licensed',
+        return_value=True)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_create_snapshot_v3_success(
+            self, mock_pool, mock_is, mock_license, mock_sg, mock_element):
+        self.data.test_volume_v4['volume_name'] = "vmax-1234567"
+        self.driver.create_snapshot(self.data.test_snapshot_1_v3)
+        utils = self.driver.common.provisionv3.utils
+        utils.get_v3_default_sg_instance_name.assert_called_once_with(
+            self.conn, u'SRP_1', u'Bronze', u'DSS', u'SYMMETRIX+000195900551',
+            False)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.multi_pool_extra_specs)
+    def test_delete_snapshot_v3_success(self, mock_is):
+        masking = self.driver.common.masking
+        with mock.patch.object(
+                masking, 'get_associated_masking_groups_from_device',
+                return_value=self.data.storagegroups):
+            self.driver.delete_snapshot(self.data.test_snapshot_1_v3)
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        'get_srp_pool_stats',
+        return_value=(100, 10, 1, 20, False))
+    def test_update_volume_stats_single_array_info(self, mock_stats):
+        self.driver.common.pool_info['reserved_percentage'] = 5
+        self.driver.common.pool_info['arrays_info'] = (
+            self.default_array_info_list())
+        self.driver.common.multiPoolSupportEnabled = True
+        data = self.driver.common.update_volume_stats()
+        pools = data['pools']
+        self.assertEqual("Bronze+DSS+SRP_1+1234567891011",
+                         pools[0]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Bronze#DSS",
+                         pools[0]['location_info'])
+        self._cleanup_pool_info()
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        'get_srp_pool_stats',
+        return_value=(100, 10, 1, 20, False))
+    def test_update_volume_stats_multiple_array_info_wlp_disabled(
+            self, mock_stats):
+        self.driver.common.pool_info['reserved_percentage'] = 5
+        self.driver.common.pool_info['arrays_info'] = (
+            self.multiple_array_info_list())
+        self.driver.common.multiPoolSupportEnabled = True
+        data = self.driver.common.update_volume_stats()
+        pools = data['pools']
+        self.assertEqual("Bronze+DSS+SRP_1+1234567891011",
+                         pools[0]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Bronze#DSS",
+                         pools[0]['location_info'])
+        self.assertEqual("Silver+OLTP+SRP_1+1234567891011",
+                         pools[1]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Silver#OLTP",
+                         pools[1]['location_info'])
+        self._cleanup_pool_info()
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        'get_srp_pool_stats',
+        return_value=(100, 10, 1, 20, False))
+    def test_update_volume_stats_multiple_array_info_wlp_enabled(
+            self, mock_stats):
+        self.driver.common.pool_info['reserved_percentage'] = 5
+        self.driver.common.pool_info['arrays_info'] = (
+            self.multiple_array_info_list())
+        self.driver.common.multiPoolSupportEnabled = True
+        data = self.driver.common.update_volume_stats()
+        pools = data['pools']
+        self.assertEqual("Bronze+DSS+SRP_1+1234567891011",
+                         pools[0]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Bronze#DSS",
+                         pools[0]['location_info'])
+        self.assertEqual("Silver+OLTP+SRP_1+1234567891011",
+                         pools[1]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Silver#OLTP",
+                         pools[1]['location_info'])
+        self._cleanup_pool_info()
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        'get_srp_pool_stats',
+        return_value=(100, 10, 1, 20, False))
+    def test_update_volume_stats_without_multi_pool(self, mock_stats):
+        self.driver.common.pool_info['reserved_percentage'] = 5
+        self.driver.common.pool_info['arrays_info'] = (
+            self.multiple_array_info_list())
+        data = self.driver.common.update_volume_stats()
+        pools = data['pools']
+        # Match with the older pool_name format
+        self.assertEqual("Bronze+SRP_1+1234567891011",
+                         pools[0]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Bronze#DSS",
+                         pools[0]['location_info'])
+        self.assertEqual("Silver+SRP_1+1234567891011",
+                         pools[1]['pool_name'])
+        self.assertEqual("1234567891011#SRP_1#Silver#OLTP",
+                         pools[1]['location_info'])
+        self._cleanup_pool_info()
+
+    def _cleanup(self, tempdir, config_file_path):
+        bExists = os.path.exists(config_file_path)
         if bExists:
-            os.remove(self.config_file_path)
-        shutil.rmtree(self.tempdir)
+            os.remove(config_file_path)
+        shutil.rmtree(tempdir)
+
+    def _cleanup_pool_info(self):
+        self.driver.common.pool_info['reserved_percentage'] = 0
+        self.driver.common.pool_info['arrays_info'] = []
+        self.driver.common.multiPoolSupportEnabled = False
 
 
 class EMCVMAXProvisionV3Test(test.TestCase):
@@ -7749,7 +7635,7 @@ class EMCVMAXProvisionV3Test(test.TestCase):
             return_value=self.data.default_sg_instance_name)
         newstoragegroup = provisionv3.create_storage_group_v3(
             conn, controllerConfigService, groupName, srp, slo, workload,
-            extraSpecs)
+            extraSpecs, False)
         self.assertEqual(self.data.default_sg_instance_name, newstoragegroup)
 
     def test_create_element_replica(self):
@@ -8184,6 +8070,71 @@ class EMCVMAXMaskingTest(test.TestCase):
                     extraSpecs)
                 self.assertFalse(verify)
 
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_check_adding_volume_to_storage_group",
+        return_value=None)
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_validate_masking_view",
+        return_value=("mv_instance", "sg_instance", None))
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        "_get_and_remove_from_storage_group_v3")
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        '_check_if_rollback_action_for_masking_required')
+    def test_get_or_create_masking_view_and_map_lun(self, check_rb, rm_sg,
+                                                    validate_mv, check_sg):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        masking = common.masking
+        connector = self.data.connector
+        extraSpecs = self.data.extra_specs
+        controllerConfigService = (
+            self.driver.utils.find_controller_configuration_service(
+                common.conn, self.data.storage_system))
+        defaultStorageGroupInstanceName = (
+            {'CreationClassName': 'CIM_DeviceMaskingGroup',
+             'ElementName': 'OS-SRP_1-Bronze-DSS-SG'})
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+        with mock.patch.object(common, '_find_lun',
+                               return_value=volumeInstance):
+            maskingViewDict = common._populate_masking_dict(
+                self.data.test_volume_v3, connector, extraSpecs)
+        maskingViewDict['isLiveMigration'] = False
+        rollbackDict = {}
+        rollbackDict['controllerConfigService'] = controllerConfigService
+        rollbackDict['defaultStorageGroupInstanceName'] = (
+            defaultStorageGroupInstanceName)
+        rollbackDict['volumeInstance'] = volumeInstance
+        rollbackDict['volumeName'] = self.data.test_volume_v3['name']
+        rollbackDict['fastPolicyName'] = None
+        rollbackDict['isV3'] = True
+        rollbackDict['extraSpecs'] = extraSpecs
+        rollbackDict['sgGroupName'] = 'OS-fakehost-SRP_1-Bronze-DSS-I-SG'
+        rollbackDict['igGroupName'] = self.data.initiatorgroup_name
+        rollbackDict['pgGroupName'] = self.data.port_group
+        rollbackDict['connector'] = self.data.connector
+        # path 1: masking view creation or retrieval is successful
+        with mock.patch.object(masking, "_get_port_group_name_from_mv",
+                               return_value=(self.data.port_group, None)):
+            deviceDict = masking.get_or_create_masking_view_and_map_lun(
+                common.conn, maskingViewDict, extraSpecs)
+            (masking._check_if_rollback_action_for_masking_required.
+             assert_not_called())
+            self.assertEqual(rollbackDict, deviceDict)
+        # path 2: masking view creation or retrieval is unsuccessful
+        with mock.patch.object(masking, "_get_port_group_name_from_mv",
+                               return_value=(None, "error_message")):
+            rollbackDict['storageSystemName'] = self.data.storage_system
+            rollbackDict['slo'] = u'Bronze'
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              masking.get_or_create_masking_view_and_map_lun,
+                              common.conn, maskingViewDict, extraSpecs)
+
 
 class EMCVMAXFCTest(test.TestCase):
     def setUp(self):
@@ -8195,6 +8146,8 @@ class EMCVMAXFCTest(test.TestCase):
         configuration.safe_get.return_value = 'FCTests'
         configuration.config_group = 'FCTests'
         emc_vmax_common.EMCVMAXCommon._gather_info = mock.Mock()
+        emc_vmax_common.EMCVMAXCommon._get_ecom_connection = mock.Mock(
+            return_value=FakeEcomConnection())
         driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
@@ -8335,6 +8288,41 @@ class EMCVMAXFCTest(test.TestCase):
         mvInstances = self.driver._get_common_masking_views(
             portGroupInstanceName, initiatorGroupInstanceName)
         self.assertEqual(0, len(mvInstances))
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'initialize_connection',
+        return_value=EMCVMAXCommonData.fc_device_info)
+    @mock.patch.object(
+        emc_vmax_fc.EMCVMAXFCDriver,
+        '_build_initiator_target_map',
+        return_value=(EMCVMAXCommonData.target_wwns,
+                      EMCVMAXCommonData.end_point_map))
+    def test_initialize_connection_snapshot(self, mock_map, mock_conn):
+        data = self.driver.initialize_connection_snapshot(
+            self.data.test_snapshot_v3, self.data.connector)
+        self.assertEqual('fibre_channel', data['driver_volume_type'])
+        self.assertEqual(3, data['data']['target_lun'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_unmap_lun')
+    @mock.patch.object(
+        emc_vmax_fc.EMCVMAXFCDriver,
+        '_get_zoning_mappings',
+        return_value=(EMCVMAXCommonData.zoning_mappings))
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'check_ig_instance_name',
+        return_value=None)
+    def test_terminate_connection_snapshot(
+            self, mock_check_ig, mock_zoning_map, mock_unmap):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        data = self.driver.terminate_connection_snapshot(
+            self.data.test_snapshot_v3, self.data.connector)
+        self.assertEqual('fibre_channel', data['driver_volume_type'])
+        self.assertEqual(2, len(data['data']['target_wwn']))
 
 
 @ddt.ddt
@@ -8631,6 +8619,36 @@ class EMCVMAXUtilsTest(test.TestCase):
                 conn, initiatorgroup)
             self.assertIsNone(foundIg)
 
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        '_is_sync_complete',
+        return_value=False)
+    def test_is_sync_complete(self, mock_sync):
+        conn = FakeEcomConnection()
+        syncname = SE_ConcreteJob()
+        syncname.classname = 'SE_StorageSynchronized_SV_SV'
+        syncname['CopyState'] = self.data.UNSYNCHRONIZED
+        issynched = self.driver.common.utils._is_sync_complete(conn, syncname)
+        self.assertFalse(issynched)
+
+    def test_get_v3_storage_group_name_compression_disabled(self):
+        poolName = 'SRP_1'
+        slo = 'Diamond'
+        workload = 'DSS'
+        isCompressionDisabled = True
+        storageGroupName = self.driver.utils.get_v3_storage_group_name(
+            poolName, slo, workload, isCompressionDisabled)
+        self.assertEqual("OS-SRP_1-Diamond-DSS-CD-SG", storageGroupName)
+
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'get_smi_version',
+        return_value=831)
+    def test_is_all_flash(self, mock_version):
+        conn = FakeEcomConnection()
+        array = '000197200056'
+        self.assertTrue(self.driver.utils.is_all_flash(conn, array))
+
 
 class EMCVMAXCommonTest(test.TestCase):
     def setUp(self):
@@ -8645,6 +8663,9 @@ class EMCVMAXCommonTest(test.TestCase):
         instancename = FakeCIMInstanceName()
         self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
                          instancename.fake_getinstancename)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils,
+                         'find_controller_configuration_service',
+                         return_value=None)
         driver = emc_vmax_iscsi.EMCVMAXISCSIDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
@@ -8741,7 +8762,7 @@ class EMCVMAXCommonTest(test.TestCase):
         repServiceInstanceName = (
             self.driver.utils.find_replication_service(
                 common.conn, self.data.storage_system))
-        common.utils.find_sync_sv_by_target = mock.Mock(
+        common.utils.find_sync_sv_by_volume = mock.Mock(
             return_value=(None, None))
 
         self.driver.common._cleanup_target(
@@ -8780,7 +8801,8 @@ class EMCVMAXCommonTest(test.TestCase):
                       'workload': 'DSS',
                       'slo': 'Bronze'}
         self.driver.common._extend_volume(
-            volumeInstance, volumeName, new_size_gb, old_size_gbs, extraSpecs)
+            self.data.test_volume, volumeInstance, volumeName,
+            new_size_gb, old_size_gbs, extraSpecs)
 
     @mock.patch.object(
         emc_vmax_common.EMCVMAXCommon,
@@ -8827,6 +8849,332 @@ class EMCVMAXCommonTest(test.TestCase):
         deleted_vol = self.data.deleted_volume
         foundVolumeInstance = common._find_lun(deleted_vol)
         self.assertIsNone(foundVolumeInstance)
+
+    def populate_masking_dict_setup(self):
+        extraSpecs = {'storagetype:pool': u'gold_pool',
+                      'volume_backend_name': 'GOLD_POOL_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': False,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:fastpolicy': u'GOLD'}
+        return extraSpecs
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_fast(self, mock_find_lun):
+        extraSpecs = self.populate_masking_dict_setup()
+        # If fast is enabled it will uniquely determine the SG and MV
+        # on the host along with the protocol(iSCSI) e.g. I
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, self.data.connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-GOLD-FP-I-SG', maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-GOLD-FP-I-MV', maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_fast_more_than_14chars(self, mock_find_lun):
+        # If the length of the FAST policy name is greater than 14 chars
+        extraSpecs = self.populate_masking_dict_setup()
+        extraSpecs['storagetype:fastpolicy'] = 'GOLD_MORE_THAN_FOURTEEN_CHARS'
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, self.data.connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-GOLD_MO__CHARS-FP-I-SG',
+            maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-GOLD_MO__CHARS-FP-I-MV',
+            maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_no_fast(self, mock_find_lun):
+        # If fast isn't enabled the pool will uniquely determine the SG and MV
+        # on the host along with the protocol(iSCSI) e.g. I
+        extraSpecs = self.populate_masking_dict_setup()
+        extraSpecs['storagetype:fastpolicy'] = None
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, self.data.connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-gold_pool-I-SG', maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-gold_pool-I-MV', maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_fast_both_exceeding(self, mock_find_lun):
+        # If the length of the FAST policy name is greater than 14 chars and
+        # the length of the short host is more than 38 characters
+        extraSpecs = self.populate_masking_dict_setup()
+        connector = {'host': 'SHORT_HOST_MORE_THEN THIRTY_EIGHT_CHARACTERS'}
+        extraSpecs['storagetype:fastpolicy'] = (
+            'GOLD_MORE_THAN_FOURTEEN_CHARACTERS')
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, connector, extraSpecs)
+        self.assertLessEqual(len(maskingViewDict['sgGroupName']), 64)
+        self.assertLessEqual(len(maskingViewDict['maskingViewName']), 64)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_no_fast_both_exceeding(self, mock_find_lun):
+        # If the length of the FAST policy name is greater than 14 chars and
+        # the length of the short host is more than 38 characters
+        extraSpecs = self.populate_masking_dict_setup()
+        connector = {'host': 'SHORT_HOST_MORE_THEN THIRTY_EIGHT_CHARACTERS'}
+        extraSpecs['storagetype:pool'] = (
+            'GOLD_POOL_MORE_THAN_SIXTEEN_CHARACTERS')
+        extraSpecs['storagetype:fastpolicy'] = None
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, connector, extraSpecs)
+        self.assertLessEqual(len(maskingViewDict['sgGroupName']), 64)
+        self.assertLessEqual(len(maskingViewDict['maskingViewName']), 64)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_no_slo(self, mock_find_lun):
+        extraSpecs = {'storagetype:pool': 'SRP_1',
+                      'volume_backend_name': 'V3_BE',
+                      'storagetype:workload': None,
+                      'storagetype:slo': None,
+                      'storagetype:array': '1234567891011',
+                      'isV3': True,
+                      'portgroupname': 'OS-portgroup-PG'}
+        self.populate_masking_dict_setup()
+        # If fast is enabled it will uniquely determine the SG and MV
+        # on the host along with the protocol(iSCSI) e.g. I
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, self.data.connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-No_SLO-I-SG', maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-No_SLO-I-MV', maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_slo_NONE(self, mock_find_lun):
+        extraSpecs = {'storagetype:pool': 'SRP_1',
+                      'volume_backend_name': 'V3_BE',
+                      'storagetype:workload': 'NONE',
+                      'storagetype:slo': 'NONE',
+                      'storagetype:array': '1234567891011',
+                      'isV3': True,
+                      'portgroupname': 'OS-portgroup-PG'}
+        self.populate_masking_dict_setup()
+        # If fast is enabled it will uniquely determine the SG and MV
+        # on the host along with the protocol(iSCSI) e.g. I
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, self.data.connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-SRP_1-NONE-NONE-I-SG', maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-SRP_1-NONE-NONE-I-MV',
+            maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_v3(self, mock_find_lun):
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'VMAX_ISCSI_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': u'Diamond',
+                      'storagetype:workload': u'DSS'}
+        connector = {'host': 'fakehost'}
+        self.populate_masking_dict_setup()
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, connector, extraSpecs)
+        self.assertEqual('OS-fakehost-SRP_1-Diamond-DSS-I-SG',
+                         maskingViewDict['sgGroupName'])
+        self.assertEqual('OS-fakehost-SRP_1-Diamond-DSS-I-MV',
+                         maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_v3_compression(self, mock_find_lun):
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'COMPRESSION_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': u'Diamond',
+                      'storagetype:workload': u'DSS',
+                      'storagetype:disablecompression': 'True'}
+        connector = self.data.connector
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-SRP_1-Diamond-DSS-I-CD-SG',
+            maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-SRP_1-Diamond-DSS-I-CD-MV',
+            maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_find_lun',
+        return_value=(
+            {'SystemName': EMCVMAXCommonData.storage_system}))
+    def test_populate_masking_dict_v3_compression_no_slo(self, mock_find_lun):
+        # Compression is no applicable when there is no slo
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'COMPRESSION_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': None,
+                      'storagetype:workload': None,
+                      'storagetype:disablecompression': 'True'}
+        connector = self.data.connector
+        maskingViewDict = self.driver.common._populate_masking_dict(
+            self.data.test_volume, connector, extraSpecs)
+        self.assertEqual(
+            'OS-fakehost-No_SLO-I-SG', maskingViewDict['sgGroupName'])
+        self.assertEqual(
+            'OS-fakehost-No_SLO-I-MV', maskingViewDict['maskingViewName'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_migrate_volume_v3',
+        return_value=True)
+    def test_slo_workload_migration_compression_enabled(self, mock_migrate):
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'COMPRESSION_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': u'Diamond',
+                      'storagetype:workload': u'DSS',
+                      'storagetype:disablecompression': 'True'}
+        new_type_extra_specs = extraSpecs.copy()
+        new_type_extra_specs.pop('storagetype:disablecompression', None)
+        new_type = {'extra_specs': new_type_extra_specs}
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        volumeName = 'retype_compression'
+
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+
+        self.assertTrue(self.driver.common._slo_workload_migration(
+            volumeInstance, self.data.test_source_volume_1_v3,
+            self.data.test_host_1_v3, volumeName, 'retyping', new_type,
+            extraSpecs))
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_migrate_volume_v3',
+        return_value=True)
+    def test_slo_workload_migration_compression_disabled(self, mock_migrate):
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'COMPRESSION_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': u'Diamond',
+                      'storagetype:workload': u'DSS'}
+        new_type_extra_specs = extraSpecs.copy()
+        new_type_extra_specs['storagetype:disablecompression'] = 'True'
+        new_type = {'extra_specs': new_type_extra_specs}
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        volumeName = 'retype_compression'
+
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+
+        self.assertTrue(self.driver.common._slo_workload_migration(
+            volumeInstance, self.data.test_source_volume_1_v3,
+            self.data.test_host_1_v3, volumeName, 'retyping', new_type,
+            extraSpecs))
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_migrate_volume_v3',
+        return_value=True)
+    def test_slo_workload_migration_compression_false(self, mock_migrate):
+        # Cannot retype because both volume types have the same slo/workload
+        # and both are false for disable compression, one by omission
+        extraSpecs = {'storagetype:pool': u'SRP_1',
+                      'volume_backend_name': 'COMPRESSION_BE',
+                      'storagetype:array': u'1234567891011',
+                      'isV3': True,
+                      'portgroupname': u'OS-portgroup-PG',
+                      'storagetype:slo': u'Diamond',
+                      'storagetype:workload': u'DSS'}
+        new_type_extra_specs = extraSpecs.copy()
+        new_type_extra_specs['storagetype:disablecompression'] = 'false'
+        new_type = {'extra_specs': new_type_extra_specs}
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        volumeName = 'retype_compression'
+
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+
+        self.assertFalse(self.driver.common._slo_workload_migration(
+            volumeInstance, self.data.test_source_volume_1_v3,
+            self.data.test_host_1_v3, volumeName, 'retyping', new_type,
+            extraSpecs))
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_initial_setup',
+        return_value=EMCVMAXCommonData.extra_specs)
+    def test_failover_not_replicated(self, mock_setup):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        volumes = [self.data.test_volume]
+        # Path 1: Failover non replicated volume
+        verify_update_fo = [{'volume_id': volumes[0]['id'],
+                             'updates': {'status': 'error'}}]
+        secondary_id, volume_update = (
+            common.failover_host('context', volumes, None))
+        self.assertEqual(verify_update_fo, volume_update)
+        # Path 2: Failback non replicated volume
+        # Path 2a: Volume still available on primary
+        verify_update_fb1 = [{'volume_id': volumes[0]['id'],
+                              'updates': {'status': 'available'}}]
+        secondary_id, volume_update_1 = (
+            common.failover_host('context', volumes, 'default'))
+        self.assertEqual(verify_update_fb1, volume_update_1)
+        # Path 2a: Volume not still available on primary
+        with mock.patch.object(common, '_find_lun',
+                               return_value=None):
+            secondary_id, volume_update_2 = (
+                common.failover_host('context', volumes, 'default'))
+            self.assertEqual(verify_update_fo, volume_update_2)
 
 
 class EMCVMAXProvisionTest(test.TestCase):
@@ -8901,6 +9249,17 @@ class EMCVMAXProvisionTest(test.TestCase):
             conn, controllerConfigService, storageGroupInstanceName,
             volumeInstanceName, volumeName, extraSpecs)
 
+    def test_find_consistency_group(self):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        repserv = common.conn.EnumerateInstanceNames(
+            "EMC_ReplicationService")[0]
+        cgInstanceName, cgName = common._find_consistency_group(
+            repserv, EMCVMAXCommonData.test_CG['id'])
+        self.assertEqual(EMCVMAXCommonData.replicationgroup_creationclass,
+                         cgInstanceName['CreationClassName'])
+        self.assertEqual(EMCVMAXCommonData.test_CG['id'], cgName)
+
 
 class EMCVMAXISCSITest(test.TestCase):
     def setUp(self):
@@ -8912,6 +9271,9 @@ class EMCVMAXISCSITest(test.TestCase):
         configuration.safe_get.return_value = 'iSCSITests'
         configuration.config_group = 'iSCSITests'
         emc_vmax_common.EMCVMAXCommon._gather_info = mock.Mock()
+        instancename = FakeCIMInstanceName()
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
+                         instancename.fake_getinstancename)
         driver = emc_vmax_iscsi.EMCVMAXISCSIDriver(configuration=configuration)
         driver.db = FakeDB()
         self.driver = driver
@@ -8933,3 +9295,585 @@ class EMCVMAXISCSITest(test.TestCase):
                          properties['target_iqns'])
         self.assertEqual(['10.10.0.50:3260', '10.10.0.51:3260'],
                          properties['target_portals'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'find_device_number',
+        return_value={'hostlunid': 1,
+                      'storagesystem': EMCVMAXCommonData.storage_system})
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'initialize_connection',
+        return_value=EMCVMAXCommonData.iscsi_device_info)
+    def test_initialize_connection_snapshot(self, mock_conn, mock_num):
+        data = self.driver.initialize_connection_snapshot(
+            self.data.test_snapshot_v3, self.data.connector)
+        self.assertEqual('iscsi', data['driver_volume_type'])
+        self.assertEqual(1, data['data']['target_lun'])
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_unmap_lun')
+    def test_terminate_connection_snapshot(self, mock_unmap):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        self.driver.terminate_connection_snapshot(
+            self.data.test_snapshot_v3, self.data.connector)
+        common._unmap_lun.assert_called_once_with(
+            self.data.test_snapshot_v3, self.data.connector)
+
+
+class EMCV3ReplicationTest(test.TestCase):
+
+    def setUp(self):
+        self.data = EMCVMAXCommonData()
+
+        self.flags(rpc_backend='oslo_messaging._drivers.impl_fake')
+
+        self.tempdir = tempfile.mkdtemp()
+        super(EMCV3ReplicationTest, self).setUp()
+        self.config_file_path = None
+        self.create_fake_config_file_v3()
+        self.addCleanup(self._cleanup)
+        self.set_configuration()
+
+    def set_configuration(self):
+        self.replication_device = [
+            {'target_device_id': u'000195900551',
+             'remote_port_group': self.data.port_group,
+             'remote_pool': 'SRP_1',
+             'rdf_group_label': self.data.rdf_group,
+             'allow_extend': 'True'}]
+        self.configuration = mock.Mock(
+            replication_device=self.replication_device,
+            cinder_emc_config_file=self.config_file_path,
+            config_group='V3')
+
+        def safe_get(key):
+            return getattr(self.configuration, key)
+        self.configuration.safe_get = safe_get
+
+        self.mock_object(emc_vmax_common.EMCVMAXCommon, '_get_ecom_connection',
+                         self.fake_ecom_connection)
+        instancename = FakeCIMInstanceName()
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'get_instance_name',
+                         instancename.fake_getinstancename)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils, 'isArrayV3',
+                         self.fake_is_v3)
+        self.mock_object(volume_types, 'get_volume_type_extra_specs',
+                         self.fake_volume_type_extra_specs)
+        self.mock_object(emc_vmax_common.EMCVMAXCommon,
+                         '_get_multi_pool_support_enabled_flag',
+                         self.fake_get_multi_pool)
+        self.mock_object(emc_vmax_utils.EMCVMAXUtils,
+                         'get_existing_instance',
+                         self.fake_get_existing_instance)
+        self.mock_object(cinder_utils, 'get_bool_param',
+                         return_value=False)
+        self.patcher = mock.patch(
+            'oslo_service.loopingcall.FixedIntervalLoopingCall',
+            new=utils.ZeroIntervalLoopingCall)
+        self.patcher.start()
+
+        driver = emc_vmax_fc.EMCVMAXFCDriver(configuration=self.configuration)
+        driver.db = FakeDB()
+        self.driver = driver
+
+    def create_fake_config_file_v3(self):
+        doc = minidom.Document()
+        emc = doc.createElement("EMC")
+        doc.appendChild(emc)
+
+        ecomserverip = doc.createElement("EcomServerIp")
+        ecomserveriptext = doc.createTextNode("1.1.1.1")
+        emc.appendChild(ecomserverip)
+        ecomserverip.appendChild(ecomserveriptext)
+
+        ecomserverport = doc.createElement("EcomServerPort")
+        ecomserverporttext = doc.createTextNode("10")
+        emc.appendChild(ecomserverport)
+        ecomserverport.appendChild(ecomserverporttext)
+
+        ecomusername = doc.createElement("EcomUserName")
+        ecomusernametext = doc.createTextNode("user")
+        emc.appendChild(ecomusername)
+        ecomusername.appendChild(ecomusernametext)
+
+        ecompassword = doc.createElement("EcomPassword")
+        ecompasswordtext = doc.createTextNode("pass")
+        emc.appendChild(ecompassword)
+        ecompassword.appendChild(ecompasswordtext)
+
+        portgroup = doc.createElement("PortGroup")
+        portgrouptext = doc.createTextNode(self.data.port_group)
+        portgroup.appendChild(portgrouptext)
+
+        pool = doc.createElement("Pool")
+        pooltext = doc.createTextNode("SRP_1")
+        emc.appendChild(pool)
+        pool.appendChild(pooltext)
+
+        array = doc.createElement("Array")
+        arraytext = doc.createTextNode("1234567891011")
+        emc.appendChild(array)
+        array.appendChild(arraytext)
+
+        slo = doc.createElement("ServiceLevel")
+        slotext = doc.createTextNode("Bronze")
+        emc.appendChild(slo)
+        slo.appendChild(slotext)
+
+        workload = doc.createElement("Workload")
+        workloadtext = doc.createTextNode("DSS")
+        emc.appendChild(workload)
+        workload.appendChild(workloadtext)
+
+        portgroups = doc.createElement("PortGroups")
+        portgroups.appendChild(portgroup)
+        emc.appendChild(portgroups)
+
+        timeout = doc.createElement("Timeout")
+        timeouttext = doc.createTextNode("0")
+        emc.appendChild(timeout)
+        timeout.appendChild(timeouttext)
+
+        filename = 'cinder_emc_config_V3.xml'
+
+        self.config_file_path = self.tempdir + '/' + filename
+
+        f = open(self.config_file_path, 'w')
+        doc.writexml(f)
+        f.close()
+
+    def fake_ecom_connection(self):
+        self.conn = FakeEcomConnection()
+        return self.conn
+
+    def fake_is_v3(self, conn, serialNumber):
+        return True
+
+    def fake_volume_type_extra_specs(self, volume_type):
+        extraSpecs = {'volume_backend_name': 'VMAXReplication',
+                      'replication_enabled': '<is> True'}
+        return extraSpecs
+
+    def fake_get_multi_pool(self):
+        return False
+
+    def fake_get_existing_instance(self, conn, instancename):
+        return instancename
+
+    def _cleanup(self):
+        bExists = os.path.exists(self.config_file_path)
+        if bExists:
+            os.remove(self.config_file_path)
+        shutil.rmtree(self.tempdir)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'get_target_instance',
+        return_value='volume_instance')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_setup_volume_replication_success(self, mock_pool,
+                                              mock_target):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        sourceVolume = self.data.test_volume_re
+        volumeDict = self.data.provider_location
+        with mock.patch.object(
+                common, 'create_remote_replica',
+                return_value=(0, self.data.provider_location2)):
+            extraSpecs = self.data.extra_specs_is_re
+            rep_status, rep_driver_data = common.setup_volume_replication(
+                common.conn, sourceVolume, volumeDict, extraSpecs)
+            self.assertEqual(fields.ReplicationStatus.ENABLED, rep_status)
+            self.assertEqual(self.data.keybindings2, rep_driver_data)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_setup_volume_replication_failed(self, mock_pool):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        sourceVolume = self.data.test_volume_re
+        volumeDict = self.data.provider_location
+        extraSpecs = self.data.extra_specs_is_re
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            common.setup_volume_replication, common.conn, sourceVolume,
+            volumeDict, extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_cleanup_remote_target')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_cleanup_lun_replication(self, mock_pool, mock_delete):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        volume = self.data.test_volume_re
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        sourceInstance = common.conn.GetInstance(volumeInstanceName)
+        extraSpecs = self.data.extra_specs_is_re
+        common.cleanup_lun_replication(common.conn, volume, volume['name'],
+                                       sourceInstance, extraSpecs)
+        with mock.patch.object(
+                common.utils, 'find_volume_instance',
+                return_value={'ElementName': self.data.test_volume_re['id']}):
+            targetInstance = sourceInstance
+            repServiceInstanceName = common.conn.EnumerateInstanceNames(
+                'EMC_ReplicationService')[0]
+            rep_config = common.utils.get_replication_config(
+                self.replication_device)
+            repExtraSpecs = common._get_replication_extraSpecs(
+                extraSpecs, rep_config)
+            common._cleanup_remote_target.assert_called_once_with(
+                common.conn, repServiceInstanceName, sourceInstance,
+                targetInstance, extraSpecs, repExtraSpecs)
+
+    def test_get_rdf_details(self):
+        common = self.driver.common
+        conn = self.fake_ecom_connection()
+        rdfGroupInstance, repServiceInstanceName = (
+            common.get_rdf_details(conn, self.data.storage_system))
+        self.assertEqual(rdfGroupInstance, self.data.srdf_group_instance)
+        self.assertEqual(repServiceInstanceName,
+                         conn.EnumerateInstanceNames(
+                             'EMC_ReplicationService')[0])
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        '_check_sync_state',
+        return_value=6)
+    def test_failover_volume_success(self, mock_sync):
+        volumes = [self.data.test_volume_re]
+        rep_data = self.data.replication_driver_data
+        loc = six.text_type(self.data.provider_location)
+        rep_data = six.text_type(rep_data)
+        check_update_list = (
+            [{'volume_id': self.data.test_volume_re['id'],
+              'updates':
+                  {'replication_status': fields.ReplicationStatus.ENABLED,
+                   'provider_location': loc,
+                   'replication_driver_data': rep_data}}])
+        secondary_id, volume_update_list = (
+            self.driver.failover_host('context', volumes, 'default'))
+        self.assertEqual(check_update_list, volume_update_list)
+
+    def test_failover_volume_failed(self):
+        fake_vol = self.data.test_failed_re_volume
+        fake_location = six.text_type(
+            {'keybindings': 'fake_keybindings'})
+        fake_volumes = [fake_vol]
+        check_update_list = (
+            [{'volume_id': fake_vol['id'],
+              'updates':
+                  {'replication_status': (
+                      fields.ReplicationStatus.FAILOVER_ERROR),
+                      'provider_location': fake_location,
+                      'replication_driver_data': 'fake_data'}}])
+        secondary_id, volume_update_list = (
+            self.driver.failover_host('context', fake_volumes, None))
+        self.assertEqual(check_update_list, volume_update_list)
+
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        '_check_sync_state',
+        return_value=12)
+    def test_failback_volume_success(self, mock_sync):
+        volumes = [self.data.test_volume_re]
+        provider_location = self.data.provider_location
+        loc = six.text_type(provider_location)
+        rep_data = six.text_type(self.data.replication_driver_data)
+        check_update_list = (
+            [{'volume_id': self.data.test_volume_re['id'],
+              'updates':
+                  {'replication_status': fields.ReplicationStatus.ENABLED,
+                   'replication_driver_data': rep_data,
+                   'provider_location': loc}}])
+        secondary_id, volume_update_list = (
+            self.driver.failover_host('context', volumes, 'default'))
+        self.assertEqual(check_update_list, volume_update_list)
+
+    def test_failback_volume_failed(self):
+        fake_vol = self.data.test_failed_re_volume
+        fake_location = six.text_type(
+            {'keybindings': 'fake_keybindings'})
+        fake_volumes = [fake_vol]
+        check_update_list = (
+            [{'volume_id': fake_vol['id'],
+              'updates':
+                  {'replication_status': (
+                      fields.ReplicationStatus.FAILOVER_ERROR),
+                      'provider_location': fake_location,
+                      'replication_driver_data': 'fake_data'}}])
+        secondary_id, volume_update_list = (
+            self.driver.failover_host('context', fake_volumes, 'default'))
+        self.assertEqual(check_update_list, volume_update_list)
+
+    @mock.patch.object(
+        emc_vmax_utils.EMCVMAXUtils,
+        'compare_size',
+        return_value=0)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'add_volume_to_replication_group',
+        return_value=EMCVMAXCommonData.re_storagegroup)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_create_remote_replica',
+        return_value=(0, EMCVMAXCommonData.provider_location))
+    def test_extend_volume_is_replicated_success(
+            self, mock_replica, mock_sg, mock_size):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        volume = self.data.test_volume_re
+        new_size = '2'
+        newSizeBits = common.utils.convert_gb_to_bits(new_size)
+        extendedVolumeInstance = self.data.volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        extendedVolumeSize = common.utils.get_volume_size(
+            self.conn, extendedVolumeInstance)
+        self.driver.extend_volume(volume, new_size)
+        common.utils.compare_size.assert_called_once_with(
+            newSizeBits, extendedVolumeSize)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_create_remote_replica',
+        return_value=(1, 'error'))
+    def test_extend_volume_is_replicated_failed(self, mock_replica):
+        volume = self.data.test_volume_re
+        new_size = '2'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.extend_volume, volume, new_size)
+
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        'remove_and_reset_members')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'add_volume_to_replication_group',
+        return_value=EMCVMAXCommonData.re_storagegroup)
+    @mock.patch.object(
+        emc_vmax_provision_v3.EMCVMAXProvisionV3,
+        'get_volume_dict_from_job',
+        return_value=EMCVMAXCommonData.provider_location)
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_create_remote_replica_success(self, mock_pool, mock_volume_dict,
+                                           mock_sg, mock_return):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        repServiceInstanceName = common.conn.EnumerateInstanceNames(
+            'EMC_ReplicationService')[0]
+        rdfGroupInstance = self.data.srdf_group_instance
+        sourceVolume = self.data.test_volume_re
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        sourceInstance = common.conn.GetInstance(volumeInstanceName)
+        targetInstance = sourceInstance
+        extraSpecs = self.data.extra_specs_is_re
+        rep_config = common.utils.get_replication_config(
+            self.replication_device)
+        referenceDict = EMCVMAXCommonData.provider_location
+        rc, rdfDict = common.create_remote_replica(
+            common.conn, repServiceInstanceName, rdfGroupInstance,
+            sourceVolume, sourceInstance, targetInstance,
+            extraSpecs, rep_config)
+        self.assertEqual(referenceDict, rdfDict)
+
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        'remove_and_reset_members')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_cleanup_remote_target')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, EMCVMAXCommonData.storage_system))
+    def test_create_remote_replica_failed(self, mock_pool,
+                                          mock_cleanup, mock_return):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        repServiceInstanceName = common.conn.EnumerateInstanceNames(
+            'EMC_ReplicationService')[0]
+        rdfGroupInstance = self.data.srdf_group_instance
+        sourceVolume = self.data.test_volume_re
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        sourceInstance = common.conn.GetInstance(volumeInstanceName)
+        targetInstance = sourceInstance
+        extraSpecs = self.data.extra_specs_is_re
+        rep_config = common.utils.get_replication_config(
+            self.replication_device)
+        repExtraSpecs = common._get_replication_extraSpecs(
+            extraSpecs, rep_config)
+        with mock.patch.object(common.provisionv3,
+                               '_create_element_replica_extra_params',
+                               return_value=(9, 'error')):
+            with mock.patch.object(common.utils,
+                                   'wait_for_job_complete',
+                                   return_value=(9, 'error')):
+                self.assertRaises(
+                    exception.VolumeBackendAPIException,
+                    common.create_remote_replica, common.conn,
+                    repServiceInstanceName, rdfGroupInstance, sourceVolume,
+                    sourceInstance, targetInstance, extraSpecs, rep_config)
+                common._cleanup_remote_target.assert_called_once_with(
+                    common.conn, repServiceInstanceName, sourceInstance,
+                    targetInstance, extraSpecs, repExtraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_masking.EMCVMAXMasking,
+        'get_masking_view_from_storage_group',
+        return_value=None)
+    def test_add_volume_to_replication_group_success(self, mock_mv):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        controllerConfigService = (
+            common.utils.find_controller_configuration_service(
+                common.conn, self.data.storage_system))
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+        volumeName = self.data.test_volume_re['name']
+        extraSpecs = self.data.extra_specs_is_re
+        with mock.patch.object(
+                common.utils, 'find_storage_masking_group',
+                return_value=self.data.default_sg_instance_name):
+            common.add_volume_to_replication_group(
+                common.conn, controllerConfigService,
+                volumeInstance, volumeName, extraSpecs)
+
+    def test_add_volume_to_replication_group_failed(self):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        controllerConfigService = (
+            common.utils.find_controller_configuration_service(
+                common.conn, self.data.storage_system))
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+        volumeName = self.data.test_volume_re['name']
+        extraSpecs = self.data.extra_specs_is_re
+        with mock.patch.object(
+                common.utils, 'find_storage_masking_group',
+                return_value=None):
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              common.add_volume_to_replication_group,
+                              common.conn, controllerConfigService,
+                              volumeInstance, volumeName, extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'add_volume_to_replication_group')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_create_v3_volume',
+        return_value=(0, EMCVMAXCommonData.provider_location,
+                      EMCVMAXCommonData.storage_system))
+    def test_create_replicated_volume_success(self, mock_create, mock_add):
+        model_update = self.driver.create_volume(
+            self.data.test_volume_re)
+        rep_status = model_update['replication_status']
+        rep_data = model_update['replication_driver_data']
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         rep_status)
+        self.assertIsNotNone(rep_data)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_cleanup_replication_source')
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_create_v3_volume',
+        return_value=(0, EMCVMAXCommonData.provider_location,
+                      EMCVMAXCommonData.storage_system))
+    def test_create_replicated_volume_failed(self, mock_create, mock_cleanup):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        volumeName = self.data.test_volume_re['id']
+        volumeDict = self.data.provider_location
+        extraSpecs = self.data.extra_specs_is_re
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.create_volume, self.data.test_volume_re)
+        common._cleanup_replication_source.assert_called_once_with(
+            common.conn, volumeName, volumeDict, extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_delete_from_pool_v3')
+    def test_cleanup_replication_source(self, mock_delete):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        volumeName = self.data.test_volume_re['name']
+        volumeDict = self.data.provider_location
+        extraSpecs = self.data.extra_specs_is_re
+        storageConfigService = (
+            common.utils.find_storage_configuration_service(
+                common.conn, self.data.storage_system))
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        sourceInstance = common.conn.GetInstance(volumeInstanceName)
+        deviceId = self.data.test_volume_re['device_id']
+        common._cleanup_replication_source(
+            common.conn, volumeName, volumeDict, extraSpecs)
+        common._delete_from_pool_v3.assert_called_once_with(
+            storageConfigService, sourceInstance,
+            volumeName, deviceId, extraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        '_delete_from_pool_v3')
+    def test_cleanup_remote_target(self, mock_delete):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        repServiceInstanceName = common.conn.EnumerateInstanceNames(
+            'EMC_ReplicationService')[0]
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        sourceInstance = common.conn.GetInstance(volumeInstanceName)
+        targetInstance = sourceInstance.copy()
+        targetStorageConfigService = (
+            common.utils.find_storage_configuration_service(
+                common.conn, self.data.storage_system))
+        deviceId = targetInstance['DeviceID']
+        volumeName = targetInstance['Name']
+        extraSpecs = self.data.extra_specs_is_re
+        rep_config = common.utils.get_replication_config(
+            self.replication_device)
+        repExtraSpecs = common._get_replication_extraSpecs(
+            extraSpecs, rep_config)
+        common._cleanup_remote_target(
+            common.conn, repServiceInstanceName, sourceInstance,
+            targetInstance, extraSpecs, repExtraSpecs)
+        common._delete_from_pool_v3.assert_called_once_with(
+            targetStorageConfigService, targetInstance, volumeName,
+            deviceId, repExtraSpecs)
+
+    @mock.patch.object(
+        emc_vmax_common.EMCVMAXCommon,
+        'cleanup_lun_replication')
+    def test_delete_re_volume(self, mock_cleanup):
+        common = self.driver.common
+        common.conn = self.fake_ecom_connection()
+        volume = self.data.test_volume_re
+        volumeName = volume['name']
+        volumeInstanceName = (
+            common.conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        volumeInstance = common.conn.GetInstance(volumeInstanceName)
+        extraSpecs = self.data.extra_specs_is_re
+        self.driver.delete_volume(volume)
+        common.cleanup_lun_replication.assert_called_once_with(
+            common.conn, volume, volumeName, volumeInstance, extraSpecs)

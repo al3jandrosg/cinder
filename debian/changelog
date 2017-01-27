@@ -1,3 +1,12 @@
+cinder (2:10.0.0~b3-0ubuntu1) zesty; urgency=medium
+
+  * New upstream milestone for OpenStack Ocata.
+  * debian/patches/google-back-requirements.patch: Dropped
+  * debian/pydist-overrides: Add google-api-python-client and oauth2client.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Chuck Short <zulcss@ubuntu.com>  Fri, 27 Jan 2017 09:20:08 -0500
+
 cinder (2:10.0.0~b2-0ubuntu1) zesty; urgency=medium
 
   [ Chuck Short ]
@@ -6,7 +15,7 @@ cinder (2:10.0.0~b2-0ubuntu1) zesty; urgency=medium
     under apache2 with mod_wsgi instead of under eventlet.
 
   [ Corey Bryant ]
-  * New upstream release.
+  * New upstream milestone for OpenStack Ocata.
   * d/control: Align (Build-)Depends with upstream.
   * d/p/google-back-requirements.patch: Rebased.
 

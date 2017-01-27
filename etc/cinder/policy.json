@@ -6,6 +6,7 @@
 
     "volume:create": "",
     "volume:delete": "rule:admin_or_owner",
+    "volume:force_delete": "rule:admin_api",
     "volume:get": "rule:admin_or_owner",
     "volume:get_all": "rule:admin_or_owner",
     "volume:get_volume_metadata": "rule:admin_or_owner",
@@ -92,6 +93,7 @@
     "backup:backup-import": "rule:admin_api",
     "backup:backup-export": "rule:admin_api",
     "backup:update": "rule:admin_or_owner",
+    "backup:backup_project_attribute": "rule:admin_api",
 
     "snapshot_extension:snapshot_actions:update_snapshot_status": "",
     "snapshot_extension:snapshot_manage": "rule:admin_api",
@@ -125,6 +127,8 @@
     "group:update_group_snapshot": "rule:admin_or_owner",
     "group:get_group_snapshot": "rule:admin_or_owner",
     "group:get_all_group_snapshots": "rule:admin_or_owner",
+    "group:reset_group_snapshot_status":"rule:admin_api",
+    "group:reset_status":"rule:admin_api",
 
     "scheduler_extension:scheduler_stats:get_pools" : "rule:admin_api",
     "message:delete": "rule:admin_or_owner",
@@ -133,5 +137,7 @@
 
     "clusters:get": "rule:admin_api",
     "clusters:get_all": "rule:admin_api",
-    "clusters:update": "rule:admin_api"
+    "clusters:update": "rule:admin_api",
+
+    "workers:cleanup": "rule:admin_api"
 }

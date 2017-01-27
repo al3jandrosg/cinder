@@ -132,10 +132,13 @@ class EMCVMAXMasking(object):
                 {'maskingViewName': maskingViewDict['maskingViewName']})
             errorMessage = e
 
-        rollbackDict['pgGroupName'], errorMessage = (
+        rollbackDict['pgGroupName'], pg_errorMessage = (
             self._get_port_group_name_from_mv(
                 conn, maskingViewDict['maskingViewName'],
                 maskingViewDict['storageSystemName']))
+
+        if pg_errorMessage:
+            errorMessage = pg_errorMessage
 
         if not errorMessage:
             # Only after the masking view has been validated, add the
@@ -200,7 +203,9 @@ class EMCVMAXMasking(object):
         defaultSgGroupName = self.utils.get_v3_storage_group_name(
             maskingviewdict['pool'],
             maskingviewdict['slo'],
-            maskingviewdict['workload'])
+            maskingviewdict['workload'],
+            maskingviewdict['isCompressionDisabled'],
+            maskingviewdict['replication_enabled'])
         assocStorageGroupInstanceNames = (
             self.utils.get_storage_groups_from_volume(
                 conn, volumeinstance.path))
@@ -774,7 +779,8 @@ class EMCVMAXMasking(object):
             foundStorageGroupInstanceName = (
                 self.provisionv3.create_storage_group_v3(
                     conn, controllerConfigService, storageGroupName,
-                    pool, slo, workload, maskingViewDict['extraSpecs']))
+                    pool, slo, workload, maskingViewDict['extraSpecs'],
+                    maskingViewDict['isCompressionDisabled']))
         else:
             fastPolicyName = maskingViewDict['fastPolicy']
             volumeInstance = maskingViewDict['volumeInstance']
@@ -2225,15 +2231,18 @@ class EMCVMAXMasking(object):
         """Return volume to the default storage group in v3.
 
         :param conn: the ecom connection
-        :param controllerConfigService: controller config service
+        :param controllerConfigurationService: controller config service
         :param volumeInstance: volumeInstance
         :param volumeName: the volume name
         :param extraSpecs: additional info
         :raises: VolumeBackendAPIException
         """
+        rep_enabled = self.utils.is_replication_enabled(extraSpecs)
+        isCompressionDisabled = self.utils.is_compression_disabled(extraSpecs)
         storageGroupName = self.utils.get_v3_storage_group_name(
             extraSpecs[self.utils.POOL], extraSpecs[self.utils.SLO],
-            extraSpecs[self.utils.WORKLOAD])
+            extraSpecs[self.utils.WORKLOAD], isCompressionDisabled,
+            rep_enabled)
         storageGroupInstanceName = self.utils.find_storage_masking_group(
             conn, controllerConfigurationService, storageGroupName)
 
@@ -2242,7 +2251,8 @@ class EMCVMAXMasking(object):
                 self.provisionv3.create_storage_group_v3(
                     conn, controllerConfigurationService, storageGroupName,
                     extraSpecs[self.utils.POOL], extraSpecs[self.utils.SLO],
-                    extraSpecs[self.utils.WORKLOAD], extraSpecs))
+                    extraSpecs[self.utils.WORKLOAD], extraSpecs,
+                    isCompressionDisabled))
             if not storageGroupInstanceName:
                 errorMessage = (_("Failed to create storage group "
                                   "%(storageGroupName)s.") %

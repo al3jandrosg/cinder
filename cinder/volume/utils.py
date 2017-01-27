@@ -725,14 +725,6 @@ def extract_host(host, level='backend', default_pool_name=False):
             return None
 
 
-def get_volume_rpc_host(host):
-    if CONF.rpc_backend and CONF.rpc_backend == "zmq":
-        # ZeroMQ RPC driver requires only the hostname.
-        # So, return just that.
-        return extract_host(host, 'host')
-    return extract_host(host)
-
-
 def append_host(host, pool):
     """Encode pool into host info."""
     if not host or not pool:
@@ -752,6 +744,9 @@ def matching_backend_name(src_volume_type, volume_type):
 
 
 def hosts_are_equivalent(host_1, host_2):
+    # In case host_1 or host_2 are None
+    if not (host_1 and host_2):
+        return host_1 == host_2
     return extract_host(host_1) == extract_host(host_2)
 
 
@@ -882,3 +877,14 @@ def create_encryption_key(context, key_manager, volume_type_id):
             algorithm=algorithm,
             length=length)
     return encryption_key_id
+
+
+def is_replicated_str(str):
+    spec = (str or '').split()
+    return (len(spec) == 2 and
+            spec[0] == '<is>' and strutils.bool_from_string(spec[1]))
+
+
+def is_replicated_spec(extra_specs):
+    return (extra_specs and
+            is_replicated_str(extra_specs.get('replication_enabled')))

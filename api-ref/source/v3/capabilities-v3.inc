@@ -12,8 +12,8 @@ Show all back-end capabilities
 
 .. rest_method::  GET /v3/{tenant_id}/capabilities/{hostname}
 
-Shows capabilities for a storage back end.
-
+Shows capabilities for a storage back end on the host.
+The ``hostname`` takes the form of ``hostname@volume_backend_name``.
 
 Normal response codes: 200
 Error response codes:

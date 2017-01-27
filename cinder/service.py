@@ -31,23 +31,25 @@ from oslo_service import loopingcall
 from oslo_service import service
 from oslo_service import wsgi
 from oslo_utils import importutils
-osprofiler_notifier = importutils.try_import('osprofiler.notifier')
+osprofiler_initializer = importutils.try_import('osprofiler.initializer')
 profiler = importutils.try_import('osprofiler.profiler')
-osprofiler_web = importutils.try_import('osprofiler.web')
 profiler_opts = importutils.try_import('osprofiler.opts')
 
 
 from cinder.backup import rpcapi as backup_rpcapi
+from cinder.common import constants
 from cinder import context
 from cinder import coordination
 from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder import objects
 from cinder.objects import base as objects_base
+from cinder.objects import fields
 from cinder import rpc
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import version
 from cinder.volume import rpcapi as volume_rpcapi
+from cinder.volume import utils as vol_utils
 
 
 LOG = logging.getLogger(__name__)
@@ -87,19 +89,20 @@ if profiler_opts:
 
 
 def setup_profiler(binary, host):
-    if (osprofiler_notifier is None or
+    if (osprofiler_initializer is None or
             profiler is None or
-            osprofiler_web is None or
             profiler_opts is None):
         LOG.debug('osprofiler is not present')
         return
 
     if CONF.profiler.enabled:
-        _notifier = osprofiler_notifier.create(
-            "Messaging", messaging, context.get_admin_context().to_dict(),
-            rpc.TRANSPORT, "cinder", binary, host)
-        osprofiler_notifier.set(_notifier)
-        osprofiler_web.enable(CONF.profiler.hmac_keys)
+        osprofiler_initializer.init_from_conf(
+            conf=CONF,
+            context=context.get_admin_context().to_dict(),
+            project="cinder",
+            service=binary,
+            host=host
+        )
         LOG.warning(
             _LW("OSProfiler is enabled.\nIt means that person who knows "
                 "any of hmac_keys that are specified in "
@@ -108,10 +111,8 @@ def setup_profiler(binary, host):
                 "is no security issue. Note that even if person can "
                 "trigger profiler, only admin user can retrieve trace "
                 "information.\n"
-                "To disable OSprofiler set in cinder.conf:\n"
+                "To disable OSProfiler set in cinder.conf:\n"
                 "[profiler]\nenabled=false"))
-    else:
-        osprofiler_web.disable()
 
 
 class Service(service.Service):
@@ -187,7 +188,7 @@ class Service(service.Service):
             if self.added_to_cluster:
                 # We pass copy service's disable status in the cluster if we
                 # have to create it.
-                self._ensure_cluster_exists(ctxt, service_ref.disabled)
+                self._ensure_cluster_exists(ctxt, service_ref)
                 service_ref.cluster_name = cluster
             service_ref.save()
             Service.service_id = service_ref.id
@@ -213,6 +214,7 @@ class Service(service.Service):
 
         setup_profiler(binary, host)
         self.rpcserver = None
+        self.backend_rpcserver = None
         self.cluster_rpcserver = None
 
     # TODO(geguileo): Remove method in O since it will no longer be used.
@@ -241,15 +243,29 @@ class Service(service.Service):
         LOG.debug("Creating RPC server for service %s", self.topic)
 
         ctxt = context.get_admin_context()
-        target = messaging.Target(topic=self.topic, server=self.host)
         endpoints = [self.manager]
         endpoints.extend(self.manager.additional_endpoints)
         obj_version_cap = objects.Service.get_minimum_obj_version(ctxt)
         LOG.debug("Pinning object versions for RPC server serializer to %s",
                   obj_version_cap)
         serializer = objects_base.CinderObjectSerializer(obj_version_cap)
+
+        target = messaging.Target(topic=self.topic, server=self.host)
         self.rpcserver = rpc.get_server(target, endpoints, serializer)
         self.rpcserver.start()
+
+        # NOTE(dulek): Kids, don't do that at home. We're relying here on
+        # oslo.messaging implementation details to keep backward compatibility
+        # with pre-Ocata services. This will not matter once we drop
+        # compatibility with them.
+        if self.topic == constants.VOLUME_TOPIC:
+            target = messaging.Target(
+                topic='%(topic)s.%(host)s' % {'topic': self.topic,
+                                              'host': self.host},
+                server=vol_utils.extract_host(self.host, 'host'))
+            self.backend_rpcserver = rpc.get_server(target, endpoints,
+                                                    serializer)
+            self.backend_rpcserver.start()
 
         # TODO(geguileo): In O - Remove the is_svc_upgrading_to_n part
         if self.cluster and not self.is_svc_upgrading_to_n(self.binary):
@@ -257,7 +273,9 @@ class Service(service.Service):
                          '%(version)s)'),
                      {'topic': self.topic, 'version': version_string,
                       'cluster': self.cluster})
-            target = messaging.Target(topic=self.topic, server=self.cluster)
+            target = messaging.Target(
+                topic='%s.%s' % (self.topic, self.cluster),
+                server=vol_utils.extract_host(self.cluster, 'host'))
             serializer = objects_base.CinderObjectSerializer(obj_version_cap)
             self.cluster_rpcserver = rpc.get_server(target, endpoints,
                                                     serializer)
@@ -301,17 +319,34 @@ class Service(service.Service):
                      'new_down_time': new_down_time})
                 CONF.set_override('service_down_time', new_down_time)
 
-    def _ensure_cluster_exists(self, context, disabled=None):
+    def _ensure_cluster_exists(self, context, service):
         if self.cluster:
             try:
-                objects.Cluster.get_by_id(context, None, name=self.cluster,
-                                          binary=self.binary)
+                cluster = objects.Cluster.get_by_id(context, None,
+                                                    name=self.cluster,
+                                                    binary=self.binary)
+                # If the cluster already exists, then the service replication
+                # fields must match those of the cluster unless the service
+                # is in error status.
+                error_states = (fields.ReplicationStatus.ERROR,
+                                fields.ReplicationStatus.FAILOVER_ERROR)
+                if service.replication_status not in error_states:
+                    for attr in ('replication_status', 'active_backend_id',
+                                 'frozen'):
+                        if getattr(service, attr) != getattr(cluster, attr):
+                            setattr(service, attr, getattr(cluster, attr))
+
             except exception.ClusterNotFound:
-                cluster = objects.Cluster(context=context, name=self.cluster,
-                                          binary=self.binary)
-                # If disabled has been specified overwrite default value
-                if disabled is not None:
-                    cluster.disabled = disabled
+                # Since the cluster didn't exist, we copy replication fields
+                # from the service.
+                cluster = objects.Cluster(
+                    context=context,
+                    name=self.cluster,
+                    binary=self.binary,
+                    disabled=service.disabled,
+                    replication_status=service.replication_status,
+                    active_backend_id=service.active_backend_id,
+                    frozen=service.frozen)
                 try:
                     cluster.create()
 
@@ -340,7 +375,10 @@ class Service(service.Service):
         Service.service_id = service_ref.id
         # TODO(geguileo): In O unconditionally ensure that the cluster exists
         if not self.is_upgrading_to_n:
-            self._ensure_cluster_exists(context)
+            self._ensure_cluster_exists(context, service_ref)
+            # If we have updated the service_ref with replication data from
+            # the cluster it will be saved.
+            service_ref.save()
 
     def __getattr__(self, key):
         manager = self.__dict__.get('manager', None)
@@ -393,6 +431,8 @@ class Service(service.Service):
         # errors, go ahead and ignore them.. as we're shutting down anyway
         try:
             self.rpcserver.stop()
+            if self.backend_rpcserver:
+                self.backend_rpcserver.stop()
             if self.cluster_rpcserver:
                 self.cluster_rpcserver.stop()
         except Exception:
@@ -422,6 +462,8 @@ class Service(service.Service):
                     pass
         if self.rpcserver:
             self.rpcserver.wait()
+        if self.backend_rpcserver:
+            self.backend_rpcserver.wait()
         if self.cluster_rpcserver:
             self.cluster_rpcserver.wait()
         super(Service, self).wait()

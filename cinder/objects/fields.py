@@ -80,6 +80,23 @@ class GroupStatusField(BaseEnumField):
     AUTO_TYPE = GroupStatus()
 
 
+class GroupSnapshotStatus(BaseCinderEnum):
+    ERROR = 'error'
+    AVAILABLE = 'available'
+    CREATING = 'creating'
+    DELETING = 'deleting'
+    DELETED = 'deleted'
+    UPDATING = 'updating'
+    ERROR_DELETING = 'error_deleting'
+
+    ALL = (ERROR, AVAILABLE, CREATING, DELETING, DELETED,
+           UPDATING, ERROR_DELETING)
+
+
+class GroupSnapshotStatusField(BaseEnumField):
+    AUTO_TYPE = GroupSnapshotStatus()
+
+
 class ReplicationStatus(BaseCinderEnum):
     ERROR = 'error'
     ENABLED = 'enabled'
@@ -105,9 +122,10 @@ class SnapshotStatus(BaseCinderEnum):
     DELETED = 'deleted'
     UPDATING = 'updating'
     ERROR_DELETING = 'error_deleting'
+    UNMANAGING = 'unmanaging'
 
     ALL = (ERROR, AVAILABLE, CREATING, DELETING, DELETED,
-           UPDATING, ERROR_DELETING)
+           UPDATING, ERROR_DELETING, UNMANAGING)
 
 
 class SnapshotStatusField(BaseEnumField):
@@ -130,11 +148,13 @@ class VolumeAttachStatus(BaseCinderEnum):
     ATTACHED = 'attached'
     ATTACHING = 'attaching'
     DETACHED = 'detached'
+    RESERVED = 'reserved'
     ERROR_ATTACHING = 'error_attaching'
     ERROR_DETACHING = 'error_detaching'
+    DELETED = 'deleted'
 
     ALL = (ATTACHED, ATTACHING, DETACHED, ERROR_ATTACHING,
-           ERROR_DETACHING)
+           ERROR_DETACHING, RESERVED, DELETED)
 
 
 class VolumeAttachStatusField(BaseEnumField):

@@ -88,14 +88,14 @@ Response Parameters
    - os-vol-tenant-attr:tenant_id: os-vol-tenant-attr:tenant_id
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
    - metadata: metadata
-   - status: status
+   - status: status_3
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid
    - consistencygroup_id: consistencygroup_id
    - os-vol-mig-status-attr:name_id: os-vol-mig-status-attr:name_id
    - name: name
-   - bootable: bootable
+   - bootable: bootable_response
    - created_at: created_at
    - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volumes: volumes
@@ -197,14 +197,14 @@ Response Parameters
    - size: size
    - user_id: user_id
    - metadata: metadata
-   - status: status
+   - status: status_3
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
    - name: name
-   - bootable: bootable
+   - bootable: bootable_response
    - created_at: created_at
    - volume_type: volume_type
 
@@ -302,7 +302,7 @@ Response Parameters
    - os-vol-tenant-attr:tenant_id: os-vol-tenant-attr:tenant_id
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
    - metadata: metadata
-   - status: status
+   - status: status_3
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid
@@ -310,7 +310,7 @@ Response Parameters
    - consistencygroup_id: consistencygroup_id
    - os-vol-mig-status-attr:name_id: os-vol-mig-status-attr:name_id
    - name: name
-   - bootable: bootable
+   - bootable: bootable_response
    - created_at: created_at
    - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volume_type: volume_type
@@ -375,14 +375,14 @@ Response Parameters
    - size: size
    - user_id: user_id
    - metadata: metadata
-   - status: status
+   - status: status_3
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
    - name: name
-   - bootable: bootable
+   - bootable: bootable_response
    - created_at: created_at
    - volume_type: volume_type
 

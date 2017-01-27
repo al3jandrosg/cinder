@@ -76,10 +76,16 @@ class EMCVMAXISCSIDriver(driver.ISCSIDriver):
               - QoS support (blueprint vmax-qos)
               - VMAX2/VMAX3 iscsi multipath support (iscsi only)
               https://blueprints.launchpad.net/cinder/+spec/vmax-iscsi-multipath
+        2.5.0 - Attach and detach snapshot (blueprint vmax-attach-snapshot)
+              - MVs and SGs not reflecting correct protocol (bug #1640222)
+              - Storage assisted volume migration via retype
+                (bp vmax-volume-migration)
+              - Support for compression on All Flash
+              - Volume replication 2.1 (bp add-vmax-replication)
 
     """
 
-    VERSION = "2.4.0"
+    VERSION = "2.5.0"
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_VMAX_CI"
@@ -87,43 +93,32 @@ class EMCVMAXISCSIDriver(driver.ISCSIDriver):
     def __init__(self, *args, **kwargs):
 
         super(EMCVMAXISCSIDriver, self).__init__(*args, **kwargs)
+        self.active_backend_id = kwargs.get('active_backend_id', None)
         self.common = (
-            emc_vmax_common.EMCVMAXCommon('iSCSI',
-                                          self.VERSION,
-                                          configuration=self.configuration))
+            emc_vmax_common.EMCVMAXCommon(
+                'iSCSI',
+                self.VERSION,
+                configuration=self.configuration,
+                active_backend_id=self.active_backend_id))
 
     def check_for_setup_error(self):
         pass
 
     def create_volume(self, volume):
         """Creates a VMAX volume."""
-        volpath = self.common.create_volume(volume)
-
-        model_update = {}
-        volume['provider_location'] = six.text_type(volpath)
-        model_update['provider_location'] = volume['provider_location']
-        return model_update
+        return self.common.create_volume(volume)
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot."""
-        volpath = self.common.create_volume_from_snapshot(volume, snapshot)
-
-        model_update = {}
-        volume['provider_location'] = six.text_type(volpath)
-        model_update['provider_location'] = volume['provider_location']
-        return model_update
+        return self.common.create_volume_from_snapshot(
+            volume, snapshot)
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates a cloned volume."""
-        volpath = self.common.create_cloned_volume(volume, src_vref)
-
-        model_update = {}
-        volume['provider_location'] = six.text_type(volpath)
-        model_update['provider_location'] = volume['provider_location']
-        return model_update
+        return self.common.create_cloned_volume(volume, src_vref)
 
     def delete_volume(self, volume):
-        """Deletes an EMC volume."""
+        """Deletes an VMAX volume."""
         self.common.delete_volume(volume)
 
     def create_snapshot(self, snapshot):
@@ -190,6 +185,17 @@ class EMCVMAXISCSIDriver(driver.ISCSIDriver):
         """
         device_info = self.common.initialize_connection(
             volume, connector)
+        return self.get_iscsi_dict(
+            device_info, volume, connector)
+
+    def get_iscsi_dict(self, device_info, volume, connector):
+        """Populate iscsi dict to pass to nova.
+
+        :param device_info: device info dict
+        :param volume: volume object
+        :param connector: connector object
+        :return: iscsi dict
+        """
         try:
             ip_and_iqn = device_info['ip_and_iqn']
             is_multipath = device_info['is_multipath']
@@ -202,26 +208,11 @@ class EMCVMAXISCSIDriver(driver.ISCSIDriver):
         iscsi_properties = self.smis_get_iscsi_properties(
             volume, connector, ip_and_iqn, is_multipath)
 
-        LOG.info(_LI("Leaving initialize_connection: %s"), iscsi_properties)
+        LOG.info(_LI("iSCSI properties are: %s"), iscsi_properties)
         return {
             'driver_volume_type': 'iscsi',
             'data': iscsi_properties
         }
-
-    def _parse_target_list(self, targets):
-        """Parse target list into usable format.
-
-        :param targets: list of all targets
-        :return: outTargets
-        """
-        outTargets = []
-        for target in targets:
-            results = target.split(" ")
-            properties = {}
-            properties['target_portal'] = results[0].split(",")[0]
-            properties['target_iqn'] = results[1]
-            outTargets.append(properties)
-        return outTargets
 
     def smis_get_iscsi_properties(self, volume, connector, ip_and_iqn,
                                   is_multipath):
@@ -409,3 +400,52 @@ class EMCVMAXISCSIDriver(driver.ISCSIDriver):
         return self.common.create_consistencygroup_from_src(
             context, group, volumes, cgsnapshot, snapshots, source_cg,
             source_vols)
+
+    def create_export_snapshot(self, context, snapshot, connector):
+        """Driver entry point to get the export info for a new snapshot."""
+        pass
+
+    def remove_export_snapshot(self, context, snapshot):
+        """Driver entry point to remove an export for a snapshot."""
+        pass
+
+    def initialize_connection_snapshot(self, snapshot, connector, **kwargs):
+        """Allows connection to snapshot.
+
+        :param snapshot: the snapshot object
+        :param connector: the connector object
+        :param kwargs: additional parameters
+        :returns: iscsi dict
+        """
+        src_volume = snapshot['volume']
+        snapshot['host'] = src_volume['host']
+        device_info = self.common.initialize_connection(
+            snapshot, connector)
+        return self.get_iscsi_dict(
+            device_info, snapshot, connector)
+
+    def terminate_connection_snapshot(self, snapshot, connector, **kwargs):
+        """Disallows connection to snapshot.
+
+        :param snapshot: the snapshot object
+        :param connector: the connector object
+        :param kwargs: additional parameters
+        """
+        src_volume = snapshot['volume']
+        snapshot['host'] = src_volume['host']
+        return self.common.terminate_connection(snapshot,
+                                                connector)
+
+    def backup_use_temp_snapshot(self):
+        return True
+
+    def failover_host(self, context, volumes, secondary_id=None):
+        """Failover volumes to a secondary host/ backend.
+
+        :param context: the context
+        :param volumes: the list of volumes to be failed over
+        :param secondary_id: the backend to be failed over to, is 'default'
+                             if fail back
+        :return: secondary_id, volume_update_list
+        """
+        return self.common.failover_host(context, volumes, secondary_id)

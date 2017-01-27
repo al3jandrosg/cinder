@@ -17,10 +17,9 @@ Client side of the scheduler manager RPC API.
 """
 
 from oslo_serialization import jsonutils
+from oslo_utils import timeutils
 
 from cinder.common import constants
-from cinder import exception
-from cinder.i18n import _
 from cinder import rpc
 
 
@@ -62,9 +61,14 @@ class SchedulerAPI(rpc.RPCAPI):
         3.0 - Remove 2.x compatibility
         3.1 - Adds notify_service_capabilities()
         3.2 - Adds extend_volume()
+        3.3 - Add cluster support to migrate_volume, and to
+              update_service_capabilities and send the timestamp from the
+              capabilities.
+        3.4 - Adds work_cleanup and do_cleanup methods.
+        3.5 - Make notify_service_capabilities support A/A
     """
 
-    RPC_API_VERSION = '3.2'
+    RPC_API_VERSION = '3.5'
     RPC_DEFAULT_VERSION = '3.0'
     TOPIC = constants.SCHEDULER_TOPIC
     BINARY = 'cinder-scheduler'
@@ -79,7 +83,7 @@ class SchedulerAPI(rpc.RPCAPI):
             'filter_properties_list': filter_properties_list,
         }
 
-        return cctxt.cast(ctxt, 'create_consistencygroup', **msg_args)
+        cctxt.cast(ctxt, 'create_consistencygroup', **msg_args)
 
     def create_group(self, ctxt, group, group_spec=None,
                      request_spec_list=None, group_filter_properties=None,
@@ -95,7 +99,7 @@ class SchedulerAPI(rpc.RPCAPI):
             'filter_properties_list': filter_properties_list,
         }
 
-        return cctxt.cast(ctxt, 'create_group', **msg_args)
+        cctxt.cast(ctxt, 'create_group', **msg_args)
 
     def create_volume(self, ctxt, volume, snapshot_id=None, image_id=None,
                       request_spec=None, filter_properties=None):
@@ -106,15 +110,24 @@ class SchedulerAPI(rpc.RPCAPI):
                     'filter_properties': filter_properties, 'volume': volume}
         return cctxt.cast(ctxt, 'create_volume', **msg_args)
 
-    def migrate_volume_to_host(self, ctxt, volume, host, force_host_copy=False,
-                               request_spec=None, filter_properties=None):
-        cctxt = self._get_cctxt()
+    def migrate_volume(self, ctxt, volume, backend, force_copy=False,
+                       request_spec=None, filter_properties=None):
         request_spec_p = jsonutils.to_primitive(request_spec)
-        msg_args = {'host': host, 'force_host_copy': force_host_copy,
-                    'request_spec': request_spec_p,
+        msg_args = {'request_spec': request_spec_p,
                     'filter_properties': filter_properties, 'volume': volume}
+        version = '3.3'
+        if self.client.can_send_version(version):
+            msg_args['backend'] = backend
+            msg_args['force_copy'] = force_copy
+            method = 'migrate_volume'
+        else:
+            version = '3.0'
+            msg_args['host'] = backend
+            msg_args['force_host_copy'] = force_copy
+            method = 'migrate_volume_to_host'
 
-        return cctxt.cast(ctxt, 'migrate_volume_to_host', **msg_args)
+        cctxt = self._get_cctxt(version=version)
+        return cctxt.cast(ctxt, method, **msg_args)
 
     def retype(self, ctxt, volume, request_spec=None, filter_properties=None):
         cctxt = self._get_cctxt()
@@ -133,13 +146,10 @@ class SchedulerAPI(rpc.RPCAPI):
         }
         return cctxt.cast(ctxt, 'manage_existing', **msg_args)
 
+    @rpc.assert_min_rpc_version('3.2')
     def extend_volume(self, ctxt, volume, new_size, reservations,
                       request_spec, filter_properties=None):
         cctxt = self._get_cctxt()
-        if not cctxt.can_send_version('3.2'):
-            msg = _('extend_volume requires cinder-scheduler '
-                    'RPC API version >= 3.2.')
-            raise exception.ServiceTooOld(msg)
 
         request_spec_p = jsonutils.to_primitive(request_spec)
         msg_args = {
@@ -156,20 +166,56 @@ class SchedulerAPI(rpc.RPCAPI):
         cctxt = self._get_cctxt()
         return cctxt.call(ctxt, 'get_pools', filters=filters)
 
-    def update_service_capabilities(self, ctxt, service_name, host,
-                                    capabilities):
-        cctxt = self._get_cctxt(fanout=True)
-        cctxt.cast(ctxt, 'update_service_capabilities',
-                   service_name=service_name, host=host,
-                   capabilities=capabilities)
+    @staticmethod
+    def prepare_timestamp(timestamp):
+        timestamp = timestamp or timeutils.utcnow()
+        return jsonutils.to_primitive(timestamp)
 
+    def update_service_capabilities(self, ctxt, service_name, host,
+                                    capabilities, cluster_name,
+                                    timestamp=None):
+        msg_args = dict(service_name=service_name, host=host,
+                        capabilities=capabilities)
+
+        version = '3.3'
+        # If server accepts timestamping the capabilities and the cluster name
+        if self.client.can_send_version(version):
+            # Serialize the timestamp
+            msg_args.update(cluster_name=cluster_name,
+                            timestamp=self.prepare_timestamp(timestamp))
+        else:
+            version = '3.0'
+
+        cctxt = self._get_cctxt(fanout=True, version=version)
+        cctxt.cast(ctxt, 'update_service_capabilities', **msg_args)
+
+    @rpc.assert_min_rpc_version('3.1')
     def notify_service_capabilities(self, ctxt, service_name,
-                                    host, capabilities):
-        cctxt = self._get_cctxt(version='3.1')
-        if not cctxt.can_send_version('3.1'):
-            msg = _('notify_service_capabilities requires cinder-scheduler '
-                    'RPC API version >= 3.1.')
-            raise exception.ServiceTooOld(msg)
-        cctxt.cast(ctxt, 'notify_service_capabilities',
-                   service_name=service_name, host=host,
-                   capabilities=capabilities)
+                                    backend, capabilities, timestamp=None):
+        parameters = {'service_name': service_name,
+                      'capabilities': capabilities}
+        if self.client.can_send_version('3.5'):
+            version = '3.5'
+            parameters.update(backend=backend,
+                              timestamp=self.prepare_timestamp(timestamp))
+        else:
+            version = '3.1'
+            parameters['host'] = backend
+
+        cctxt = self._get_cctxt(version=version)
+        cctxt.cast(ctxt, 'notify_service_capabilities', **parameters)
+
+    @rpc.assert_min_rpc_version('3.4')
+    def work_cleanup(self, ctxt, cleanup_request):
+        """Generate individual service cleanup requests from user request."""
+        cctxt = self.client.prepare(version='3.4')
+        # Response will have services that are receiving the cleanup request
+        # and services that couldn't receive it since they are down.
+        return cctxt.call(ctxt, 'work_cleanup',
+                          cleanup_request=cleanup_request)
+
+    @rpc.assert_min_rpc_version('3.4')
+    def do_cleanup(self, ctxt, cleanup_request):
+        """Perform this scheduler's resource cleanup as per cleanup_request."""
+        cctxt = self.client.prepare(version='3.4')
+        cctxt.cast(ctxt, 'do_cleanup', cleanup_request=cleanup_request)

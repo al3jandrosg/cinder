@@ -764,9 +764,11 @@ class LimitsViewBuilderTest(test.TestCase):
                              "remaining": 10,
                              "unit": "DAY",
                              "resetTime": 1311272226}]
-        self.absolute_limits = {"metadata_items": 1,
-                                "injected_files": 5,
-                                "injected_file_content_bytes": 5}
+        self.absolute_limits = {"gigabytes": 1,
+                                "backup_gigabytes": 2,
+                                "volumes": 3,
+                                "snapshots": 4,
+                                "backups": 5}
 
     def test_build_limits(self):
         tdate = "2011-07-21T18:17:06"
@@ -785,14 +787,15 @@ class LimitsViewBuilderTest(test.TestCase):
                                             "remaining": 10,
                                             "unit": "DAY",
                                             "next-available": tdate}]}],
-                       "absolute": {"maxServerMeta": 1,
-                                    "maxImageMeta": 1,
-                                    "maxPersonality": 5,
-                                    "maxPersonalitySize": 5}}}
+                       "absolute": {"maxTotalVolumeGigabytes": 1,
+                                    "maxTotalBackupGigabytes": 2,
+                                    "maxTotalVolumes": 3,
+                                    "maxTotalSnapshots": 4,
+                                    "maxTotalBackups": 5}}}
 
         output = self.view_builder.build(self.rate_limits,
                                          self.absolute_limits)
-        self.assertDictMatch(expected_limits, output)
+        self.assertDictEqual(expected_limits, output)
 
     def test_build_limits_empty_limits(self):
         expected_limits = {"limits": {"rate": [],
@@ -801,4 +804,4 @@ class LimitsViewBuilderTest(test.TestCase):
         abs_limits = {}
         rate_limits = []
         output = self.view_builder.build(rate_limits, abs_limits)
-        self.assertDictMatch(expected_limits, output)
+        self.assertDictEqual(expected_limits, output)

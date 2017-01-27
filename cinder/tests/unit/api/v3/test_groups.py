@@ -144,6 +144,49 @@ class GroupsAPITestCase(test.TestCase):
         self.assertEqual([fake.VOLUME_TYPE_ID],
                          res_dict['group']['volume_types'])
 
+    @mock.patch('cinder.objects.volume_type.VolumeTypeList.get_all_by_group')
+    @mock.patch('cinder.objects.volume.VolumeList.get_all_by_generic_group')
+    def test_show_group_with_list_volume(self, mock_vol_get_all_by_group,
+                                         mock_vol_type_get_all_by_group):
+        volume_objs = [objects.Volume(context=self.ctxt, id=i)
+                       for i in [fake.VOLUME_ID]]
+        volumes = objects.VolumeList(context=self.ctxt, objects=volume_objs)
+        mock_vol_get_all_by_group.return_value = volumes
+
+        vol_type_objs = [objects.VolumeType(context=self.ctxt, id=i)
+                         for i in [fake.VOLUME_TYPE_ID]]
+        vol_types = objects.VolumeTypeList(context=self.ctxt,
+                                           objects=vol_type_objs)
+        mock_vol_type_get_all_by_group.return_value = vol_types
+
+        # If the microversion >= 3.25 and "list_volume=True", "volumes" should
+        # be contained in the response body.
+        req = fakes.HTTPRequest.blank('/v3/%s/groups/%s?list_volume=True' %
+                                      (fake.PROJECT_ID, self.group1.id),
+                                      version='3.25')
+        res_dict = self.controller.show(req, self.group1.id)
+        self.assertEqual(1, len(res_dict))
+        self.assertEqual([fake.VOLUME_ID],
+                         res_dict['group']['volumes'])
+
+        # If the microversion >= 3.25 but "list_volume" is missing, "volumes"
+        # should not be contained in the response body.
+        req = fakes.HTTPRequest.blank('/v3/%s/groups/%s' %
+                                      (fake.PROJECT_ID, self.group1.id),
+                                      version='3.25')
+        res_dict = self.controller.show(req, self.group1.id)
+        self.assertEqual(1, len(res_dict))
+        self.assertIsNone(res_dict['group'].get('volumes', None))
+
+        # If the microversion < 3.25, "volumes" should not be contained in the
+        # response body.
+        req = fakes.HTTPRequest.blank('/v3/%s/groups/%s?list_volume=True' %
+                                      (fake.PROJECT_ID, self.group1.id),
+                                      version='3.24')
+        res_dict = self.controller.show(req, self.group1.id)
+        self.assertEqual(1, len(res_dict))
+        self.assertIsNone(res_dict['group'].get('volumes', None))
+
     def test_show_group_with_group_NotFound(self):
         req = fakes.HTTPRequest.blank('/v3/%s/groups/%s' %
                                       (fake.PROJECT_ID,
@@ -340,21 +383,24 @@ class GroupsAPITestCase(test.TestCase):
         self.assertEqual([fake.VOLUME_TYPE_ID, fake.VOLUME_TYPE2_ID],
                          res_dict['groups'][2]['volume_types'])
 
+    @ddt.data(False, True)
     @mock.patch(
         'cinder.api.openstack.wsgi.Controller.validate_name_and_description')
-    def test_create_group_json(self, mock_validate):
+    def test_create_group_json(self, use_group_type_name, mock_validate):
         # Create volume types and group type
         vol_type = 'test'
         vol_type_id = db.volume_type_create(
             self.ctxt,
             {'name': vol_type, 'extra_specs': {}}).get('id')
-        grp_type = 'grp_type'
-        grp_type_id = db.group_type_create(
+        grp_type_name = 'test_grp_type'
+        grp_type = db.group_type_create(
             self.ctxt,
-            {'name': grp_type, 'group_specs': {}}).get('id')
+            {'name': grp_type_name, 'group_specs': {}}).get('id')
+        if use_group_type_name:
+            grp_type = grp_type_name
         body = {"group": {"name": "group1",
                           "volume_types": [vol_type_id],
-                          "group_type": grp_type_id,
+                          "group_type": grp_type,
                           "description":
                           "Group 1", }}
         req = fakes.HTTPRequest.blank('/v3/%s/groups' % fake.PROJECT_ID,
@@ -465,14 +511,10 @@ class GroupsAPITestCase(test.TestCase):
         grp_type = {'id': fake.GROUP_TYPE_ID, 'name': 'group_type'}
         fake_type = {'id': fake.VOLUME_TYPE_ID, 'name': 'fake_type'}
         self.mock_object(db, 'volume_types_get_by_name_or_id',
-                         mock.Mock(return_value=[fake_type]))
-        self.mock_object(db, 'group_type_get',
-                         mock.Mock(return_value=grp_type))
-        self.mock_object(self.group_api,
-                         '_cast_create_group',
-                         mock.Mock())
-        self.mock_object(self.group_api, 'update_quota',
-                         mock.Mock())
+                         return_value=[fake_type])
+        self.mock_object(db, 'group_type_get', return_value=grp_type)
+        self.mock_object(self.group_api, '_cast_create_group')
+        self.mock_object(self.group_api, 'update_quota')
         group = self.group_api.create(self.ctxt, name, description,
                                       grp_type['id'], [fake_type['id']])
         self.group_api.update_quota.assert_called_once_with(
@@ -490,6 +532,22 @@ class GroupsAPITestCase(test.TestCase):
             context.get_admin_context(read_deleted='yes'),
             group.id)
         self.assertEqual(fields.GroupStatus.DELETED, group.status)
+
+    @mock.patch('cinder.group.api.API.create')
+    def test_create_group_failed_exceeded_quota(self, mock_group_create):
+        mock_group_create.side_effect = exception.GroupLimitExceeded(allowed=1)
+        name = 'group1'
+        body = {"group": {"group_type": fake.GROUP_TYPE_ID,
+                          "volume_types": [fake.VOLUME_TYPE_ID],
+                          "name": name,
+                          "description":
+                          "Group 1", }}
+        req = fakes.HTTPRequest.blank('/v3/%s/groups' % fake.PROJECT_ID,
+                                      version=GROUP_MICRO_VERSION)
+        ex = self.assertRaises(exception.GroupLimitExceeded,
+                               self.controller.create,
+                               req, body)
+        self.assertEqual(413, ex.code)
 
     def test_delete_group_with_invalid_body(self):
         self.group1.status = fields.GroupStatus.AVAILABLE
@@ -808,23 +866,68 @@ class GroupsAPITestCase(test.TestCase):
                           self.controller.update,
                           req, self.group1.id, body)
 
+    @ddt.data(('3.11', 'fake_group_001',
+               fields.GroupStatus.AVAILABLE,
+               exception.VersionNotFoundForAPIMethod),
+              ('3.19', 'fake_group_001',
+               fields.GroupStatus.AVAILABLE,
+               exception.VersionNotFoundForAPIMethod),
+              ('3.20', 'fake_group_001',
+               fields.GroupStatus.AVAILABLE,
+               exception.GroupNotFound),
+              ('3.20', None,
+               'invalid_test_status',
+               webob.exc.HTTPBadRequest),
+              )
+    @ddt.unpack
+    def test_reset_group_status_illegal(self, version, group_id,
+                                        status, exceptions):
+        g_id = group_id or self.group2.id
+        req = fakes.HTTPRequest.blank('/v3/%s/groups/%s/action' %
+                                      (fake.PROJECT_ID, g_id),
+                                      version=version)
+        body = {"reset_status": {
+            "status": status
+        }}
+        self.assertRaises(exceptions,
+                          self.controller.reset_status,
+                          req, g_id, body)
+
+    def test_reset_group_status(self):
+        req = fakes.HTTPRequest.blank('/v3/%s/groups/%s/action' %
+                                      (fake.PROJECT_ID, self.group2.id),
+                                      version='3.20')
+        body = {"reset_status": {
+            "status": fields.GroupStatus.AVAILABLE
+        }}
+        response = self.controller.reset_status(req,
+                                                self.group2.id, body)
+
+        group = objects.Group.get_by_id(self.ctxt, self.group2.id)
+        self.assertEqual(202, response.status_int)
+        self.assertEqual(fields.GroupStatus.AVAILABLE, group.status)
+
     @mock.patch(
         'cinder.api.openstack.wsgi.Controller.validate_name_and_description')
     def test_create_group_from_src_snap(self, mock_validate):
         self.mock_object(volume_api.API, "create", v3_fakes.fake_volume_create)
 
         group = utils.create_group(self.ctxt,
-                                   group_type_id=fake.GROUP_TYPE_ID)
+                                   group_type_id=fake.GROUP_TYPE_ID,
+                                   volume_type_ids=[fake.VOLUME_TYPE_ID])
         volume = utils.create_volume(
             self.ctxt,
-            group_id=group.id)
+            group_id=group.id,
+            volume_type_id=fake.VOLUME_TYPE_ID)
         group_snapshot = utils.create_group_snapshot(
-            self.ctxt, group_id=group.id)
+            self.ctxt, group_id=group.id,
+            group_type_id=group.group_type_id)
         snapshot = utils.create_snapshot(
             self.ctxt,
             volume.id,
             group_snapshot_id=group_snapshot.id,
-            status=fields.SnapshotStatus.AVAILABLE)
+            status=fields.SnapshotStatus.AVAILABLE,
+            volume_type_id=volume.volume_type_id)
 
         test_grp_name = 'test grp'
         body = {"create-from-src": {"name": test_grp_name,
@@ -852,10 +955,12 @@ class GroupsAPITestCase(test.TestCase):
         self.mock_object(volume_api.API, "create", v3_fakes.fake_volume_create)
 
         source_grp = utils.create_group(self.ctxt,
-                                        group_type_id=fake.GROUP_TYPE_ID)
+                                        group_type_id=fake.GROUP_TYPE_ID,
+                                        volume_type_ids=[fake.VOLUME_TYPE_ID])
         volume = utils.create_volume(
             self.ctxt,
-            group_id=source_grp.id)
+            group_id=source_grp.id,
+            volume_type_id=fake.VOLUME_TYPE_ID)
 
         test_grp_name = 'test cg'
         body = {"create-from-src": {"name": test_grp_name,

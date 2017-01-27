@@ -25,11 +25,7 @@ from cinder.zonemanager import utils as fczm_utils
 
 @interface.volumedriver
 class NetAppEseriesFibreChannelDriver(driver.BaseVD,
-                                      driver.ManageableVD,
-                                      driver.ExtendVD,
-                                      driver.TransferVD,
-                                      driver.SnapshotVD,
-                                      driver.ConsistencyGroupVD):
+                                      driver.ManageableVD):
     """NetApp E-Series FibreChannel volume driver."""
 
     DRIVER_NAME = 'NetApp_FibreChannel_ESeries'
@@ -92,11 +88,11 @@ class NetAppEseriesFibreChannelDriver(driver.BaseVD,
     def unmanage(self, volume):
         return self.library.unmanage(volume)
 
-    @fczm_utils.AddFCZone
+    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector, **kwargs):
         return self.library.initialize_connection_fc(volume, connector)
 
-    @fczm_utils.RemoveFCZone
+    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         return self.library.terminate_connection_fc(volume, connector,
                                                     **kwargs)

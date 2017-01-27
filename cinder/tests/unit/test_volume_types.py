@@ -363,7 +363,7 @@ class VolumeTypeTestCase(test.TestCase):
                                       'k2': 'v2',
                                       'k3': 'v3'}}}
         res = volume_types.get_volume_type_qos_specs(type_ref['id'])
-        self.assertDictMatch(expected, res)
+        self.assertDictEqual(expected, res)
 
     def test_volume_types_diff(self):
         # type_ref 1 and 2 have the same extra_specs, while 3 has different
@@ -496,15 +496,15 @@ class VolumeTypeTestCase(test.TestCase):
         self.assertFalse(volume_types.is_public_volume_type(self.ctxt,
                                                             volume_type_id))
 
-    def test_ensure_no_extra_specs_for_non_admin(self):
-        # non-admin users shouldn't get extra-specs back in type-get/list etc
+    def test_ensure__extra_specs_for_non_admin(self):
+        # non-admin users get extra-specs back in type-get/list etc at DB layer
         ctxt = context.RequestContext('average-joe',
                                       'd802f078-0af1-4e6b-8c02-7fac8d4339aa',
                                       auth_token='token',
                                       is_admin=False)
         volume_types.create(self.ctxt, "type-test", is_public=False)
         vtype = volume_types.get_volume_type_by_name(ctxt, 'type-test')
-        self.assertIsNone(vtype.get('extra_specs', None))
+        self.assertIsNotNone(vtype.get('extra_specs', None))
 
     def test_ensure_extra_specs_for_admin(self):
         # admin users should get extra-specs back in type-get/list etc
@@ -554,3 +554,26 @@ class VolumeTypeTestCase(test.TestCase):
                 'cipher': 'fake1',
                 'created_at': 'time1', }
         self._exec_volume_types_encryption_changed(enc1, None, True)
+
+    @mock.patch('cinder.volume.volume_types.CONF')
+    @mock.patch('cinder.volume.volume_types.rpc')
+    def test_notify_about_volume_type_access_usage(self, mock_rpc,
+                                                   mock_conf):
+        mock_conf.host = 'host1'
+        project_id = fake.PROJECT_ID
+        volume_type_id = fake.VOLUME_TYPE_ID
+
+        output = volume_types.notify_about_volume_type_access_usage(
+            mock.sentinel.context,
+            volume_type_id,
+            project_id,
+            'test_suffix')
+
+        self.assertIsNone(output)
+        mock_rpc.get_notifier.assert_called_once_with('volume_type_project',
+                                                      'host1')
+        mock_rpc.get_notifier.return_value.info.assert_called_once_with(
+            mock.sentinel.context,
+            'volume_type_project.test_suffix',
+            {'volume_type_id': volume_type_id,
+             'project_id': project_id})

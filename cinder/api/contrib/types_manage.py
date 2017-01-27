@@ -16,7 +16,10 @@
 """The volume types manage extension."""
 
 import six
+from six.moves import http_client
 import webob
+
+from oslo_utils import strutils
 
 from cinder.api import extensions
 from cinder.api.openstack import wsgi
@@ -72,7 +75,7 @@ class VolumeTypesManageController(wsgi.Controller):
             utils.check_string_length(description, 'Type description',
                                       min_length=0, max_length=255)
 
-        if not utils.is_valid_boolstr(is_public):
+        if not strutils.is_valid_boolstr(is_public):
             msg = _("Invalid value '%s' for is_public. Accepted values: "
                     "True or False.") % is_public
             raise webob.exc.HTTPBadRequest(explanation=msg)
@@ -124,7 +127,7 @@ class VolumeTypesManageController(wsgi.Controller):
                     "a combination thereof.")
             raise webob.exc.HTTPBadRequest(explanation=msg)
 
-        if is_public is not None and not utils.is_valid_boolstr(is_public):
+        if is_public is not None and not strutils.is_valid_boolstr(is_public):
             msg = _("Invalid value '%s' for is_public. Accepted values: "
                     "True or False.") % is_public
             raise webob.exc.HTTPBadRequest(explanation=msg)
@@ -185,7 +188,7 @@ class VolumeTypesManageController(wsgi.Controller):
             # Not found exception will be handled at the wsgi level
             raise
 
-        return webob.Response(status_int=202)
+        return webob.Response(status_int=http_client.ACCEPTED)
 
 
 class Types_manage(extensions.ExtensionDescriptor):

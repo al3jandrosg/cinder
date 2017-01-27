@@ -16,6 +16,7 @@
 
 from oslo_log import log as logging
 from oslo_utils import strutils
+from oslo_utils import uuidutils
 import webob
 from webob import exc
 
@@ -25,6 +26,8 @@ from cinder.api.v3.views import groups as views_groups
 from cinder import exception
 from cinder import group as group_api
 from cinder.i18n import _, _LI
+from cinder import rpc
+from cinder.volume import group_types
 
 LOG = logging.getLogger(__name__)
 
@@ -41,6 +44,13 @@ class GroupsController(wsgi.Controller):
         self.group_api = group_api.API()
         super(GroupsController, self).__init__()
 
+    def _check_default_cgsnapshot_type(self, group_type_id):
+        if group_types.is_default_cgsnapshot_type(group_type_id):
+            msg = _("Group_type %(group_type)s is reserved for migrating "
+                    "CGs to groups. Migrated group can only be operated by "
+                    "CG APIs.") % {'group_type': group_type_id}
+            raise exc.HTTPBadRequest(explanation=msg)
+
     @wsgi.Controller.api_version(GROUP_API_VERSION)
     def show(self, req, id):
         """Return data about the given group."""
@@ -52,7 +62,50 @@ class GroupsController(wsgi.Controller):
             context,
             group_id=id)
 
+        self._check_default_cgsnapshot_type(group.group_type_id)
+
         return self._view_builder.detail(req, group)
+
+    @wsgi.Controller.api_version('3.20')
+    @wsgi.action("reset_status")
+    def reset_status(self, req, id, body):
+        return self._reset_status(req, id, body)
+
+    def _reset_status(self, req, id, body):
+        """Reset status on generic group."""
+
+        context = req.environ['cinder.context']
+        try:
+            status = body['reset_status']['status'].lower()
+        except (TypeError, KeyError):
+            raise exc.HTTPBadRequest(explanation=_("Must specify 'status'"))
+
+        LOG.debug("Updating group '%(id)s' with "
+                  "'%(update)s'", {'id': id,
+                                   'update': status})
+        try:
+            notifier = rpc.get_notifier('groupStatusUpdate')
+            notifier.info(context, 'groups.reset_status.start',
+                          {'id': id,
+                           'update': status})
+            group = self.group_api.get(context, id)
+
+            self.group_api.reset_status(context, group, status)
+            notifier.info(context, 'groups.reset_status.end',
+                          {'id': id,
+                           'update': status})
+        except exception.GroupNotFound as error:
+            # Not found exception will be handled at the wsgi level
+            notifier.error(context, 'groups.reset_status',
+                           {'error_message': error.msg,
+                            'id': id})
+            raise
+        except exception.InvalidGroupStatus as error:
+            notifier.error(context, 'groups.reset_status',
+                           {'error_message': error.msg,
+                            'id': id})
+            raise exc.HTTPBadRequest(explanation=error.msg)
+        return webob.Response(status_int=202)
 
     @wsgi.Controller.api_version(GROUP_API_VERSION)
     @wsgi.action("delete")
@@ -85,6 +138,7 @@ class GroupsController(wsgi.Controller):
 
         try:
             group = self.group_api.get(context, id)
+            self._check_default_cgsnapshot_type(group.group_type_id)
             self.group_api.delete(context, group, del_vol)
         except exception.GroupNotFound:
             # Not found exception will be handled at the wsgi level
@@ -115,12 +169,22 @@ class GroupsController(wsgi.Controller):
             context, filters=filters, marker=marker, limit=limit,
             offset=offset, sort_keys=sort_keys, sort_dirs=sort_dirs)
 
+        new_groups = []
+        for grp in groups:
+            try:
+                # Only show groups not migrated from CGs
+                self._check_default_cgsnapshot_type(grp.group_type_id)
+                new_groups.append(grp)
+            except exc.HTTPBadRequest:
+                # Skip migrated group
+                pass
+
         if is_detail:
             groups = self._view_builder.detail_list(
-                req, groups)
+                req, new_groups)
         else:
             groups = self._view_builder.summary_list(
-                req, groups)
+                req, new_groups)
         return groups
 
     @wsgi.Controller.api_version(GROUP_API_VERSION)
@@ -140,6 +204,11 @@ class GroupsController(wsgi.Controller):
             msg = _("group_type must be provided to create "
                     "group %(name)s.") % {'name': name}
             raise exc.HTTPBadRequest(explanation=msg)
+        if not uuidutils.is_uuid_like(group_type):
+            req_group_type = group_types.get_group_type_by_name(context,
+                                                                group_type)
+            group_type = req_group_type['id']
+        self._check_default_cgsnapshot_type(group_type)
         volume_types = group.get('volume_types')
         if not volume_types:
             msg = _("volume_types must be provided to create "
@@ -196,16 +265,24 @@ class GroupsController(wsgi.Controller):
                     "source.") % {'name': name}
             raise exc.HTTPBadRequest(explanation=msg)
 
+        group_type_id = None
         if group_snapshot_id:
             LOG.info(_LI("Creating group %(name)s from group_snapshot "
                          "%(snap)s."),
                      {'name': name, 'snap': group_snapshot_id},
                      context=context)
+            grp_snap = self.group_api.get_group_snapshot(context,
+                                                         group_snapshot_id)
+            group_type_id = grp_snap.group_type_id
         elif source_group_id:
             LOG.info(_LI("Creating group %(name)s from "
                          "source group %(source_group_id)s."),
                      {'name': name, 'source_group_id': source_group_id},
                      context=context)
+            source_group = self.group_api.get(context, source_group_id)
+            group_type_id = source_group.group_type_id
+
+        self._check_default_cgsnapshot_type(group_type_id)
 
         try:
             new_group = self.group_api.create_from_src(
@@ -274,6 +351,7 @@ class GroupsController(wsgi.Controller):
 
         try:
             group = self.group_api.get(context, id)
+            self._check_default_cgsnapshot_type(group.group_type_id)
             self.group_api.update(
                 context, group, name, description,
                 add_volumes, remove_volumes)

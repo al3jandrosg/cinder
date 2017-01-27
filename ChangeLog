@@ -1,13 +1,198 @@
 CHANGES
 =======
 
+10.0.0.0b3
+----------
+
+* Fix api-ref status parameter
+* Small change to microversion header on devref
+* Open the source code of ibm_storage driver
+* NFS snapshots
+* Tests: Fix mock for vzstorage remotefs
+* Fix the api-ref CI failure
+* Eager load projects when getting types by group
+* Updated from global requirements
+* Switch ManageableSnaphots & ManageableVolumes list to OVO
+* Add assert_min_rpc_version decorator
+* Add volume backup tempest tests
+* Make CappedVersionUnknown exception more useful
+* Break migrate_add_message_prefix into two queries
+* Fix some problem for attachment list
+* Don't drop the volume type's extra spec at DB layer
+* VMAX driver - Implement volume replication for VMAX
+* Brcd zonemanager: Fix unstable command generation
+* Dell SC: Logging asyncTask if XML returned
+* Test: Fix assert_has_calls dict order bug (QoS)
+* FalconStor: Drop the copy_image_to_volume feature
+* Refactor backup RPC API test cases
+* Refactor scheduler RPC API test cases
+* Update the parameter check when create attachment
+* FalconStor: Restore option "san_secondary_ip"
+* Extracted HTTP response codes to constants
+* XtremIO: Add CG capability to generic groups
+* VMAX driver - Consistency Group automerge fix
+* VMAX driver - Support for compression on All Flash
+* Add new attachment APIS
+* Add lock around SolidFire clone-image
+* VMAX driver - Storage assisted volume migration
+* Dell SC: Retype fixes
+* Revert "Mark Huawei volume driver as unsupported"
+* Fix typos
+* Refactor volume RPC API test cases
+* Make notify_service_capabilities cluster aware
+* VNX: Add async migration support
+* VNX: Update sg cache if it already existed
+* Allow snapshots and volumes to have Null group values
+* Fix for FC Initiator API in Nimble Storage Driver
+* Revert "Mark Quobyte volume driver as unsupported"
+* Fix retype with migrate
+* VMware: Allow deletion of snapshot in error state
+* Move driver tests to tests/unit/volume/drivers
+* Prevent claiming and updating races on worker
+* Fix replication freeze mechanism
+* Move service and cluster creation in test to utils
+* Make Image Volume Cache cluster aware
+* Make Replication support Active-Active
+* Fix for live migration for Nimble Storage
+* NexentaStor5: Added extend method to NFS driver
+* Sync ``services`` SQLA model with what's in the DB
+* Make BackupManager not a SchedulerDependentManager
+* Optimise: Use sqlalchemy to build table sequence
+* Fix volume manage
+* Revert "Mark Tintri volume driver as unsupported"
+* Nosec subprocess with shell equal True from Bandit
+* Add volume to fake snapshot object
+* Clean up image tmp file if c-vol gets restarted
+* Prevent driver load failures from objects
+* Nosec Paramiko exec_command() warning from Bandit
+* Replace deprecated pylint disable-msg with disable
+* Updated from global requirements
+* Save model_update as admin in create_volume
+* Improvement to get group detail(Part 2)
+* Add api version history for 3.23
+* Storwize: do the correct update after failover
+* Unity Driver: Backup volume via snapshot
+* RBD: Fix RBD replication on volumes from image source
+* Dell SC: Change DRP search to reference type
+* vzstorage: fixed snapshot deletion in error state
+* Dell SC: Missing version history
+* Remove deprecated RequestBodySizeLimiter class
+* Allow triggering cleanup from API
+* [py35] image file should be open in binary mode
+* HNAS: Change snapshot names
+* Add prefix to user message event ids
+* Improve compatibility with novaclient 7.0.0
+* Updated from global requirements
+* Unity: Add support to set IO ports in option
+* Fixes hpelefthandclient AttributeError
+* Mark the sheepdog driver as unsupported
+* Add volume type access operations notification
+* Remove inheritance from deprecated classes
+* FusionStorage: rename the CI_WIKI_NAME
+* Dell SC: Failback timeout extended
+* Tests: Remove more InvalidUUID warnings
+* Don't translate exceptions w/ no message
+* Add CG capability to generic groups in VNX driver
+* RBD: Remove volume_tmp_dir option
+* VMware: Use versionutils in oslo.utils
+* Delete volume when rescheduling
+* VMware: Set backend UUID to volume UUID
+* Rename AddFCZone and RemoveFCZone according to PEP 8
+* Cleanup limit view name processing
+* Datera 2.3 driver update
+* Skip CI link in list for infra supported drivers
+* Add manage/unmanage to DISCO driver
+* Updated from global requirements
+* Fix a few typos in storwize_svc_common.py
+* Doc: Fix build warnings for missing code-block lang
+* CoprHD: Handle ScaleIO CI failing with version-3.5
+* Python3 common patterns
+* Enable DeprecationWarning in test environments
+* Add orm type check for paginate_query
+* [api-ref]Add api ref for "volume type encryption"
+* Fix sphinx errors related to missing paths/modules
+* Cascade + force volume delete parameters
+* Adds metadata in search option for snapshot
+* Fix python integer interpretation in Py2 and Py3
+* Fix Cisco Initiator zoning updates
+* Add QoS and Dedupe Support for Nimble Storage
+* Remove unused PasteAppNotFound exception
+* tgt: Remove existence check before delete
+* Only log insecure key manager warning once
+* Refactoring ITRI DISCO cinder volume driver
+* Convert 'parallels' format name to 'ploop'
+* Add psycopg2 and PyMySQL to test-requirements
+* Attach/Delete volume for tgt driver race condition fix
+* Avoid Forcing the Translation of Translatable Variables
+* Updated from global requirements
+* Deprecate the block_device driver
+* [1/4]Reset generic volume group status
+* HNAS: Deprecate HNAS iSCSI driver
+* VMAX driver - PortGroup rollback error path scenario
+* Report multiattach capability for Hitachi VSP drivers
+* Tests: Split up NFS backup notification test
+* Set replication_status automatically on retype
+* Set replication_status on volume creation
+* Update replication property in capabilities
+* Cisco: can't add new zone when no zone is created before
+* VMware: Fix inventory folder after volume transfer
+* Use oslo.messaging topics for multibackend
+* Backup project attribute support
+* Cinder consistency group returning generic error message
+* Move VNX driver to dell_emc folder
+* NexentaStor5: sessions and HTTPS support
+* Add more operations to cluster
+* Make workers ORM compatible with SQLAlchemy 1.1.4
+* VMAX driver - MVs and SGs not reflecting correct protocol
+* Delete space to pass the check of pep8
+* Fix logging traceback in service logs
+* Remove "service" from required_import_options
+* Add Rest API Support for Nimble Storage
+* Adds release note for 'Route extend_volume' bugfix
+* Add 'unmanaging' state to volumes and snapshots
+* Fix service_get mock method
+* Mark Nexenta Edge volume drivers as unsupported
+* Mark DotHill volume drivers as unsupported
+* leave the unreleased branch unspecified for release notes
+* Fix VMAX clone CG release note
+* Mark Tintri volume driver as unsupported
+* Mark Quobyte volume driver as unsupported
+* Mark Huawei volume driver as unsupported
+* Mark CloudByte volume driver as unsupported
+* Mark HPE XP volume driver as unsupported
+* RBD: Implement v2.1 replication
+* Updated from global requirements
+* Storwize: create vol fails near licensed limit
+* Add get_all capability to volume_attachments
+* Drop the judgement condition for FakeConnector
+* Rolling upgrade procedure documentation
+* Remove Scality backend driver
+* Use method is_valid_boolstr from oslo_utils
+
 10.0.0.0b2
 ----------
 
 * Updated from global requirements
+* Support new osprofiler API
+* [api-ref] Show more specific parameter of capabilities
+* Cosmetic changes to scheduler
+* Support A/A on Scheduler operations
+* Fix detach twice of snapshot
 * Add cinder volume drivers for NEC Storage M series
+* Remove authorisation checks at the DB level for quota operations
+* Fix condition parameter bug in routes
+* Add Apache 2.0 license to source file
+* VMAX driver - Attach and detach snapshot
+* Improve DB method naming consistency
+* Simplify calls to mock_object
+* Make APIVersionRequest's null check more pythonic
 * Nexenta: Added ZFS cleanup in NexentaStor4 iSCSI driver
 * Correct reraising of exception
+* Fix warning when running `tox -e docs`
+* ibm_storage driver: Added fczm decorators
+* Dell SC: Added Logging to _swap_credentials
+* Unreserve volume: fix log message for completion
+* Dell SC: Missing volume creation options
 * Hacking: Remove N333 oslo namespace import check
 * Adds Unity Cinder Driver
 * Added initial backend ISCSI driver for Reduxio
@@ -22,7 +207,9 @@ CHANGES
 * Fix dos-style endlines
 * Add QNAP ES Storage Driver
 * Fix TypeError when execute cinder-volume-usage-audit
+* Log detailed attach/detach volumes info
 * Remove anyjson test dependency
+* EMC VMAX: Remove unused is_in_range() method
 * Non-WAN port filter issue in Kaminario iSCSI driver
 * Updated from global requirements
 * Introduce Hitachi VSP iSCSI driver
@@ -32,13 +219,16 @@ CHANGES
 * Dell SC: Incorrect exceptions being returned
 * Tests: Fix invalid UUID warnings
 * Block 3.1 message with c-sch RPCAPI pinned to 3.0
+* Fix status after a VolumeDriverException
 * Fix replication_status on InvalidReplicationTarget
 * Add host check on replication actions
 * Updated from global requirements
+* Revert "Swap volume type for migration started by retype"
 * SolidFire QoS scaled by volume size
 * Refactor api test_common to use ddt library
 * New cinder driver to support INFINIDAT InfiniBox
 * Remove support for single backend config
+* Fix secondary lvm cmds rootwrap filters
 * Update detach_volume() with versionedobjects
 * Update attach_volume() with versionedobjects
 * Calculate virtual free capacity and notify
@@ -49,15 +239,18 @@ CHANGES
 * Correct the attributes of volume which created by clone a CG
 * Swap volume type for migration started by retype
 * Replace functions 'Dict.get' and 'del' with 'Dict.pop'
+* Reuse already existing groups in tempest plugin
 * Huawei: Mark password option as secret
 * Remove Unicode byte order mark
 * Always allow to create snapshot db record with snapshot-manage
 * [api-ref] Correct status code of backup delete
 * Add cg constraint when deleting a volume type
+* Fix response bootable parameter type in api document
 * Skip more parameters when import backup record
 * Dell SC: Reject thaw call when backend is failed over
 * Dell SC: Unable to locate LV primary after LV-AFO
 * Remove nosetests i18n fix
+* Remove temporary directory creation for BaseBackupTest
 * Add logging to FakeLoggingVolumeDriver
 * Remove empty debug_opts
 * Add unsupported status to driver listing
@@ -68,15 +261,30 @@ CHANGES
 * Remove 2 unnecessary assignments
 * Show team and repo badges on README
 * HPE3PAR: handle conflict in iscsi host create
+* Add dev doc for generic volume groups
+* Remove unused constant in hbsd_horcm.py
+* Fix create_group with group type name
+* Show provider_id for admin
+* Fix online data migrations cmd in release notes
 * Fix UnableToFailOver exception message
+* Gate migration tests: Add Cinder tempest hook
 * Updated from global requirements
 * Create a dell_emc folder for Dell EMC drivers
+* CG API changes for migrating CGs
+* [2/4]Reset group snapshot status
+* Update is_up from Service OVO class to match ORM
+* Replace assertDictMatch with assertDictEqual method in tests
+* Move XtremIO driver to dell_emc folder
 * Replace six.iteritems with dict.items()
+* Fix VMAX unit test timeout issue
+* Migrate consistency groups to groups
+* Move ScaleIO driver to dell_emc folder
 * Modify the position of try-except
 * Fix names in online-data-migrations release note
 * Fix typo in test_quotas.py
 * Skip test_storwize_get_host_from_connector_with_lshost_failure
 * Update v2 and v3 Volume actions documentation
+* Handle NotImplementedError for image cache cloning
 * Fix v2 volume create api-reference request parameters
 * VMware: VMDK driver performance improvements
 * VMAX driver - Create a CG from a source CG
@@ -103,6 +311,7 @@ CHANGES
 * Update replication doc
 * Add VolumeAttachStatus Enum
 * Dell SC: Live Volumes not cleaned up
+* Remove race conditions from transfer API
 * Convert backup_device to OVO
 * Clean _get_cctxt method signatures
 * DB: Optimize volume_update method
@@ -134,6 +343,7 @@ CHANGES
 * Dell SC: AsyncTask could return incomplete
 * VNX:Add more check on replication_device keys
 * Skip unit-tests which use os.fdatasync on MacOS
+* Missing parameter for storage pools in Pure Storage driver
 * NetApp: Report shared blocks exhaustion
 * Allow entry created in VolumeAttachment table for 2nd and later volumes
 * storwize: get_host_from_connector optimization

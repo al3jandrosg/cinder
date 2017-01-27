@@ -40,6 +40,7 @@ from taskflow.engines.action_engine import engine
 
 from cinder.api import common
 from cinder.brick.local_dev import lvm as brick_lvm
+from cinder.common import constants
 from cinder import context
 from cinder import coordination
 from cinder import db
@@ -260,6 +261,47 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.volume.delete_volume(self.context, vol3)
         self.volume.delete_volume(self.context, vol4)
 
+    @mock.patch('cinder.manager.CleanableManager.init_host')
+    def test_init_host_count_allocated_capacity_cluster(self, init_host_mock):
+        cluster_name = 'mycluster'
+        self.volume.cluster = cluster_name
+        # All these volumes belong to the same cluster, so we will calculate
+        # the capacity of them all because we query the DB by cluster_name.
+        tests_utils.create_volume(self.context, size=100, host=CONF.host,
+                                  cluster_name=cluster_name)
+        tests_utils.create_volume(
+            self.context, size=128, cluster_name=cluster_name,
+            host=volutils.append_host(CONF.host, 'pool0'))
+        tests_utils.create_volume(
+            self.context, size=256, cluster_name=cluster_name,
+            host=volutils.append_host(CONF.host + '2', 'pool0'))
+        tests_utils.create_volume(
+            self.context, size=512, cluster_name=cluster_name,
+            host=volutils.append_host(CONF.host + '2', 'pool1'))
+        tests_utils.create_volume(
+            self.context, size=1024, cluster_name=cluster_name,
+            host=volutils.append_host(CONF.host + '3', 'pool2'))
+
+        # These don't belong to the cluster so they will be ignored
+        tests_utils.create_volume(
+            self.context, size=1024,
+            host=volutils.append_host(CONF.host, 'pool2'))
+        tests_utils.create_volume(
+            self.context, size=1024, cluster_name=cluster_name + '1',
+            host=volutils.append_host(CONF.host + '3', 'pool2'))
+
+        self.volume.init_host(service_id=self.service_id)
+        init_host_mock.assert_called_once_with(
+            service_id=self.service_id, added_to_cluster=None)
+        stats = self.volume.stats
+        self.assertEqual(2020, stats['allocated_capacity_gb'])
+        self.assertEqual(
+            384, stats['pools']['pool0']['allocated_capacity_gb'])
+        self.assertEqual(
+            512, stats['pools']['pool1']['allocated_capacity_gb'])
+        self.assertEqual(
+            1024, stats['pools']['pool2']['allocated_capacity_gb'])
+
     @mock.patch.object(driver.BaseVD, "update_provider_info")
     def test_init_host_sync_provider_info(self, mock_update):
         vol0 = tests_utils.create_volume(
@@ -328,6 +370,50 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.volume.delete_volume(self.context, vol0)
         self.volume.delete_volume(self.context, vol1)
 
+    @mock.patch.object(driver.BaseVD, "update_provider_info")
+    def test_init_host_sync_provider_info_no_update_cluster(self, mock_update):
+        cluster_name = 'mycluster'
+        self.volume.cluster = cluster_name
+        vol0 = tests_utils.create_volume(
+            self.context, size=1, host=CONF.host, cluster_name=cluster_name)
+        vol1 = tests_utils.create_volume(
+            self.context, size=1, host=CONF.host + '2',
+            cluster_name=cluster_name)
+        vol2 = tests_utils.create_volume(
+            self.context, size=1, host=CONF.host)
+        vol3 = tests_utils.create_volume(
+            self.context, size=1, host=CONF.host,
+            cluster_name=cluster_name + '2')
+        snap0 = tests_utils.create_snapshot(self.context, vol0.id)
+        snap1 = tests_utils.create_snapshot(self.context, vol1.id)
+        tests_utils.create_snapshot(self.context, vol2.id)
+        tests_utils.create_snapshot(self.context, vol3.id)
+        mock_update.return_value = ([], [])
+        # initialize
+        self.volume.init_host(service_id=self.service_id)
+        # Grab volume and snapshot objects
+        vol0_obj = objects.Volume.get_by_id(context.get_admin_context(),
+                                            vol0.id)
+        vol1_obj = objects.Volume.get_by_id(context.get_admin_context(),
+                                            vol1.id)
+        snap0_obj = objects.Snapshot.get_by_id(self.context, snap0.id)
+        snap1_obj = objects.Snapshot.get_by_id(self.context, snap1.id)
+
+        self.assertSetEqual({vol0.id, vol1.id},
+                            {vol.id for vol in mock_update.call_args[0][0]})
+        self.assertSetEqual({snap0.id, snap1.id},
+                            {snap.id for snap in mock_update.call_args[0][1]})
+        # Check provider ids are not changed
+        self.assertIsNone(vol0_obj.provider_id)
+        self.assertIsNone(vol1_obj.provider_id)
+        self.assertIsNone(snap0_obj.provider_id)
+        self.assertIsNone(snap1_obj.provider_id)
+        # Clean up
+        self.volume.delete_snapshot(self.context, snap0_obj)
+        self.volume.delete_snapshot(self.context, snap1_obj)
+        self.volume.delete_volume(self.context, vol0)
+        self.volume.delete_volume(self.context, vol1)
+
     @mock.patch('cinder.volume.manager.VolumeManager.'
                 '_include_resources_in_cluster')
     def test_init_host_cluster_not_changed(self, include_in_cluster_mock):
@@ -341,23 +427,26 @@ class VolumeTestCase(base.BaseVolumeTestCase):
     @mock.patch('cinder.objects.volume.VolumeList.include_in_cluster')
     @mock.patch('cinder.objects.consistencygroup.ConsistencyGroupList.'
                 'include_in_cluster')
-    def test_init_host_added_to_cluster(self, cg_include_mock,
+    @mock.patch('cinder.db.image_volume_cache_include_in_cluster')
+    def test_init_host_added_to_cluster(self, image_cache_include_mock,
+                                        cg_include_mock,
                                         vol_include_mock, vol_get_all_mock,
                                         snap_get_all_mock):
-        self.mock_object(self.volume, 'cluster', mock.sentinel.cluster)
+        cluster = str(mock.sentinel.cluster)
+        self.mock_object(self.volume, 'cluster', cluster)
         self.volume.init_host(added_to_cluster=True,
                               service_id=self.service_id)
 
-        vol_include_mock.assert_called_once_with(mock.ANY,
-                                                 mock.sentinel.cluster,
+        vol_include_mock.assert_called_once_with(mock.ANY, cluster,
                                                  host=self.volume.host)
-        cg_include_mock.assert_called_once_with(mock.ANY,
-                                                mock.sentinel.cluster,
+        cg_include_mock.assert_called_once_with(mock.ANY, cluster,
                                                 host=self.volume.host)
+        image_cache_include_mock.assert_called_once_with(mock.ANY, cluster,
+                                                         host=self.volume.host)
         vol_get_all_mock.assert_called_once_with(
-            mock.ANY, filters={'cluster_name': mock.sentinel.cluster})
+            mock.ANY, filters={'cluster_name': cluster})
         snap_get_all_mock.assert_called_once_with(
-            mock.ANY, search_opts={'cluster_name': mock.sentinel.cluster})
+            mock.ANY, filters={'cluster_name': cluster})
 
     @mock.patch('cinder.objects.service.Service.get_minimum_rpc_version')
     @mock.patch('cinder.objects.service.Service.get_minimum_obj_version')
@@ -447,6 +536,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
     def test_create_driver_not_initialized_rescheduling(self):
         self.volume.driver._initialized = False
+        mock_delete = self.mock_object(self.volume.driver, 'delete_volume')
 
         volume = tests_utils.create_volume(
             self.context,
@@ -463,6 +553,10 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         # and filter_properties, assert that it wasn't counted in
         # allocated_capacity tracking.
         self.assertEqual({}, self.volume.stats['pools'])
+
+        # NOTE(dulek): As we've rescheduled, make sure delete_volume was
+        # called.
+        self.assertTrue(mock_delete.called)
 
         db.volume_destroy(context.get_admin_context(), volume_id)
 
@@ -573,6 +667,28 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           db.volume_get,
                           self.context,
                           volume_id)
+
+    def test_delete_volume_frozen(self):
+        service = tests_utils.create_service(self.context, {'frozen': True})
+        volume = tests_utils.create_volume(self.context, host=service.host)
+        self.assertRaises(exception.InvalidInput,
+                          self.volume_api.delete, self.context, volume)
+
+    def test_delete_snapshot_frozen(self):
+        service = tests_utils.create_service(self.context, {'frozen': True})
+        volume = tests_utils.create_volume(self.context, host=service.host)
+        snapshot = tests_utils.create_snapshot(self.context, volume.id)
+        self.assertRaises(exception.InvalidInput,
+                          self.volume_api.delete_snapshot, self.context,
+                          snapshot)
+
+    @ddt.data('create_snapshot', 'create_snapshot_force')
+    def test_create_snapshot_frozen(self, method):
+        service = tests_utils.create_service(self.context, {'frozen': True})
+        volume = tests_utils.create_volume(self.context, host=service.host)
+        method = getattr(self.volume_api, method)
+        self.assertRaises(exception.InvalidInput,
+                          method, self.context, volume, 'name', 'desc')
 
     def test_delete_volume_another_cluster_fails(self):
         """Test delete of volume from another cluster fails."""
@@ -964,6 +1080,14 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
         self.volume.create_volume(self.context, volume)
         self.assertEqual(fake.PROVIDER_ID, volume['provider_id'])
+
+    def test_create_volume_with_admin_metadata(self):
+        with mock.patch.object(
+                self.volume.driver, 'create_volume',
+                return_value={'admin_metadata': {'foo': 'bar'}}):
+            volume = tests_utils.create_volume(self.user_context)
+            self.volume.create_volume(self.user_context, volume)
+            self.assertEqual({'foo': 'bar'}, volume['admin_metadata'])
 
     @mock.patch.object(key_manager, 'API', new=fake_keymgr.fake_api)
     def test_create_delete_volume_with_encrypted_volume_type(self):
@@ -2056,13 +2180,13 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             # be consumed by front-end or both front-end and back-end
             conn_info = self.volume.initialize_connection(
                 self.context, fake_volume_obj, connector,)
-            self.assertDictMatch(qos_specs_expected,
+            self.assertDictEqual(qos_specs_expected,
                                  conn_info['data']['qos_specs'])
 
             qos_values.update({'consumer': 'both'})
             conn_info = self.volume.initialize_connection(
                 self.context, fake_volume_obj, connector)
-            self.assertDictMatch(qos_specs_expected,
+            self.assertDictEqual(qos_specs_expected,
                                  conn_info['data']['qos_specs'])
             # initialize_connection() skips qos_specs that is designated to be
             # consumed by back-end only
@@ -2120,7 +2244,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         volume = volume if volume_object else vol
@@ -2169,7 +2293,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
@@ -2203,7 +2327,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
         connector = {'initiator': 'iqn.2012-07.org.fake:02'}
         conn_info = self.volume.initialize_connection(self.context,
@@ -2297,7 +2421,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         attachment2 = self.volume.attach_volume(self.context, volume_id,
                                                 instance_uuid_2, None,
                                                 mountpoint, 'ro')
@@ -2366,7 +2490,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2438,7 +2562,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2489,7 +2613,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2544,7 +2668,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
@@ -2592,7 +2716,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2656,7 +2780,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2704,7 +2828,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2766,7 +2890,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2801,7 +2925,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
         connector = {'initiator': 'iqn.2012-07.org.fake:01'}
         conn_info = self.volume.initialize_connection(self.context,
                                                       volume, connector)
@@ -2846,7 +2970,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
         # Assert a user message was created
         self.volume.message_api.create.assert_called_once_with(
-            self.context, defined_messages.ATTACH_READONLY_VOLUME,
+            self.context, defined_messages.EventIds.ATTACH_READONLY_VOLUME,
             self.context.project_id, resource_type=resource_types.VOLUME,
             resource_uuid=volume['id'])
 
@@ -2863,7 +2987,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
         db.volume_update(self.context, volume_id, {'status': 'available'})
         self.assertRaises(exception.InvalidVolumeAttachMode,
@@ -2887,7 +3011,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ret = {}
         for item in admin_metadata:
             ret.update({item['key']: item['value']})
-        self.assertDictMatch(expected, ret)
+        self.assertDictEqual(expected, ret)
 
     def test_run_api_attach_detach_volume_with_wrong_attach_mode(self):
         # Not allow using 'read-write' mode attach readonly volume
@@ -3371,7 +3495,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.assertEqual(len(vol_glance_meta), len(snap_glance_meta))
         vol_glance_dict = {x.key: x.value for x in vol_glance_meta}
         snap_glance_dict = {x.key: x.value for x in snap_glance_meta}
-        self.assertDictMatch(vol_glance_dict, snap_glance_dict)
+        self.assertDictEqual(vol_glance_dict, snap_glance_dict)
 
         # ensure that snapshot's status is changed to 'available'
         self.assertEqual(fields.SnapshotStatus.AVAILABLE, snap.status)
@@ -3624,12 +3748,16 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
         self.mock_object(self.volume.driver, 'copy_image_to_volume',
                          fake_copy_image_to_volume)
+        mock_delete = self.mock_object(self.volume.driver, 'delete_volume')
         self.assertRaises(exception.ImageCopyFailure,
                           self._create_volume_from_image)
         # NOTE(dulek): Rescheduling should not occur, so lets assert that
         # allocated_capacity is incremented.
         self.assertDictEqual(self.volume.stats['pools'],
                              {'_pool0': {'allocated_capacity_gb': 1}})
+        # NOTE(dulek): As we haven't rescheduled, make sure no delete_volume
+        # was called.
+        self.assertFalse(mock_delete.called)
 
     @mock.patch('cinder.utils.brick_get_connector_properties')
     @mock.patch('cinder.utils.brick_get_connector')
@@ -4423,6 +4551,26 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           volume,
                           cascade=True)
 
+    def test_cascade_force_delete_volume_with_snapshots_error(self):
+        """Test volume force deletion with errored dependent snapshots."""
+        volume = tests_utils.create_volume(self.context,
+                                           host='fakehost')
+
+        snapshot = create_snapshot(volume.id,
+                                   size=volume.size,
+                                   status=fields.SnapshotStatus.ERROR_DELETING)
+        self.volume.create_snapshot(self.context, snapshot)
+
+        volume_api = cinder.volume.api.API()
+
+        volume_api.delete(self.context, volume, cascade=True, force=True)
+
+        snapshot = objects.Snapshot.get_by_id(self.context, snapshot.id)
+        self.assertEqual('deleting', snapshot.status)
+
+        volume = objects.Volume.get_by_id(self.context, volume.id)
+        self.assertEqual('deleting', volume.status)
+
     @mock.patch.object(fake_driver.FakeLoggingVolumeDriver, 'get_volume_stats')
     @mock.patch.object(driver.BaseVD, '_init_vendor_properties')
     def test_get_capabilities(self, mock_init_vendor, mock_get_volume_stats):
@@ -4442,7 +4590,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                 'title': 'QoS',
                 'description': 'Enables QoS.',
                 'type': 'boolean'},
-            'replication': {
+            'replication_enabled': {
                 'title': 'Replication',
                 'description': 'Enables replication.',
                 'type': 'boolean'},
@@ -4785,7 +4933,7 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
         self.assertEqual('newhost', volume.host)
         self.assertEqual('success', volume.migration_status)
 
-    def _fake_create_volume(self, ctxt, volume, host, req_spec, filters,
+    def _fake_create_volume(self, ctxt, volume, req_spec, filters,
                             allow_reschedule=True):
         return db.volume_update(ctxt, volume['id'],
                                 {'status': self.expected_status})
@@ -4880,7 +5028,7 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
                                                      nova_api, create_volume,
                                                      save):
         def fake_create_volume(*args, **kwargs):
-            context, volume, host, request_spec, filter_properties = args
+            context, volume, request_spec, filter_properties = args
             fake_db = mock.Mock()
             task = create_volume_manager.ExtractVolumeSpecTask(fake_db)
             specs = task.execute(context, volume, {})
@@ -4916,7 +5064,7 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
                                               migrate_volume_completion,
                                               nova_api, create_volume, save):
         def fake_create_volume(*args, **kwargs):
-            context, volume, host, request_spec, filter_properties = args
+            context, volume, request_spec, filter_properties = args
             fake_db = mock.Mock()
             task = create_volume_manager.ExtractVolumeSpecTask(fake_db)
             specs = task.execute(context, volume, {})
@@ -5365,20 +5513,31 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
                             snap=False, policy='on-demand',
                             migrate_exc=False, exc=None, diff_equal=False,
                             replica=False, reserve_vol_type_only=False,
-                            encryption_changed=False):
+                            encryption_changed=False,
+                            replica_new=None):
         elevated = context.get_admin_context()
         project_id = self.context.project_id
 
-        db.volume_type_create(elevated, {'name': 'old', 'extra_specs': {}})
+        if replica:
+            rep_status = 'enabled'
+            extra_specs = {'replication_enabled': '<is> True'}
+        else:
+            rep_status = 'disabled'
+            extra_specs = {}
+
+        if replica_new is None:
+            replica_new = replica
+        new_specs = {'replication_enabled': '<is> True'} if replica_new else {}
+
+        db.volume_type_create(elevated, {'name': 'old',
+                                         'extra_specs': extra_specs})
         old_vol_type = db.volume_type_get_by_name(elevated, 'old')
-        db.volume_type_create(elevated, {'name': 'new', 'extra_specs': {}})
+
+        db.volume_type_create(elevated, {'name': 'new',
+                                         'extra_specs': new_specs})
         vol_type = db.volume_type_get_by_name(elevated, 'new')
         db.quota_create(elevated, project_id, 'volumes_new', 10)
 
-        if replica:
-            rep_status = 'active'
-        else:
-            rep_status = 'disabled'
         volume = tests_utils.create_volume(self.context, size=1,
                                            host=CONF.host, status='retyping',
                                            volume_type_id=old_vol_type['id'],
@@ -5430,8 +5589,14 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
                 'qos_specs': {},
                 'extra_specs': {},
             }
+            if replica != replica_new:
+                returned_diff['extra_specs']['replication_enabled'] = (
+                    extra_specs.get('replication_enabled'),
+                    new_specs.get('replication_enabled'))
+            expected_replica_status = 'enabled' if replica_new else 'disabled'
+
             if encryption_changed:
-                returned_diff = {'encryption': 'fake'}
+                returned_diff['encryption'] = 'fake'
             _diff.return_value = (returned_diff, diff_equal)
             if migrate_exc:
                 _mig.side_effect = KeyError
@@ -5451,6 +5616,8 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
                                   migration_policy=policy,
                                   reservations=reservations,
                                   old_reservations=old_reservations)
+            if host_obj['host'] != CONF.host:
+                _retype.assert_not_called()
 
         # get volume/quota properties
         volume = objects.Volume.get_by_id(elevated, volume.id)
@@ -5497,9 +5664,16 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
             mock_notify.assert_not_called()
         if encryption_changed:
             self.assertTrue(_mig.called)
+        self.assertEqual(expected_replica_status, volume.replication_status)
 
     def test_retype_volume_driver_success(self):
         self._retype_volume_exec(True)
+
+    @ddt.data((False, False), (False, True), (True, False), (True, True))
+    @ddt.unpack
+    def test_retype_volume_replica(self, replica, replica_new):
+        self._retype_volume_exec(True, replica=replica,
+                                 replica_new=replica_new)
 
     def test_retype_volume_migration_bad_policy(self):
         # Test volume retype that requires migration by not allowed
@@ -5566,107 +5740,356 @@ class VolumeMigrationTestCase(base.BaseVolumeTestCase):
         self.assertRaises(exception.VolumeNotFound, volume.refresh)
 
 
+@ddt.ddt
 class ReplicationTestCase(base.BaseVolumeTestCase):
 
-    @mock.patch.object(volume_rpcapi.VolumeAPI, 'failover_host')
+    @mock.patch('cinder.objects.Service.is_up', True)
+    @mock.patch.object(volume_rpcapi.VolumeAPI, 'failover')
     @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_failover_host(self, mock_db_args, mock_db_update,
-                           mock_failover):
-        """Test replication failover_host."""
+    @mock.patch.object(objects.ServiceList, 'get_all')
+    def test_failover(self, mock_get_all, mock_db_update, mock_failover):
+        """Test replication failover."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
-            self.context,
-            binary='cinder-volume')
+        service = fake_service.fake_service_obj(self.context,
+                                                binary='cinder-volume')
+        mock_get_all.return_value = [service]
         mock_db_update.return_value = {'replication_status': 'enabled'}
         volume_api = cinder.volume.api.API()
-        volume_api.failover_host(self.context, host=CONF.host)
-        mock_failover.assert_called_once_with(self.context, CONF.host, None)
+        volume_api.failover(self.context, host=CONF.host, cluster_name=None)
+        mock_failover.assert_called_once_with(self.context, service, None)
 
-    @mock.patch.object(volume_rpcapi.VolumeAPI, 'failover_host')
+    @mock.patch.object(volume_rpcapi.VolumeAPI, 'failover')
     @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_failover_host_unexpected_status(self, mock_db_args,
-                                             mock_db_update,
-                                             mock_failover):
-        """Test replication failover_host unxepected status."""
+    @mock.patch.object(cinder.db, 'service_get_all')
+    def test_failover_unexpected_status(self, mock_db_get_all, mock_db_update,
+                                        mock_failover):
+        """Test replication failover unxepected status."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
+        mock_db_get_all.return_value = [fake_service.fake_service_obj(
             self.context,
-            binary='cinder-volume')
+            binary='cinder-volume')]
         mock_db_update.return_value = None
         volume_api = cinder.volume.api.API()
         self.assertRaises(exception.InvalidInput,
-                          volume_api.failover_host,
+                          volume_api.failover,
                           self.context,
-                          host=CONF.host)
+                          host=CONF.host,
+                          cluster_name=None)
 
     @mock.patch.object(volume_rpcapi.VolumeAPI, 'freeze_host')
-    @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_freeze_host(self, mock_db_args, mock_db_update,
+    @mock.patch.object(cinder.db, 'conditional_update', return_value=1)
+    @mock.patch.object(cinder.objects.ServiceList, 'get_all')
+    def test_freeze_host(self, mock_get_all, mock_db_update,
                          mock_freeze):
         """Test replication freeze_host."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
-            self.context,
-            binary='cinder-volume')
-        mock_db_update.return_value = {'frozen': False}
+        service = fake_service.fake_service_obj(self.context,
+                                                binary='cinder-volume')
+        mock_get_all.return_value = [service]
+        mock_freeze.return_value = True
         volume_api = cinder.volume.api.API()
-        volume_api.freeze_host(self.context, host=CONF.host)
-        mock_freeze.assert_called_once_with(self.context, CONF.host)
+        volume_api.freeze_host(self.context, host=CONF.host, cluster_name=None)
+        mock_freeze.assert_called_once_with(self.context, service)
 
     @mock.patch.object(volume_rpcapi.VolumeAPI, 'freeze_host')
     @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_freeze_host_unexpected_status(self, mock_db_args,
+    @mock.patch.object(cinder.db, 'service_get_all')
+    def test_freeze_host_unexpected_status(self, mock_get_all,
                                            mock_db_update,
                                            mock_freeze):
         """Test replication freeze_host unexpected status."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
+        mock_get_all.return_value = [fake_service.fake_service_obj(
             self.context,
-            binary='cinder-volume')
+            binary='cinder-volume')]
         mock_db_update.return_value = None
         volume_api = cinder.volume.api.API()
         self.assertRaises(exception.InvalidInput,
                           volume_api.freeze_host,
                           self.context,
-                          host=CONF.host)
+                          host=CONF.host,
+                          cluster_name=None)
 
     @mock.patch.object(volume_rpcapi.VolumeAPI, 'thaw_host')
-    @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_thaw_host(self, mock_db_args, mock_db_update,
+    @mock.patch.object(cinder.db, 'conditional_update', return_value=1)
+    @mock.patch.object(cinder.objects.ServiceList, 'get_all')
+    def test_thaw_host(self, mock_get_all, mock_db_update,
                        mock_thaw):
         """Test replication thaw_host."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
-            self.context,
-            binary='cinder-volume')
-        mock_db_update.return_value = {'frozen': True}
+        service = fake_service.fake_service_obj(self.context,
+                                                binary='cinder-volume')
+        mock_get_all.return_value = [service]
         mock_thaw.return_value = True
         volume_api = cinder.volume.api.API()
-        volume_api.thaw_host(self.context, host=CONF.host)
-        mock_thaw.assert_called_once_with(self.context, CONF.host)
+        volume_api.thaw_host(self.context, host=CONF.host, cluster_name=None)
+        mock_thaw.assert_called_once_with(self.context, service)
 
     @mock.patch.object(volume_rpcapi.VolumeAPI, 'thaw_host')
     @mock.patch.object(cinder.db, 'conditional_update')
-    @mock.patch.object(cinder.db, 'service_get')
-    def test_thaw_host_unexpected_status(self, mock_db_args,
+    @mock.patch.object(cinder.db, 'service_get_all')
+    def test_thaw_host_unexpected_status(self, mock_get_all,
                                          mock_db_update,
                                          mock_thaw):
         """Test replication thaw_host unexpected status."""
 
-        mock_db_args.return_value = fake_service.fake_service_obj(
+        mock_get_all.return_value = [fake_service.fake_service_obj(
             self.context,
-            binary='cinder-volume')
+            binary='cinder-volume')]
         mock_db_update.return_value = None
         volume_api = cinder.volume.api.API()
         self.assertRaises(exception.InvalidInput,
                           volume_api.thaw_host,
                           self.context,
-                          host=CONF.host)
+                          host=CONF.host, cluster_name=None)
+
+    @mock.patch('cinder.volume.driver.BaseVD.failover_completed')
+    def test_failover_completed(self, completed_mock):
+        rep_field = fields.ReplicationStatus
+        svc = objects.Service(self.context, host=self.volume.host,
+                              binary=constants.VOLUME_BINARY,
+                              replication_status=rep_field.ENABLED)
+        svc.create()
+        self.volume.failover_completed(
+            self.context,
+            {'active_backend_id': 'secondary',
+             'replication_status': rep_field.FAILED_OVER})
+        service = objects.Service.get_by_id(self.context, svc.id)
+        self.assertEqual('secondary', service.active_backend_id)
+        self.assertEqual('failed-over', service.replication_status)
+        completed_mock.assert_called_once_with(self.context, 'secondary')
+
+    @mock.patch('cinder.volume.driver.BaseVD.failover_completed', wraps=True)
+    def test_failover_completed_driver_failure(self, completed_mock):
+        rep_field = fields.ReplicationStatus
+        svc = objects.Service(self.context, host=self.volume.host,
+                              binary=constants.VOLUME_BINARY,
+                              replication_status=rep_field.ENABLED)
+        svc.create()
+        self.volume.failover_completed(
+            self.context,
+            {'active_backend_id': 'secondary',
+             'replication_status': rep_field.FAILED_OVER})
+        service = objects.Service.get_by_id(self.context, svc.id)
+        self.assertEqual('secondary', service.active_backend_id)
+        self.assertEqual(rep_field.ERROR, service.replication_status)
+        self.assertTrue(service.disabled)
+        self.assertIsNotNone(service.disabled_reason)
+        completed_mock.assert_called_once_with(self.context, 'secondary')
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.failover_completed')
+    def test_finish_failover_non_clustered(self, completed_mock):
+        svc = mock.Mock(is_clustered=None)
+        self.volume.finish_failover(self.context, svc, mock.sentinel.updates)
+        svc.update.assert_called_once_with(mock.sentinel.updates)
+        svc.save.assert_called_once_with()
+        completed_mock.assert_not_called()
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.failover_completed')
+    def test_finish_failover_clustered(self, completed_mock):
+        svc = mock.Mock(cluster_name='cluster_name')
+        updates = {'status': 'error'}
+        self.volume.finish_failover(self.context, svc, updates)
+        completed_mock.assert_called_once_with(self.context, svc, updates)
+        svc.cluster.status = 'error'
+        svc.cluster.save.assert_called_once()
+
+    @ddt.data(None, 'cluster_name')
+    @mock.patch('cinder.volume.manager.VolumeManager.finish_failover')
+    @mock.patch('cinder.volume.manager.VolumeManager._get_my_volumes')
+    def test_failover_manager(self, cluster, get_vols_mock, finish_mock):
+        """Test manager's failover method for clustered and not clustered."""
+        rep_field = fields.ReplicationStatus
+        svc = objects.Service(self.context, host=self.volume.host,
+                              binary=constants.VOLUME_BINARY,
+                              cluster_name=cluster,
+                              replication_status=rep_field.ENABLED)
+        svc.create()
+
+        vol = objects.Volume(self.context, host=self.volume.host)
+        vol.create()
+
+        get_vols_mock.return_value = [vol]
+
+        with mock.patch.object(self.volume, 'driver') as driver:
+            called, not_called = driver.failover_host, driver.failover
+            if cluster:
+                called, not_called = not_called, called
+
+            called.return_value = ('secondary', [{'volume_id': vol.id,
+                                   'updates': {'status': 'error'}}])
+
+            self.volume.failover(self.context,
+                                 secondary_backend_id='secondary')
+
+        not_called.assert_not_called()
+        called.assert_called_once_with(self.context, [vol],
+                                       secondary_id='secondary')
+
+        expected_update = {'replication_status': rep_field.FAILED_OVER,
+                           'active_backend_id': 'secondary',
+                           'disabled': True,
+                           'disabled_reason': 'failed-over'}
+        finish_mock.assert_called_once_with(self.context, svc, expected_update)
+
+        volume = objects.Volume.get_by_id(self.context, vol.id)
+        self.assertEqual('error', volume.status)
+
+    @ddt.data(('host1', None), (None, 'mycluster'))
+    @ddt.unpack
+    def test_failover_api_fail_multiple_results(self, host, cluster):
+        """Fail if we try to failover multiple backends in the same request."""
+        rep_field = fields.ReplicationStatus
+        clusters = [
+            objects.Cluster(self.context,
+                            name='mycluster@backend1',
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+            objects.Cluster(self.context,
+                            name='mycluster@backend2',
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY)
+        ]
+        clusters[0].create()
+        clusters[1].create()
+        services = [
+            objects.Service(self.context, host='host1@backend1',
+                            cluster_name=clusters[0].name,
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+            objects.Service(self.context, host='host1@backend2',
+                            cluster_name=clusters[1].name,
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+        ]
+        services[0].create()
+        services[1].create()
+        self.assertRaises(exception.Invalid,
+                          self.volume_api.failover, self.context, host,
+                          cluster)
+
+    def test_failover_api_not_found(self):
+        self.assertRaises(exception.ServiceNotFound, self.volume_api.failover,
+                          self.context, 'host1', None)
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.failover')
+    def test_failover_api_success_multiple_results(self, failover_mock):
+        """Succeed to failover multiple services for the same backend."""
+        rep_field = fields.ReplicationStatus
+        cluster_name = 'mycluster@backend1'
+        cluster = objects.Cluster(self.context,
+                                  name=cluster_name,
+                                  replication_status=rep_field.ENABLED,
+                                  binary=constants.VOLUME_BINARY)
+        cluster.create()
+        services = [
+            objects.Service(self.context, host='host1@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+            objects.Service(self.context, host='host2@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+        ]
+        services[0].create()
+        services[1].create()
+
+        self.volume_api.failover(self.context, None, cluster_name,
+                                 mock.sentinel.secondary_id)
+
+        for service in services + [cluster]:
+            self.assertEqual(rep_field.ENABLED, service.replication_status)
+            service.refresh()
+            self.assertEqual(rep_field.FAILING_OVER,
+                             service.replication_status)
+
+        failover_mock.assert_called_once_with(self.context, mock.ANY,
+                                              mock.sentinel.secondary_id)
+        self.assertEqual(services[0].id, failover_mock.call_args[0][1].id)
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.failover')
+    def test_failover_api_success_multiple_results_not_updated(self,
+                                                               failover_mock):
+        """Succeed to failover even if a service is not updated."""
+        rep_field = fields.ReplicationStatus
+        cluster_name = 'mycluster@backend1'
+        cluster = objects.Cluster(self.context,
+                                  name=cluster_name,
+                                  replication_status=rep_field.ENABLED,
+                                  binary=constants.VOLUME_BINARY)
+        cluster.create()
+        services = [
+            objects.Service(self.context, host='host1@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ENABLED,
+                            binary=constants.VOLUME_BINARY),
+            objects.Service(self.context, host='host2@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ERROR,
+                            binary=constants.VOLUME_BINARY),
+        ]
+        services[0].create()
+        services[1].create()
+
+        self.volume_api.failover(self.context, None, cluster_name,
+                                 mock.sentinel.secondary_id)
+
+        for service in services[:1] + [cluster]:
+            service.refresh()
+            self.assertEqual(rep_field.FAILING_OVER,
+                             service.replication_status)
+
+        services[1].refresh()
+        self.assertEqual(rep_field.ERROR, services[1].replication_status)
+
+        failover_mock.assert_called_once_with(self.context, mock.ANY,
+                                              mock.sentinel.secondary_id)
+        self.assertEqual(services[0].id, failover_mock.call_args[0][1].id)
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.failover')
+    def test_failover_api_fail_multiple_results_not_updated(self,
+                                                            failover_mock):
+        """Fail if none of the services could be updated."""
+        rep_field = fields.ReplicationStatus
+        cluster_name = 'mycluster@backend1'
+        cluster = objects.Cluster(self.context,
+                                  name=cluster_name,
+                                  replication_status=rep_field.ENABLED,
+                                  binary=constants.VOLUME_BINARY)
+        cluster.create()
+        down_time = timeutils.datetime.datetime(1970, 1, 1)
+        services = [
+            # This service is down
+            objects.Service(self.context, host='host1@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ENABLED,
+                            created_at=down_time,
+                            updated_at=down_time,
+                            modified_at=down_time,
+                            binary=constants.VOLUME_BINARY),
+            # This service is not with the right replication status
+            objects.Service(self.context, host='host2@backend1',
+                            cluster_name=cluster_name,
+                            replication_status=rep_field.ERROR,
+                            binary=constants.VOLUME_BINARY),
+        ]
+        services[0].create()
+        services[1].create()
+
+        self.assertRaises(exception.InvalidInput,
+                          self.volume_api.failover, self.context, None,
+                          cluster_name, mock.sentinel.secondary_id)
+
+        for service in services:
+            svc = objects.Service.get_by_id(self.context, service.id)
+            self.assertEqual(service.replication_status,
+                             svc.replication_status)
+
+        cluster.refresh()
+        self.assertEqual(rep_field.ENABLED, cluster.replication_status)
+
+        failover_mock.assert_not_called()
 
 
 class CopyVolumeToImageTestCase(base.BaseVolumeTestCase):
@@ -5729,7 +6152,8 @@ class CopyVolumeToImageTestCase(base.BaseVolumeTestCase):
                               self.image_meta)
             # Assert a user message was created
             self.volume.message_api.create.assert_called_once_with(
-                self.context, defined_messages.IMAGE_FROM_VOLUME_OVER_QUOTA,
+                self.context,
+                defined_messages.EventIds.IMAGE_FROM_VOLUME_OVER_QUOTA,
                 self.context.project_id, resource_type=resource_types.VOLUME,
                 resource_uuid=volume['id'])
 
@@ -6060,7 +6484,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
             },
         ]
 
-    def test_volume_get_active_by_window(self):
+    def test_volume_get_all_active_by_window(self):
         # Find all all volumes valid within a timeframe window.
 
         # Not in window
@@ -6078,7 +6502,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
         # Not of window.
         db.volume_create(self.context, self.db_vol_attrs[4])
 
-        volumes = db.volume_get_active_by_window(
+        volumes = db.volume_get_all_active_by_window(
             self.context,
             datetime.datetime(1, 3, 1, 1, 1, 1),
             datetime.datetime(1, 4, 1, 1, 1, 1),
@@ -6088,7 +6512,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
         self.assertEqual(fake.VOLUME3_ID, volumes[1].id)
         self.assertEqual(fake.VOLUME4_ID, volumes[2].id)
 
-    def test_snapshot_get_active_by_window(self):
+    def test_snapshot_get_all_active_by_window(self):
         # Find all all snapshots valid within a timeframe window.
         db.volume_create(self.context, {'id': fake.VOLUME_ID})
         for i in range(5):
@@ -6119,7 +6543,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
         snap5 = objects.Snapshot(self.ctx, **self.db_snap_attrs[4])
         snap5.create()
 
-        snapshots = objects.SnapshotList.get_active_by_window(
+        snapshots = objects.SnapshotList.get_all_active_by_window(
             self.context,
             datetime.datetime(1, 3, 1, 1, 1, 1),
             datetime.datetime(1, 4, 1, 1, 1, 1)).objects
@@ -6131,7 +6555,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
         self.assertEqual(snap4.id, snapshots[2].id)
         self.assertEqual(fake.VOLUME_ID, snapshots[2].volume_id)
 
-    def test_backup_get_active_by_window(self):
+    def test_backup_get_all_active_by_window(self):
         # Find all backups valid within a timeframe window.
         db.volume_create(self.context, {'id': fake.VOLUME_ID})
         for i in range(5):
@@ -6152,7 +6576,7 @@ class GetActiveByWindowTestCase(base.BaseVolumeTestCase):
         # Not of window
         db.backup_create(self.ctx, self.db_back_attrs[4])
 
-        backups = db.backup_get_active_by_window(
+        backups = db.backup_get_all_active_by_window(
             self.context,
             datetime.datetime(1, 3, 1, 1, 1, 1),
             datetime.datetime(1, 4, 1, 1, 1, 1),
@@ -6725,6 +7149,7 @@ class ImageVolumeCacheTestCase(base.BaseVolumeTestCase):
         volume_params = {
             'status': 'creating',
             'host': 'some_host',
+            'cluster_name': 'some_cluster',
             'size': 1
         }
         volume_api = cinder.volume.api.API()
@@ -6734,6 +7159,7 @@ class ImageVolumeCacheTestCase(base.BaseVolumeTestCase):
         image_id = '70a599e0-31e7-49b7-b260-868f441e862b'
         db.image_volume_cache_create(self.context,
                                      volume['host'],
+                                     volume_params['cluster_name'],
                                      image_id,
                                      datetime.datetime.utcnow(),
                                      volume['id'],

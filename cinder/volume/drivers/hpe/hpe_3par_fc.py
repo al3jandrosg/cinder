@@ -53,13 +53,9 @@ EXISTENT_PATH = 73
 
 
 @interface.volumedriver
-class HPE3PARFCDriver(driver.TransferVD,
-                      driver.ManageableVD,
-                      driver.ExtendVD,
-                      driver.SnapshotVD,
+class HPE3PARFCDriver(driver.ManageableVD,
                       driver.ManageableSnapshotsVD,
                       driver.MigrateVD,
-                      driver.ConsistencyGroupVD,
                       driver.BaseVD):
     """OpenStack Fibre Channel driver to enable 3PAR storage array.
 
@@ -243,7 +239,7 @@ class HPE3PARFCDriver(driver.TransferVD,
             self._logout(common)
 
     @utils.trace
-    @fczm_utils.AddFCZone
+    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Assigns the volume to a server.
 
@@ -366,7 +362,7 @@ class HPE3PARFCDriver(driver.TransferVD,
             self._logout(common)
 
     @utils.trace
-    @fczm_utils.RemoveFCZone
+    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Driver entry point to unattach a volume from an instance."""
         common = self._login()

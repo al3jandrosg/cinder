@@ -511,7 +511,7 @@ class TestUploadVolume(test.TestCase):
         self.assertFalse(mock_convert.called)
         self.assertFalse(mock_info.called)
         mock_chown.assert_called_once_with(volume_path)
-        mock_open.assert_called_once_with(volume_path)
+        mock_open.assert_called_once_with(volume_path, 'rb')
         image_service.update.assert_called_once_with(
             ctxt, image_meta['id'], {},
             mock_open.return_value.__enter__.return_value)
@@ -1397,6 +1397,52 @@ class TestCreateTemporaryFile(test.TestCase):
         mock_dirs.assert_called_once_with(conv_dir)
         mock_mkstemp.assert_called_once_with(dir=conv_dir)
         mock_close.assert_called_once_with(fd)
+
+    @mock.patch('cinder.image.image_utils.os.remove')
+    @mock.patch('cinder.image.image_utils.os.path.join')
+    @mock.patch('cinder.image.image_utils.CONF')
+    @mock.patch('cinder.image.image_utils.os.listdir')
+    @mock.patch('cinder.image.image_utils.os.path.exists', return_value=True)
+    def test_cleanup_temporary_file(self, mock_path, mock_listdir, mock_conf,
+                                    mock_join, mock_remove):
+        mock_listdir.return_value = ['tmphost@backend1', 'tmphost@backend2']
+        conv_dir = mock.sentinel.image_conversion_dir
+        mock_conf.image_conversion_dir = conv_dir
+        mock_join.return_value = '/test/tmp/tmphost@backend1'
+        image_utils.cleanup_temporary_file('host@backend1')
+        mock_listdir.assert_called_once_with(conv_dir)
+        mock_remove.assert_called_once_with('/test/tmp/tmphost@backend1')
+
+    @mock.patch('cinder.image.image_utils.os.remove')
+    @mock.patch('cinder.image.image_utils.os.listdir')
+    @mock.patch('cinder.image.image_utils.CONF')
+    @mock.patch('cinder.image.image_utils.os.path.exists', return_value=False)
+    def test_cleanup_temporary_file_with_not_exist_path(self, mock_path,
+                                                        mock_conf,
+                                                        mock_listdir,
+                                                        mock_remove):
+        conv_dir = mock.sentinel.image_conversion_dir
+        mock_conf.image_conversion_dir = conv_dir
+        image_utils.cleanup_temporary_file('host@backend1')
+        self.assertFalse(mock_listdir.called)
+        self.assertFalse(mock_remove.called)
+
+    @mock.patch('cinder.image.image_utils.os.remove')
+    @mock.patch('cinder.image.image_utils.os.path.join')
+    @mock.patch('cinder.image.image_utils.CONF')
+    @mock.patch('cinder.image.image_utils.os.listdir')
+    @mock.patch('cinder.image.image_utils.os.path.exists', return_value=True)
+    def test_cleanup_temporary_file_with_exception(self, mock_path,
+                                                   mock_listdir, mock_conf,
+                                                   mock_join, mock_remove):
+        mock_listdir.return_value = ['tmphost@backend1', 'tmphost@backend2']
+        conv_dir = mock.sentinel.image_conversion_dir
+        mock_conf.image_conversion_dir = conv_dir
+        mock_join.return_value = '/test/tmp/tmphost@backend1'
+        mock_remove.side_effect = OSError
+        image_utils.cleanup_temporary_file('host@backend1')
+        mock_listdir.assert_called_once_with(conv_dir)
+        mock_remove.assert_called_once_with('/test/tmp/tmphost@backend1')
 
 
 class TestTemporaryFileContextManager(test.TestCase):

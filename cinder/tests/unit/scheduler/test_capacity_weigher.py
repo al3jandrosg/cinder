@@ -15,6 +15,7 @@
 """
 Tests For Capacity Weigher.
 """
+from datetime import datetime
 
 import ddt
 import mock
@@ -44,16 +45,16 @@ class CapacityWeigherTestCase(test.TestCase):
             weight_properties)
 
     @mock.patch('cinder.db.sqlalchemy.api.service_get_all')
-    def _get_all_hosts(self, _mock_service_get_all, disabled=False):
+    def _get_all_backends(self, _mock_service_get_all, disabled=False):
         ctxt = context.get_admin_context()
         fakes.mock_host_manager_db_calls(_mock_service_get_all,
                                          disabled=disabled)
-        host_states = self.host_manager.get_all_host_states(ctxt)
+        backend_states = self.host_manager.get_all_backend_states(ctxt)
         _mock_service_get_all.assert_called_once_with(
             ctxt,
             None,  # backend_match_level
-            topic=constants.VOLUME_TOPIC, disabled=disabled)
-        return host_states
+            topic=constants.VOLUME_TOPIC, frozen=False, disabled=disabled)
+        return backend_states
 
     # If thin and thin_provisioning_support are True,
     # use the following formula:
@@ -77,7 +78,7 @@ class CapacityWeigherTestCase(test.TestCase):
     )
     @ddt.unpack
     def test_default_of_spreading_first(self, volume_type, winner):
-        hostinfo_list = self._get_all_hosts()
+        backend_info_list = self._get_all_backends()
 
         # Results for the 1st test
         # {'provisioning:type': 'thin'}:
@@ -105,7 +106,7 @@ class CapacityWeigherTestCase(test.TestCase):
             'volume_type': volume_type,
         }
         weighed_host = self._get_weighed_hosts(
-            hostinfo_list,
+            backend_info_list,
             weight_properties=weight_properties)[0]
         self.assertEqual(1.0, weighed_host.weight)
         self.assertEqual(winner, utils.extract_host(weighed_host.obj.host))
@@ -125,7 +126,7 @@ class CapacityWeigherTestCase(test.TestCase):
     @ddt.unpack
     def test_capacity_weight_multiplier1(self, volume_type, winner):
         self.flags(capacity_weight_multiplier=-1.0)
-        hostinfo_list = self._get_all_hosts()
+        backend_info_list = self._get_all_backends()
 
         # Results for the 1st test
         # {'provisioning:type': 'thin'}:
@@ -153,7 +154,7 @@ class CapacityWeigherTestCase(test.TestCase):
             'volume_type': volume_type,
         }
         weighed_host = self._get_weighed_hosts(
-            hostinfo_list,
+            backend_info_list,
             weight_properties=weight_properties)[0]
         self.assertEqual(0.0, weighed_host.weight)
         self.assertEqual(winner, utils.extract_host(weighed_host.obj.host))
@@ -173,7 +174,7 @@ class CapacityWeigherTestCase(test.TestCase):
     @ddt.unpack
     def test_capacity_weight_multiplier2(self, volume_type, winner):
         self.flags(capacity_weight_multiplier=2.0)
-        hostinfo_list = self._get_all_hosts()
+        backend_info_list = self._get_all_backends()
 
         # Results for the 1st test
         # {'provisioning:type': 'thin'}:
@@ -201,7 +202,7 @@ class CapacityWeigherTestCase(test.TestCase):
             'volume_type': volume_type,
         }
         weighed_host = self._get_weighed_hosts(
-            hostinfo_list,
+            backend_info_list,
             weight_properties=weight_properties)[0]
         self.assertEqual(1.0 * 2, weighed_host.weight)
         self.assertEqual(winner, utils.extract_host(weighed_host.obj.host))
@@ -209,7 +210,7 @@ class CapacityWeigherTestCase(test.TestCase):
     def test_capacity_weight_no_unknown_or_infinite(self):
         self.flags(capacity_weight_multiplier=-1.0)
         del self.host_manager.service_states['host5']
-        hostinfo_list = self._get_all_hosts()
+        backend_info_list = self._get_all_backends()
 
         # host1: thin_provisioning_support = False
         #        free_capacity_gb=1024,
@@ -228,7 +229,7 @@ class CapacityWeigherTestCase(test.TestCase):
         #        Norm=0.0
 
         # so, host4 should win:
-        weighed_hosts = self._get_weighed_hosts(hostinfo_list)
+        weighed_hosts = self._get_weighed_hosts(backend_info_list)
         best_host = weighed_hosts[0]
         self.assertEqual(0.0, best_host.weight)
         self.assertEqual('host4', utils.extract_host(best_host.obj.host))
@@ -248,8 +249,8 @@ class CapacityWeigherTestCase(test.TestCase):
             'thin_provisioning_support': True,
             'thick_provisioning_support': False,
             'reserved_percentage': 5,
-            'timestamp': None}
-        hostinfo_list = self._get_all_hosts()
+            'timestamp': datetime.utcnow()}
+        backend_info_list = self._get_all_backends()
 
         # host1: thin_provisioning_support = False
         #        free_capacity_gb=1024,
@@ -270,7 +271,7 @@ class CapacityWeigherTestCase(test.TestCase):
         #        Norm=-1.0
 
         # so, host4 should win:
-        weighed_hosts = self._get_weighed_hosts(hostinfo_list)
+        weighed_hosts = self._get_weighed_hosts(backend_info_list)
         best_host = weighed_hosts[0]
         self.assertEqual(0.0, best_host.weight)
         self.assertEqual('host4', utils.extract_host(best_host.obj.host))
@@ -290,8 +291,8 @@ class CapacityWeigherTestCase(test.TestCase):
             'thin_provisioning_support': True,
             'thick_provisioning_support': False,
             'reserved_percentage': 5,
-            'timestamp': None}
-        hostinfo_list = self._get_all_hosts()
+            'timestamp': datetime.utcnow()}
+        backend_info_list = self._get_all_backends()
 
         # host1: thin_provisioning_support = False
         #        free_capacity_gb=1024,
@@ -312,7 +313,7 @@ class CapacityWeigherTestCase(test.TestCase):
         #        Norm=-1.0
 
         # so, host4 should win:
-        weighed_hosts = self._get_weighed_hosts(hostinfo_list)
+        weighed_hosts = self._get_weighed_hosts(backend_info_list)
         best_host = weighed_hosts[0]
         self.assertEqual(0.0, best_host.weight)
         self.assertEqual('host4', utils.extract_host(best_host.obj.host))
@@ -332,8 +333,8 @@ class CapacityWeigherTestCase(test.TestCase):
             'thin_provisioning_support': True,
             'thick_provisioning_support': False,
             'reserved_percentage': 5,
-            'timestamp': None}
-        hostinfo_list = self._get_all_hosts()
+            'timestamp': datetime.utcnow()}
+        backend_info_list = self._get_all_backends()
 
         # host1: thin_provisioning_support = False
         #        free_capacity_gb=1024,
@@ -354,7 +355,7 @@ class CapacityWeigherTestCase(test.TestCase):
         #        Norm=-1.0
 
         # so, host4 should win:
-        weighed_hosts = self._get_weighed_hosts(hostinfo_list)
+        weighed_hosts = self._get_weighed_hosts(backend_info_list)
         best_host = weighed_hosts[0]
         self.assertEqual(0.0, best_host.weight)
         self.assertEqual('host4', utils.extract_host(best_host.obj.host))
@@ -374,8 +375,8 @@ class CapacityWeigherTestCase(test.TestCase):
             'thin_provisioning_support': True,
             'thick_provisioning_support': False,
             'reserved_percentage': 5,
-            'timestamp': None}
-        hostinfo_list = self._get_all_hosts()
+            'timestamp': datetime.utcnow()}
+        backend_info_list = self._get_all_backends()
 
         # host1: thin_provisioning_support = False
         #        free_capacity_gb=1024,
@@ -396,7 +397,7 @@ class CapacityWeigherTestCase(test.TestCase):
         #        Norm=-1.0
 
         # so, host4 should win:
-        weighed_hosts = self._get_weighed_hosts(hostinfo_list)
+        weighed_hosts = self._get_weighed_hosts(backend_info_list)
         best_host = weighed_hosts[0]
         self.assertEqual(0.0, best_host.weight)
         self.assertEqual('host4', utils.extract_host(best_host.obj.host))
