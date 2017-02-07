@@ -461,9 +461,13 @@ class XIVProxy(proxy.IBMStorageProxy):
             LOG.error(msg)
             raise self.meta['exception'].VolumeBackendAPIException(data=msg)
 
-        volume_update = {}
         self._create_volume(volume)
+        return self.handle_created_vol_properties(cg,
+                                                  replication_info,
+                                                  volume)
 
+    def handle_created_vol_properties(self, cg, replication_info, volume):
+        volume_update = {}
         if cg:
             volume_update['consistencygroup_id'] = (
                 volume.get('consistencygroup_id', None))
@@ -619,7 +623,7 @@ class XIVProxy(proxy.IBMStorageProxy):
 
         try:
             volume_replication_mgr.delete_mirror(
-                mirror_name=volume['name'])
+                resource_id=volume['name'])
         except Exception as e:
             details = self._get_code_and_status_or_message(e)
             msg = (_("Failed deleting replica for %(vol)s: '%(details)s'"),
@@ -1513,6 +1517,10 @@ class XIVProxy(proxy.IBMStorageProxy):
     @proxy._trace_time
     def create_cloned_volume(self, volume, src_vref):
         """Create cloned volume."""
+        cg = self._cg_name_from_volume(volume)
+        # read replication information
+        specs = self._get_extra_specs(volume.get('volume_type_id', None))
+        replication_info = self._get_replication_info(specs)
 
         # TODO(alonma): Refactor to use more common code
         src_vref_size = float(src_vref['size'])
@@ -1524,7 +1532,7 @@ class XIVProxy(proxy.IBMStorageProxy):
             LOG.error(error)
             raise self._get_exception()(error)
 
-        self.create_volume(volume)
+        self._create_volume(volume)
         try:
             self._call_xiv_xcli(
                 "vol_copy",
@@ -1542,20 +1550,20 @@ class XIVProxy(proxy.IBMStorageProxy):
         # A side effect of vol_copy is the resizing of the destination volume
         # to the size of the source volume. If the size is different we need
         # to get it back to the desired size
-        if src_vref_size == volume_size:
-            return
-        size = storage.gigabytes_to_blocks(volume_size)
-        try:
-            self._call_xiv_xcli(
-                "vol_resize",
-                vol=volume['name'],
-                size_blocks=size)
-        except errors.XCLIError as e:
-            error = (_("Fatal error in vol_resize: %(details)s"),
-                     {'details': self._get_code_and_status_or_message(e)})
-            LOG.error(error)
-            self._silent_delete_volume(volume=volume)
-            raise self._get_exception()(error)
+        if src_vref_size != volume_size:
+            size = storage.gigabytes_to_blocks(volume_size)
+            try:
+                self._call_xiv_xcli(
+                    "vol_resize",
+                    vol=volume['name'],
+                    size_blocks=size)
+            except errors.XCLIError as e:
+                error = (_("Fatal error in vol_resize: %(details)s"),
+                         {'details': self._get_code_and_status_or_message(e)})
+                LOG.error(error)
+                self._silent_delete_volume(volume=volume)
+                raise self._get_exception()(error)
+        self.handle_created_vol_properties(cg, replication_info, volume)
 
     @proxy._trace_time
     def volume_exists(self, volume):
@@ -1634,16 +1642,26 @@ class XIVProxy(proxy.IBMStorageProxy):
         cgname = self._cg_name_from_group(group)
         LOG.info(_LI("Creating consistency group %(name)s."),
                  {'name': cgname})
-        specs = self._get_extra_specs(
-            group['volume_type_id'].replace(",", ""))
-        replication_info = self._get_replication_info(specs)
-
-        if replication_info.get('enabled'):
-            # An unsupported illegal configuration
-            msg = _("Unable to create consistency group: "
-                    "Replication of consistency group is not supported")
+        if isinstance(group, objects.Group):
+            volume_type_ids = group.volume_type_ids
+        elif isinstance(group, objects.ConsistencyGroup):
+            volume_type_ids = [group.volume_type_id]
+        else:
+            msg = (_("Consistency group %(group)s has no volume_type_ids") %
+                   {'group': cgname})
             LOG.error(msg)
             raise self.meta['exception'].VolumeBackendAPIException(data=msg)
+        for volume_type_id in volume_type_ids:
+            specs = self._get_extra_specs(volume_type_id)
+            replication_info = self._get_replication_info(specs)
+
+            if replication_info.get('enabled'):
+                # An unsupported illegal configuration
+                msg = _("Unable to create consistency group: "
+                        "Replication of consistency group is not supported")
+                LOG.error(msg)
+                raise self.meta['exception'].VolumeBackendAPIException(
+                    data=msg)
 
         # call XCLI
         try:
@@ -1832,21 +1850,20 @@ class XIVProxy(proxy.IBMStorageProxy):
                 self._call_xiv_xcli(
                     "cg_delete", cg=cgname).as_list
                 model_update['status'] = 'deleted'
-            except errors.CgDoesNotExistError as e:
-                error = (_("consistency group %s does not exist on backend") %
-                         cgname)
+            except (errors.CgDoesNotExistError, errors.CgBadNameError):
+                error = (_LW("consistency group %(cgname)s does not "
+                             "exist on backend") %
+                         {'cgname': cgname})
+                LOG.warning(error)
+                # if the object was already deleted on the backend, we can
+                # continue and delete the openstack object
+                model_update['status'] = 'deleted'
+            except errors.CgHasMirrorError:
+                error = (_("consistency group %s is being mirrored") % cgname)
                 LOG.error(error)
                 raise self._get_exception()(error)
-            except errors.CgHasMirrorError as e:
-                error = (_("consistency group %s is being mirrored ") % cgname)
-                LOG.error(error)
-                raise self._get_exception()(error)
-            except errors.CgNotEmptyError as e:
-                error = (_("consistency group %s is not empty ") % cgname)
-                LOG.error(error)
-                raise self._get_exception()(error)
-            except errors.CgBadNameError as e:
-                error = (_("consistency group %s does not exist ") % cgname)
+            except errors.CgNotEmptyError:
+                error = (_("consistency group %s is not empty") % cgname)
                 LOG.error(error)
                 raise self._get_exception()(error)
             except errors.XCLIError as e:

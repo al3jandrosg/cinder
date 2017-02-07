@@ -4,6 +4,7 @@
     "admin_or_owner":  "is_admin:True or project_id:%(project_id)s",
 
     "volume:create": "",
+    "volume:create_from_image": "",
     "volume:get": "rule:admin_or_owner",
     "volume:get_all": "",
     "volume:get_volume_metadata": "",
@@ -101,9 +102,6 @@
     "backup:backup-export": "rule:admin_api",
     "backup:update": "rule:admin_or_owner",
     "backup:backup_project_attribute": "rule:admin_api",
-
-    "volume_extension:replication:promote": "rule:admin_api",
-    "volume_extension:replication:reenable": "rule:admin_api",
 
     "consistencygroup:create" : "",
     "consistencygroup:delete": "",

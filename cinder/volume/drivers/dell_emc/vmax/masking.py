@@ -19,10 +19,10 @@ import six
 
 from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
-from cinder.volume.drivers.emc import emc_vmax_fast
-from cinder.volume.drivers.emc import emc_vmax_provision
-from cinder.volume.drivers.emc import emc_vmax_provision_v3
-from cinder.volume.drivers.emc import emc_vmax_utils
+from cinder.volume.drivers.dell_emc.vmax import fast
+from cinder.volume.drivers.dell_emc.vmax import provision
+from cinder.volume.drivers.dell_emc.vmax import provision_v3
+from cinder.volume.drivers.dell_emc.vmax import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ FASTPOLICY = 'storagetype:fastpolicy'
 ISV3 = 'isV3'
 
 
-class EMCVMAXMasking(object):
+class VMAXMasking(object):
     """Masking class for SMI-S based EMC volume drivers.
 
     Masking code to dynamically create a masking view
@@ -47,10 +47,10 @@ class EMCVMAXMasking(object):
     """
     def __init__(self, prtcl):
         self.protocol = prtcl
-        self.utils = emc_vmax_utils.EMCVMAXUtils(prtcl)
-        self.fast = emc_vmax_fast.EMCVMAXFast(prtcl)
-        self.provision = emc_vmax_provision.EMCVMAXProvision(prtcl)
-        self.provisionv3 = emc_vmax_provision_v3.EMCVMAXProvisionV3(prtcl)
+        self.utils = utils.VMAXUtils(prtcl)
+        self.fast = fast.VMAXFast(prtcl)
+        self.provision = provision.VMAXProvision(prtcl)
+        self.provisionv3 = provision_v3.VMAXProvisionV3(prtcl)
 
     def setup_masking_view(self, conn, maskingViewDict, extraSpecs):
 
@@ -2492,34 +2492,42 @@ class EMCVMAXMasking(object):
             {'volumeName': volumeName})
 
         # Delete storage group.
+        self.delete_storage_group(conn, controllerConfigService,
+                                  storageGroupInstanceName, extraSpecs)
+
+    def delete_storage_group(self, conn, controllerConfigService,
+                             storageGroupInstanceName, extraSpecs):
+        """Delete a given storage group.
+
+        :param conn: connection to the ecom server
+        :param controllerConfigService: controller config service
+        :param storageGroupInstanceName: the storage group instance
+        :param extraSpecs: the extra specifications
+        """
+        # Delete storage group.
         self._delete_storage_group(conn, controllerConfigService,
-                                   storageGroupInstanceName,
-                                   storageGroupName, extraSpecs)
+                                   storageGroupInstanceName, extraSpecs)
         storageGroupInstance = self.utils.get_existing_instance(
             conn, storageGroupInstanceName)
         if storageGroupInstance:
-            exceptionMessage = (_(
-                "Storage group %(storageGroupName)s "
-                "was not deleted successfully") %
-                {'storageGroupName': storageGroupName})
+            exceptionMessage = (
+                _("Storage group %(storageGroupName)s "
+                  "was not deleted successfully")
+                % {'storageGroupName': storageGroupInstanceName})
 
             LOG.error(exceptionMessage)
             raise exception.VolumeBackendAPIException(
                 data=exceptionMessage)
         else:
-            LOG.info(_LI(
-                "Storage Group %(storageGroupName)s successfully deleted."),
-                {'storageGroupName': storageGroupName})
+            LOG.debug("Storage Group successfully deleted.")
 
     def _delete_storage_group(self, conn, controllerConfigService,
-                              storageGroupInstanceName, storageGroupName,
-                              extraSpecs):
+                              storageGroupInstanceName, extraSpecs):
         """Delete empty storage group
 
         :param conn: the ecom connection
         :param controllerConfigService: controller config service
         :param storageGroupInstanceName: storage group instance name
-        :param storageGroupName: storage group name
         :param extraSpecs: extra specifications
         """
         rc, job = conn.InvokeMethod(
@@ -2535,7 +2543,7 @@ class EMCVMAXMasking(object):
                 exceptionMessage = (_(
                     "Error Deleting Group: %(storageGroupName)s. "
                     "Return code: %(rc)lu. Error: %(error)s")
-                    % {'storageGroupName': storageGroupName,
+                    % {'storageGroupName': storageGroupInstanceName,
                        'rc': rc,
                        'error': errordesc})
                 LOG.error(exceptionMessage)

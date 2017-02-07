@@ -27,12 +27,12 @@ from cinder import exception
 from cinder import utils as cinder_utils
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder.objects import fields
-from cinder.volume.drivers.emc import emc_vmax_fast
-from cinder.volume.drivers.emc import emc_vmax_https
-from cinder.volume.drivers.emc import emc_vmax_masking
-from cinder.volume.drivers.emc import emc_vmax_provision
-from cinder.volume.drivers.emc import emc_vmax_provision_v3
-from cinder.volume.drivers.emc import emc_vmax_utils
+from cinder.volume.drivers.dell_emc.vmax import fast
+from cinder.volume.drivers.dell_emc.vmax import https
+from cinder.volume.drivers.dell_emc.vmax import masking
+from cinder.volume.drivers.dell_emc.vmax import provision
+from cinder.volume.drivers.dell_emc.vmax import provision_v3
+from cinder.volume.drivers.dell_emc.vmax import utils
 from cinder.volume import utils as volume_utils
 
 
@@ -100,7 +100,7 @@ emc_opts = [
 CONF.register_opts(emc_opts)
 
 
-class EMCVMAXCommon(object):
+class VMAXCommon(object):
     """Common class for SMI-S based EMC volume drivers.
 
     This common class is for EMC volume drivers based on SMI-S.
@@ -142,11 +142,11 @@ class EMCVMAXCommon(object):
         self.url = None
         self.user = None
         self.passwd = None
-        self.masking = emc_vmax_masking.EMCVMAXMasking(prtcl)
-        self.utils = emc_vmax_utils.EMCVMAXUtils(prtcl)
-        self.fast = emc_vmax_fast.EMCVMAXFast(prtcl)
-        self.provision = emc_vmax_provision.EMCVMAXProvision(prtcl)
-        self.provisionv3 = emc_vmax_provision_v3.EMCVMAXProvisionV3(prtcl)
+        self.masking = masking.VMAXMasking(prtcl)
+        self.utils = utils.VMAXUtils(prtcl)
+        self.fast = fast.VMAXFast(prtcl)
+        self.provision = provision.VMAXProvision(prtcl)
+        self.provisionv3 = provision_v3.VMAXProvisionV3(prtcl)
         self.version = version
         # replication
         self.replication_enabled = False
@@ -264,8 +264,12 @@ class EMCVMAXCommon(object):
                 # only strings
                 temparrayInfo = arrayInfoList[0].copy()
                 slo, workload = sloWorkload.split(':')
-                if temparrayInfo['SLO'] is None:
+                # Check if we got SLO and workload from the set (from array)
+                # The previous check was done by mistake against the value
+                # from XML file
+                if slo:
                     temparrayInfo['SLO'] = slo
+                if workload:
                     temparrayInfo['Workload'] = workload
                 finalArrayInfoList.append(temparrayInfo)
         except Exception:
@@ -389,8 +393,9 @@ class EMCVMAXCommon(object):
                                                  cloneDict, extraSpecs)
                 raise
             model_update.update(
-                {'replication_status': six.text_type(replication_status),
-                 'replication_driver_data': replication_driver_data})
+                {'replication_status': replication_status,
+                 'replication_driver_data': six.text_type(
+                     replication_driver_data)})
 
         cloneDict['version'] = self.version
         model_update.update(
@@ -421,8 +426,9 @@ class EMCVMAXCommon(object):
                     self.conn, cloneVolume['name'], cloneDict, extraSpecs)
                 raise
             model_update.update(
-                {'replication_status': six.text_type(replication_status),
-                 'replication_driver_data': replication_driver_data})
+                {'replication_status': replication_status,
+                 'replication_driver_data': six.text_type(
+                     replication_driver_data)})
 
         cloneDict['version'] = self.version
         model_update.update(
@@ -1659,7 +1665,7 @@ class EMCVMAXCommon(object):
                             "cert_file":
                                 self.configuration.safe_get(
                                     'driver_client_cert')}
-            pywbem.cim_http.wbem_request = emc_vmax_https.wbem_request
+            pywbem.cim_http.wbem_request = https.wbem_request
             conn = pywbem.WBEMConnection(
                 self.url,
                 (self.user, self.passwd),
@@ -2120,7 +2126,7 @@ class EMCVMAXCommon(object):
             else:
                 # V2 extra specs
                 extraSpecs = self._set_v2_extra_specs(extraSpecs, poolRecord)
-            if (qosSpecs.get('qos_spec')
+            if (qosSpecs.get('qos_specs')
                     and qosSpecs['qos_specs']['consumer'] != "front-end"):
                 extraSpecs['qos'] = qosSpecs['qos_specs']['specs']
         except Exception:
@@ -3251,6 +3257,8 @@ class EMCVMAXCommon(object):
         :returns: string -- storageSystemName
         :raises: VolumeBackendAPIException
         """
+        rc = -1
+        volumeDict = {}
         isValidSLO, isValidWorkload = self.utils.verify_slo_workload(
             extraSpecs[SLO], extraSpecs[WORKLOAD])
 
@@ -3310,9 +3318,28 @@ class EMCVMAXCommon(object):
             extraSpecs[POOL], extraSpecs[SLO],
             extraSpecs[WORKLOAD], doDisableCompression,
             storageSystemName, extraSpecs)
-        volumeDict, rc = self.provisionv3.create_volume_from_sg(
-            self.conn, storageConfigService, volumeName,
-            sgInstanceName, volumeSize, extraSpecs)
+        try:
+            volumeDict, rc = self.provisionv3.create_volume_from_sg(
+                self.conn, storageConfigService, volumeName,
+                sgInstanceName, volumeSize, extraSpecs)
+        except Exception:
+            # if the volume create fails, check if the
+            # storage group needs to be cleaned up
+            volumeInstanceNames = (
+                self.masking.get_devices_from_storage_group(
+                    self.conn, sgInstanceName))
+
+            if not len(volumeInstanceNames):
+                LOG.debug("There are no volumes in the storage group "
+                          "%(maskingGroup)s. Deleting storage group",
+                          {'maskingGroup': sgInstanceName})
+                controllerConfigService = (
+                    self.utils.find_controller_configuration_service(
+                        self.conn, storageSystemName))
+                self.masking.delete_storage_group(
+                    self.conn, controllerConfigService,
+                    sgInstanceName, extraSpecs)
+            raise
 
         return rc, volumeDict, storageSystemName
 
@@ -4580,9 +4607,10 @@ class EMCVMAXCommon(object):
                 self.setup_volume_replication(
                     self.conn, volume, provider_location, extraSpecs))
             model_update.update(
-                {'replication_status': six.text_type(replication_status)})
+                {'replication_status': replication_status})
             model_update.update(
-                {'replication_driver_data': replication_driver_data})
+                {'replication_driver_data': six.text_type(
+                    replication_driver_data)})
 
         model_update.update({'display_name': volumeElementName})
         model_update.update(
@@ -5128,8 +5156,8 @@ class EMCVMAXCommon(object):
 
             if (isinstance(loc, six.string_types)
                     and isinstance(rep_data, six.string_types)):
-                name = eval(loc)
-                replication_keybindings = eval(rep_data)
+                name = ast.literal_eval(loc)
+                replication_keybindings = ast.literal_eval(rep_data)
                 storageSystem = replication_keybindings['SystemName']
                 rdfGroupInstance, repServiceInstanceName = (
                     self.get_rdf_details(conn, storageSystem))
@@ -5295,19 +5323,41 @@ class EMCVMAXCommon(object):
         if not self.conn:
             self.conn = self._get_ecom_connection()
         if secondary_id != 'default':
-            self.failover = True
-            if self.rep_config:
-                secondary_id = self.rep_config['array']
+            if not self.failover:
+                self.failover = True
+                if self.rep_config:
+                    secondary_id = self.rep_config['array']
+            else:
+                exception_message = (_(
+                    "Backend %(backend)s is already failed over. "
+                    "If you wish to failback, please append "
+                    "'--backend_id default' to your command.")
+                    % {'backend': self.configuration.safe_get(
+                       'volume_backend_name')})
+                LOG.error(exception_message)
+                raise exception.VolumeBackendAPIException(
+                    data=exception_message)
         else:
-            self.failover = False
-            secondary_id = None
+            if self.failover:
+                self.failover = False
+                secondary_id = None
+            else:
+                exception_message = (_(
+                    "Cannot failback backend %(backend)s- backend not "
+                    "in failed over state. If you meant to failover, please "
+                    "omit the '--backend_id default' from the command")
+                    % {'backend': self.configuration.safe_get(
+                       'volume_backend_name')})
+                LOG.error(exception_message)
+                raise exception.VolumeBackendAPIException(
+                    data=exception_message)
 
         def failover_volume(vol, failover):
             loc = vol['provider_location']
             rep_data = vol['replication_driver_data']
             try:
-                name = eval(loc)
-                replication_keybindings = eval(rep_data)
+                name = ast.literal_eval(loc)
+                replication_keybindings = ast.literal_eval(rep_data)
                 keybindings = name['keybindings']
                 storageSystem = keybindings['SystemName']
                 sourceInstance = self._find_lun(vol)
@@ -5454,8 +5504,8 @@ class EMCVMAXCommon(object):
             loc = volume['provider_location']
             rep_data = volume['replication_driver_data']
             try:
-                name = eval(loc)
-                replication_keybindings = eval(rep_data)
+                name = ast.literal_eval(loc)
+                replication_keybindings = ast.literal_eval(rep_data)
                 targetStorageSystem = replication_keybindings['SystemName']
                 targetVolumeDict = {'classname': name['classname'],
                                     'keybindings': replication_keybindings}
@@ -5570,8 +5620,7 @@ class EMCVMAXCommon(object):
             # establish replication relationship
             rc, rdfDict = self._create_remote_replica(
                 conn, repServiceInstanceName, rdfGroupInstance, volumeName,
-                sourceInstance, targetInstance, extraSpecs,
-                controllerConfigService, repExtraSpecs)
+                sourceInstance, targetInstance, extraSpecs)
 
             # add source and target instances to their replication groups
             LOG.debug("Adding sourceInstance to default replication group.")
@@ -5642,8 +5691,7 @@ class EMCVMAXCommon(object):
 
     def _create_remote_replica(
             self, conn, repServiceInstanceName, rdfGroupInstance,
-            volumeName, sourceInstance, targetInstance, extraSpecs,
-            controllerConfigService, repExtraSpecs):
+            volumeName, sourceInstance, targetInstance, extraSpecs):
         """Helper function to establish a replication relationship.
 
         :param conn: the connection to the ecom server
@@ -5653,8 +5701,6 @@ class EMCVMAXCommon(object):
         :param sourceInstance: the source volume instance
         :param targetInstance: the target volume instance
         :param extraSpecs: extra specifications
-        :param controllerConfigService: the controller config service
-        :param repExtraSpecs: replication extra specifications
         :return: rc, rdfDict - the target volume dictionary
         """
         syncType = MIRROR_SYNC_TYPE

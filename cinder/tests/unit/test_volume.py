@@ -1512,6 +1512,54 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                               volume_type=foo_type,
                               snapshot=snapshot_obj)
 
+    def _test_create_from_source_snapshot_encryptions(
+            self, is_snapshot=False):
+        volume_api = cinder.volume.api.API()
+        foo_type = {
+            'name': 'foo',
+            'extra_specs': {'volume_backend_name': 'dev_1'},
+            'id': fake.VOLUME_TYPE_ID,
+            'description': None}
+
+        biz_type = {
+            'name': 'foo',
+            'extra_specs': {'volume_backend_name': 'dev_1'},
+            'id': fake.VOLUME_TYPE2_ID,
+            'description': None}
+        source_vol = {'id': fake.VOLUME_ID,
+                      'status': 'available',
+                      'volume_size': 1,
+                      'volume_type': biz_type,
+                      'volume_type_id': biz_type['id']}
+
+        snapshot = {'id': fake.SNAPSHOT_ID,
+                    'status': fields.SnapshotStatus.AVAILABLE,
+                    'volume_size': 1,
+                    'volume_type_id': biz_type['id']}
+        snapshot_obj = fake_snapshot.fake_snapshot_obj(self.context,
+                                                       **snapshot)
+
+        with mock.patch.object(
+                cinder.volume.volume_types,
+                'volume_types_encryption_changed') as mock_encryption_changed:
+            mock_encryption_changed.return_value = True
+            self.assertRaises(exception.InvalidInput,
+                              volume_api.create,
+                              self.context,
+                              size=1,
+                              name='fake_name',
+                              description='fake_desc',
+                              volume_type=foo_type,
+                              source_volume=(
+                                  source_vol if not is_snapshot else None),
+                              snapshot=snapshot_obj if is_snapshot else None)
+
+    def test_create_from_source_encryption_changed(self):
+        self._test_create_from_source_snapshot_encryptions()
+
+    def test_create_from_snapshot_encryption_changed(self):
+        self._test_create_from_source_snapshot_encryptions(is_snapshot=True)
+
     def test_create_snapshot_driver_not_initialized(self):
         volume_src = tests_utils.create_volume(self.context,
                                                **self.volume_params)
@@ -4899,6 +4947,30 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         gigabytes_in_use_new = usage.in_use
         self.assertEqual(gigabytes_in_use, gigabytes_in_use_new)
 
+    @mock.patch('cinder.tests.fake_driver.FakeLoggingVolumeDriver.'
+                'SUPPORTS_ACTIVE_ACTIVE', True)
+    def test_set_resource_host_different(self):
+        manager = vol_manager.VolumeManager(host='localhost-1@ceph',
+                                            cluster='mycluster@ceph')
+        volume = tests_utils.create_volume(self.user_context,
+                                           host='localhost-2@ceph#ceph',
+                                           cluster_name='mycluster@ceph')
+        manager._set_resource_host(volume)
+        volume.refresh()
+        self.assertEqual('localhost-1@ceph#ceph', volume.host)
+
+    @mock.patch('cinder.tests.fake_driver.FakeLoggingVolumeDriver.'
+                'SUPPORTS_ACTIVE_ACTIVE', True)
+    def test_set_resource_host_equal(self):
+        manager = vol_manager.VolumeManager(host='localhost-1@ceph',
+                                            cluster='mycluster@ceph')
+        volume = tests_utils.create_volume(self.user_context,
+                                           host='localhost-1@ceph#ceph',
+                                           cluster_name='mycluster@ceph')
+        with mock.patch.object(volume, 'save') as save_mock:
+            manager._set_resource_host(volume)
+            save_mock.assert_not_called()
+
 
 @ddt.ddt
 class VolumeMigrationTestCase(base.BaseVolumeTestCase):
@@ -6309,7 +6381,21 @@ class CopyVolumeToImageTestCase(base.BaseVolumeTestCase):
             mock_quota_reserve):
         self.flags(glance_api_version=2)
         self.volume.driver.configuration.image_upload_use_cinder_backend = True
+        self.addCleanup(fake_image.FakeImageService_reset)
         image_service = fake_image.FakeImageService()
+
+        def add_location_wrapper(ctx, id, uri, metadata):
+            try:
+                volume = db.volume_get(ctx, id)
+                self.assertEqual(ctx.project_id,
+                                 volume['metadata']['image_owner'])
+            except exception.VolumeNotFound:
+                pass
+            return image_service.add_location_orig(ctx, id, uri, metadata)
+
+        image_service.add_location_orig = image_service.add_location
+        image_service.add_location = add_location_wrapper
+
         image_id = '5c6eec33-bab4-4e7d-b2c9-88e2d0a5f6f2'
         self.image_meta['id'] = image_id
         self.image_meta['status'] = 'queued'
@@ -6799,6 +6885,7 @@ class GenericVolumeDriverTestCase(DriverTestCase):
     def test__create_temp_volume_from_snapshot(self):
         volume_dict = {'id': fake.SNAPSHOT_ID,
                        'host': 'fakehost',
+                       'cluster_name': 'fakecluster',
                        'availability_zone': 'fakezone',
                        'size': 1}
         vol = fake_volume.fake_volume_obj(self.context, **volume_dict)
@@ -6813,6 +6900,7 @@ class GenericVolumeDriverTestCase(DriverTestCase):
             self.assertEqual(fields.VolumeAttachStatus.DETACHED,
                              temp_vol.attach_status)
             self.assertEqual('fakezone', temp_vol.availability_zone)
+            self.assertEqual('fakecluster', temp_vol.cluster_name)
 
     @mock.patch.object(utils, 'brick_get_connector_properties')
     @mock.patch.object(cinder.volume.manager.VolumeManager, '_attach_volume')

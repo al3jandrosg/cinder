@@ -708,11 +708,14 @@ class CreateVolumeFlowManagerTestCase(test.TestCase):
 
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
                 '_handle_bootable_volume_glance_meta')
     @mock.patch('cinder.objects.Volume.get_by_id')
     @mock.patch('cinder.objects.Snapshot.get_by_id')
     def test_create_from_snapshot(self, snapshot_get_by_id, volume_get_by_id,
-                                  handle_bootable):
+                                  handle_bootable, cleanup_cg):
         fake_db = mock.MagicMock()
         fake_driver = mock.MagicMock()
         fake_volume_manager = mock.MagicMock()
@@ -730,25 +733,34 @@ class CreateVolumeFlowManagerTestCase(test.TestCase):
             volume_obj, snapshot_obj)
         handle_bootable.assert_called_once_with(self.ctxt, volume_obj,
                                                 snapshot_id=snapshot_obj.id)
+        cleanup_cg.assert_called_once_with(volume_obj)
 
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
     @mock.patch('cinder.objects.Snapshot.get_by_id')
-    def test_create_from_snapshot_update_failure(self, snapshot_get_by_id):
+    def test_create_from_snapshot_update_failure(self, snapshot_get_by_id,
+                                                 mock_cleanup_cg):
         fake_db = mock.MagicMock()
         fake_driver = mock.MagicMock()
         fake_volume_manager = mock.MagicMock()
         fake_manager = create_volume_manager.CreateVolumeFromSpecTask(
             fake_volume_manager, fake_db, fake_driver)
-        volume = fake_volume.fake_db_volume()
+        volume_obj = fake_volume.fake_volume_obj(self.ctxt)
         snapshot_obj = fake_snapshot.fake_snapshot_obj(self.ctxt)
         snapshot_get_by_id.return_value = snapshot_obj
         fake_db.volume_get.side_effect = exception.CinderException
 
         self.assertRaises(exception.MetadataUpdateFailure,
                           fake_manager._create_from_snapshot, self.ctxt,
-                          volume, snapshot_obj.id)
+                          volume_obj, snapshot_obj.id)
         fake_driver.create_volume_from_snapshot.assert_called_once_with(
-            volume, snapshot_obj)
+            volume_obj, snapshot_obj)
+        mock_cleanup_cg.assert_called_once_with(volume_obj)
 
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.'
                 '_handle_bootable_volume_glance_meta')
@@ -759,7 +771,8 @@ class CreateVolumeFlowManagerTestCase(test.TestCase):
                                                 mock_check_size,
                                                 mock_qemu_img,
                                                 mock_fetch_img,
-                                                mock_handle_bootable):
+                                                mock_handle_bootable,
+                                                mock_cleanup_cg):
         fake_db = mock.MagicMock()
         fake_driver = mock.MagicMock()
         fake_volume_manager = mock.MagicMock()
@@ -789,6 +802,7 @@ class CreateVolumeFlowManagerTestCase(test.TestCase):
         mock_handle_bootable.assert_called_once_with(self.ctxt, volume,
                                                      image_id=image_id,
                                                      image_meta=image_meta)
+        mock_cleanup_cg.assert_called_once_with(volume)
 
     @ddt.data(True, False)
     def test__copy_image_to_volume(self, is_encrypted):
@@ -822,13 +836,17 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
         super(CreateVolumeFlowManagerGlanceCinderBackendCase, self).setUp()
         self.ctxt = context.get_admin_context()
 
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
     @mock.patch('cinder.image.image_utils.TemporaryImages.fetch')
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.'
                 '_handle_bootable_volume_glance_meta')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     def test_create_from_image_volume(self, mock_qemu_info, handle_bootable,
-                                      mock_fetch_img, format='raw', owner=None,
+                                      mock_fetch_img, mock_cleanup_cg,
+                                      format='raw', owner=None,
                                       location=True):
         self.flags(allowed_direct_url_schemes=['cinder'])
         mock_fetch_img.return_value = mock.MagicMock(
@@ -854,6 +872,7 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
         image_meta = {'id': image_id,
                       'container_format': 'bare',
                       'disk_format': format,
+                      'size': 1024,
                       'owner': owner or self.ctxt.project_id,
                       'virtual_size': None}
 
@@ -874,6 +893,7 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
                                                     image_meta=image_meta)
         else:
             self.assertFalse(fake_driver.create_cloned_volume.called)
+        mock_cleanup_cg.assert_called_once_with(volume)
 
     def test_create_from_image_volume_in_qcow2_format(self):
         self.test_create_from_image_volume(format='qcow2')
@@ -921,7 +941,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
         image_location = 'someImageLocationStr'
         image_id = fakes.IMAGE_ID
-        image_meta = {'virtual_size': '1073741824'}
+        image_meta = {'virtual_size': '1073741824', 'size': 1073741824}
 
         manager = create_volume_manager.CreateVolumeFromSpecTask(
             self.mock_volume_manager,
@@ -968,7 +988,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
         image_location = 'someImageLocationStr'
         image_id = fakes.IMAGE_ID
-        image_meta = {'virtual_size': '1073741824'}
+        image_meta = {'virtual_size': '1073741824', 'size': 1073741824}
 
         manager = create_volume_manager.CreateVolumeFromSpecTask(
             self.mock_volume_manager,
@@ -1052,7 +1072,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
         image_location = 'someImageLocationStr'
         image_id = fakes.IMAGE_ID
-        image_meta = {'virtual_size': '2147483648'}
+        image_meta = {'virtual_size': '2147483648', 'size': 2147483648}
 
         manager = create_volume_manager.CreateVolumeFromSpecTask(
             self.mock_volume_manager,
@@ -1085,7 +1105,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
         image_location = 'someImageLocationStr'
         image_id = fakes.IMAGE_ID
-        image_meta = {'virtual_size': None}
+        image_meta = {'virtual_size': None, 'size': 1024}
 
         manager = create_volume_manager.CreateVolumeFromSpecTask(
             self.mock_volume_manager,
@@ -1122,10 +1142,12 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.db.volume_update')
     @mock.patch('cinder.objects.Volume.get_by_id')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.check_available_space')
     def test_create_from_image_cache_miss(
-            self, mock_qemu_info, mock_volume_get, mock_volume_update,
-            mock_get_internal_context, mock_create_from_img_dl,
-            mock_create_from_src, mock_handle_bootable, mock_fetch_img):
+            self, mock_check_size, mock_qemu_info, mock_volume_get,
+            mock_volume_update, mock_get_internal_context,
+            mock_create_from_img_dl, mock_create_from_src,
+            mock_handle_bootable, mock_fetch_img):
         mock_get_internal_context.return_value = self.ctxt
         mock_fetch_img.return_value = mock.MagicMock(
             spec=utils.get_file_spec())
@@ -1189,9 +1211,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.db.volume_update')
     @mock.patch('cinder.objects.Volume.get_by_id')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.check_available_space')
     def test_create_from_image_cache_miss_error_downloading(
-            self, mock_qemu_info, mock_volume_get, mock_volume_update,
-            mock_get_internal_context,
+            self, mock_check_size, mock_qemu_info, mock_volume_get,
+            mock_volume_update, mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         mock_fetch_img.return_value = mock.MagicMock()
@@ -1267,7 +1290,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
         image_location = 'someImageLocationStr'
         image_id = fakes.IMAGE_ID
-        image_meta = {'virtual_size': '1073741824'}
+        image_meta = {'virtual_size': '1073741824', 'size': 1073741824}
 
         manager = create_volume_manager.CreateVolumeFromSpecTask(
             self.mock_volume_manager,
@@ -1313,9 +1336,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             image_meta=image_meta
         )
 
+    @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     def test_create_from_image_cache_miss_error_size_invalid(
-            self, mock_qemu_info, mock_get_internal_context,
+            self, mock_qemu_info, mock_check_space, mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         mock_fetch_img.return_value = mock.MagicMock()

@@ -62,6 +62,7 @@ api-ref/source/v2/quota-sets.inc
 api-ref/source/v2/volume-manage.inc
 api-ref/source/v2/volume-type-access.inc
 api-ref/source/v2/volumes-v2-extensions.inc
+api-ref/source/v2/volumes-v2-snapshots-actions.inc
 api-ref/source/v2/volumes-v2-snapshots.inc
 api-ref/source/v2/volumes-v2-types.inc
 api-ref/source/v2/volumes-v2-versions.inc
@@ -120,6 +121,7 @@ api-ref/source/v2/samples/snapshot-metadata-show-response.json
 api-ref/source/v2/samples/snapshot-metadata-update-request.json
 api-ref/source/v2/samples/snapshot-metadata-update-response.json
 api-ref/source/v2/samples/snapshot-show-response.json
+api-ref/source/v2/samples/snapshot-status-reset-request.json
 api-ref/source/v2/samples/snapshot-update-request.json
 api-ref/source/v2/samples/snapshot-update-response.json
 api-ref/source/v2/samples/snapshots-list-detailed-response.json
@@ -187,6 +189,7 @@ api-ref/source/v3/quota-sets.inc
 api-ref/source/v3/volume-manage.inc
 api-ref/source/v3/volume-type-access.inc
 api-ref/source/v3/volumes-v3-extensions.inc
+api-ref/source/v3/volumes-v3-snapshots-actions.inc
 api-ref/source/v3/volumes-v3-snapshots.inc
 api-ref/source/v3/volumes-v3-types.inc
 api-ref/source/v3/volumes-v3-versions.inc
@@ -269,6 +272,7 @@ api-ref/source/v3/samples/snapshot-metadata-show-response.json
 api-ref/source/v3/samples/snapshot-metadata-update-request.json
 api-ref/source/v3/samples/snapshot-metadata-update-response.json
 api-ref/source/v3/samples/snapshot-show-response.json
+api-ref/source/v3/samples/snapshot-status-reset-request.json
 api-ref/source/v3/samples/snapshot-update-request.json
 api-ref/source/v3/samples/snapshot-update-response.json
 api-ref/source/v3/samples/snapshots-list-detailed-response.json
@@ -317,6 +321,7 @@ api-ref/source/v3/samples/volume-update-request.json
 api-ref/source/v3/samples/volume-update-response.json
 api-ref/source/v3/samples/volumes-list-detailed-response.json
 api-ref/source/v3/samples/volumes-list-response.json
+api-ref/source/v3/samples/volumes-list-summary-response.json
 cinder/__init__.py
 cinder/context.py
 cinder/coordination.py
@@ -531,6 +536,11 @@ cinder/db/sqlalchemy/migrate_repo/versions/088_add_replication_info_to_cluster.p
 cinder/db/sqlalchemy/migrate_repo/versions/089_add_cluster_name_image_cache.py
 cinder/db/sqlalchemy/migrate_repo/versions/090_add_race_preventer_to_workers.py
 cinder/db/sqlalchemy/migrate_repo/versions/091_add_attachment_specs.py
+cinder/db/sqlalchemy/migrate_repo/versions/092_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/093_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/094_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/095_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/096_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/group/__init__.py
 cinder/group/api.py
@@ -549,6 +559,7 @@ cinder/interface/fczm_driver.py
 cinder/interface/util.py
 cinder/interface/volume_consistencygroup_driver.py
 cinder/interface/volume_driver.py
+cinder/interface/volume_group_driver.py
 cinder/interface/volume_management_driver.py
 cinder/interface/volume_snapshot_driver.py
 cinder/interface/volume_snapshotmanagement_driver.py
@@ -600,8 +611,6 @@ cinder/objects/snapshot.py
 cinder/objects/volume.py
 cinder/objects/volume_attachment.py
 cinder/objects/volume_type.py
-cinder/releasenotes/notes/kaminario-cinder-driver-remove-deprecate-option-831920f4d25e2979.yaml
-cinder/releasenotes/notes/remove-eqlx-deprecated-options-89ba02c41d4da62a.yaml
 cinder/scheduler/__init__.py
 cinder/scheduler/base_filter.py
 cinder/scheduler/base_handler.py
@@ -690,6 +699,7 @@ cinder/tests/unit/test_fixtures.py
 cinder/tests/unit/test_hacking.py
 cinder/tests/unit/test_image_utils.py
 cinder/tests/unit/test_migrations.py
+cinder/tests/unit/test_paginate_query.py
 cinder/tests/unit/test_qos_specs.py
 cinder/tests/unit/test_quota.py
 cinder/tests/unit/test_quota_utils.py
@@ -906,7 +916,6 @@ cinder/tests/unit/volume/drivers/test_coprhd.py
 cinder/tests/unit/volume/drivers/test_datera.py
 cinder/tests/unit/volume/drivers/test_dothill.py
 cinder/tests/unit/volume/drivers/test_drbdmanagedrv.py
-cinder/tests/unit/volume/drivers/test_eqlx.py
 cinder/tests/unit/volume/drivers/test_falconstor_fss.py
 cinder/tests/unit/volume/drivers/test_fujitsu.py
 cinder/tests/unit/volume/drivers/test_gpfs.py
@@ -939,6 +948,8 @@ cinder/tests/unit/volume/drivers/dell/test_dellfc.py
 cinder/tests/unit/volume/drivers/dell/test_dellsc.py
 cinder/tests/unit/volume/drivers/dell/test_dellscapi.py
 cinder/tests/unit/volume/drivers/dell_emc/__init__.py
+cinder/tests/unit/volume/drivers/dell_emc/test_ps.py
+cinder/tests/unit/volume/drivers/dell_emc/test_vmax.py
 cinder/tests/unit/volume/drivers/dell_emc/test_xtremio.py
 cinder/tests/unit/volume/drivers/dell_emc/scaleio/__init__.py
 cinder/tests/unit/volume/drivers/dell_emc/scaleio/mocks.py
@@ -988,8 +999,6 @@ cinder/tests/unit/volume/drivers/disco/test_delete_snapshot.py
 cinder/tests/unit/volume/drivers/disco/test_delete_volume.py
 cinder/tests/unit/volume/drivers/disco/test_extend_volume.py
 cinder/tests/unit/volume/drivers/disco/test_manage_existing.py
-cinder/tests/unit/volume/drivers/emc/__init__.py
-cinder/tests/unit/volume/drivers/emc/test_emc_vmax.py
 cinder/tests/unit/volume/drivers/fusionstorage/__init__.py
 cinder/tests/unit/volume/drivers/fusionstorage/test_dsware.py
 cinder/tests/unit/volume/drivers/fusionstorage/test_fspythonapi.py
@@ -1097,7 +1106,6 @@ cinder/tests/unit/windows/__init__.py
 cinder/tests/unit/windows/db_fakes.py
 cinder/tests/unit/windows/test_smbfs.py
 cinder/tests/unit/windows/test_windows.py
-cinder/tests/unit/windows/test_windows_remotefs.py
 cinder/tests/unit/zonemanager/__init__.py
 cinder/tests/unit/zonemanager/test_brcd_fc_san_lookup_service.py
 cinder/tests/unit/zonemanager/test_brcd_fc_zone_client_cli.py
@@ -1130,7 +1138,6 @@ cinder/volume/drivers/block_device.py
 cinder/volume/drivers/blockbridge.py
 cinder/volume/drivers/coho.py
 cinder/volume/drivers/drbdmanagedrv.py
-cinder/volume/drivers/eqlx.py
 cinder/volume/drivers/hgst.py
 cinder/volume/drivers/infinidat.py
 cinder/volume/drivers/lvm.py
@@ -1182,6 +1189,7 @@ cinder/volume/drivers/dell/dell_storagecenter_common.py
 cinder/volume/drivers/dell/dell_storagecenter_fc.py
 cinder/volume/drivers/dell/dell_storagecenter_iscsi.py
 cinder/volume/drivers/dell_emc/__init__.py
+cinder/volume/drivers/dell_emc/ps.py
 cinder/volume/drivers/dell_emc/xtremio.py
 cinder/volume/drivers/dell_emc/scaleio/__init__.py
 cinder/volume/drivers/dell_emc/scaleio/driver.py
@@ -1190,6 +1198,16 @@ cinder/volume/drivers/dell_emc/unity/adapter.py
 cinder/volume/drivers/dell_emc/unity/client.py
 cinder/volume/drivers/dell_emc/unity/driver.py
 cinder/volume/drivers/dell_emc/unity/utils.py
+cinder/volume/drivers/dell_emc/vmax/__init__.py
+cinder/volume/drivers/dell_emc/vmax/common.py
+cinder/volume/drivers/dell_emc/vmax/fast.py
+cinder/volume/drivers/dell_emc/vmax/fc.py
+cinder/volume/drivers/dell_emc/vmax/https.py
+cinder/volume/drivers/dell_emc/vmax/iscsi.py
+cinder/volume/drivers/dell_emc/vmax/masking.py
+cinder/volume/drivers/dell_emc/vmax/provision.py
+cinder/volume/drivers/dell_emc/vmax/provision_v3.py
+cinder/volume/drivers/dell_emc/vmax/utils.py
 cinder/volume/drivers/dell_emc/vnx/__init__.py
 cinder/volume/drivers/dell_emc/vnx/adapter.py
 cinder/volume/drivers/dell_emc/vnx/client.py
@@ -1207,16 +1225,6 @@ cinder/volume/drivers/dothill/dothill_client.py
 cinder/volume/drivers/dothill/dothill_common.py
 cinder/volume/drivers/dothill/dothill_fc.py
 cinder/volume/drivers/dothill/dothill_iscsi.py
-cinder/volume/drivers/emc/__init__.py
-cinder/volume/drivers/emc/emc_vmax_common.py
-cinder/volume/drivers/emc/emc_vmax_fast.py
-cinder/volume/drivers/emc/emc_vmax_fc.py
-cinder/volume/drivers/emc/emc_vmax_https.py
-cinder/volume/drivers/emc/emc_vmax_iscsi.py
-cinder/volume/drivers/emc/emc_vmax_masking.py
-cinder/volume/drivers/emc/emc_vmax_provision.py
-cinder/volume/drivers/emc/emc_vmax_provision_v3.py
-cinder/volume/drivers/emc/emc_vmax_utils.py
 cinder/volume/drivers/falconstor/__init__.py
 cinder/volume/drivers/falconstor/fc.py
 cinder/volume/drivers/falconstor/fss_common.py
@@ -1388,7 +1396,6 @@ cinder/volume/drivers/vmware/vmdk.py
 cinder/volume/drivers/vmware/volumeops.py
 cinder/volume/drivers/windows/__init__.py
 cinder/volume/drivers/windows/constants.py
-cinder/volume/drivers/windows/remotefs.py
 cinder/volume/drivers/windows/smbfs.py
 cinder/volume/drivers/windows/windows.py
 cinder/volume/drivers/zfssa/__init__.py
@@ -1593,6 +1600,7 @@ releasenotes/notes/delete_parameters-6f44fece22a7787d.yaml
 releasenotes/notes/dell-emc-unity-driver-72cb901467b23b22.yaml
 releasenotes/notes/deprecate-backends-in-default-b9784a2333fe22f2.yaml
 releasenotes/notes/deprecate-block-device-driver-d30232547a31fe1e.yaml
+releasenotes/notes/deprecate-cinder-linux-smb-driver-4aec58f15a963c54.yaml
 releasenotes/notes/deprecate-xml-api-bf3e4079f1dc5eae.yaml
 releasenotes/notes/deprecated-ibm-multipath-f06c0e907a6301de.yaml
 releasenotes/notes/deprecated-nas-ip-fd86a734c92f6fae.yaml
@@ -1604,6 +1612,7 @@ releasenotes/notes/enforce_min_vmware-a080055111b04692.yaml
 releasenotes/notes/eqlx-volume-manage-unmanage-a24ec7f0d9989df3.yaml
 releasenotes/notes/falconstor-cinder-driver-dcb61441cd7601c5.yaml
 releasenotes/notes/fix-extend-volume-in-thin-pools-57a3d53be4d47704.yaml
+releasenotes/notes/fix-hnas-clone-with-different-volume-type-b969897cba2610cc.yaml
 releasenotes/notes/fix-hnas-stats-reporting-1335e582e46ff440.yaml
 releasenotes/notes/friendly-zone-names-d5e131d356040de0.yaml
 releasenotes/notes/fujitsu-eternus-dx-fc-741319960195215c.yaml
@@ -1618,6 +1627,7 @@ releasenotes/notes/group-type-group-specs-531e33ee0ae9f822.yaml
 releasenotes/notes/hbsd-driver-deletion-d81f7c4513f45d7b.yaml
 releasenotes/notes/hitachi-vsp-driver-87659bb496bb459b.yaml
 releasenotes/notes/hitachi-vsp-iscsi-driver-cac31d7c54d7718d.yaml
+releasenotes/notes/hitachi-vsp-ports-option-7147289e6529d7fe.yaml
 releasenotes/notes/hnas-change-snapshot-names-8153b043eb7e99fc.yaml
 releasenotes/notes/hnas-deprecate-iscsi-driver-cd521b3a2ba948f3.yaml
 releasenotes/notes/hnas-deprecated-svc-volume-type-77768f27946aadf4.yaml
@@ -1639,6 +1649,7 @@ releasenotes/notes/improvement-to-query-consistency-group-detail-84a906d45383e06
 releasenotes/notes/infinidat-add-infinibox-driver-67cc33fc3fbff1bb.yaml
 releasenotes/notes/kaminario-cinder-driver-bug-1646692-7aad3b7496689aa7.yaml
 releasenotes/notes/kaminario-cinder-driver-bug-1646766-fe810f5801d24f2f.yaml
+releasenotes/notes/kaminario-cinder-driver-remove-deprecate-option-831920f4d25e2979.yaml
 releasenotes/notes/kaminario-fc-cinder-driver-8266641036281a44.yaml
 releasenotes/notes/kaminario-iscsi-cinder-driver-c34fadf63cd253de.yaml
 releasenotes/notes/lefthand-consistency-groups-d73f8e418884fcc6.yaml
@@ -1651,8 +1662,8 @@ releasenotes/notes/mark-dothill-unsupported-7f95115b7b24e53c.yaml
 releasenotes/notes/mark-hpe-xp-unsupported-c9ce6cfbab622e46.yaml
 releasenotes/notes/mark-nexentaedge-unsupported-56d184fdccc6eaac.yaml
 releasenotes/notes/mark-scality-unsupported-530370e034a6f488.yaml
-releasenotes/notes/mark-sheepdog-unsupported-0d9e1310b8ae8dff.yaml
 releasenotes/notes/migrate-cg-to-generic-volume-groups-f82ad3658f3e567c.yaml
+releasenotes/notes/move-eqlx-driver-to-dell-emc-fe5d2b484c47b7a6.yaml
 releasenotes/notes/move-scaleio-driver-to-dell-emc-dir-c195374ca6b7e98d.yaml
 releasenotes/notes/move-xtremio-driver-to-dell-emc-dir-f7e07a502cafd78f.yaml
 releasenotes/notes/nec_storage_volume_driver-57663f9ecce1ae19.yaml
@@ -1683,6 +1694,7 @@ releasenotes/notes/pure-custom-user-agent-dcca4cb44b69e763.yaml
 releasenotes/notes/pure-enhanced-stats-42a684fe4546d1b1.yaml
 releasenotes/notes/pure-eradicate-on-delete-1e15e1440d5cd4d6.yaml
 releasenotes/notes/pure-fc-wwpn-case-c1d97f3fa7663acf.yaml
+releasenotes/notes/pure-generic-volume-groups-2b0941103f7c01cb.yaml
 releasenotes/notes/pure-list-mangeable-fed4a1b23212f545.yaml
 releasenotes/notes/pure-v2.1-replication-0246223caaa8a9b5.yaml
 releasenotes/notes/pure-verify-https-requests-464320c97ba77a1f.yaml
@@ -1696,6 +1708,7 @@ releasenotes/notes/reduxio-iscsci-driver-5827c32a0c498949.yaml
 releasenotes/notes/refactor-disco-volume-driver-3ff0145707ec0f3e.yaml
 releasenotes/notes/reject-volume_clear_size-settings-larger-than-1024MiB-30b38811da048948.yaml
 releasenotes/notes/remove-deprecated-driver-mappings-b927d8ef9fc3b713.yaml
+releasenotes/notes/remove-eqlx-deprecated-options-89ba02c41d4da62a.yaml
 releasenotes/notes/remove-hp-cliq-41f47fd61e47d13f.yaml
 releasenotes/notes/remove-ibm-nas-driver-0ed204ed0a2dcf55.yaml
 releasenotes/notes/remove-scality-fa209aae9748a1f3.yaml
@@ -1757,6 +1770,7 @@ releasenotes/notes/vmax-compression-support-1dfe463328b56d7f.yaml
 releasenotes/notes/vmax-iscsi-multipath-76cc09bacf4fdfbf.yaml
 releasenotes/notes/vmax-oversubscription-d61d0e3b1df2487a.yaml
 releasenotes/notes/vmax-qos-eb40ed35bd2f457d.yaml
+releasenotes/notes/vmax-rename-dell-emc-f9ebfb9eb567f427.yaml
 releasenotes/notes/vmax-volume-migration-992c8c68e2207bbc.yaml
 releasenotes/notes/vmdk_backup_restore-41f807b7bc8e0ae8.yaml
 releasenotes/notes/vmdk_config_conn_pool_size-0658c497e118533f.yaml

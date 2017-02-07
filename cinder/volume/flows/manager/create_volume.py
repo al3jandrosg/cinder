@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import os
 import traceback
 
 from oslo_concurrency import processutils
@@ -27,6 +28,7 @@ from cinder.i18n import _, _LE, _LI, _LW
 from cinder.image import glance
 from cinder.image import image_utils
 from cinder import objects
+from cinder.objects import consistencygroup
 from cinder import utils
 from cinder.volume.flows import common
 from cinder.volume import utils as volume_utils
@@ -446,6 +448,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
         model_update = self.driver.create_volume_from_snapshot(volume,
                                                                snapshot)
+        self._cleanup_cg_in_volume(volume)
         # NOTE(harlowja): Subtasks would be useful here since after this
         # point the volume has already been created and further failures
         # will not destroy the volume (although they could in the future).
@@ -487,6 +490,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         # that use the source volume are underway.
         srcvol_ref = objects.Volume.get_by_id(context, source_volid)
         model_update = self.driver.create_cloned_volume(volume, srcvol_ref)
+        self._cleanup_cg_in_volume(volume)
         # NOTE(harlowja): Subtasks would be useful here since after this
         # point the volume has already been created and further failures
         # will not destroy the volume (although they could in the future).
@@ -506,6 +510,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         srcvol_ref = objects.Volume.get_by_id(context, source_replicaid)
         model_update = self.driver.create_replica_test_volume(volume,
                                                               srcvol_ref)
+        self._cleanup_cg_in_volume(volume)
         # NOTE(harlowja): Subtasks would be useful here since after this
         # point the volume has already been created and further failures
         # will not destroy the volume (although they could in the future).
@@ -638,7 +643,9 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
             return None, False
 
         try:
-            return self.driver.create_cloned_volume(volume, image_volume), True
+            ret = self.driver.create_cloned_volume(volume, image_volume)
+            self._cleanup_cg_in_volume(volume)
+            return ret, True
         except (NotImplementedError, exception.CinderException):
             LOG.exception(_LE('Failed to clone image volume %(id)s.'),
                           {'id': image_volume['id']})
@@ -653,6 +660,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         # clone image 'path' resumable and revertable in the correct
         # manner.
         model_update = self.driver.create_volume(volume) or {}
+        self._cleanup_cg_in_volume(volume)
         model_update['status'] = 'downloading'
         try:
             volume.update(model_update)
@@ -712,6 +720,14 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                   " at location %(image_location)s.",
                   {'volume_id': volume.id,
                    'image_location': image_location, 'image_id': image_id})
+
+        # NOTE(e0ne): check for free space in image_conversion_dir before
+        # image downloading.
+        if (CONF.image_conversion_dir and not
+                os.path.exists(CONF.image_conversion_dir)):
+            os.makedirs(CONF.image_conversion_dir)
+        image_utils.check_available_space(CONF.image_conversion_dir,
+                                          image_meta['size'], image_id)
 
         virtual_size = image_meta.get('virtual_size')
         if virtual_size:
@@ -818,7 +834,9 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         return model_update
 
     def _create_raw_volume(self, volume, **kwargs):
-        return self.driver.create_volume(volume)
+        ret = self.driver.create_volume(volume)
+        self._cleanup_cg_in_volume(volume)
+        return ret
 
     def execute(self, context, volume, volume_spec):
         volume_spec = dict(volume_spec)
@@ -832,6 +850,15 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
             LOG.error(_LE("Unable to create volume. "
                           "Volume driver %s not initialized"), driver_name)
             raise exception.DriverNotInitialized()
+
+        # NOTE(xyang): Populate consistencygroup_id and consistencygroup
+        # fields before passing to the driver. This is to support backward
+        # compatibility of consistencygroup.
+        if volume.group_id:
+            volume.consistencygroup_id = volume.group_id
+            cg = consistencygroup.ConsistencyGroup()
+            cg.from_group(volume.group)
+            volume.consistencygroup = cg
 
         create_type = volume_spec.pop('type', None)
         LOG.info(_LI("Volume %(volume_id)s: being created as %(create_type)s "
@@ -870,6 +897,17 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                               "with creation provided model %(model)s"),
                           {'volume_id': volume_id, 'model': model_update})
             raise
+
+    def _cleanup_cg_in_volume(self, volume):
+        # NOTE(xyang): Cannot have both group_id and consistencygroup_id.
+        # consistencygroup_id needs to be removed to avoid DB reference
+        # error because there isn't an entry in the consistencygroups table.
+        if (('group_id' in volume and volume.group_id) and
+                ('consistencygroup_id' in volume and
+                 volume.consistencygroup_id)):
+            volume.consistencygroup_id = None
+            if 'consistencygroup' in volume:
+                volume.consistencygroup = None
 
 
 class CreateVolumeOnFinishTask(NotifyVolumeActionTask):

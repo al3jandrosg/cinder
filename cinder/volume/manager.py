@@ -165,6 +165,12 @@ MAPPING = {
     'cinder.volume.drivers.dell_emc.xtremio.XtremIOFCDriver',
     'cinder.volume.drivers.datera.DateraDriver':
     'cinder.volume.drivers.datera.datera_iscsi.DateraDriver',
+    'cinder.volume.drivers.emc.emc_vmax_iscsi.EMCVMAXISCSIDriver':
+    'cinder.volume.drivers.dell_emc.vmax.iscsi.VMAXISCSIDriver',
+    'cinder.volume.drivers.emc.emc_vmax_fc.EMCVMAXFCDriver':
+    'cinder.volume.drivers.dell_emc.vmax.fc.VMAXFCDriver',
+    'cinder.volume.drivers.eqlx.DellEQLSanISCSIDriver':
+    'cinder.volume.drivers.dell_emc.ps.PSSeriesISCSIDriver',
 }
 
 
@@ -570,8 +576,10 @@ class VolumeManager(manager.CleanableManager,
 
     def _set_resource_host(self, resource):
         """Set the host field on the DB to our own when we are clustered."""
-        if resource.is_clustered and resource.host != self.host:
-            resource.host = self.host
+        if (resource.is_clustered and
+                not vol_utils.hosts_are_equivalent(resource.host, self.host)):
+            pool = vol_utils.extract_host(resource.host, 'pool')
+            resource.host = vol_utils.append_host(self.host, pool)
             resource.save()
 
     @objects.Volume.set_workers
@@ -1280,6 +1288,14 @@ class VolumeManager(manager.CleanableManager,
         if not image_volume:
             return False
 
+        # The image_owner metadata should be set before uri is added to
+        # the image so glance cinder store can check its owner.
+        image_volume_meta = {'image_owner': ctx.project_id}
+        self.db.volume_metadata_update(image_volume_context,
+                                       image_volume.id,
+                                       image_volume_meta,
+                                       False)
+
         uri = 'cinder://%s' % image_volume.id
         image_registered = None
         try:
@@ -1301,8 +1317,7 @@ class VolumeManager(manager.CleanableManager,
                                   '%(id)s.'), {'id': image_volume.id})
             return False
 
-        image_volume_meta = {'glance_image_id': image_meta['id'],
-                             'image_owner': ctx.project_id}
+        image_volume_meta['glance_image_id'] = image_meta['id']
         self.db.volume_metadata_update(image_volume_context,
                                        image_volume.id,
                                        image_volume_meta,
@@ -1419,8 +1434,6 @@ class VolumeManager(manager.CleanableManager,
             if discard_supported:
                 conn_info['data']['discard'] = True
 
-        LOG.info(_LI("Initialize volume connection completed successfully."),
-                 resource=volume)
         return conn_info
 
     def initialize_connection(self, context, volume, connector):
@@ -2818,7 +2831,7 @@ class VolumeManager(manager.CleanableManager,
                         group, volumes)
                     cgsnapshot, sorted_snapshots = (
                         self._convert_group_snapshot_to_cgsnapshot(
-                            group_snapshot, sorted_snapshots))
+                            group_snapshot, sorted_snapshots, context))
                     source_cg, sorted_source_vols = (
                         self._convert_group_to_cg(source_group,
                                                   sorted_source_vols))
@@ -3281,7 +3294,7 @@ class VolumeManager(manager.CleanableManager,
         for vol in volumes:
             vol.consistencygroup_id = vol.group_id
 
-        return group, volumes
+        return cg, volumes
 
     def _remove_consistencygroup_id_from_volumes(self, volumes):
         if not volumes:
@@ -3289,13 +3302,19 @@ class VolumeManager(manager.CleanableManager,
         for vol in volumes:
             vol.consistencygroup_id = None
 
-    def _convert_group_snapshot_to_cgsnapshot(self, group_snapshot, snapshots):
+    def _convert_group_snapshot_to_cgsnapshot(self, group_snapshot, snapshots,
+                                              ctxt):
         if not group_snapshot:
             return None, None
         cgsnap = cgsnapshot.CGSnapshot()
         cgsnap.from_group_snapshot(group_snapshot)
         for snap in snapshots:
             snap.cgsnapshot_id = snap.group_snapshot_id
+
+        # Populate consistencygroup object
+        grp = objects.Group.get_by_id(ctxt, group_snapshot.group_id)
+        cg, __ = self._convert_group_to_cg(grp, [])
+        cgsnap.consistencygroup = cg
 
         return cgsnap, snapshots
 
@@ -3778,7 +3797,7 @@ class VolumeManager(manager.CleanableManager,
                 else:
                     cgsnapshot, snapshots = (
                         self._convert_group_snapshot_to_cgsnapshot(
-                            group_snapshot, snapshots))
+                            group_snapshot, snapshots, context))
                     model_update, snapshots_model_update = (
                         self.driver.create_cgsnapshot(context, cgsnapshot,
                                                       snapshots))
@@ -4042,7 +4061,7 @@ class VolumeManager(manager.CleanableManager,
                 else:
                     cgsnapshot, snapshots = (
                         self._convert_group_snapshot_to_cgsnapshot(
-                            group_snapshot, snapshots))
+                            group_snapshot, snapshots, context))
                     model_update, snapshots_model_update = (
                         self.driver.delete_cgsnapshot(context, cgsnapshot,
                                                       snapshots))

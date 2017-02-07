@@ -67,7 +67,7 @@ class BrickLvmTestCase(test.TestCase):
                 cmd_string):
             data = "  fake-vg\n"
         elif _lvm_prefix + 'vgs, --version' in cmd_string:
-            data = "  LVM version:     2.02.95(2) (2012-03-06)\n"
+            data = "  LVM version:     2.02.103(2) (2012-03-06)\n"
         elif(_lvm_prefix + 'vgs, --noheadings, -o, uuid, fake-vg' in
              cmd_string):
             data = "  kVxztV-dKpG-Rz7E-xtKY-jeju-QsYU-SLG6Z1\n"
@@ -140,6 +140,12 @@ class BrickLvmTestCase(test.TestCase):
             data += "  fake-vg|/dev/sdb|10.00|1.00\n"
             data += "  fake-vg|/dev/sdc|10.00|8.99\n"
             data += "  fake-vg-2|/dev/sdd|10.00|9.99\n"
+            if '--ignoreskippedcluster' not in cmd_string:
+                raise processutils.ProcessExecutionError(
+                    stderr="Skipping clustered volume group",
+                    stdout=data,
+                    exit_code=5
+                )
         elif _lvm_prefix + 'lvs, --noheadings, --unit=g' \
                 ', -o, size,data_percent, --separator, :' in cmd_string:
             if 'test-prov-cap-pool' in cmd_string:
@@ -279,6 +285,23 @@ class BrickLvmTestCase(test.TestCase):
             self.assertFalse(self.vg.supports_lvchange_ignoreskipactivation)
 
         self.vg._supports_lvchange_ignoreskipactivation = None
+
+    def test_pvs_ignoreskippedcluster_support(self):
+        """Tests if lvm support ignoreskippedcluster option."""
+
+        brick.LVM._supports_pvs_ignoreskippedcluster = None
+        with mock.patch.object(processutils, 'execute',
+                               self.fake_pretend_lvm_version):
+            self.assertTrue(brick.LVM.supports_pvs_ignoreskippedcluster(
+                'sudo'))
+
+        brick.LVM._supports_pvs_ignoreskippedcluster = None
+        with mock.patch.object(processutils, 'execute',
+                               self.fake_old_lvm_version):
+            self.assertFalse(brick.LVM.supports_pvs_ignoreskippedcluster(
+                'sudo'))
+
+        brick.LVM._supports_pvs_ignoreskippedcluster = None
 
     def test_thin_pool_creation(self):
 

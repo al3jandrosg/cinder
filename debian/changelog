@@ -1,3 +1,11 @@
+cinder (2:10.0.0~rc1-0ubuntu1) zesty; urgency=medium
+
+  * debian/apache2-wsgi.conf: DefaultProcessGroup should be cinder-wsgi
+    insteam of osapi-volume. (LP: #1655311) 
+  * New upstream release for Ocata. 
+
+ -- Chuck Short <zulcss@ubuntu.com>  Tue, 07 Feb 2017 10:22:15 -0500
+
 cinder (2:10.0.0~b3-0ubuntu2) zesty; urgency=medium
 
   * debian/control: Remove bad dependency. 

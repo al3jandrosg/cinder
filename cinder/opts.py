@@ -74,10 +74,14 @@ from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell import dell_storagecenter_common as \
     cinder_volume_drivers_dell_dellstoragecentercommon
+from cinder.volume.drivers.dell_emc import ps as \
+    cinder_volume_drivers_dell_emc_ps
 from cinder.volume.drivers.dell_emc.scaleio import driver as \
     cinder_volume_drivers_dell_emc_scaleio_driver
 from cinder.volume.drivers.dell_emc.unity import driver as \
     cinder_volume_drivers_dell_emc_unity_driver
+from cinder.volume.drivers.dell_emc.vmax import common as \
+    cinder_volume_drivers_dell_emc_vmax_common
 from cinder.volume.drivers.dell_emc.vnx import common as \
     cinder_volume_drivers_dell_emc_vnx_common
 from cinder.volume.drivers.dell_emc import xtremio as \
@@ -88,9 +92,6 @@ from cinder.volume.drivers.dothill import dothill_common as \
     cinder_volume_drivers_dothill_dothillcommon
 from cinder.volume.drivers import drbdmanagedrv as \
     cinder_volume_drivers_drbdmanagedrv
-from cinder.volume.drivers.emc import emc_vmax_common as \
-    cinder_volume_drivers_emc_emcvmaxcommon
-from cinder.volume.drivers import eqlx as cinder_volume_drivers_eqlx
 from cinder.volume.drivers.falconstor import fss_common as \
     cinder_volume_drivers_falconstor_fsscommon
 from cinder.volume.drivers.fujitsu import eternus_dx_common as \
@@ -275,16 +276,16 @@ def list_opts():
                 cinder_volume_drivers_datera_dateraiscsi.d_opts,
                 cinder_volume_drivers_dell_dellstoragecentercommon.
                 common_opts,
+                cinder_volume_drivers_dell_emc_ps.eqlx_opts,
                 cinder_volume_drivers_dell_emc_scaleio_driver.scaleio_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
+                cinder_volume_drivers_dell_emc_vmax_common.emc_opts,
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_disco_disco.disco_opts,
                 cinder_volume_drivers_dothill_dothillcommon.common_opts,
                 cinder_volume_drivers_dothill_dothillcommon.iscsi_opts,
                 cinder_volume_drivers_drbdmanagedrv.drbd_opts,
-                cinder_volume_drivers_emc_emcvmaxcommon.emc_opts,
-                cinder_volume_drivers_eqlx.eqlx_opts,
                 cinder_volume_drivers_falconstor_fsscommon.FSS_OPTS,
                 cinder_volume_drivers_fujitsu_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,

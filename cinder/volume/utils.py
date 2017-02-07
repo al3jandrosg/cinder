@@ -43,6 +43,7 @@ from cinder.i18n import _, _LI, _LW, _LE
 from cinder import objects
 from cinder import rpc
 from cinder import utils
+from cinder.volume import group_types
 from cinder.volume import throttling
 from cinder.volume import volume_types
 
@@ -122,6 +123,7 @@ def _usage_from_backup(backup, **kw):
     return usage_info
 
 
+@utils.if_notifications_enabled
 def notify_about_volume_usage(context, volume, event_suffix,
                               extra_usage_info=None, host=None):
     if not host:
@@ -136,6 +138,7 @@ def notify_about_volume_usage(context, volume, event_suffix,
                                           usage_info)
 
 
+@utils.if_notifications_enabled
 def notify_about_backup_usage(context, backup, event_suffix,
                               extra_usage_info=None,
                               host=None):
@@ -182,6 +185,7 @@ def _usage_from_snapshot(snapshot, **extra_usage_info):
     return usage_info
 
 
+@utils.if_notifications_enabled
 def notify_about_snapshot_usage(context, snapshot, event_suffix,
                                 extra_usage_info=None, host=None):
     if not host:
@@ -213,6 +217,7 @@ def _usage_from_capacity(capacity, **extra_usage_info):
     return capacity_info
 
 
+@utils.if_notifications_enabled
 def notify_about_capacity_usage(context, capacity, suffix,
                                 extra_usage_info=None, host=None):
     if not host:
@@ -228,6 +233,7 @@ def notify_about_capacity_usage(context, capacity, suffix,
                                             usage_info)
 
 
+@utils.if_notifications_enabled
 def notify_about_replication_usage(context, volume, suffix,
                                    extra_usage_info=None, host=None):
     if not host:
@@ -244,6 +250,7 @@ def notify_about_replication_usage(context, volume, suffix,
                                                usage_info)
 
 
+@utils.if_notifications_enabled
 def notify_about_replication_error(context, volume, suffix,
                                    extra_error_info=None, host=None):
     if not host:
@@ -273,6 +280,7 @@ def _usage_from_consistencygroup(group_ref, **kw):
     return usage_info
 
 
+@utils.if_notifications_enabled
 def notify_about_consistencygroup_usage(context, group, event_suffix,
                                         extra_usage_info=None, host=None):
     if not host:
@@ -304,6 +312,7 @@ def _usage_from_group(group_ref, **kw):
     return usage_info
 
 
+@utils.if_notifications_enabled
 def notify_about_group_usage(context, group, event_suffix,
                              extra_usage_info=None, host=None):
     if not host:
@@ -350,6 +359,7 @@ def _usage_from_group_snapshot(group_snapshot, **kw):
     return usage_info
 
 
+@utils.if_notifications_enabled
 def notify_about_cgsnapshot_usage(context, cgsnapshot, event_suffix,
                                   extra_usage_info=None, host=None):
     if not host:
@@ -367,6 +377,7 @@ def notify_about_cgsnapshot_usage(context, cgsnapshot, event_suffix,
         usage_info)
 
 
+@utils.if_notifications_enabled
 def notify_about_group_snapshot_usage(context, group_snapshot, event_suffix,
                                       extra_usage_info=None, host=None):
     if not host:
@@ -888,3 +899,21 @@ def is_replicated_str(str):
 def is_replicated_spec(extra_specs):
     return (extra_specs and
             is_replicated_str(extra_specs.get('replication_enabled')))
+
+
+def group_get_by_id(group_id):
+    ctxt = context.get_admin_context()
+    group = db.group_get(ctxt, group_id)
+    return group
+
+
+def is_group_a_cg_snapshot_type(group_or_snap):
+    LOG.debug("Checking if %s is a consistent snapshot group",
+              group_or_snap)
+    if group_or_snap["group_type_id"] is not None:
+        spec = group_types.get_group_type_specs(
+            group_or_snap["group_type_id"],
+            key="consistent_group_snapshot_enabled"
+        )
+        return spec == "<is> True"
+    return False

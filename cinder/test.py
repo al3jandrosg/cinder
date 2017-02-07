@@ -31,6 +31,7 @@ from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_config import fixture as config_fixture
 from oslo_log.fixture import logging_error as log_fixture
+import oslo_messaging
 from oslo_messaging import conffixture as messaging_conffixture
 from oslo_serialization import jsonutils
 from oslo_utils import strutils
@@ -109,9 +110,8 @@ class TestCase(testtools.TestCase):
 
         # Mock rpc get notifier with fake notifier method that joins all
         # notifications with the default notifier
-        p = mock.patch('cinder.rpc.get_notifier',
-                       side_effect=self._get_joined_notifier)
-        p.start()
+        self.patch('cinder.rpc.get_notifier',
+                   side_effect=self._get_joined_notifier)
 
         if self.MOCK_WORKER:
             # Mock worker creation for all tests that don't care about it
@@ -153,6 +153,14 @@ class TestCase(testtools.TestCase):
         self.messaging_conf.transport_driver = 'fake'
         self.messaging_conf.response_timeout = 15
         self.useFixture(self.messaging_conf)
+
+        # Load oslo_messaging_notifications config group so we can set an
+        # override to prevent notifications from being ignored due to the
+        # short-circuit mechanism.
+        oslo_messaging.get_notification_transport(CONF)
+        #  We need to use a valid driver for the notifications, so we use test.
+        self.override_config('driver', ['test'],
+                             group='oslo_messaging_notifications')
         rpc.init(CONF)
 
         # NOTE(geguileo): This is required because _determine_obj_version_cap

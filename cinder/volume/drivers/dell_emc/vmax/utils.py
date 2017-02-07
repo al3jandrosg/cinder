@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import ast
 import datetime
 import hashlib
 import os
@@ -70,7 +71,7 @@ IS_RE = 'replication_enabled'
 REPLICATION_FAILOVER = fields.ReplicationStatus.FAILED_OVER
 
 
-class EMCVMAXUtils(object):
+class VMAXUtils(object):
     """Utility class for SMI-S based EMC volume drivers.
 
     This Utility class is for EMC volume drivers based on SMI-S.
@@ -1272,6 +1273,8 @@ class EMCVMAXUtils(object):
         for syncInstanceName in syncInstanceNames:
             syncSvTarget = syncInstanceName['SyncedElement']
             syncSvSource = syncInstanceName['SystemElement']
+            if storageSystem != syncSvTarget['SystemName']:
+                continue
             if syncSvTarget['DeviceID'] == volumeInstance['DeviceID'] or (
                     syncSvSource['DeviceID'] == volumeInstance['DeviceID']):
                 # Check that it hasn't recently been deleted.
@@ -2048,9 +2051,9 @@ class EMCVMAXUtils(object):
                     portGroupName = portGroupElement.childNodes[0].nodeValue
                     if portGroupName:
                         portGroupNames.append(portGroupName.strip())
-            portGroupNames = EMCVMAXUtils._filter_list(portGroupNames)
+            portGroupNames = VMAXUtils._filter_list(portGroupNames)
             if len(portGroupNames) > 0:
-                return EMCVMAXUtils.get_random_pg_from_list(portGroupNames)
+                return VMAXUtils.get_random_pg_from_list(portGroupNames)
 
         exception_message = (_("No Port Group elements found in config file."))
         LOG.error(exception_message)
@@ -2646,6 +2649,7 @@ class EMCVMAXUtils(object):
         :param storagegroup: the storagegroup instance name
         :param extraSpecs: extra specifications
         """
+        modifiedInstance = None
         if type(storagegroup) is pywbem.cim_obj.CIMInstance:
             storagegroupInstance = storagegroup
         else:
@@ -2914,9 +2918,10 @@ class EMCVMAXUtils(object):
         :return: updated provider_location
         """
         if isinstance(provider_location, six.text_type):
-            provider_location = eval(provider_location)
+            provider_location = ast.literal_eval(provider_location)
         if isinstance(replication_keybindings, six.text_type):
-            replication_keybindings = eval(replication_keybindings)
+            replication_keybindings = ast.literal_eval(
+                replication_keybindings)
 
         keybindings = provider_location['keybindings']
         provider_location['keybindings'] = replication_keybindings
@@ -2940,8 +2945,8 @@ class EMCVMAXUtils(object):
         """
 
         foundSyncInstanceName = None
-        syncInstanceNames = conn.EnumerateInstanceNames(
-            'SE_StorageSynchronized_SV_SV')
+        syncInstanceNames = conn.ReferenceNames(
+            sourceInstance.path, ResultClass='SE_StorageSynchronized_SV_SV')
         for syncInstanceName in syncInstanceNames:
             syncSvTarget = syncInstanceName['SyncedElement']
             syncSvSource = syncInstanceName['SystemElement']

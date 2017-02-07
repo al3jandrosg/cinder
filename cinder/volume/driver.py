@@ -1424,9 +1424,10 @@ class BaseVD(object):
 
     def _create_temp_volume(self, context, volume):
         kwargs = {
-            'size': volume['size'],
-            'display_name': 'backup-vol-%s' % volume['id'],
-            'host': volume['host'],
+            'size': volume.size,
+            'display_name': 'backup-vol-%s' % volume.id,
+            'host': volume.host,
+            'cluster_name': volume.cluster_name,
             'user_id': context.user_id,
             'project_id': context.project_id,
             'status': 'creating',
@@ -1755,7 +1756,7 @@ class BaseVD(object):
         """Creates a group.
 
         :param context: the context of the caller.
-        :param group: the dictionary of the group to be created.
+        :param group: the Group object of the group to be created.
         :returns: model_update
 
         model_update will be in this format: {'status': xxx, ......}.
@@ -1776,14 +1777,13 @@ class BaseVD(object):
         """Deletes a group.
 
         :param context: the context of the caller.
-        :param group: the dictionary of the group to be deleted.
-        :param volumes: a list of volume dictionaries in the group.
+        :param group: the Group object of the group to be deleted.
+        :param volumes: a list of Volume objects in the group.
         :returns: model_update, volumes_model_update
 
-        param volumes is retrieved directly from the db. It is a list of
-        cinder.db.sqlalchemy.models.Volume to be precise. It cannot be
-        assigned to volumes_model_update. volumes_model_update is a list of
-        dictionaries. It has to be built by the driver. An entry will be
+        param volumes is a list of objects retrieved from the db. It cannot
+        be assigned to volumes_model_update. volumes_model_update is a list
+        of dictionaries. It has to be built by the driver. An entry will be
         in this format: {'id': xxx, 'status': xxx, ......}. model_update
         will be in this format: {'status': xxx, ......}.
 
@@ -1821,9 +1821,9 @@ class BaseVD(object):
         """Updates a group.
 
         :param context: the context of the caller.
-        :param group: the dictionary of the group to be updated.
-        :param add_volumes: a list of volume dictionaries to be added.
-        :param remove_volumes: a list of volume dictionaries to be removed.
+        :param group: the Group object of the group to be updated.
+        :param add_volumes: a list of Volume objects to be added.
+        :param remove_volumes: a list of Volume objects to be removed.
         :returns: model_update, add_volumes_update, remove_volumes_update
 
         model_update is a dictionary that the driver wants the manager
@@ -1836,8 +1836,8 @@ class BaseVD(object):
         volume entry can be updated. If None is returned, the volume will
         remain its original status. Also note that you cannot directly
         assign add_volumes to add_volumes_update as add_volumes is a list of
-        cinder.db.sqlalchemy.models.Volume objects and cannot be used for
-        db update directly. Same with remove_volumes.
+        volume objects and cannot be used for db update directly. Same with
+        remove_volumes.
 
         If the driver throws an exception, the status of the group as well as
         those of the volumes to be added/removed will be set to 'error'.
@@ -1853,17 +1853,16 @@ class BaseVD(object):
         :param group: the Group object to be created.
         :param volumes: a list of Volume objects in the group.
         :param group_snapshot: the GroupSnapshot object as source.
-        :param snapshots: a list of snapshot objects in group_snapshot.
+        :param snapshots: a list of Snapshot objects in group_snapshot.
         :param source_group: the Group object as source.
-        :param source_vols: a list of volume objects in the source_group.
+        :param source_vols: a list of Volume objects in the source_group.
         :returns: model_update, volumes_model_update
 
         The source can be group_snapshot or a source_group.
 
-        param volumes is retrieved directly from the db. It is a list of
-        cinder.db.sqlalchemy.models.Volume to be precise. It cannot be
-        assigned to volumes_model_update. volumes_model_update is a list of
-        dictionaries. It has to be built by the driver. An entry will be
+        param volumes is a list of objects retrieved from the db. It cannot
+        be assigned to volumes_model_update. volumes_model_update is a list
+        of dictionaries. It has to be built by the driver. An entry will be
         in this format: {'id': xxx, 'status': xxx, ......}. model_update
         will be in this format: {'status': xxx, ......}.
 
@@ -1923,7 +1922,7 @@ class BaseVD(object):
 
         :param context: the context of the caller.
         :param group_snapshot: the GroupSnapshot object to be deleted.
-        :param snapshots: a list of snapshot objects in the group_snapshot.
+        :param snapshots: a list of Snapshot objects in the group_snapshot.
         :returns: model_update, snapshots_model_update
 
         param snapshots is a list of objects. It cannot be assigned to
