@@ -1919,8 +1919,11 @@ class VolumeManager(manager.CleanableManager,
         # Detach the source volume (if it fails, don't fail the migration)
         # As after detach and refresh, volume_attchments will be None.
         # We keep volume_attachment for later attach.
+        volume_attachments = []
         if orig_volume_status == 'in-use':
             for attachment in volume.volume_attachment:
+                # Save the attachments the volume currently have
+                volume_attachments.append(attachment)
                 try:
                     self.detach_volume(ctxt, volume.id, attachment.id)
                 except Exception as ex:
@@ -1948,12 +1951,14 @@ class VolumeManager(manager.CleanableManager,
                    'previous_status': volume.status,
                    'migration_status': 'success'}
 
+        # Restore the attachmens
         if orig_volume_status == 'in-use':
-            for attachment in volume.volume_attachment:
+            for attachment in volume_attachments:
+                LOG.debug('Re-attaching: %s', attachment)
                 rpcapi.attach_volume(ctxt, volume,
-                                     attachment['instance_uuid'],
-                                     attachment['attached_host'],
-                                     attachment['mountpoint'],
+                                     attachment.instance_uuid,
+                                     attachment.attached_host,
+                                     attachment.mountpoint,
                                      'rw')
         volume.update(updates)
         volume.save()
@@ -2305,10 +2310,11 @@ class VolumeManager(manager.CleanableManager,
         # We already got the new reservations
         new_reservations = reservations
 
-        # If volume types have the same contents, no need to do anything
+        # If volume types have the same contents, no need to do anything.
+        # Use the admin contex to be able to access volume extra_specs
         retyped = False
         diff, all_equal = volume_types.volume_types_diff(
-            context, volume.volume_type_id, new_type_id)
+            context.elevated(), volume.volume_type_id, new_type_id)
         if all_equal:
             retyped = True
 
@@ -2328,12 +2334,14 @@ class VolumeManager(manager.CleanableManager,
                 not diff.get('encryption') and
                 self._is_our_backend(host['host'], host.get('cluster_name'))):
             try:
-                new_type = volume_types.get_volume_type(context, new_type_id)
-                ret = self.driver.retype(context,
-                                         volume,
-                                         new_type,
-                                         diff,
-                                         host)
+                new_type = volume_types.get_volume_type(context.elevated(),
+                                                        new_type_id)
+                with volume.obj_as_admin():
+                    ret = self.driver.retype(context,
+                                             volume,
+                                             new_type,
+                                             diff,
+                                             host)
                 # Check if the driver retype provided a model update or
                 # just a retype indication
                 if type(ret) == tuple:
@@ -2862,6 +2870,7 @@ class VolumeManager(manager.CleanableManager,
                           resource={'type': 'group',
                                     'id': group.id})
                 # Update volume status to 'error' as well.
+                self._remove_consistencygroup_id_from_volumes(volumes)
                 for vol in volumes:
                     vol.status = 'error'
                     vol.save()
@@ -3227,6 +3236,7 @@ class VolumeManager(manager.CleanableManager,
                 # Update volume status to 'error' if driver returns
                 # None for volumes_model_update.
                 if not volumes_model_update:
+                    self._remove_consistencygroup_id_from_volumes(volumes)
                     for vol_obj in volumes:
                         vol_obj.status = 'error'
                         vol_obj.save()
@@ -3293,6 +3303,7 @@ class VolumeManager(manager.CleanableManager,
         cg.from_group(group)
         for vol in volumes:
             vol.consistencygroup_id = vol.group_id
+            vol.consistencygroup = cg
 
         return cg, volumes
 
@@ -3301,6 +3312,7 @@ class VolumeManager(manager.CleanableManager,
             return
         for vol in volumes:
             vol.consistencygroup_id = None
+            vol.consistencygroup = None
 
     def _convert_group_snapshot_to_cgsnapshot(self, group_snapshot, snapshots,
                                               ctxt):
@@ -3308,13 +3320,15 @@ class VolumeManager(manager.CleanableManager,
             return None, None
         cgsnap = cgsnapshot.CGSnapshot()
         cgsnap.from_group_snapshot(group_snapshot)
-        for snap in snapshots:
-            snap.cgsnapshot_id = snap.group_snapshot_id
 
         # Populate consistencygroup object
         grp = objects.Group.get_by_id(ctxt, group_snapshot.group_id)
         cg, __ = self._convert_group_to_cg(grp, [])
         cgsnap.consistencygroup = cg
+
+        for snap in snapshots:
+            snap.cgsnapshot_id = snap.group_snapshot_id
+            snap.cgsnapshot = cgsnap
 
         return cgsnap, snapshots
 
@@ -3323,6 +3337,7 @@ class VolumeManager(manager.CleanableManager,
             return
         for snap in snapshots:
             snap.cgsnapshot_id = None
+            snap.cgsnapshot = None
 
     def _create_group_generic(self, context, group):
         """Creates a group."""
@@ -3615,6 +3630,8 @@ class VolumeManager(manager.CleanableManager,
                 for add_vol in add_volumes_ref:
                     add_vol.status = 'error'
                     add_vol.save()
+                self._remove_consistencygroup_id_from_volumes(
+                    remove_volumes_ref)
                 for rem_vol in remove_volumes_ref:
                     rem_vol.status = 'error'
                     rem_vol.save()
@@ -3834,6 +3851,7 @@ class VolumeManager(manager.CleanableManager,
                 group_snapshot.save()
                 # Update snapshot status to 'error' if driver returns
                 # None for snapshots_model_update.
+                self._remove_cgsnapshot_id_from_snapshots(snapshots)
                 if not snapshots_model_update:
                     for snapshot in snapshots:
                         snapshot.status = fields.SnapshotStatus.ERROR
@@ -4102,6 +4120,7 @@ class VolumeManager(manager.CleanableManager,
                 # Update snapshot status to 'error' if driver returns
                 # None for snapshots_model_update.
                 if not snapshots_model_update:
+                    self._remove_cgsnapshot_id_from_snapshots(snapshots)
                     for snapshot in snapshots:
                         snapshot.status = fields.SnapshotStatus.ERROR
                         snapshot.save()

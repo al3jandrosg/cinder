@@ -1811,6 +1811,7 @@ tools/fast8.sh
 tools/generate_driver_list.py
 tools/lintstack.py
 tools/lintstack.sh
+tools/test-setup.sh
 tools/with_venv.sh
 tools/config/check_uptodate.sh
 tools/hooks/README

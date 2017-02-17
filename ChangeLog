@@ -1,6 +1,22 @@
 CHANGES
 =======
 
+10.0.0.0rc2
+-----------
+
+* Fix attachments after attached migration
+* Fix volume retype with migration as non-admin
+* Fix SolidFire cgsnap clone bug
+* SolidFire: Handle connect_volume() failure when create vol from image
+* VMAX driver - allow for multi volume types in Consistency Group
+* Fix duplicate lvs2 entry in rootwrap volume filter
+* fix create_consistencygroup in xiv
+* Dell EMC: Create independent volume on clone
+* VMAX driver - copy state fix
+* Prepare for using standard python tests
+* Update UPPER_CONSTRAINTS_FILE for stable/ocata
+* Update .gitreview for stable/ocata
+
 10.0.0.0rc1
 -----------
 
@@ -303,6 +319,7 @@ CHANGES
 * SolidFire QoS scaled by volume size
 * Refactor api test_common to use ddt library
 * New cinder driver to support INFINIDAT InfiniBox
+* Remove cgsnapshot_id before snapshot.save
 * Add missing consistencygroup_id in volume
 * Remove support for single backend config
 * Add back policy check for CG

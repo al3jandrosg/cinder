@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import uuid
 from xml.dom import minidom
 
 import ddt
@@ -6361,7 +6362,14 @@ class EMCV3DriverTestCase(test.TestCase):
             return_value=self.default_extraspec())
         self.driver.delete_volume(self.data.test_volume_v3)
 
-    @unittest.skip("Skip until bug #1578986 is fixed")
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'get_v3_default_sg_instance_name',
+        return_value=(None, None, VMAXCommonData.default_sg_instance_name))
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'is_clone_licensed',
+        return_value=True)
     @mock.patch.object(
         common.VMAXCommon,
         '_get_pool_and_storage_system',
@@ -6371,15 +6379,11 @@ class EMCV3DriverTestCase(test.TestCase):
         'get_volume_type_extra_specs',
         return_value={'volume_backend_name': 'V3_BE'})
     def test_create_snapshot_v3_success(
-            self, mock_type, mock_pool):
+            self, mock_type, mock_pool, mock_licence, mock_sg):
         common = self.driver.common
-        common.provisionv3.utils.get_v3_default_sg_instance_name = mock.Mock(
-            return_value=(None, None, self.data.default_sg_instance_name))
-        common.utils.is_clone_licensed = (
-            mock.Mock(return_value=True))
-        common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        self.driver.create_snapshot(self.data.test_snapshot_v3)
+        with mock.patch.object(common, '_initial_setup',
+                               return_value=self.default_extraspec()):
+            self.driver.create_snapshot(self.data.test_snapshot_v3)
 
     @mock.patch.object(
         volume_types,
@@ -6391,7 +6395,18 @@ class EMCV3DriverTestCase(test.TestCase):
             return_value=self.default_extraspec())
         self.driver.delete_snapshot(self.data.test_snapshot_v3)
 
-    @unittest.skip("Skip until bug #1578986 is fixed")
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'get_v3_default_sg_instance_name',
+        return_value=(None, None, VMAXCommonData.default_sg_instance_name))
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_get_or_create_storage_group_v3',
+        return_value=VMAXCommonData.default_sg_instance_name)
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'is_clone_licensed',
+        return_value=True)
     @mock.patch.object(
         utils.VMAXUtils,
         'compare_size',
@@ -6409,8 +6424,11 @@ class EMCV3DriverTestCase(test.TestCase):
         'volume_get',
         return_value=VMAXCommonData.test_source_volume)
     def test_create_cloned_volume_v3_success(
-            self, mock_volume_db, mock_type, mock_pool, mock_compare):
-        self.data.test_volume_v3['volume_name'] = "vmax-1234567"
+            self, mock_volume_db, mock_type, mock_pool, mock_compare,
+            mock_licence, mock_sg, mock_sg_name):
+        sourceVol = self.data.test_volume_v3.copy()
+        sourceVol['volume_name'] = "vmax-1234567"
+        sourceVol['size'] = 100
         cloneVol = {}
         cloneVol['name'] = 'vol1'
         cloneVol['id'] = '1'
@@ -6423,17 +6441,16 @@ class EMCV3DriverTestCase(test.TestCase):
         cloneVol['NumberOfBlocks'] = 100
         cloneVol['BlockSize'] = self.data.block_size
         cloneVol['host'] = self.data.fake_host_v3
-        cloneVol['size'] = 1
+        cloneVol['size'] = 100
         common = self.driver.common
-        common.utils.is_clone_licensed = (
-            mock.Mock(return_value=True))
-        common._initial_setup = mock.Mock(
-            return_value=self.default_extraspec())
-        common._get_or_create_storage_group_v3 = mock.Mock(
-            return_value = self.data.default_sg_instance_name)
-        common.provisionv3.utils.get_v3_default_sg_instance_name = mock.Mock(
-            return_value=(None, None, self.data.default_sg_instance_name))
-        self.driver.create_cloned_volume(cloneVol, self.data.test_volume_v3)
+        conn = FakeEcomConnection()
+        sourceInstance = (
+            conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
+        with mock.patch.object(common, '_initial_setup',
+                               return_value=self.default_extraspec()):
+            with mock.patch.object(common, '_find_lun',
+                                   return_value=sourceInstance):
+                self.driver.create_cloned_volume(cloneVol, sourceVol)
 
     @mock.patch.object(
         common.VMAXCommon,
@@ -6536,6 +6553,16 @@ class EMCV3DriverTestCase(test.TestCase):
 
     @mock.patch.object(
         utils.VMAXUtils,
+        'find_volume_instance',
+        return_value=(
+            FakeEcomConnection().EnumerateInstanceNames(
+                "EMC_StorageVolume")[0]))
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_create_v3_volume',
+        return_value=(0, {}, VMAXCommonData.storage_system))
+    @mock.patch.object(
+        utils.VMAXUtils,
         'find_group_sync_rg_by_target',
         return_value=1)
     @mock.patch.object(
@@ -6554,22 +6581,33 @@ class EMCV3DriverTestCase(test.TestCase):
         '_get_pool_and_storage_system',
         return_value=(None, VMAXCommonData.storage_system))
     @mock.patch.object(
-        volume_types,
-        'get_volume_type_extra_specs',
-        return_value={'volume_backend_name': 'V3_BE'})
+        utils.VMAXUtils,
+        'get_volumetype_extraspecs',
+        return_value={'pool_name': u'Bronze+DSS+SRP_1+1234567891011'})
     def test_create_cgsnapshot_v3_success(
             self, _mock_volume_type, _mock_storage, _mock_cg,
-            _mock_members, mock_rg):
+            _mock_members, mock_rg, mock_create_vol, mock_find):
+        volume = {}
+        snapshot = {}
+        snapshots = []
+        volume['volume_type_id'] = 'abc'
+        volume['size'] = '123'
+        volume['id'] = '123'
+        snapshot['volume'] = volume
+        snapshot['id'] = '456'
+        snapshots.append(snapshot)
         provisionv3 = self.driver.common.provisionv3
         provisionv3.create_group_replica = mock.Mock(return_value=(0, None))
         self.driver.create_cgsnapshot(
-            self.data.test_ctxt, self.data.test_CG_snapshot, [])
+            self.data.test_ctxt, self.data.test_CG_snapshot, snapshots)
         repServ = self.conn.EnumerateInstanceNames("EMC_ReplicationService")[0]
+        intervals_retries_dict = (
+            {'storagetype:interval': 0, 'storagetype:retries': 0})
         provisionv3.create_group_replica.assert_called_once_with(
             self.conn, repServ,
             VMAXCommonData.test_CG,
             VMAXCommonData.test_CG, '12de',
-            VMAXCommonData.extra_specs)
+            intervals_retries_dict)
 
     @mock.patch.object(
         common.VMAXCommon,
@@ -7707,7 +7745,11 @@ class VMAXProvisionV3Test(test.TestCase):
             extraSpecs, False)
         self.assertEqual(self.data.default_sg_instance_name, newstoragegroup)
 
-    def test_create_element_replica(self):
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'get_v3_default_sg_instance_name',
+        return_value=(None, None, VMAXCommonData.default_sg_instance_name))
+    def test_create_element_replica(self, mock_sg):
         provisionv3 = self.driver.common.provisionv3
         conn = FakeEcomConnection()
         repServiceInstanceName = {
@@ -7722,8 +7764,6 @@ class VMAXProvisionV3Test(test.TestCase):
             conn.EnumerateInstanceNames("EMC_StorageVolume")[0])
         syncType = 7
         cloneName = 'new_ss'
-        provisionv3.utils.get_v3_default_sg_instance_name = mock.Mock(
-            return_value=(None, None, self.data.default_sg_instance_name))
         rc, job = provisionv3.create_element_replica(
             conn, repServiceInstanceName, cloneName, syncType, sourceInstance,
             extraSpecs)
@@ -8898,12 +8938,77 @@ class VMAXCommonTest(test.TestCase):
     def test_get_consistency_group_utils(self, mock_init, mock_pool):
         common = self.driver.common
         common.conn = FakeEcomConnection()
-        replicationService, storageSystem, extraSpecs = (
+        replicationService, storageSystem, extraSpecsList, isV3 = (
             common._get_consistency_group_utils(
                 common.conn, VMAXCommonData.test_CG))
-        self.assertEqual(self.data.extra_specs, extraSpecs)
+        self.assertEqual(
+            self.data.extra_specs, extraSpecsList[0]['extraSpecs'])
+
         self.assertEqual(common.conn.EnumerateInstanceNames(
             'EMC_ReplicationService')[0], replicationService)
+
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, VMAXCommonData.storage_system))
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'get_volumetype_extraspecs',
+        return_value=(VMAXCommonData.multi_pool_extra_specs))
+    def test_get_consistency_group_utils_multi_pool_enabled(
+            self, mock_init, mock_pool):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        replicationService, storageSystem, extraSpecsList, isV3 = (
+            common._get_consistency_group_utils(
+                common.conn, VMAXCommonData.test_CG))
+        self.assertEqual(
+            self.data.multi_pool_extra_specs, extraSpecsList[0]['extraSpecs'])
+        self.assertEqual(1, len(extraSpecsList))
+        self.assertEqual(common.conn.EnumerateInstanceNames(
+            'EMC_ReplicationService')[0], replicationService)
+
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, VMAXCommonData.storage_system))
+    @mock.patch.object(
+        utils.VMAXUtils,
+        'get_volumetype_extraspecs',
+        return_value=(VMAXCommonData.multi_pool_extra_specs))
+    def test_get_consistency_group_utils_multi_pool_multi_vp(
+            self, mock_init, mock_pool):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        test_CG_multi_vp = consistencygroup.ConsistencyGroup(
+            context=None, name='myCG1', id=uuid.uuid1(),
+            volume_type_id='abc,def',
+            status=fields.ConsistencyGroupStatus.AVAILABLE)
+        replicationService, storageSystem, extraSpecsList, isV3 = (
+            common._get_consistency_group_utils(
+                common.conn, test_CG_multi_vp))
+        self.assertEqual(2, len(extraSpecsList))
+
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_get_pool_and_storage_system',
+        return_value=(None, VMAXCommonData.storage_system))
+    @mock.patch.object(
+        common.VMAXCommon,
+        '_initial_setup',
+        return_value=(VMAXCommonData.extra_specs))
+    def test_get_consistency_group_utils_single_pool_multi_vp(
+            self, mock_init, mock_pool):
+        common = self.driver.common
+        common.conn = FakeEcomConnection()
+        test_CG_multi_vp = consistencygroup.ConsistencyGroup(
+            context=None, name='myCG1', id=uuid.uuid1(),
+            volume_type_id='abc,def',
+            status=fields.ConsistencyGroupStatus.AVAILABLE)
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            common._get_consistency_group_utils, common.conn,
+            test_CG_multi_vp)
 
     def test_update_consistency_group_name(self):
         common = self.driver.common

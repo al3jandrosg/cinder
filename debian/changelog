@@ -1,3 +1,9 @@
+cinder (2:10.0.0~rc2-0ubuntu1) zesty; urgency=medium
+
+  * New upstream release candidate for OpenStack Ocata.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 17 Feb 2017 08:29:17 -0500
+
 cinder (2:10.0.0~rc1-0ubuntu1) zesty; urgency=medium
 
   * debian/apache2-wsgi.conf: DefaultProcessGroup should be cinder-wsgi

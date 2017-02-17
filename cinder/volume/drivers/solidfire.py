@@ -883,11 +883,12 @@ class SolidFireDriver(san.SanISCSIDriver):
             tvol['provider_location'] = template_vol['provider_location']
             tvol['provider_auth'] = template_vol['provider_auth']
 
-            connector = {'multipath': False}
-            conn = self.initialize_connection(tvol, connector)
-            attach_info = super(SolidFireDriver, self)._connect_device(conn)
-            properties = 'na'
             try:
+                connector = {'multipath': False}
+                conn = self.initialize_connection(tvol, connector)
+                attach_info = super(SolidFireDriver, self)._connect_device(
+                    conn)
+                properties = 'na'
                 image_utils.convert_image(tmp_image,
                                           attach_info['device']['path'],
                                           'raw',
@@ -910,6 +911,7 @@ class SolidFireDriver(san.SanISCSIDriver):
                           vol['volumeID'])
                 self._detach_volume(context, attach_info, tvol, properties)
                 self._issue_api_request('DeleteVolume', params)
+                self._issue_api_request('PurgeDeletedVolume', params)
                 return
 
         self._detach_volume(context, attach_info, tvol, properties)
@@ -1466,6 +1468,19 @@ class SolidFireDriver(san.SanISCSIDriver):
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create a volume from the specified snapshot."""
+        if snapshot.get('cgsnapshot_id'):
+            # We're creating a volume from a snapshot that resulted from a
+            # consistency group snapshot. Because of the way that SolidFire
+            # creates cgsnaps, we have to search for the correct snapshot.
+            cgsnapshot_id = snapshot.get('cgsnapshot_id')
+            snapshot_id = snapshot.get('volume_id')
+            sf_name = self.configuration.sf_volume_prefix + cgsnapshot_id
+            sf_group_snap = self._get_group_snapshot_by_name(sf_name)
+            return self._create_clone_from_sf_snapshot(snapshot_id,
+                                                       cgsnapshot_id,
+                                                       sf_group_snap,
+                                                       volume)
+
         (_data, _sfaccount, model) = self._do_clone_volume(
             snapshot['id'],
             volume)
