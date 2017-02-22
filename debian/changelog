@@ -1,3 +1,10 @@
+cinder (2:10.0.0-0ubuntu2) zesty; urgency=medium
+
+  * debian/cinder-api.install: Move cinder-wsgi back to 
+    its regular place. 
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 22 Feb 2017 11:17:48 -0500
+
 cinder (2:10.0.0-0ubuntu1) zesty; urgency=medium
 
   * New upstream release for Openstack Ocata. 
