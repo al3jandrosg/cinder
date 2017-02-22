@@ -1,3 +1,9 @@
+cinder (2:10.0.0-0ubuntu1) zesty; urgency=medium
+
+  * New upstream release for Openstack Ocata. 
+
+ -- Chuck Short <zulcss@ubuntu.com>  Wed, 22 Feb 2017 09:19:18 -0500
+
 cinder (2:10.0.0~rc2-0ubuntu1) zesty; urgency=medium
 
   * New upstream release candidate for OpenStack Ocata.

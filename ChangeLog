@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-10.0.0.0rc2
------------
+10.0.0
+------
 
 * Fix attachments after attached migration
 * Fix volume retype with migration as non-admin
