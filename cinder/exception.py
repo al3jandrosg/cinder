@@ -32,7 +32,7 @@ import webob.exc
 from webob.util import status_generic_reasons
 from webob.util import status_reasons
 
-from cinder.i18n import _, _LE
+from cinder.i18n import _
 
 
 LOG = logging.getLogger(__name__)
@@ -108,9 +108,9 @@ class CinderException(Exception):
                 exc_info = sys.exc_info()
                 # kwargs doesn't match a variable in the message
                 # log the issue and the kwargs
-                LOG.exception(_LE('Exception in string format operation'))
+                LOG.exception('Exception in string format operation')
                 for name, value in kwargs.items():
-                    LOG.error(_LE("%(name)s: %(value)s"),
+                    LOG.error("%(name)s: %(value)s",
                               {'name': name, 'value': value})
                 if CONF.fatal_exception_format_errors:
                     six.reraise(*exc_info)
@@ -275,6 +275,10 @@ class InvalidGlobalAPIVersion(Invalid):
 
 class MissingRequired(Invalid):
     message = _("Missing required element '%(element)s' in request body.")
+
+
+class ValidationError(Invalid):
+    message = "%(detail)s"
 
 
 class APIException(CinderException):
@@ -603,8 +607,8 @@ class VolumeSizeExceedsAvailableQuota(QuotaError):
 
 
 class VolumeSizeExceedsLimit(QuotaError):
-    message = _("Requested volume size %(size)d is larger than "
-                "maximum allowed limit %(limit)d.")
+    message = _("Requested volume size %(size)dG is larger than "
+                "maximum allowed limit %(limit)dG.")
 
 
 class VolumeBackupSizeExceedsAvailableQuota(QuotaError):
@@ -1359,3 +1363,29 @@ class AttachmentSpecsNotFound(NotFound):
 
 class InvalidAttachment(Invalid):
     message = _("Invalid attachment: %(reason)s")
+
+
+# Veritas driver
+class UnableToExecuteHyperScaleCmd(VolumeDriverException):
+    message = _("Failed HyperScale command for '%(message)s'")
+
+
+class UnableToProcessHyperScaleCmdOutput(VolumeDriverException):
+    message = _("Failed processing command output '%(cmd_out)s'"
+                " for HyperScale command")
+
+
+class ErrorInFetchingConfiguration(VolumeDriverException):
+    message = _("Error in fetching configuration for '%(persona)s'")
+
+
+class ErrorInSendingMsg(VolumeDriverException):
+    message = _("Error in sending message '%(cmd_error)s'")
+
+
+class ErrorInHyperScaleVersion(VolumeDriverException):
+    message = _("Error in getting HyperScale version '%(cmd_error)s'")
+
+
+class ErrorInParsingArguments(VolumeDriverException):
+    message = _("Error in parsing message arguments : Invalid Payload")

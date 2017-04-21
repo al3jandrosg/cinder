@@ -1,3 +1,18 @@
+cinder (2:11.0.0~b1-0ubuntu1) artful; urgency=medium
+
+  [ Chuck Short ]
+  * d/cinder-common.postinst: Restrict permissions on /etc/cinder
+    (LP: #1675088).
+  * d/README.Debian: no-one should be running nova-volume any more.
+  * d/test-blacklist: Add blacklist-filter so we can exclude tests while
+    running unit tests in the packaging.
+
+  [ James Page ]
+  * New upstream milestone for OpenStack Pike.
+  * Align (Build-)Depends with new upstream milestone.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 21 Apr 2017 17:17:13 +0100
+
 cinder (2:10.0.0-0ubuntu2) zesty; urgency=medium
 
   * debian/cinder-api.install: Move cinder-wsgi back to 

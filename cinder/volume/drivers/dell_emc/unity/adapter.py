@@ -21,8 +21,8 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 
 from cinder import exception
+from cinder.i18n import _
 from cinder import utils as cinder_utils
-from cinder.i18n import _, _LE, _LI
 from cinder.volume.drivers.dell_emc.unity import client
 from cinder.volume.drivers.dell_emc.unity import utils
 from cinder.volume import utils as vol_utils
@@ -74,6 +74,12 @@ class CommonAdapter(object):
         self.array_cert_verify = False
         self.array_ca_cert_path = self.config.driver_ssl_cert_path
 
+        sys_version = self.client.system.system_version
+        if utils.is_before_4_1(sys_version):
+            raise exception.VolumeBackendAPIException(
+                data=_('Unity driver does not support array OE version: %s. '
+                       'Upgrade to 4.1 or later.') % sys_version)
+
         self.storage_pools_map = self.get_managed_pools()
 
         self.allowed_ports = self.validate_ports(self.config.unity_io_ports)
@@ -105,21 +111,21 @@ class CommonAdapter(object):
         matched, _ignored, unmatched_whitelist = utils.match_any(all_ports.id,
                                                                  whitelist)
         if not matched:
-            LOG.error(_LE('No matched ports filtered by all patterns: %s'),
+            LOG.error('No matched ports filtered by all patterns: %s',
                       whitelist)
             raise exception.InvalidConfigurationValue(
                 option='%s.unity_io_ports' % self.config.config_group,
                 value=self.config.unity_io_ports)
 
         if unmatched_whitelist:
-            LOG.error(_LE('No matched ports filtered by below patterns: %s'),
+            LOG.error('No matched ports filtered by below patterns: %s',
                       unmatched_whitelist)
             raise exception.InvalidConfigurationValue(
                 option='%s.unity_io_ports' % self.config.config_group,
                 value=self.config.unity_io_ports)
 
-        LOG.info(_LI('These ports %(matched)s will be used based on '
-                     'the option unity_io_ports: %(config)s'),
+        LOG.info('These ports %(matched)s will be used based on '
+                 'the option unity_io_ports: %(config)s',
                  {'matched': matched,
                   'config': self.config.unity_io_ports})
         return matched
@@ -168,8 +174,8 @@ class CommonAdapter(object):
         qos_specs = utils.get_backend_qos_specs(volume)
         limit_policy = self.client.get_io_limit_policy(qos_specs)
 
-        LOG.info(_LI('Create Volume: %(volume)s  Size: %(size)s '
-                     'Pool: %(pool)s Qos: %(qos)s.'),
+        LOG.info('Create Volume: %(volume)s  Size: %(size)s '
+                 'Pool: %(pool)s Qos: %(qos)s.',
                  {'volume': volume_name,
                   'size': volume_size,
                   'pool': pool.name,
@@ -187,8 +193,8 @@ class CommonAdapter(object):
     def delete_volume(self, volume):
         lun_id = self.get_lun_id(volume)
         if lun_id is None:
-            LOG.info(_LI('Backend LUN not found, skipping the deletion. '
-                         'Volume: %(volume_name)s.'),
+            LOG.info('Backend LUN not found, skipping the deletion. '
+                     'Volume: %(volume_name)s.',
                      {'volume_name': volume.name})
         else:
             self.client.delete_lun(lun_id)
@@ -451,8 +457,8 @@ class CommonAdapter(object):
         except Exception:
             with excutils.save_and_reraise_exception():
                 utils.ignore_exception(self.delete_volume, volume)
-                LOG.error(_LE('Failed to create cloned volume: %(vol_id)s, '
-                              'from source unity snapshot: %(snap_name)s. '),
+                LOG.error('Failed to create cloned volume: %(vol_id)s, '
+                          'from source unity snapshot: %(snap_name)s.',
                           {'vol_id': volume.id, 'snap_name': snap.name})
 
         return model_update

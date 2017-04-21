@@ -18,6 +18,8 @@ from cinder import objects
 objects.register_all()
 
 from cinder.api import common as cinder_api_common
+from cinder.api.contrib import types_extra_specs as \
+    cinder_api_contrib_typesextraspecs
 from cinder.api.middleware import auth as cinder_api_middleware_auth
 from cinder.api.views import versions as cinder_api_views_versions
 from cinder.backup import api as cinder_backup_api
@@ -63,8 +65,6 @@ from cinder.volume.drivers import block_device as \
     cinder_volume_drivers_blockdevice
 from cinder.volume.drivers import blockbridge as \
     cinder_volume_drivers_blockbridge
-from cinder.volume.drivers.cloudbyte import options as \
-    cinder_volume_drivers_cloudbyte_options
 from cinder.volume.drivers import coho as cinder_volume_drivers_coho
 from cinder.volume.drivers.coprhd import common as \
     cinder_volume_drivers_coprhd_common
@@ -107,8 +107,6 @@ from cinder.volume.drivers.hitachi import hbsd_horcm as \
     cinder_volume_drivers_hitachi_hbsdhorcm
 from cinder.volume.drivers.hitachi import hbsd_iscsi as \
     cinder_volume_drivers_hitachi_hbsdiscsi
-from cinder.volume.drivers.hitachi import hnas_iscsi as \
-    cinder_volume_drivers_hitachi_hnasiscsi
 from cinder.volume.drivers.hitachi import hnas_nfs as \
     cinder_volume_drivers_hitachi_hnasnfs
 from cinder.volume.drivers.hitachi import hnas_utils as \
@@ -125,8 +123,6 @@ from cinder.volume.drivers.hpe import hpe_3par_common as \
     cinder_volume_drivers_hpe_hpe3parcommon
 from cinder.volume.drivers.hpe import hpe_lefthand_iscsi as \
     cinder_volume_drivers_hpe_hpelefthandiscsi
-from cinder.volume.drivers.hpe import hpe_xp_opts as \
-    cinder_volume_drivers_hpe_hpexpopts
 from cinder.volume.drivers.huawei import huawei_driver as \
     cinder_volume_drivers_huawei_huaweidriver
 from cinder.volume.drivers.ibm import flashsystem_common as \
@@ -171,7 +167,6 @@ from cinder.volume.drivers.san.hp import hpmsa_common as \
     cinder_volume_drivers_san_hp_hpmsacommon
 from cinder.volume.drivers.san import san as cinder_volume_drivers_san_san
 from cinder.volume.drivers import sheepdog as cinder_volume_drivers_sheepdog
-from cinder.volume.drivers import smbfs as cinder_volume_drivers_smbfs
 from cinder.volume.drivers import solidfire as cinder_volume_drivers_solidfire
 from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
@@ -182,6 +177,8 @@ from cinder.volume.drivers.violin import v7000_common as \
 from cinder.volume.drivers.vmware import vmdk as \
     cinder_volume_drivers_vmware_vmdk
 from cinder.volume.drivers import vzstorage as cinder_volume_drivers_vzstorage
+from cinder.volume.drivers.windows import smbfs as \
+    cinder_volume_drivers_windows_smbfs
 from cinder.volume.drivers.windows import windows as \
     cinder_volume_drivers_windows_windows
 from cinder.volume.drivers import xio as cinder_volume_drivers_xio
@@ -216,6 +213,7 @@ def list_opts():
         ('DEFAULT',
             itertools.chain(
                 cinder_api_common.api_common_opts,
+                cinder_api_contrib_typesextraspecs.extraspec_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
                 cinder_api_views_versions.versions_opts,
                 cinder_backup_api.backup_api_opts,
@@ -262,14 +260,6 @@ def list_opts():
                 cinder_volume_driver.iser_opts,
                 cinder_volume_drivers_blockdevice.volume_opts,
                 cinder_volume_drivers_blockbridge.blockbridge_opts,
-                cinder_volume_drivers_cloudbyte_options.
-                cloudbyte_add_qosgroup_opts,
-                cinder_volume_drivers_cloudbyte_options.
-                cloudbyte_create_volume_opts,
-                cinder_volume_drivers_cloudbyte_options.
-                cloudbyte_connection_opts,
-                cinder_volume_drivers_cloudbyte_options.
-                cloudbyte_update_volume_opts,
                 cinder_volume_drivers_coho.coho_opts,
                 cinder_volume_drivers_coprhd_common.volume_opts,
                 cinder_volume_drivers_coprhd_scaleio.scaleio_opts,
@@ -295,7 +285,6 @@ def list_opts():
                 cinder_volume_drivers_hitachi_hbsdfc.volume_opts,
                 cinder_volume_drivers_hitachi_hbsdhorcm.volume_opts,
                 cinder_volume_drivers_hitachi_hbsdiscsi.volume_opts,
-                cinder_volume_drivers_hitachi_hnasiscsi.iSCSI_OPTS,
                 cinder_volume_drivers_hitachi_hnasnfs.NFS_OPTS,
                 cinder_volume_drivers_hitachi_hnasutils.drivers_common_opts,
                 cinder_volume_drivers_hitachi_vspcommon.common_opts,
@@ -304,9 +293,6 @@ def list_opts():
                 cinder_volume_drivers_hitachi_vspiscsi.iscsi_opts,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
                 cinder_volume_drivers_hpe_hpelefthandiscsi.hpelefthand_opts,
-                cinder_volume_drivers_hpe_hpexpopts.FC_VOLUME_OPTS,
-                cinder_volume_drivers_hpe_hpexpopts.COMMON_VOLUME_OPTS,
-                cinder_volume_drivers_hpe_hpexpopts.HORCM_VOLUME_OPTS,
                 cinder_volume_drivers_huawei_huaweidriver.huawei_opts,
                 cinder_volume_drivers_ibm_flashsystemcommon.flashsystem_opts,
                 cinder_volume_drivers_ibm_flashsystemfc.flashsystem_fc_opts,
@@ -362,7 +348,6 @@ def list_opts():
                 cinder_volume_drivers_san_hp_hpmsacommon.iscsi_opts,
                 cinder_volume_drivers_san_san.san_opts,
                 cinder_volume_drivers_sheepdog.sheepdog_opts,
-                cinder_volume_drivers_smbfs.volume_opts,
                 cinder_volume_drivers_solidfire.sf_opts,
                 cinder_volume_drivers_synology_synologycommon.cinder_opts,
                 cinder_volume_drivers_tegile.tegile_opts,
@@ -370,6 +355,7 @@ def list_opts():
                 cinder_volume_drivers_violin_v7000common.violin_opts,
                 cinder_volume_drivers_vmware_vmdk.vmdk_opts,
                 cinder_volume_drivers_vzstorage.vzstorage_opts,
+                cinder_volume_drivers_windows_smbfs.volume_opts,
                 cinder_volume_drivers_windows_windows.windows_opts,
                 cinder_volume_drivers_xio.XIO_OPTS,
                 cinder_volume_drivers_zadara.zadara_opts,

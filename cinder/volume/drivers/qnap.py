@@ -36,7 +36,7 @@ from six.moves import http_client
 from six.moves import urllib
 
 from cinder import exception
-from cinder.i18n import _, _LE
+from cinder.i18n import _
 from cinder import interface
 from cinder.volume.drivers.san import san
 
@@ -66,7 +66,14 @@ class QnapISCSIDriver(san.SanISCSIDriver):
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "QNAP_CI"
+
+    # TODO(smcginnis) Either remove this if CI requirement are met, or
+    # remove this driver in the Queens release per normal deprecation
+    SUPPORTED = False
+
     VERSION = '1.0.0'
+
+    TIME_INTERVAL = 3
 
     def __init__(self, *args, **kwargs):
         """Initialize QnapISCSIDriver."""
@@ -99,9 +106,9 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         try:
             self.api_executor = self.creat_api_executor()
         except Exception:
-            LOG.error(_LE('Failed to create HTTP client. '
-                          'Check ip, port, username, password'
-                          ' and make sure the array version is compatible'))
+            LOG.error('Failed to create HTTP client. '
+                      'Check ip, port, username, password'
+                      ' and make sure the array version is compatible')
             msg = _('Failed to create HTTP client.')
             raise exception.VolumeDriverException(message=msg)
 
@@ -234,7 +241,6 @@ class QnapISCSIDriver(san.SanISCSIDriver):
             create_lun_name,
             reserve)
 
-        time_interval = 3
         max_wait_sec = 600
         try_times = 0
         lun_naa = ""
@@ -245,7 +251,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
                 lun_naa = created_lun.find('LUNNAA').text
 
             try_times = try_times + 3
-            eventlet.sleep(time_interval)
+            eventlet.sleep(self.TIME_INTERVAL)
             if(try_times > max_wait_sec or lun_naa is not None):
                 break
 
@@ -379,7 +385,6 @@ class QnapISCSIDriver(san.SanISCSIDriver):
 
         self.api_executor.clone_snapshot(snapshot_id, cloned_lun_name)
 
-        time_interval = 3
         max_wait_sec = 600
         try_times = 0
         lun_naa = ""
@@ -390,7 +395,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
                 lun_naa = created_lun.find('LUNNAA').text
 
             try_times = try_times + 3
-            eventlet.sleep(time_interval)
+            eventlet.sleep(self.TIME_INTERVAL)
             if(try_times > max_wait_sec or lun_naa is not None):
                 break
 
@@ -423,7 +428,6 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         LOG.debug('create_snapshot_name: %s', create_snapshot_name)
 
         self.api_executor.create_snapshot_api(lun_index, create_snapshot_name)
-        time_interval = 3
         max_wait_sec = 600
         try_times = 0
         snapshot_id = ""
@@ -434,7 +438,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
                 snapshot_id = created_snapshot.find('snapshot_id').text
 
             try_times = try_times + 3
-            eventlet.sleep(time_interval)
+            eventlet.sleep(self.TIME_INTERVAL)
             if(try_times > max_wait_sec or created_snapshot is not None):
                 break
 
@@ -480,7 +484,6 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         self.api_executor.clone_snapshot(
             snapshot_id, create_lun_name)
 
-        time_interval = 3
         max_wait_sec = 600
         try_times = 0
         lun_naa = ""
@@ -491,7 +494,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
                 lun_naa = created_lun.find('LUNNAA').text
 
             try_times = try_times + 3
-            eventlet.sleep(time_interval)
+            eventlet.sleep(self.TIME_INTERVAL)
             if(try_times > max_wait_sec or lun_naa is not None):
                 break
 
@@ -774,7 +777,7 @@ def _connection_checker(func):
                         self._login()
                         continue
 
-                LOG.error(_LE('Re-throwing Exception %s'), e)
+                LOG.error('Re-throwing Exception %s', e)
                 raise
     return inner_connection_checker
 

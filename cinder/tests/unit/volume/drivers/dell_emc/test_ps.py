@@ -89,7 +89,8 @@ class PSSeriesISCSIDriverTestCase(test.TestCase):
             'target_discovered': True,
             'target_portal': '%s:3260' % self.driver._group_ip,
             'target_iqn': self.fake_iqn,
-            'volume_id': 1}
+            'volume_id': 1,
+            'discard': True}
         self._model_update = {
             'provider_location': "%s:3260,1 %s 0" % (self.driver._group_ip,
                                                      self.fake_iqn),
@@ -332,6 +333,7 @@ class PSSeriesISCSIDriverTestCase(test.TestCase):
                     volume, self.connector)
                 self.assertEqual(self._fake_get_iscsi_properties(volume),
                                  iscsi_properties['data'])
+                self.assertTrue(iscsi_properties['data']['discard'])
 
     def test_terminate_connection(self):
         def my_side_effect(*args, **kwargs):
@@ -419,7 +421,7 @@ class PSSeriesISCSIDriverTestCase(test.TestCase):
             self.assertEqual(not thin_enabled,
                              stats['thick_provisioning_support'])
             self.assertEqual('Dell EMC', stats['vendor_name'])
-            self.assertTrue(stats['multiattach'])
+            self.assertFalse(stats['multiattach'])
 
     def test_get_space_in_gb(self):
         self.assertEqual(123.0, self.driver._get_space_in_gb('123.0GB'))

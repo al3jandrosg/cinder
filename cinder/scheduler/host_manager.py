@@ -22,15 +22,15 @@ import collections
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import importutils
+from oslo_utils import strutils
 from oslo_utils import timeutils
 
 from cinder.common import constants
 from cinder import context as cinder_context
 from cinder import exception
 from cinder import objects
-from cinder import utils
-from cinder.i18n import _LI, _LW
 from cinder.scheduler import filters
+from cinder import utils
 from cinder.volume import utils as vol_utils
 
 
@@ -483,8 +483,7 @@ class HostManager(object):
 
         # Ignore older updates
         if capab_old['timestamp'] and timestamp < capab_old['timestamp']:
-            LOG.info(_LI('Ignoring old capability report from %s.'),
-                     backend)
+            LOG.info('Ignoring old capability report from %s.', backend)
             return
 
         # If the capabilites are not changed and the timestamp is older,
@@ -558,7 +557,7 @@ class HostManager(object):
         for service in volume_services.objects:
             host = service.host
             if not service.is_up:
-                LOG.warning(_LW("volume service is down. (host: %s)"), host)
+                LOG.warning("volume service is down. (host: %s)", host)
                 continue
 
             backend_key = service.service_topic_queue
@@ -600,8 +599,8 @@ class HostManager(object):
             # the map when we are removing it because it has been added to a
             # cluster.
             if backend_key not in active_hosts:
-                LOG.info(_LI("Removing non-active backend: %(backend)s from "
-                             "scheduler cache."), {'backend': backend_key})
+                LOG.info("Removing non-active backend: %(backend)s from "
+                         "scheduler cache.", {'backend': backend_key})
             del self.backend_state_map[backend_key]
 
     def get_all_backend_states(self, context):
@@ -628,20 +627,38 @@ class HostManager(object):
 
         return all_pools.values()
 
-    def get_pools(self, context):
+    def get_pools(self, context, filters=None):
         """Returns a dict of all pools on all hosts HostManager knows about."""
 
         self._update_backend_state_map(context)
 
         all_pools = []
+        name = None
+        if filters:
+            name = filters.pop('name', None)
+
         for backend_key, state in self.backend_state_map.items():
             for key in state.pools:
+                filtered = False
                 pool = state.pools[key]
                 # use backend_key.pool_name to make sure key is unique
                 pool_key = vol_utils.append_host(backend_key, pool.pool_name)
                 new_pool = dict(name=pool_key)
                 new_pool.update(dict(capabilities=pool.capabilities))
-                all_pools.append(new_pool)
+
+                if name and new_pool.get('name') != name:
+                    continue
+
+                if filters:
+                    # filter all other items in capabilities
+                    for (attr, value) in filters.items():
+                        cap = new_pool.get('capabilities').get(attr)
+                        if not self._equal_after_convert(cap, value):
+                            filtered = True
+                            break
+
+                if not filtered:
+                    all_pools.append(new_pool)
 
         return all_pools
 
@@ -761,3 +778,17 @@ class HostManager(object):
                 vol_utils.notify_about_capacity_usage(
                     context, u, u['type'], None, None)
         LOG.debug("Publish storage capacity: %s.", usage)
+
+    def _equal_after_convert(self, capability, value):
+
+        if isinstance(value, type(capability)) or capability is None:
+            return value == capability
+
+        if isinstance(capability, bool):
+            return capability == strutils.bool_from_string(value)
+
+        # We can not check or convert value parameter's type in
+        # anywhere else.
+        # If the capability and value are not in the same type,
+        # we just convert them into string to compare them.
+        return str(value) == str(capability)

@@ -23,7 +23,7 @@ from oslo_utils import excutils
 import six
 
 from cinder import exception
-from cinder.i18n import _, _LE, _LI
+from cinder.i18n import _
 from cinder import ssh_utils
 from cinder import utils
 from cinder.volume.drivers.ibm.storwize_svc import storwize_const
@@ -104,8 +104,8 @@ class StorwizeSVCReplicationStretchedCluster(StorwizeSVCReplication):
             self.driver._helpers.rm_vdisk_copy(volume['name'],
                                                secondary['copy_id'])
         else:
-            LOG.info(_LI('Could not find replica to delete of'
-                         ' volume %(vol)s.'), {'vol': vdisk})
+            LOG.info('Could not find replica to delete of'
+                     ' volume %(vol)s.', {'vol': vdisk})
 
     def test_replica(self, tgt_volume, src_volume):
         vdisk = src_volume['name']
@@ -237,6 +237,9 @@ class StorwizeSVCReplicationGlobalMirror(
             if not attr:
                 opts = self.driver._get_vdisk_params(vref['volume_type_id'])
                 pool = self.target.get('pool_name')
+                src_attr = self.driver._helpers.get_vdisk_attributes(
+                    vref['name'])
+                opts['iogrp'] = src_attr['IO_group_id']
                 self.target_helpers.create_vdisk(target_vol_name,
                                                  six.text_type(vref['size']),
                                                  'gb', pool, opts)
@@ -264,9 +267,9 @@ class StorwizeSVCReplicationGlobalMirror(
             self.target_helpers.switch_relationship(rel_info['name'])
             return {'replication_status': 'failed-over'}
         except Exception as e:
-            LOG.exception(_LE('Unable to fail-over the volume %(id)s to the '
-                              'secondary back-end by switchrcrelationship '
-                              'command, error: %(error)s'),
+            LOG.exception('Unable to fail-over the volume %(id)s to the '
+                          'secondary back-end by switchrcrelationship '
+                          'command, error: %(error)s',
                           {"id": vref['id'], "error": e})
             # If the switch command fail, try to make the aux volume
             # writeable again.
@@ -280,8 +283,6 @@ class StorwizeSVCReplicationGlobalMirror(
                        {"id": vref['id'], "error": e})
                 LOG.exception(msg)
                 raise exception.VolumeDriverException(message=msg)
-        LOG.debug('leave: failover_volume_host: vref=%(vref)s',
-                  {'vref': vref['name']})
 
     def replication_failback(self, volume):
         tgt_volume = storwize_const.REPLICA_AUX_VOL_PREFIX + volume['name']
@@ -371,7 +372,7 @@ class StorwizeSVCReplicationManager(object):
                         cmd=command)
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE("Error running SSH command: %s"), command)
+                LOG.error("Error running SSH command: %s", command)
 
     def get_target_helpers(self):
         return self.target_helpers
@@ -395,6 +396,7 @@ class StorwizeSVCReplicationManager(object):
                     client.mkfcpartnership(remote_name)
                 else:
                     client.mkippartnership(remote_ip)
+                partnership_info = client.get_partnership_info(remote_name)
             if partnership_info['partnership'] != 'fully_configured':
                 client.chpartnership(partnership_info['id'])
         except Exception:
@@ -410,7 +412,10 @@ class StorwizeSVCReplicationManager(object):
         target_system_name = target_system_info['system_name']
         local_ip = self.driver.configuration.safe_get('san_ip')
         target_ip = self.target.get('san_ip')
-        self._partnership_validate_create(self._master_helpers,
-                                          target_system_name, target_ip)
-        self._partnership_validate_create(self.target_helpers,
-                                          local_system_name, local_ip)
+        # Establish partnership only when the local system and the replication
+        # target system is different.
+        if target_system_name != local_system_name:
+            self._partnership_validate_create(self._master_helpers,
+                                              target_system_name, target_ip)
+            self._partnership_validate_create(self.target_helpers,
+                                              local_system_name, local_ip)

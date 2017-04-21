@@ -16,8 +16,6 @@
 import ast
 import datetime
 import hashlib
-import os
-import pickle
 import random
 import re
 import time
@@ -30,7 +28,7 @@ import six
 
 from cinder import context
 from cinder import exception
-from cinder.i18n import _, _LE, _LI, _LW
+from cinder.i18n import _
 from cinder.objects import fields
 from cinder.volume import volume_types
 
@@ -85,182 +83,76 @@ class VMAXUtils(object):
 
     def __init__(self, prtcl):
         if not pywbemAvailable:
-            LOG.info(_LI(
+            LOG.info(
                 "Module PyWBEM not installed. "
-                "Install PyWBEM using the python-pywbem package."))
+                "Install PyWBEM using the python-pywbem package.")
         self.protocol = prtcl
 
-    def find_storage_configuration_service(self, conn, storageSystemName):
-        """Get storage configuration service with given storage system name.
+    def _find_service(self, conn, instance_name,
+                      service_type, storageSystemName):
+        """Get service with given storage system name.
 
         :param conn: connection to the ecom server
+        :param instance_name: instance name
+        :param service_type: message into the log
         :param storageSystemName: the storage system name
         :returns: foundConfigService
         :raises: VolumeBackendAPIException
         """
-        foundConfigService = None
-        configservices = conn.EnumerateInstanceNames(
-            'EMC_StorageConfigurationService')
-        for configservice in configservices:
-            if storageSystemName == configservice['SystemName']:
-                foundConfigService = configservice
-                LOG.debug("Found Storage Configuration Service: "
-                          "%(configservice)s.",
-                          {'configservice': configservice})
+        foundService = None
+        services = conn.EnumerateInstanceNames(instance_name)
+        for service in services:
+            if storageSystemName == service['SystemName']:
+                foundService = service
+                LOG.debug("Found %(service_type)s Service: %(service)s.",
+                          {'service_type': service_type,
+                           'service': service})
                 break
 
-        if foundConfigService is None:
-            exceptionMessage = (_("Storage Configuration Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
+        if foundService is None:
+            exceptionMessage = (_("%(service_type)s not found on %(storage)s.")
+                                % {'service_type': service_type,
+                                   'storage': storageSystemName})
             LOG.error(exceptionMessage)
             raise exception.VolumeBackendAPIException(data=exceptionMessage)
 
-        return foundConfigService
+        return foundService
+
+    def find_storage_configuration_service(self, conn, storageSystemName):
+        # Get storage configuration service with given storage system name.
+        return self._find_service(conn, 'EMC_StorageConfigurationService',
+                                  'Storage Configuration Service',
+                                  storageSystemName)
 
     def find_controller_configuration_service(self, conn, storageSystemName):
-        """Get the controller config by using the storage service name.
-
-        Given the storage system name, get the controller configuration
-        service.
-
-        :param conn: connection to the ecom server
-        :param storageSystemName: the storage system name
-        :returns: foundconfigService
-        :raises: VolumeBackendAPIException
-        """
-        foundConfigService = None
-        configservices = conn.EnumerateInstanceNames(
-            'EMC_ControllerConfigurationService')
-        for configservice in configservices:
-            if storageSystemName == configservice['SystemName']:
-                foundConfigService = configservice
-                LOG.debug("Found Controller Configuration Service: "
-                          "%(configservice)s.",
-                          {'configservice': configservice})
-                break
-
-        if foundConfigService is None:
-            exceptionMessage = (_("Controller Configuration Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
-            LOG.error(exceptionMessage)
-            raise exception.VolumeBackendAPIException(data=exceptionMessage)
-
-        return foundConfigService
+        # Get the controller config by using the storage service name.
+        return self._find_service(conn, 'EMC_ControllerConfigurationService',
+                                  'Controller Configuration Service',
+                                  storageSystemName)
 
     def find_element_composition_service(self, conn, storageSystemName):
-        """Given the storage system name, get the element composition service.
-
-        :param conn: the connection to the ecom server
-        :param storageSystemName: the storage system name
-        :returns: foundElementCompositionService
-        :raises: VolumeBackendAPIException
-        """
-        foundElementCompositionService = None
-        elementCompositionServices = conn.EnumerateInstanceNames(
-            'Symm_ElementCompositionService')
-        for elementCompositionService in elementCompositionServices:
-            if storageSystemName == elementCompositionService['SystemName']:
-                foundElementCompositionService = elementCompositionService
-                LOG.debug(
-                    "Found Element Composition Service: "
-                    "%(elementCompositionService)s.", {
-                        'elementCompositionService':
-                            elementCompositionService})
-                break
-        if foundElementCompositionService is None:
-            exceptionMessage = (_("Element Composition Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
-            LOG.error(exceptionMessage)
-            raise exception.VolumeBackendAPIException(data=exceptionMessage)
-
-        return foundElementCompositionService
+        # Given the storage system name, get the element composition service.
+        return self._find_service(conn, 'Symm_ElementCompositionService',
+                                  'Element Composition Service',
+                                  storageSystemName)
 
     def find_storage_relocation_service(self, conn, storageSystemName):
-        """Given the storage system name, get the storage relocation service.
-
-        :param conn: the connection to the ecom server
-        :param storageSystemName: the storage system name
-        :returns: foundStorageRelocationService
-        :raises: VolumeBackendAPIException
-        """
-        foundStorageRelocationService = None
-        storageRelocationServices = conn.EnumerateInstanceNames(
-            'Symm_StorageRelocationService')
-        for storageRelocationService in storageRelocationServices:
-            if storageSystemName == storageRelocationService['SystemName']:
-                foundStorageRelocationService = storageRelocationService
-                LOG.debug(
-                    "Found Element Composition Service: "
-                    "%(storageRelocationService)s.",
-                    {'storageRelocationService': storageRelocationService})
-                break
-
-        if foundStorageRelocationService is None:
-            exceptionMessage = (_("Storage Relocation Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
-            LOG.error(exceptionMessage)
-            raise exception.VolumeBackendAPIException(data=exceptionMessage)
-
-        return foundStorageRelocationService
+        # Given the storage system name, get the storage relocation service.
+        return self._find_service(conn, 'Symm_StorageRelocationService',
+                                  'Element Composition Service',
+                                  storageSystemName)
 
     def find_storage_hardwareid_service(self, conn, storageSystemName):
-        """Given the storage system name, get the storage hardware service.
-
-        :param conn: the connection to the ecom server
-        :param storageSystemName: the storage system name
-        :returns: foundStorageRelocationService
-        :raises: VolumeBackendAPIException
-        """
-        foundHardwareService = None
-        storageHardwareservices = conn.EnumerateInstanceNames(
-            'EMC_StorageHardwareIDManagementService')
-        for storageHardwareservice in storageHardwareservices:
-            if storageSystemName == storageHardwareservice['SystemName']:
-                foundHardwareService = storageHardwareservice
-                LOG.debug("Found Storage Hardware ID Management Service:"
-                          "%(storageHardwareservice)s.",
-                          {'storageHardwareservice': storageHardwareservice})
-                break
-
-        if foundHardwareService is None:
-            exceptionMessage = (_("Storage HardwareId mgmt Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
-            LOG.error(exceptionMessage)
-            raise exception.VolumeBackendAPIException(data=exceptionMessage)
-
-        return foundHardwareService
+        # Given the storage system name, get the storage hardware service.
+        return self._find_service(conn,
+                                  'EMC_StorageHardwareIDManagementService',
+                                  'Storage Hardware ID Management Service',
+                                  storageSystemName)
 
     def find_replication_service(self, conn, storageSystemName):
-        """Given the storage system name, get the replication service.
-
-        :param conn: the connection to the ecom server
-        :param storageSystemName: the storage system name
-        :returns: foundRepService
-        :raises: VolumeBackendAPIException
-        """
-        foundRepService = None
-        repservices = conn.EnumerateInstanceNames(
-            'EMC_ReplicationService')
-        for repservice in repservices:
-            if storageSystemName == repservice['SystemName']:
-                foundRepService = repservice
-                LOG.debug("Found Replication Service:"
-                          "%(repservice)s",
-                          {'repservice': repservice})
-                break
-        if foundRepService is None:
-            exceptionMessage = (_("Replication Service not found "
-                                  "on %(storageSystemName)s.")
-                                % {'storageSystemName': storageSystemName})
-            LOG.error(exceptionMessage)
-            raise exception.VolumeBackendAPIException(data=exceptionMessage)
-
-        return foundRepService
+        # Given the storage system name, get the replication service.
+        return self._find_service(conn, 'EMC_ReplicationService',
+                                  'Replication Service', storageSystemName)
 
     def get_tier_policy_service(self, conn, storageSystemInstanceName):
         """Gets the tier policy service for a given storage system instance.
@@ -319,9 +211,8 @@ class VMAXUtils(object):
             if retries > maxJobRetries:
                 kwargs['rc'], kwargs['errordesc'] = (
                     self._verify_job_state(conn, job))
-                LOG.error(_LE("_wait_for_job_complete "
-                              "failed after %(retries)d "
-                              "tries."),
+                LOG.error("_wait_for_job_complete failed after %(retries)d "
+                          "tries.",
                           {'retries': retries})
 
                 raise loopingcall.LoopingCallDone()
@@ -457,8 +348,7 @@ class VMAXUtils(object):
                 raise exception.VolumeBackendAPIException(exceptionMessage)
 
             if kwargs['retries'] > maxJobRetries:
-                LOG.error(_LE("_wait_for_sync failed after %(retries)d "
-                              "tries."),
+                LOG.error("_wait_for_sync failed after %(retries)d tries.",
                           {'retries': retries})
                 raise loopingcall.LoopingCallDone(retvalue=maxJobRetries)
             if kwargs['wait_for_sync_called']:
@@ -526,7 +416,7 @@ class VMAXUtils(object):
         if len(groups) > 0:
             foundStorageSystemInstanceName = groups[0]
         else:
-            LOG.error(_LE("Cannot get storage system."))
+            LOG.error("Cannot get storage system.")
             raise
 
         return foundStorageSystemInstanceName
@@ -549,9 +439,9 @@ class VMAXUtils(object):
             ResultClass='CIM_DeviceMaskingGroup')
 
         if len(storageGroupInstanceNames) > 1:
-            LOG.info(_LI(
+            LOG.info(
                 "The volume belongs to more than one storage group. "
-                "Returning storage group %(sgName)s."),
+                "Returning storage group %(sgName)s.",
                 {'sgName': sgName})
         for storageGroupInstanceName in storageGroupInstanceNames:
             instance = self.get_existing_instance(
@@ -1001,9 +891,9 @@ class VMAXUtils(object):
         poolInstanceName = self.get_pool_by_name(
             conn, poolName, storageSystemName)
         if poolInstanceName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Unable to retrieve pool instance of %(poolName)s on "
-                "array %(array)s."),
+                "array %(array)s.",
                 {'poolName': poolName, 'array': storageSystemName})
             return (0, 0)
         storagePoolInstance = conn.GetInstance(
@@ -1241,7 +1131,7 @@ class VMAXUtils(object):
                 infoDetail = host.split('@')
             storageSystem = 'SYMMETRIX+' + infoDetail[0]
         except Exception:
-            LOG.error(_LE("Error parsing array from host capabilities."))
+            LOG.error("Error parsing array from host capabilities.")
 
         return storageSystem
 
@@ -1292,15 +1182,15 @@ class VMAXUtils(object):
         if foundSyncInstanceName:
             # Wait for SE_StorageSynchronized_SV_SV to be fully synced.
             if waitforsync:
-                LOG.warning(_LW(
+                LOG.warning(
                     "Expect a performance hit as volume is not fully "
-                    "synced on %(deviceId)s."),
+                    "synced on %(deviceId)s.",
                     {'deviceId': volumeInstance['DeviceID']})
                 startTime = time.time()
                 self.wait_for_sync(conn, foundSyncInstanceName, extraSpecs)
-                LOG.warning(_LW(
+                LOG.warning(
                     "Synchronization process took "
-                    "took: %(delta)s H:MM:SS."),
+                    "took: %(delta)s H:MM:SS.",
                     {'delta': self.get_time_delta(startTime,
                                                   time.time())})
 
@@ -1336,9 +1226,9 @@ class VMAXUtils(object):
                 break
 
         if foundSyncInstanceName is None:
-            LOG.warning(_LW(
+            LOG.warning(
                 "Group sync name not found for target group %(target)s "
-                "on %(storageSystem)s."),
+                "on %(storageSystem)s.",
                 {'target': targetRgInstanceName['InstanceID'],
                  'storageSystem': storageSystem})
         else:
@@ -1570,14 +1460,14 @@ class VMAXUtils(object):
                 break
 
         if not isValidSLO:
-            LOG.error(_LE(
+            LOG.error(
                 "SLO: %(slo)s is not valid. Valid values are Bronze, Silver, "
-                "Gold, Platinum, Diamond, Optimized, NONE."), {'slo': slo})
+                "Gold, Platinum, Diamond, Optimized, NONE.", {'slo': slo})
 
         if not isValidWorkload:
-            LOG.error(_LE(
+            LOG.error(
                 "Workload: %(workload)s is not valid. Valid values are "
-                "DSS_REP, DSS, OLTP, OLTP_REP, NONE."), {'workload': workload})
+                "DSS_REP, DSS, OLTP, OLTP_REP, NONE.", {'workload': workload})
 
         return isValidSLO, isValidWorkload
 
@@ -1641,8 +1531,8 @@ class VMAXUtils(object):
         if len(metaHeads) > 0:
             metaHeadInstanceName = metaHeads[0]
         if metaHeadInstanceName is None:
-            LOG.info(_LI(
-                "Volume  %(volume)s does not have meta device members."),
+            LOG.info(
+                "Volume  %(volume)s does not have meta device members.",
                 {'volume': volumeInstanceName})
 
         return metaHeadInstanceName
@@ -1714,7 +1604,7 @@ class VMAXUtils(object):
             instance = None
         else:
             # Something else that we cannot recover from has happened.
-            LOG.error(_LE("Exception: %s"), desc)
+            LOG.error("Exception: %s", desc)
             exceptionMessage = (_(
                 "Cannot verify the existence of object:"
                 "%(instanceName)s.")
@@ -1806,8 +1696,8 @@ class VMAXUtils(object):
                       {'initiator': initiator, 'rc': rc, 'ret': ret})
             hardwareIdList = ret['HardwareID']
         else:
-            LOG.warning(_LW("CreateStorageHardwareID failed. initiator: "
-                            "%(initiator)s, rc=%(rc)d, ret=%(ret)s."),
+            LOG.warning("CreateStorageHardwareID failed. initiator: "
+                        "%(initiator)s, rc=%(rc)d, ret=%(ret)s.",
                         {'initiator': initiator, 'rc': rc, 'ret': ret})
         return hardwareIdList
 
@@ -1826,7 +1716,7 @@ class VMAXUtils(object):
             if 'iqn' in initiator.lower():
                 hardwareTypeId = 5
         if hardwareTypeId == 0:
-            LOG.warning(_LW("Cannot determine the hardware type."))
+            LOG.warning("Cannot determine the hardware type.")
         return hardwareTypeId
 
     def _process_tag(self, element, tagName):
@@ -1976,15 +1866,15 @@ class VMAXUtils(object):
             portGroup = self._get_random_portgroup(dom)
             serialNumber = self._process_tag(dom, 'Array')
             if serialNumber is None:
-                LOG.error(_LE(
+                LOG.error(
                     "Array Serial Number must be in the file "
-                    "%(fileName)s."),
+                    "%(fileName)s.",
                     {'fileName': fileName})
             poolName = self._process_tag(dom, 'Pool')
             if poolName is None:
-                LOG.error(_LE(
+                LOG.error(
                     "PoolName must be in the file "
-                    "%(fileName)s."),
+                    "%(fileName)s.",
                     {'fileName': fileName})
             kwargs = self._fill_record(
                 connargs, serialNumber, poolName, portGroup, dom)
@@ -2024,9 +1914,8 @@ class VMAXUtils(object):
                                   % {'poolName': arrayInfoRec['PoolName'],
                                      'array': arrayInfoRec['SerialNumber']})
                 if compString == pool:
-                    LOG.info(_LI(
-                        "The pool_name from extraSpecs is %(pool)s."),
-                        {'pool': pool})
+                    LOG.info("The pool_name from extraSpecs is %(pool)s.",
+                             {'pool': pool})
                     foundArrayInfoRec = arrayInfoRec
                     break
         else:
@@ -2284,9 +2173,9 @@ class VMAXUtils(object):
                 break
 
         if foundSyncInstanceName is None:
-            LOG.info(_LI(
+            LOG.info(
                 "No replication synchronization session found associated "
-                "with source volume %(source)s on %(storageSystem)s."),
+                "with source volume %(source)s on %(storageSystem)s.",
                 {'source': sourceDeviceId, 'storageSystem': storageSystem})
 
         return foundSyncInstanceName
@@ -2301,16 +2190,13 @@ class VMAXUtils(object):
         :returns: volume_model_updates - updated volumes
         """
         volume_model_updates = []
-        LOG.info(_LI(
-            "Updating status for CG: %(id)s."),
-            {'id': cgId})
+        LOG.info("Updaing status for CG: %(id)s.", {'id': cgId})
         if volumes:
             for volume in volumes:
                 volume_model_updates.append({'id': volume['id'],
                                              'status': status})
         else:
-            LOG.info(_LI("No volume found for CG: %(cg)s."),
-                     {'cg': cgId})
+            LOG.info("No volume found for CG: %(cg)s.", {'cg': cgId})
         return volume_model_updates
 
     def get_smi_version(self, conn):
@@ -2612,7 +2498,7 @@ class VMAXUtils(object):
         try:
             max_subscription_percent_int = int(max_subscription_percent)
         except ValueError:
-            LOG.error(_LE("Cannot convert max subscription percent to int."))
+            LOG.error("Cannot convert max subscription percent to int.")
             return None
         return float(max_subscription_percent_int) / 100
 
@@ -2685,77 +2571,6 @@ class VMAXUtils(object):
             modifiedInstance = conn.ModifyInstance(storagegroupInstance,
                                                    PropertyList=propertylist)
         return modifiedInstance
-
-    def insert_live_migration_record(self, volume, maskingviewdict,
-                                     connector, extraSpecs):
-        """Insert a record of live migration destination into a temporary file
-
-        :param volume: the volume dictionary
-        :param maskingviewdict: the storage group instance name
-        :param connector: the connector Object
-        :param extraSpecs: the extraSpecs dict
-        """
-        live_migration_details = self.get_live_migration_record(volume, True)
-        if live_migration_details:
-            if volume['id'] not in live_migration_details:
-                live_migration_details[volume['id']] = [maskingviewdict,
-                                                        connector, extraSpecs]
-        else:
-            live_migration_details = {volume['id']: [maskingviewdict,
-                                                     connector, extraSpecs]}
-        try:
-            with open(LIVE_MIGRATION_FILE, "wb") as f:
-                pickle.dump(live_migration_details, f)
-        except Exception:
-            exceptionMessage = (_(
-                "Error in processing live migration file."))
-            LOG.exception(exceptionMessage)
-            raise exception.VolumeBackendAPIException(
-                data=exceptionMessage)
-
-    def delete_live_migration_record(self, volume):
-        """Delete record of live migration
-
-        Delete record of live migration destination from file and if
-        after deletion of record, delete file if empty.
-
-        :param volume: the volume dictionary
-        """
-        live_migration_details = self.get_live_migration_record(volume, True)
-        if live_migration_details:
-            if volume['id'] in live_migration_details:
-                del live_migration_details[volume['id']]
-                with open(LIVE_MIGRATION_FILE, "wb") as f:
-                    pickle.dump(live_migration_details, f)
-            else:
-                LOG.debug("%(Volume)s doesn't exist in live migration "
-                          "record.",
-                          {'Volume': volume['id']})
-            if not live_migration_details:
-                os.remove(LIVE_MIGRATION_FILE)
-
-    def get_live_migration_record(self, volume, returnallrecords):
-        """get record of live migration destination from a temporary file
-
-        :param volume: the volume dictionary
-        :param returnallrecords: if true, return all records in file
-        :returns: returns a single record or all records depending on
-        returnallrecords flag
-        """
-        returned_record = None
-        if os.path.isfile(LIVE_MIGRATION_FILE):
-            with open(LIVE_MIGRATION_FILE, "rb") as f:
-                live_migration_details = pickle.load(f)
-            if returnallrecords:
-                returned_record = live_migration_details
-            else:
-                if volume['id'] in live_migration_details:
-                    returned_record = live_migration_details[volume['id']]
-                else:
-                    LOG.debug("%(Volume)s doesn't exist in live migration "
-                              "record.",
-                              {'Volume': volume['id']})
-        return returned_record
 
     def get_iqn(self, conn, ipendpointinstancename):
         """Get the IPv4Address from the ip endpoint instance name.
@@ -2969,14 +2784,14 @@ class VMAXUtils(object):
         if foundSyncInstanceName:
             # Wait for SE_StorageSynchronized_SV_SV to be fully synced.
             if waitforsync:
-                LOG.warning(_LW(
+                LOG.warning(
                     "Expect a performance hit as volume is not not fully "
-                    "synced on %(deviceId)s."),
+                    "synced on %(deviceId)s.",
                     {'deviceId': sourceInstance['DeviceID']})
                 startTime = time.time()
                 self.wait_for_sync(conn, foundSyncInstanceName, extraSpecs)
-                LOG.warning(_LW(
-                    "Synchronization process took: %(delta)s H:MM:SS."),
+                LOG.warning(
+                    "Synchronization process took: %(delta)s H:MM:SS.",
                     {'delta': self.get_time_delta(startTime,
                                                   time.time())})
 
@@ -3011,8 +2826,8 @@ class VMAXUtils(object):
             extraSpecs[self.POOL] = poolDetails[2]
             extraSpecs[self.ARRAY] = poolDetails[3]
         except KeyError:
-            LOG.error(_LE("Error parsing SLO, workload from "
-                          "the provided extra_specs."))
+            LOG.error("Error parsing SLO, workload from "
+                      "the provided extra_specs.")
         return extraSpecs
 
     def get_default_intervals_retries(self):

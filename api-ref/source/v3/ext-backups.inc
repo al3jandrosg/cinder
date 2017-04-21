@@ -1,6 +1,5 @@
 .. -*- rst -*-
 
-=================
 Backups (backups)
 =================
 
@@ -39,7 +38,7 @@ in the ``fail_reason`` field for the backup.
 
 
 List backups with detail
-========================
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/backups/detail
 
@@ -59,6 +58,7 @@ Request
    - sort_key: sort_key
    - sort_dir: sort_dir
    - limit: limit
+   - offset: offset
    - marker: marker
 
 
@@ -92,7 +92,7 @@ Response Example
 
 
 Show backup detail
-==================
+~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/backups/{backup_id}
 
@@ -142,7 +142,7 @@ Response Example
 
 
 Delete a backup
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  DELETE /v3/{project_id}/backups/{backup_id}
 
@@ -160,7 +160,7 @@ Request
 
 
 Restore a backup
-================
+~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/backups/{backup_id}/restore
 
@@ -199,7 +199,7 @@ Response Parameters
    - volume_id: volume_id
 
 Create a backup
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/backups
 
@@ -238,7 +238,7 @@ Response Parameters
    - name: name
 
 List backups for project
-========================
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/backups
 

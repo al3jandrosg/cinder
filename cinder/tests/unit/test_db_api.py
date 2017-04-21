@@ -34,7 +34,6 @@ from cinder import quota
 from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import utils
-from cinder.volume import group_types
 
 CONF = cfg.CONF
 THREE = 3
@@ -1219,6 +1218,27 @@ class DBAPIVolumeTestCase(BaseTest):
                           False,
                           FAKE_METADATA_TYPE.fake_type)
 
+    @ddt.data(common.METADATA_TYPES.user, common.METADATA_TYPES.image)
+    @mock.patch.object(timeutils, 'utcnow')
+    @mock.patch.object(sqlalchemy_api, 'resource_exists')
+    @mock.patch.object(sqlalchemy_api, 'conditional_update')
+    @mock.patch.object(sqlalchemy_api, '_volume_x_metadata_get_query')
+    def test_volume_metadata_delete_deleted_at_updated(self,
+                                                       meta_type,
+                                                       mock_query,
+                                                       mock_update,
+                                                       mock_resource,
+                                                       mock_utc):
+        mock_query.all.return_value = {}
+        mock_utc.return_value = 'fake_time'
+
+        db.volume_metadata_update(self.ctxt, 1, {}, True, meta_type=meta_type)
+
+        mock_update.assert_called_once_with(mock.ANY, mock.ANY,
+                                            {'deleted': True,
+                                             'deleted_at': 'fake_time'},
+                                            mock.ANY)
+
     def test_volume_metadata_update_delete(self):
         metadata1 = {'a': '1', 'c': '2'}
         metadata2 = {'a': '3', 'd': '4'}
@@ -1669,6 +1689,26 @@ class DBAPISnapshotTestCase(BaseTest):
 
         self.assertEqual(should_be, db_meta)
 
+    @mock.patch.object(timeutils, 'utcnow')
+    @mock.patch.object(sqlalchemy_api, 'resource_exists')
+    @mock.patch.object(sqlalchemy_api, '_snapshot_metadata_get')
+    @mock.patch.object(sqlalchemy_api, '_snapshot_metadata_get_item')
+    def test_snapshot_metadata_delete_deleted_at_updated(self,
+                                                         mock_metadata_item,
+                                                         mock_metadata,
+                                                         mock_resource,
+                                                         mock_utc):
+        fake_metadata = {'fake_key1': 'fake_value1'}
+        mock_item = mock.Mock()
+        mock_metadata.return_value = fake_metadata
+        mock_utc.return_value = 'fake_time'
+        mock_metadata_item.side_effect = [mock_item]
+
+        db.snapshot_metadata_update(self.ctxt, 1, {}, True)
+
+        mock_item.update.assert_called_once_with({'deleted': True,
+                                                  'deleted_at': 'fake_time'})
+
     def test_snapshot_metadata_delete(self):
         metadata = {'a': '1', 'c': '2'}
         should_be = {'a': '1'}
@@ -1760,315 +1800,6 @@ class DBAPIConsistencygroupTestCase(BaseTest):
             self.assertEqual(
                 new_cluster_name + cgs[i].cluster_name[len(cluster_name):],
                 db_cgs[i].cluster_name)
-
-
-class DBAPIMigrateCGstoGroupsTestCase(BaseTest):
-    """Tests for cinder.db.api.migrate_consistencygroups_to_groups."""
-
-    def setUp(self):
-        super(DBAPIMigrateCGstoGroupsTestCase, self).setUp()
-
-        db.volume_type_create(self.ctxt, {'id': 'a', 'name': 'a'})
-        db.volume_type_create(self.ctxt, {'id': 'b', 'name': 'b'})
-
-        cg_dicts = [
-            {'id': '1', 'status': fields.ConsistencyGroupStatus.AVAILABLE,
-             'volume_type_id': 'a,b,'},
-            {'id': '2', 'status': fields.ConsistencyGroupStatus.ERROR,
-             'volume_type_id': 'a,'},
-            {'id': '3',
-             'status': fields.ConsistencyGroupStatus.AVAILABLE,
-             'volume_type_id': 'b,'},
-            {'id': '4',
-             'status': fields.ConsistencyGroupStatus.UPDATING,
-             'volume_type_id': 'a,'},
-        ]
-        for cg_dict in cg_dicts:
-            db.consistencygroup_create(self.ctxt, cg_dict)
-
-        # Create volumes in CGs
-        self.vol1 = db.volume_create(self.ctxt, {'volume_type_id': 'a',
-                                                 'consistencygroup_id': '1',
-                                                 'status': 'available',
-                                                 'size': 1})
-        self.vol2 = db.volume_create(self.ctxt, {'volume_type_id': 'b',
-                                                 'consistencygroup_id': '1',
-                                                 'status': 'available',
-                                                 'size': 1})
-        self.vol3 = db.volume_create(self.ctxt, {'volume_type_id': 'b',
-                                                 'consistencygroup_id': '3',
-                                                 'status': 'available',
-                                                 'size': 1})
-
-        # Create cgsnapshots
-        cgsnap1 = db.cgsnapshot_create(
-            self.ctxt,
-            {'id': 'cgsnap1',
-             'consistencygroup_id': '1',
-             'status': fields.ConsistencyGroupStatus.AVAILABLE}
-        )
-        cgsnap3 = db.cgsnapshot_create(
-            self.ctxt,
-            {'id': 'cgsnap3',
-             'consistencygroup_id': '3',
-             'status': fields.ConsistencyGroupStatus.AVAILABLE}
-        )
-
-        # Create snapshots
-        self.snap1 = db.snapshot_create(
-            self.ctxt,
-            {'volume_id': self.vol1['id'],
-             'cgsnapshot_id': cgsnap1['id'],
-             'status': fields.SnapshotStatus.AVAILABLE})
-        self.snap2 = db.snapshot_create(
-            self.ctxt,
-            {'volume_id': self.vol2['id'],
-             'cgsnapshot_id': cgsnap1['id'],
-             'status': fields.SnapshotStatus.AVAILABLE})
-        self.snap3 = db.snapshot_create(
-            self.ctxt,
-            {'volume_id': self.vol3['id'],
-             'cgsnapshot_id': cgsnap3['id'],
-             'status': fields.SnapshotStatus.AVAILABLE})
-
-        # Create CG from CG snapshot
-        cg5_dict = {
-            'id': '5',
-            'cgsnapshot_id': cgsnap3['id'],
-            'status': fields.ConsistencyGroupStatus.AVAILABLE,
-            'volume_type_id': 'b,'
-        }
-        db.consistencygroup_create(self.ctxt, cg5_dict)
-        cg_dicts.append(cg5_dict)
-        self.vol5 = db.volume_create(self.ctxt, {'volume_type_id': 'b',
-                                                 'consistencygroup_id': '5',
-                                                 'status': 'available',
-                                                 'size': 1})
-
-        # Create CG from source CG
-        cg6_dict = {
-            'id': '6',
-            'source_cgid': '5',
-            'status': fields.ConsistencyGroupStatus.AVAILABLE,
-            'volume_type_id': 'b,'
-        }
-        db.consistencygroup_create(self.ctxt, cg6_dict)
-        cg_dicts.append(cg6_dict)
-        self.vol6 = db.volume_create(self.ctxt, {'volume_type_id': 'b',
-                                                 'consistencygroup_id': '6',
-                                                 'status': 'available',
-                                                 'size': 1})
-
-        self.addCleanup(self._cleanup)
-
-    def _cleanup(self):
-        db.snapshot_destroy(self.ctxt, self.snap1.id)
-        db.snapshot_destroy(self.ctxt, self.snap2.id)
-        db.snapshot_destroy(self.ctxt, self.snap3.id)
-
-        db.volume_destroy(self.ctxt, self.vol1.id)
-        db.volume_destroy(self.ctxt, self.vol2.id)
-        db.volume_destroy(self.ctxt, self.vol3.id)
-        db.volume_destroy(self.ctxt, self.vol5.id)
-        db.volume_destroy(self.ctxt, self.vol6.id)
-
-        db.cgsnapshot_destroy(self.ctxt, 'cgsnap1')
-        db.cgsnapshot_destroy(self.ctxt, 'cgsnap3')
-
-        db.group_snapshot_destroy(self.ctxt, 'cgsnap1')
-        db.group_snapshot_destroy(self.ctxt, 'cgsnap3')
-
-        db.consistencygroup_destroy(self.ctxt, '1')
-        db.consistencygroup_destroy(self.ctxt, '2')
-        db.consistencygroup_destroy(self.ctxt, '3')
-        db.consistencygroup_destroy(self.ctxt, '4')
-        db.consistencygroup_destroy(self.ctxt, '5')
-        db.consistencygroup_destroy(self.ctxt, '6')
-
-        db.group_destroy(self.ctxt, '1')
-        db.group_destroy(self.ctxt, '2')
-        db.group_destroy(self.ctxt, '3')
-        db.group_destroy(self.ctxt, '4')
-        db.group_destroy(self.ctxt, '5')
-        db.group_destroy(self.ctxt, '6')
-
-        db.volume_type_destroy(self.ctxt, 'a')
-        db.volume_type_destroy(self.ctxt, 'b')
-
-        grp_type = group_types.get_default_group_type()
-        if grp_type:
-            db.group_type_destroy(self.ctxt, grp_type.id)
-
-    def _assert_migrated(self, migrated, not_migrated):
-        for cg_id, cgsnap_id in migrated.items():
-            grp = db.group_get(self.ctxt, cg_id)
-            self.assertIsNotNone(grp)
-            vols_in_cgs = db.volume_get_all_by_group(self.ctxt, cg_id)
-            vols_in_grps = db.volume_get_all_by_generic_group(self.ctxt, cg_id)
-            self.assertEqual(0, len(vols_in_cgs))
-            if cg_id == '1':
-                self.assertEqual(2, len(vols_in_grps))
-            elif cg_id == '3':
-                self.assertEqual(1, len(vols_in_grps))
-            if cgsnap_id:
-                grp_snap = db.group_snapshot_get(self.ctxt, cgsnap_id)
-                self.assertIsNotNone(grp_snap)
-                snaps_in_cgsnaps = db.snapshot_get_all_for_cgsnapshot(
-                    self.ctxt, cgsnap_id)
-                snaps_in_grpsnaps = db.snapshot_get_all_for_group_snapshot(
-                    self.ctxt, cgsnap_id)
-                self.assertEqual(0, len(snaps_in_cgsnaps))
-                if cg_id == '1':
-                    self.assertEqual(2, len(snaps_in_grpsnaps))
-                elif cg_id == '3':
-                    self.assertEqual(1, len(snaps_in_grpsnaps))
-
-        for cg_id in not_migrated:
-            self.assertRaises(exception.GroupNotFound,
-                              db.group_get, self.ctxt, cg_id)
-
-    def test_migrate(self):
-        # Run migration
-        count_all, count_hit = db.migrate_consistencygroups_to_groups(
-            self.ctxt, 50)
-        # Check counted entries
-        self.assertEqual(6, count_all)
-        self.assertEqual(5, count_hit)
-
-        # Check migated
-        migrated = {'1': 'cgsnap1', '2': None, '3': 'cgsnap3',
-                    '5': None, '6': None}
-        not_migrated = ('4',)
-
-        self._assert_migrated(migrated, not_migrated)
-
-    def test_migrate_force(self):
-        # Run migration
-        count_all, count_hit = db.migrate_consistencygroups_to_groups(
-            self.ctxt, 50, True)
-        # Check counted entries
-        self.assertEqual(6, count_all)
-        self.assertEqual(6, count_hit)
-
-        # Check migrated
-        migrated = {'1': 'cgsnap1', '2': None, '3': 'cgsnap3', '4': None,
-                    '5': None, '6': None}
-
-        self._assert_migrated(migrated, ())
-
-    def test_migrate_limit_force(self):
-        # Run first migration
-        count_all, count_hit = db.migrate_consistencygroups_to_groups(
-            self.ctxt, 2, True)
-        # Check counted entries
-        self.assertEqual(2, count_all)
-        self.assertEqual(2, count_hit)
-
-        # Check migrated
-        migrated = {'1': 'cgsnap1', '2': None}
-        not_migrated = ('3', '4', '5', '6',)
-
-        self._assert_migrated(migrated, not_migrated)
-
-        # Run second migration
-        count_all, count_hit = db.migrate_consistencygroups_to_groups(
-            self.ctxt, 4, True)
-        # Check counted entries
-        self.assertEqual(4, count_all)
-        self.assertEqual(4, count_hit)
-
-        # Check migrated
-        migrated = {'1': 'cgsnap1', '2': None, '3': 'cgsnap3', '4': None,
-                    '5': None, '6': None}
-
-        self._assert_migrated(migrated, ())
-
-
-class DBAPIMigrateMessagePrefixTestCase(BaseTest):
-    """Tests for cinder.db.api.migrate_add_message_prefix."""
-
-    def setUp(self):
-        super(DBAPIMigrateMessagePrefixTestCase, self).setUp()
-        message_values = {
-            "project_id": "fake_project",
-            "event_id": "test_id",
-            "message_level": "ERROR",
-            "id": '1',
-        }
-
-        db.message_create(self.ctxt, message_values)
-
-        message_2_values = {
-            "project_id": "fake_project",
-            "event_id": "test_id",
-            "message_level": "ERROR",
-            "id": '2',
-        }
-
-        db.message_create(self.ctxt, message_2_values)
-
-        message_3_values = {
-            "project_id": "fake_project",
-            "event_id": "VOLUME_test_id",
-            "message_level": "ERROR",
-            "id": '3',
-        }
-
-        db.message_create(self.ctxt, message_3_values)
-
-    def tearDown(self):
-        super(DBAPIMigrateMessagePrefixTestCase, self).tearDown()
-
-        db.message_destroy(self.ctxt, {'id': '1'})
-        db.message_destroy(self.ctxt, {'id': '2'})
-        db.message_destroy(self.ctxt, {'id': '3'})
-
-    def _assert_migrated(self, migrated, not_migrated):
-        for message_id in migrated:
-            message = db.message_get(self.ctxt, message_id)
-            self.assertEqual('VOLUME_test_id', message['event_id'])
-
-        for message_id in not_migrated:
-            message = db.message_get(self.ctxt, message_id)
-            self.assertEqual('test_id', message['event_id'])
-
-    def test_migrate(self):
-
-        self._assert_migrated(['3'], ['1', '2'])
-
-        # Run migration
-        count_all, count_hit = db.migrate_add_message_prefix(self.ctxt, 50)
-        # Check counted entries
-        self.assertEqual(2, count_all)
-        self.assertEqual(2, count_hit)
-
-        self._assert_migrated(['1', '2', '3'], [])
-
-    def test_migrate_limit_force(self):
-        # Run first migration
-        count_all, count_hit = db.migrate_add_message_prefix(self.ctxt, 1,
-                                                             True)
-        # Check counted entries
-        self.assertEqual(1, count_all)
-        self.assertEqual(1, count_hit)
-
-        self._assert_migrated(['1', '3'], ['2'])
-
-        # Run second migration
-        count_all, count_hit = db.migrate_add_message_prefix(self.ctxt, 2,
-                                                             True)
-        # Check counted entries
-        self.assertEqual(1, count_all)
-        self.assertEqual(1, count_hit)
-
-        self._assert_migrated(['1', '2', '3'], [])
-
-        # Run final migration
-        count_all, count_hit = db.migrate_add_message_prefix(self.ctxt, 2,
-                                                             True)
-        # Check counted entries
-        self.assertEqual(0, count_all)
-        self.assertEqual(0, count_hit)
 
 
 class DBAPICgsnapshotTestCase(BaseTest):
@@ -2282,14 +2013,12 @@ class DBAPIEncryptionTestCase(BaseTest):
             self._assertEqualObjects(values[i], encryption, self._ignored_keys)
 
     def test_volume_type_encryption_update(self):
-        update_values = self._get_values(updated=True)
-        self.updated = \
-            [db.volume_type_encryption_update(self.ctxt,
-                                              values['volume_type_id'], values)
-             for values in update_values]
-        for i, encryption in enumerate(self.updated):
-            self._assertEqualObjects(update_values[i], encryption,
-                                     self._ignored_keys)
+        for values in self._get_values(updated=True):
+            db.volume_type_encryption_update(self.ctxt,
+                                             values['volume_type_id'], values)
+            db_enc = db.volume_type_encryption_get(self.ctxt,
+                                                   values['volume_type_id'])
+            self._assertEqualObjects(values, db_enc, self._ignored_keys)
 
     def test_volume_type_encryption_get(self):
         for encryption in self.created:
@@ -2757,8 +2486,8 @@ class DBAPIBackupTestCase(BaseTest):
     def test_backup_update(self):
         updated_values = self._get_values(one=True)
         update_id = self.created[1]['id']
-        updated_backup = db.backup_update(self.ctxt, update_id,
-                                          updated_values)
+        db.backup_update(self.ctxt, update_id, updated_values)
+        updated_backup = db.backup_get(self.ctxt, update_id)
         self._assertEqualObjects(updated_values, updated_backup,
                                  self._ignored_keys)
 
@@ -2768,9 +2497,8 @@ class DBAPIBackupTestCase(BaseTest):
         updated_values['fail_reason'] = fail_reason
 
         update_id = self.created[1]['id']
-        updated_backup = db.backup_update(self.ctxt, update_id,
-                                          updated_values)
-
+        db.backup_update(self.ctxt, update_id, updated_values)
+        updated_backup = db.backup_get(self.ctxt, update_id)
         updated_values['fail_reason'] = fail_reason[:255]
         self._assertEqualObjects(updated_values, updated_backup,
                                  self._ignored_keys)

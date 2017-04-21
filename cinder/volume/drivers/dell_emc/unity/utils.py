@@ -16,6 +16,7 @@
 from __future__ import division
 
 import contextlib
+from distutils import version
 import functools
 from oslo_log import log as logging
 from oslo_utils import fnmatch
@@ -23,7 +24,7 @@ from oslo_utils import units
 import six
 
 from cinder import exception
-from cinder.i18n import _, _LW
+from cinder.i18n import _
 from cinder.volume import utils as vol_utils
 from cinder.volume import volume_types
 from cinder.zonemanager import utils as zm_utils
@@ -69,11 +70,11 @@ def extract_provider_location(provider_location, key):
             if len(fields) == 2 and fields[0] == key:
                 return fields[1]
         else:
-            msg = _LW('"%(key)s" is not found in provider '
-                      'location "%(location)s."')
-            LOG.warning(msg, {'key': key, 'location': provider_location})
+            LOG.warning('"%(key)s" is not found in provider '
+                        'location "%(location)s."',
+                        {'key': key, 'location': provider_location})
     else:
-        LOG.warning(_LW('Empty provider location received.'))
+        LOG.warning('Empty provider location received.')
 
 
 def byte_to_gib(byte):
@@ -185,9 +186,9 @@ def ignore_exception(func, *args, **kwargs):
     try:
         func(*args, **kwargs)
     except Exception as ex:
-        LOG.warning(_LW('Error occurred but ignored. Function: %(func_name)s, '
-                        'args: %(args)s, kwargs: %(kwargs)s, '
-                        'exception: %(ex)s.'),
+        LOG.warning('Error occurred but ignored. Function: %(func_name)s, '
+                    'args: %(args)s, kwargs: %(kwargs)s, '
+                    'exception: %(ex)s.',
                     {'func_name': func, 'args': args,
                      'kwargs': kwargs, 'ex': ex})
 
@@ -284,3 +285,7 @@ def match_any(full, patterns):
         filter(lambda p: not any(fnmatch.fnmatchcase(x, p) for x in full),
                patterns))
     return matched, unmatched, unmatched_patterns
+
+
+def is_before_4_1(ver):
+    return version.LooseVersion(ver) < version.LooseVersion('4.1')

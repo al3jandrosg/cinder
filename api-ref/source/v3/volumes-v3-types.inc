@@ -1,12 +1,11 @@
 .. -*- rst -*-
 
-====================
 Volume types (types)
 ====================
 
 
 Update a volume type
-====================
+~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v3/{project_id}/types/{volume_type_id}
 
@@ -66,7 +65,7 @@ Response Example
 
 
 Update extra specs for volume type
-==================================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v3/{project_id}/types/{volume_type_id}
 
@@ -115,7 +114,7 @@ Response Example
 
 
 Show volume type detail
-=======================
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types/{volume_type_id}
 
@@ -154,7 +153,7 @@ Response Example
 
 
 Delete a volume type
-====================
+~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  DELETE /v3/{project_id}/types/{volume_type_id}
 
@@ -173,7 +172,7 @@ Request
 
 
 List all volume types
-=====================
+~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types
 
@@ -193,6 +192,7 @@ Request
    - sort_key: sort_key
    - sort_dir: sort_dir
    - limit: limit
+   - offset: offset
    - marker: marker
 
 
@@ -214,7 +214,7 @@ Response Example
 
 
 Create a volume type
-====================
+~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/types
 
@@ -272,7 +272,7 @@ Response Example
    :language: javascript
 
 Show an encryption type
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/encryption
 
@@ -318,7 +318,7 @@ Response Example
 
 
 Delete an encryption type
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/encryption/{encryption_id}
 
@@ -341,7 +341,7 @@ Request
 
 
 Create an encryption type
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/types/{volume_type_id}/encryption
 
@@ -394,7 +394,7 @@ Response Example
 
 
 Update an encryption type
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/types/{volume_type_id}/encryption/{encryption_id}
 

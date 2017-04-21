@@ -12,7 +12,8 @@ if [ "$1" = "configure" ]; then
 
     chown -R cinder:adm /var/log/cinder
     chmod 0750 /var/log/cinder
-    chown -R cinder:cinder /var/lib/cinder /etc/cinder
+    chown -R cinder:cinder /var/lib/cinder
+    chown -R root:cinder /etc/cinder
     chmod 0750 /etc/cinder
     chmod 0440 /etc/sudoers.d/cinder_sudoers
     chown -R root:root /etc/cinder/rootwrap.d

@@ -45,6 +45,20 @@ hostname:
   in: path
   required: false
   type: string
+key_1:
+  description: |
+    The metadata key name for the metadata that you
+    want to remove.
+  in: path
+  required: true
+  type: string
+key_2:
+  description: |
+    The metadata key name for the metadata that you
+    want to see.
+  in: path
+  required: true
+  type: string
 qos_id:
   description: |
     The ID of the QoS specification.
@@ -76,11 +90,11 @@ user_id_1:
   in: path
   required: false
   type: string
-volume_id_1:
+volume_id_path:
   description: |
     The UUID of the volume.
   in: path
-  required: false
+  required: true
   type: string
 volume_type:
   description: |
@@ -868,7 +882,7 @@ mountpoint:
   description: |
     The attaching mount point.
   in: body
-  required: false
+  required: true
   type: string
 multiattach:
   description: |

@@ -1,41 +1,252 @@
 CHANGES
 =======
 
-10.0.0
-------
+11.0.0.0b1
+----------
 
+* Updated from global requirements
+* Use HostAddressOpt for opts that accept IP and hostnames
+* DS8K driver: change the design of CG
+* Add sem-ver flag so pbr generates correct version
+* Fixed wrongly catched multiple exception types
+* Storwize: add CG capability to generic groups
+* Fix attach issue for failed-over volume
+* Reduce code duplication
+* Remove 'verbose' config option initialization
+* Add CG capability to generic groups in Huawei driver
+* Huawei: disable certificate verification
+* Hitachi: Mark HBSD and VSP as unsupported
+* HNAS: Mark NFS driver as unsupported
+* Support for HostAddress opt
+* Add an optional db session argument to cinder.db.sqlalchemy.api. quota_allocated_get_all_by_project(). Then in quota_reserve() pass the session that is fetched for that method so that a new session does not have to be made. This can avoid DB timeouts and retries when a lot of concurrent operations are hitting quota_reserve()
+* VMAX driver - Live Migration is dropping connection
+* [Trivial]Fix some incorrect annotations
+* Fix some format error in docstrings
+* Add bandit-baseline to tox.ini
+* Backup: Add choices to compression algorithm option
+* ScaleIO: Fixing support for SIO 1.3x
+* Updated from global requirements
+* Fix error status check when create backup
+* Remove mirror policy parameter from Huawei driver
+* Updated from global requirements
+* Implementation of cinder driver for Veritas HyperScale
+* Tolerate new SQLAlchemy==1.1.7
+* [BugFix][Devref] Refactor attach/detach v2 devref
+* [BugFix]Cinder forgets to update 'deleted_at' when deleting
+* Add more specific error message
+* New test case for InfroTrend driver
+* [api-ref] Update snapshot/volume's metadata api-ref
+* [BugFix] Add 'all_tenants', 'project_id' in attachment-list
+* Huawei driver supports front-end qos
+* Add two response parameters in the api-ref of getting capabilities
+* NetApp E-Series CI name update
+* Don't use tempest special_fields
+* Make cinder-manage online migrations more verbose
+* api-ref: Fix volume_id parameter for the path
+* Fix 500 error when 'mountpoint' is not provided to os-attach
+* HPE LeftHand: extend volume if larger than snapshot
+* Mark the Violin volume drivers as unsupported
+* Mark QNAP volume driver as unsupported
+* [Doc] Add documentation for messages API
+* Mark Blockbridge volume driver as unsupported
+* Remove XML description from media-types
+* Fix version numbers on media-types
+* Fix status_code of "list versions" API
+* Adding new test case for InforTrend driver
+* Fixed inconsistent naming conventions
+* Extracted HTTP response codes to constants
+* Extracted HTTP response codes to constants
+* Extracted HTTP response codes to constants
+* Extracted HTTP response codes to constants
+* replace references to cinder.openstack.org
+* Consistency groups API is not returning project_id filter groups
+* Adding tests for api/v3/group_specs.py
+* Fix docs failures caused by latest eventlet
+* VMware: Enforce min vCenter server version 5.5
+* Fix cinder functional tests job
+* Don't change volume's status when create backups from snapshots
+* Fix more invalid UUID warnings in test_vmax file
+* [Doc] Add missing parameter in v3 resource documentation
+* Remove log translations
+* Remove old oslo.messaging transport aliases
+* Remove unused CG code
+* Delete consistency group fails on xtremio driver
+* Remove hacking check for log translation
+* Update db from drivers in default groups methods
+* ScaleIO: Fixing warnings spotted by PyCharm and tox
+* Added gigabyte unit to values in exception message
+* Set access_policy for messaging's dispatcher
+* Dell EMC SC: Return dict from delete_consisgroup
+* Prevent duplicate entries in the image cache
+* Updated from global requirements
+* Fix ut error of volume deletion
+* IBM storage: switch to generic volume group
+* Fix lock contention in SolidFire driver
+* Revert "Remove v1 API reference"
+* VMAX driver - volumes part of CG not managed correctly
+* VMAX driver - consistency group remove empty values
+* Datera: extend volume if larger than snapshot
+* Tests: Fix InvalidUUID warning for 'qosId'
+* Add filter, sorter and pagination for group snapshot
+* Correct Extend lvm Volume
+* Fix create_consistencygroup when using CG objects
+* Fix: SnapshotStatus missing in Cinder
+* Replace yaml.load() with yaml.safe_load()
+* [Optimise] Refactor group snapshot testcases
+* Add API documentation for volume detach in v3
+* Dell EMC SC: Added retry to _init_volume
+* Make QnapISCSIDriver unit tests faster
+* Updated from global requirements
+* Fix 500 HTTP API error caused by rpcapi RemoteError exception
+* Update devref for OVO version bumping
+* Improve devref for API errors
+* Add a README in tests dir linked to devref html
+* Remove HNAS iSCSI driver
+* [Optimise] Refactor ExtraSpecsOpsTestCase with ddt
+* ProphetStor driver create vol from snap with wrong size
+* Add driver-requirements.txt
+* Bump prlimit cpu time for qemu-img from 2 to 8
+* Remove unreachable code
+* Remove duplicate key from dictionary
+* Fix 500 error if boolean is_public is passed as string
+* api-ref: v2 API does not mention GET volume metadata by key
+* Update guru doc to support file modification events
+* XtremIO: allow a cloned volume with larger size
+* Replace obsolete vanity openstack.org URLs
+* Fix column types in models.py
+* cors: update default configuration
+* Tests: Use six.moves.urllib urlencode
+* Switch to use stable data_utils
+* VMAX driver - Change vendor_name from EMC to Dell EMC
+* Fix generic group's unit testcase
+* Switch to decorators.idempotent_id
+* Change the default value of used Glance API
+* Disallow modification of in use Volume Types
+* Hash password displays in debug log
+* Add debug log of retryable response on SolidFire
+* Filter on Active status in SolidFire List
+* Remove TODO related to Nova API version
+* Add per-backend availability zones
+* cinder-backup - coordination not initialized
+* Reuse API v2 for v1 calls
+* api-ref: v2 update volume metadata description is wrong
+* Fix action on services raises TypeError
+* api-ref: v2 API does not mention DELETE for volume metadata
+* Set backup available after verify
+* Updated from global requirements
+* Fix size update error for snapshot-manage operation
+* Remove domains *-log-* from compile_catalog
+* Fix typo error
+* Updated from global requirements
+* Validate display_name/description attributes in API layer
+* Purge immediately on Delete in SolidFire Driver
+* Deprecate API v2
+* Huawei driver supports specifying copy speed
+* Fix internal tempest tests
+* Reuse identical API v2 code for v1
+* Remove v1 API reference
+* NEC: Fix format string in debug message
+* Fix ATTACH_READONLY_VOLUME message generation
+* Remove an outdated comment
+* Enforce _usage_from_snapshot to fetch info from deleted volume
+* VMAX driver - replace pickle with jsonutils
+* Zadara driver - move from httplib to requests
+* Remove Linux SMBFS driver
+* Unity driver: fail to disconnect volume
+* Remove unused logging import
+* create snapshot with generic group fail with XtremIO Driver
 * Fix attachments after attached migration
 * Fix volume retype with migration as non-admin
+* Fix multibackend-matrix confs
+* Adds attached migration to multibackend-matrix
+* VMAX driver - superfluous debug messages causing error
 * Fix SolidFire cgsnap clone bug
+* Compact Mitaka database migrations
+* Remove Ocata's data migrations
+* Add the backup variable structure in backup_driver interface
+* Dell EMC SC: Return dict in delete_cgsnapshot
+* ceph backup support for EXCLUSIVE_LOCK and JOURNALING features
 * SolidFire: Handle connect_volume() failure when create vol from image
-* VMAX driver - allow for multi volume types in Consistency Group
+* Change nova_catalog_admin_info to default to publicURL
+* Adds db_online_data_migrations to cinder-manage manpage
+* VMware: Delete temporary snapshot after clone
+* doc: verify all rst files
+* Updated from global requirements
+* 3PAR: rally test create-volume-from-snapshot fails
+* VMAX Driver - disable initiator check by default
+* NetApp: Track SVM and Cluster scoped credentials
+* Fix Pep8 Failures for Python3
+* Tests: Remove mocks of nonexistent methods (NetApp)
+* Cinder tox updates for Python3
+* [4/4]Reset generic volume group and group snapshot statuses
+* Removes getfattr from Quobyte Cinder driver
+* Use ovo instead of dict
 * Fix duplicate lvs2 entry in rootwrap volume filter
+* Updated from global requirements
 * fix create_consistencygroup in xiv
+* Output the driver info as json
+* Add maximum microversion for Ocata
+* Dell EMC Ps: Report discard support
+* Switch and/or to ternary operator
+* Fix "No documentation found in" errors in docs
+* VNX: Handle error during volume deletion
+* Unity driver: check array OE version
 * Dell EMC: Create independent volume on clone
-* VMAX driver - copy state fix
-* Prepare for using standard python tests
-* Update UPPER_CONSTRAINTS_FILE for stable/ocata
-* Update .gitreview for stable/ocata
+* Add quota limit check and enhance roll back for cg create
+* Storwize: correct the product key for replication
+* Fix Block Storage API reference nesting
+* VMAX driver - snapshot creation and immediate deletion fix
+* Drop version validation
+* Add filters support to get_pools
+* [11/11] Refactor test_volume file
+* [10/11] Refactor test_volume file
+* [9/11] Refactor test_volume file
+* [8/11] Refactor test_volume file
+* [7/11] Refactor test_volume file
+* [6/11] Refactor test_volume file
+* [5/11] Refactor test_volume file
+* [4/11] Refactor test_volume file
+* [3/11] Refactor test_volume file
+* [2/11] Refactor test_volume file
+* [1/11] Refactor test_volume file
+* Disable multiattach for all drivers
+* Remove support for py34
+* Autoselection of IBM SVC/Storwize IO group
+* Remove unsupported NexentaEdge driver
+* Remove unsupported HPE XP driver
+* Remove unsupported CloudByte driver
+* VMAX driver - allow for multi volume types in Consistency Group
+* Minor cleanup on tools/test-setup.sh
+* Add Ocata sanity check migration
+* Use https instead of http for git.openstack.org
+* Update reno for stable/ocata
 
 10.0.0.0rc1
 -----------
 
+* VMAX driver - widen locking around storage groups
 * Reserve 5 migrations for DB backports
 * Tests: Fix NetApp unit test failure w/ hash randomization
 * xiv create vol from replicated source fails
 * Don't use None value for sql query
 * Remove promote and reenable from policy
+* VMAX driver - copy state fix
 * VMAX driver - ignore service level and workload in xml
 * VMAX driver - Convert eval to ast.literal_eval
 * VMAX driver - failover error fix
+* 3PAR: Remove un-necessary snapshot in online copy operation
 * Add SUPPORTED flag to Lenovo FC driver
 * Image utils: fix fetching available space on Windows
+* NetApp cDOT: Add check if copyoffload tool is available
 * Fix max_age calculation for quota usage refresh
 * Fix 500 error while listing manageable volumes and snapshots
 * Add usage and limit info on quota limit errors
+* Prepare for using standard python tests
 * Convert ignoreskippedcluster check to be static
+* Nosec audit url open issue from Bandit
 * Clean up release notes for Ocata
 * xiv delete cg fails if removed on backend
+* VMware: Set vSphere opID prefix
 * Make get_capabilities look for clusters
 * Resolve Brocade HTTPS connection error
 * Add SUPPORTED flag to Lenovo iSCSI driver
@@ -45,6 +256,9 @@ CHANGES
 * Fix notification short-circuit
 * Fix CopyVolumeToImageTestCase max recursion depth
 * HNAS: Cloned volume with different volume type
+* VMware: Use full clone if extend needed
+* Extracted HTTP response codes to constants
+* VMware: Use storage profile name in extra-spec
 * Move release notes to correct location
 * Add cluster_name to temporary volumes
 * Fix host assignment when clustered
@@ -63,8 +277,10 @@ CHANGES
 * Rebrand and move EQLX driver to dell_emc folder
 * Fix Live Migration for Nimble Storage Driver
 * create consistency group mishandles types
+* Infortrend: Stable generation of strings from dicts
 * VMAX driver - QoS key fix
 * VMAX driver - remove global mock of volume_types
+* Switch to decorators.idempotent_id
 * Set image_owner before adding location to glance
 * Dell EMC SC: Delete doesn't account for migration
 * Zero out SolidFire capacity when unreachable
@@ -80,6 +296,7 @@ CHANGES
 * [api-ref]Change tenant to project
 * Fix double call to "qemu-img create"
 * Fix api-ref status parameter
+* Refactor volumes summary
 * Small change to microversion header on devref
 * Check if volume node has enough space for image operations
 * Revert "Mark the sheepdog driver as unsupported"
@@ -98,6 +315,8 @@ CHANGES
 * NetApp cDOT: Add NetApp Volume Encryption support
 * Add volume backup tempest tests
 * Make CappedVersionUnknown exception more useful
+* vzstorage: use resize instead of grow for ploop images
+* Add driver supported status to dict output format
 * Break migrate_add_message_prefix into two queries
 * Remove useless FIXME
 * Fix some problem for attachment list
@@ -149,9 +368,11 @@ CHANGES
 * Modify the spelling mistakes
 * Add volume to fake snapshot object
 * Clean up image tmp file if c-vol gets restarted
+* Modify the spelling mistakes
 * Prevent driver load failures from objects
 * Nosec Paramiko exec_command() warning from Bandit
 * Replace deprecated pylint disable-msg with disable
+* DB: Optimize update methods
 * Updated from global requirements
 * Save model_update as admin in create_volume
 * Improvement to get group detail(Part 2)
@@ -182,6 +403,7 @@ CHANGES
 * Add command information to cinder-manage.rst
 * Add CG capability to generic groups in VNX driver
 * RBD: Remove volume_tmp_dir option
+* Fix devref create_volume doc formatting
 * VMware: Use versionutils in oslo.utils
 * Delete volume when rescheduling
 * VMware: Set backend UUID to volume UUID
@@ -277,6 +499,7 @@ CHANGES
 * Simplify calls to mock_object
 * Make APIVersionRequest's null check more pythonic
 * Nexenta: Added ZFS cleanup in NexentaStor4 iSCSI driver
+* Move windows drivers to versioned objects
 * Correct reraising of exception
 * Fix warning when running `tox -e docs`
 * ibm_storage driver: Added fczm decorators
@@ -307,6 +530,7 @@ CHANGES
 * Remove Kaminario deprecated option
 * Introduce Hitachi VSP driver
 * Support A/A in delete actions and get_capabilities
+* Change volume_type dict to ovo
 * Dell SC: Incorrect exceptions being returned
 * Tests: Fix invalid UUID warnings
 * Block 3.1 message with c-sch RPCAPI pinned to 3.0
@@ -316,6 +540,7 @@ CHANGES
 * Add host check on replication actions
 * Updated from global requirements
 * Revert "Swap volume type for migration started by retype"
+* LVM: collect more debug data when VG creation fails
 * SolidFire QoS scaled by volume size
 * Refactor api test_common to use ddt library
 * New cinder driver to support INFINIDAT InfiniBox
@@ -331,6 +556,7 @@ CHANGES
 * Admin API policy enforcement contingent on is_admin_project
 * test: fix wrong usage of config option in test_window
 * Fix wrong usage of config option gpfs_images_share_mode
+* Refactor test_volume_actions to use ddt library
 * Correct the attributes of volume which created by clone a CG
 * Swap volume type for migration started by retype
 * Replace functions 'Dict.get' and 'del' with 'Dict.pop'
@@ -574,6 +800,7 @@ CHANGES
 * replace filter() to meet python3
 * Add snapshot id validation during volume creation
 * Imported Translations from Zanata
+* Refactor of getting qemu-img version
 * Remove extra param in list_manageable_snapshots
 * Stop using mox in cinder/tests/unit
 * Modifies override logic for key_manager
@@ -610,6 +837,7 @@ CHANGES
 * Add scheduler RPC API v3.0
 * XtremIO: bump driver version to 1.0.8
 * Imported Translations from Zanata
+* netapp image cache cleaning start thresholds does not work
 * Fix missing JSON response in API reference
 * Mark v1 as DEPRECATED in devref
 * Add xUnknownSliceID to retry list
@@ -766,6 +994,7 @@ CHANGES
 * Stop using /etc/cinder/cinder.conf for cmd tests
 * Use utils.validate_dictionary_string_length
 * Stop using mox from unit/image/*.py
+* Fix some typos in comments
 * Separate create and update rules for volume metadata
 * Updated from global requirements
 * TrivialFix: remove unnecessary VERSION_COMPATIBILITY
@@ -872,6 +1101,7 @@ CHANGES
 * HPE XP add entry point debug tracing
 * Remove resource_common_manage load warning
 * Updated from global requirements
+* Huawei: Check before add initiator
 * Huawei: Modify array LUNs naming rules
 * Added update-host for CGs in cinder-manage
 * Imported Translations from Zanata

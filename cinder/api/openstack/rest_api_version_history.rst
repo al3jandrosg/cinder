@@ -281,6 +281,14 @@ user documentation.
     ``active_backend_id`` as filters, and returns additional fields for each
     cluster: ``replication_status``, ``frozen``, ``active_backend_id``.
 
-3.27
-----
+3.27 (Maximum in Ocata)
+-----------------------
   Added new attachment API's
+
+3.28
+----
+  Add filters support to get_pools
+
+3.29
+----
+  Add filter, sorter and pagination support in group snapshot.

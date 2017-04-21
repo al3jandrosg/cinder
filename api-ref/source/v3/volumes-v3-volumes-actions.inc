@@ -1,6 +1,5 @@
 .. -*- rst -*-
 
-================================
 Volume actions (volumes, action)
 ================================
 
@@ -12,7 +11,7 @@ storage object associated with it.
 
 
 Extend a volume size
-====================
+~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -59,7 +58,7 @@ Request Example
 
 
 Reset a volume's statuses
-=========================
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -93,7 +92,7 @@ Request Example
 
 
 Set image metadata for a volume
-===============================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -125,7 +124,7 @@ Request Example
 
 
 Remove image metadata from a volume
-===================================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -157,7 +156,7 @@ Request Example
 
 
 Attach volume to a server
-=========================
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -182,7 +181,7 @@ Request
    - host_name: host_name
    - os-attach: os-attach
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -196,8 +195,44 @@ Request Example
 
 
 
+Detach volume from server
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Detaches a volume from a server. Specify the ``os-detach`` action in the request body.
+
+Preconditions
+
+- Volume status must be ``in-use``.
+
+Normal response codes: 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - attachment_id: attachment_id
+   - os-detach: os-detach
+   - project_id: project_id_path
+   - volume_id: volume_id
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-detach-request.json
+   :language: javascript
+
+
+
+
+
+
+
 Unmanage a volume
-=================
+~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
@@ -232,7 +267,7 @@ Request Example
 
 
 Force detach a volume
-=====================
+~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 

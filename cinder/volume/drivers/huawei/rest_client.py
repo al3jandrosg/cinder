@@ -17,6 +17,7 @@ import json
 import re
 import six
 import socket
+import ssl
 import time
 
 from oslo_log import log as logging
@@ -25,7 +26,7 @@ from six.moves import http_cookiejar
 from six.moves import urllib
 
 from cinder import exception
-from cinder.i18n import _, _LE, _LI, _LW
+from cinder.i18n import _
 from cinder import utils
 from cinder.volume.drivers.huawei import constants
 
@@ -72,6 +73,14 @@ class RestClient(object):
         opener = urllib.request.build_opener(handler)
         urllib.request.install_opener(opener)
         res_json = None
+        try:
+            create_unverified_https_context = ssl._create_unverified_context
+        except AttributeError:
+            # Legacy Python that doesn't verify HTTPS certificates by default
+            pass
+        else:
+            # Handle target environment that doesn't support HTTPS verification
+            ssl._create_default_https_context = create_unverified_https_context
 
         try:
             socket.setdefaulttimeout(calltimeout)
@@ -80,21 +89,22 @@ class RestClient(object):
             req = urllib.request.Request(url, data, self.headers)
             if method:
                 req.get_method = lambda: method
-            res = urllib.request.urlopen(req).read().decode("utf-8")
+            # all URLs begin with hardcoded values
+            res = urllib.request.urlopen(req).read().decode("utf-8")  # nosec
 
             if not log_filter_flag:
-                LOG.info(_LI('\n\n\n\nRequest URL: %(url)s\n\n'
-                             'Call Method: %(method)s\n\n'
-                             'Request Data: %(data)s\n\n'
-                             'Response Data:%(res)s\n\n'),
+                LOG.info('\n\n\n\nRequest URL: %(url)s\n\n'
+                         'Call Method: %(method)s\n\n'
+                         'Request Data: %(data)s\n\n'
+                         'Response Data:%(res)s\n\n',
                          {'url': url,
                           'method': method,
                           'data': data,
                           'res': res})
 
         except Exception as err:
-            LOG.error(_LE('Bad response from server: %(url)s.'
-                          ' Error: %(err)s'), {'url': url, 'err': err})
+            LOG.error('Bad response from server: %(url)s.'
+                      ' Error: %(err)s', {'url': url, 'err': err})
             json_msg = ('{"error":{"code": %s,"description": "Connect to '
                         'server error."}}') % constants.ERROR_CONNECT_TO_SERVER
             res_json = json.loads(json_msg)
@@ -103,7 +113,7 @@ class RestClient(object):
         try:
             res_json = json.loads(res)
         except Exception as err:
-            LOG.error(_LE('JSON transfer error: %s.'), err)
+            LOG.error('JSON transfer error: %s.', err)
             raise
 
         return res_json
@@ -122,8 +132,8 @@ class RestClient(object):
                                   log_filter_flag=True)
 
             if (result['error']['code'] != 0) or ("data" not in result):
-                LOG.error(_LE("Login error. URL: %(url)s\n"
-                              "Reason: %(reason)s."),
+                LOG.error("Login error. URL: %(url)s\n"
+                          "Reason: %(reason)s.",
                           {"url": item_url, "reason": result})
                 continue
 
@@ -152,7 +162,7 @@ class RestClient(object):
         try:
             self.login()
         except Exception as err:
-            LOG.warning(_LW('Login failed. Error: %s.'), err)
+            LOG.warning('Login failed. Error: %s.', err)
 
     @utils.synchronized('huawei_cinder_call')
     def call(self, url, data=None, method=None, log_filter_flag=False):
@@ -167,7 +177,7 @@ class RestClient(object):
         error_code = result['error']['code']
         if (error_code == constants.ERROR_CONNECT_TO_SERVER
                 or error_code == constants.ERROR_UNAUTHORIZED_TO_SERVER):
-            LOG.error(_LE("Can't open the recent url, relogin."))
+            LOG.error("Can't open the recent url, relogin.")
             device_id = self.login()
 
         if device_id is not None:
@@ -203,6 +213,8 @@ class RestClient(object):
             raise exception.VolumeBackendAPIException(data=err_msg)
 
     def create_lun(self, lun_params):
+        # Set the mirror switch always on
+        lun_params['MIRRORPOLICY'] = '1'
         url = "/lun"
         result = self.call(url, lun_params)
         if result['error']['code'] == constants.ERROR_VOLUME_ALREADY_EXIST:
@@ -369,13 +381,20 @@ class RestClient(object):
 
         return self._get_id_from_result(result, name, 'NAME')
 
-    def create_luncopy(self, luncopyname, srclunid, tgtlunid):
+    def create_luncopy(self, luncopyname, srclunid, tgtlunid, copyspeed):
         """Create a luncopy."""
         url = "/luncopy"
+        if copyspeed not in constants.LUN_COPY_SPEED_TYPES:
+            LOG.warning('The copy speed %(copyspeed)s is not valid, '
+                        'using default value %(default)s instead.',
+                        {'copyspeed': copyspeed,
+                         'default': constants.LUN_COPY_SPEED_MEDIUM})
+            copyspeed = constants.LUN_COPY_SPEED_MEDIUM
+
         data = {"TYPE": 219,
                 "NAME": luncopyname,
                 "DESCRIPTION": luncopyname,
-                "COPYSPEED": 2,
+                "COPYSPEED": copyspeed,
                 "LUNCOPYTYPE": "1",
                 "SOURCELUN": ("INVALID;%s;INVALID;INVALID;INVALID"
                               % srclunid),
@@ -442,9 +461,9 @@ class RestClient(object):
         view_id = self.find_mapping_view(mapping_view_name)
         map_info = {}
 
-        LOG.info(_LI(
+        LOG.info(
             'do_mapping, lun_group: %(lun_group)s, '
-            'view_id: %(view_id)s, lun_id: %(lun_id)s.'),
+            'view_id: %(view_id)s, lun_id: %(lun_id)s.',
             {'lun_group': lungroup_id,
              'view_id': view_id,
              'lun_id': lun_id})
@@ -486,9 +505,9 @@ class RestClient(object):
 
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE(
+                LOG.error(
                     'Error occurred when adding hostgroup and lungroup to '
-                    'view. Remove lun from lungroup now.'))
+                    'view. Remove lun from lungroup now.')
                 self.remove_lun_from_lungroup(lungroup_id, lun_id, lun_type)
 
         return map_info
@@ -506,7 +525,7 @@ class RestClient(object):
         added = self._initiator_is_added_to_array(initiator_name)
         if not added:
             self._add_initiator_to_array(initiator_name)
-        if not self.is_initiator_associated_to_host(initiator_name):
+        if not self.is_initiator_associated_to_host(initiator_name, host_id):
             self._associate_initiator_to_host(initiator_name,
                                               host_id)
 
@@ -540,10 +559,10 @@ class RestClient(object):
         """Check if host exists on the array, or create it."""
         hostgroup_id = self.find_hostgroup(hostgroup_name)
         if hostgroup_id:
-            LOG.info(_LI(
+            LOG.info(
                 'create_hostgroup_with_check. '
                 'hostgroup name: %(name)s, '
-                'hostgroup id: %(id)s'),
+                'hostgroup id: %(id)s',
                 {'name': hostgroup_name,
                  'id': hostgroup_id})
             return hostgroup_id
@@ -551,9 +570,9 @@ class RestClient(object):
         try:
             hostgroup_id = self._create_hostgroup(hostgroup_name)
         except Exception:
-            LOG.info(_LI(
+            LOG.info(
                 'Failed to create hostgroup: %(name)s. '
-                'Please check if it exists on the array.'),
+                'Please check if it exists on the array.',
                 {'name': hostgroup_name})
             hostgroup_id = self.find_hostgroup(hostgroup_name)
             if hostgroup_id is None:
@@ -564,11 +583,11 @@ class RestClient(object):
                 LOG.error(err_msg)
                 raise exception.VolumeBackendAPIException(data=err_msg)
 
-        LOG.info(_LI(
+        LOG.info(
             'create_hostgroup_with_check. '
             'Create hostgroup success. '
             'hostgroup name: %(name)s, '
-            'hostgroup id: %(id)s'),
+            'hostgroup id: %(id)s',
             {'name': hostgroup_name,
              'id': hostgroup_id})
         return hostgroup_id
@@ -640,7 +659,7 @@ class RestClient(object):
                         host_lun_id = hostassoinfo['HostLUNID']
                         break
                     except Exception as err:
-                        LOG.error(_LE("JSON transfer data error. %s."), err)
+                        LOG.error("JSON transfer data error. %s.", err)
                         raise
         return host_lun_id
 
@@ -655,10 +674,10 @@ class RestClient(object):
     def add_host_with_check(self, host_name, host_name_before_hash):
         host_id = self.get_host_id_by_name(host_name)
         if host_id:
-            LOG.info(_LI(
+            LOG.info(
                 'add_host_with_check. '
                 'host name: %(name)s, '
-                'host id: %(id)s'),
+                'host id: %(id)s',
                 {'name': host_name,
                  'id': host_id})
             return host_id
@@ -666,9 +685,9 @@ class RestClient(object):
         try:
             host_id = self._add_host(host_name, host_name_before_hash)
         except Exception:
-            LOG.info(_LI(
+            LOG.info(
                 'Failed to create host: %(name)s. '
-                'Check if it exists on the array.'),
+                'Check if it exists on the array.',
                 {'name': host_name})
             host_id = self.get_host_id_by_name(host_name)
             if not host_id:
@@ -679,11 +698,11 @@ class RestClient(object):
                 LOG.error(err_msg)
                 raise exception.VolumeBackendAPIException(data=err_msg)
 
-        LOG.info(_LI(
+        LOG.info(
             'add_host_with_check. '
             'create host success. '
             'host name: %(name)s, '
-            'host id: %(id)s'),
+            'host id: %(id)s',
             {'name': host_name,
              'id': host_id})
         return host_id
@@ -772,17 +791,25 @@ class RestClient(object):
             return True
         return False
 
-    def is_initiator_associated_to_host(self, ininame):
+    def is_initiator_associated_to_host(self, ininame, host_id):
         """Check whether the initiator is associated to the host."""
         url = "/iscsi_initiator?range=[0-256]"
         result = self.call(url, None, "GET")
         self._assert_rest_result(
             result, _('Check initiator associated to host error.'))
 
-        if 'data' in result:
-            for item in result['data']:
-                if item['ID'] == ininame and item['ISFREE'] == "true":
+        for item in result.get('data'):
+            if item['ID'] == ininame:
+                if item['ISFREE'] == "true":
                     return False
+                if item['PARENTID'] == host_id:
+                    return True
+                else:
+                    msg = (_("Initiator %(ini)s has been added to another "
+                             "host %(host)s.") % {"ini": ininame,
+                                                  "host": item['PARENTNAME']})
+                    LOG.error(msg)
+                    raise exception.VolumeBackendAPIException(data=msg)
         return True
 
     def _add_initiator_to_array(self, initiator_name):
@@ -815,13 +842,13 @@ class RestClient(object):
         multipath_type = self._find_alua_info(self.iscsi_info,
                                               initiator_name)
         if chapinfo:
-            LOG.info(_LI('Use CHAP when adding initiator to host.'))
+            LOG.info('Use CHAP when adding initiator to host.')
             self._use_chap(chapinfo, initiator_name, host_id)
         else:
             self._add_initiator_to_host(initiator_name, host_id)
 
         if multipath_type:
-            LOG.info(_LI('Use ALUA when adding initiator to host.'))
+            LOG.info('Use ALUA when adding initiator to host.')
             self._use_alua(initiator_name, multipath_type)
 
     def find_chap_info(self, iscsi_info, initiator_name):
@@ -1154,7 +1181,7 @@ class RestClient(object):
         LOG.debug('Request ip info is: %s.', ip_info)
         split_list = ip_info.split(".")
         newstr = split_list[1] + split_list[2]
-        LOG.info(_LI('New str info is: %s.'), newstr)
+        LOG.info('New str info is: %s.', newstr)
 
         if ip_info:
             if newstr[0] == 'A':
@@ -1169,7 +1196,7 @@ class RestClient(object):
                     iqn_suffix = iqn_suffix[i:]
                     break
             iqn = iqn_prefix + ':' + iqn_suffix + ':' + iscsi_ip
-            LOG.info(_LI('_get_tgt_iqn: iSCSI target iqn is: %s.'), iqn)
+            LOG.info('_get_tgt_iqn: iSCSI target iqn is: %s.', iqn)
             return iqn
 
     def get_fc_target_wwpns(self, wwn):
@@ -1255,7 +1282,7 @@ class RestClient(object):
                     constants.STATUS_HEALTH
                    and item['RUNNINGSTATUS'] == constants.STATUS_RUNNING):
                     target_ip = item['IPV4ADDR']
-                    LOG.info(_LI('_get_tgt_ip_from_portgroup: Get ip: %s.'),
+                    LOG.info('_get_tgt_ip_from_portgroup: Get ip: %s.',
                              target_ip)
                     target_ips.append(target_ip)
 
@@ -1302,7 +1329,7 @@ class RestClient(object):
         # Deal with the remote tgt ip.
         if 'remote_target_ip' in connector:
             target_ips.append(connector['remote_target_ip'])
-        LOG.info(_LI('Get the default ip: %s.'), target_ips)
+        LOG.info('Get the default ip: %s.', target_ips)
 
         for ip in target_ips:
             target_iqn = self._get_tgt_iqn_from_rest(ip)
@@ -1342,7 +1369,7 @@ class RestClient(object):
         info_list = []
         target_ips = []
         if result['error']['code'] != 0:
-            LOG.warning(_LW("Can't find target port info from rest."))
+            LOG.warning("Can't find target port info from rest.")
             return target_ips
 
         elif not result['data']:
@@ -1356,7 +1383,7 @@ class RestClient(object):
                 info_list.append(item['ID'])
 
         if not info_list:
-            LOG.warning(_LW("Can't find target port info from rest."))
+            LOG.warning("Can't find target port info from rest.")
             return target_ips
 
         for info in info_list:
@@ -1375,7 +1402,7 @@ class RestClient(object):
 
         target_iqn = None
         if result['error']['code'] != 0:
-            LOG.warning(_LW("Can't find target iqn from rest."))
+            LOG.warning("Can't find target iqn from rest.")
             return target_iqn
         ip_pattern = re.compile(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
         if 'data' in result:
@@ -1387,7 +1414,7 @@ class RestClient(object):
                         break
 
         if not target_iqn:
-            LOG.warning(_LW("Can't find target iqn from rest."))
+            LOG.warning("Can't find target iqn from rest.")
             return target_iqn
 
         split_list = target_iqn.split(",")
@@ -1947,7 +1974,7 @@ class RestClient(object):
 
         if (error_code == constants.ERROR_CONNECT_TO_SERVER
                 or error_code == constants.ERROR_UNAUTHORIZED_TO_SERVER):
-            LOG.error(_LE("Can not open the recent url, login again."))
+            LOG.error("Can not open the recent url, login again.")
             self.login()
             result = self.call(url, None, "GET")
 

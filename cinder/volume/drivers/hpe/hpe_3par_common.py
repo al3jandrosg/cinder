@@ -60,7 +60,7 @@ from oslo_utils import units
 from cinder import context
 from cinder import exception
 from cinder import flow_utils
-from cinder.i18n import _, _LE, _LI, _LW
+from cinder.i18n import _
 from cinder.objects import fields
 from cinder.volume import qos_specs
 from cinder.volume import utils as volume_utils
@@ -247,10 +247,14 @@ class HPE3PARCommon(object):
         3.0.27 - Fix snapCPG error during backup of attached volume.
                  Bug #1646396 and also ,Fix backup of attached ISCSI
                  and CHAP enabled volume.bug #1644238.
+        3.0.28 - Remove un-necessary snapshot creation of source volume
+                 while doing online copy in create_cloned_volume call.
+                 Bug #1661541
+        3.0.29 - Fix convert snapshot volume to base volume type. bug #1656186
 
     """
 
-    VERSION = "3.0.27"
+    VERSION = "3.0.29"
 
     stats = {}
 
@@ -430,13 +434,12 @@ class HPE3PARCommon(object):
             if self._replication_enabled and (
                self.API_VERSION < REMOTE_COPY_API_VERSION):
                 self._replication_enabled = False
-                msg = (_LE("The primary array must have an API version of "
-                           "%(min_ver)s or higher, but is only on "
-                           "%(current_ver)s, therefore replication is not "
-                           "supported.") %
-                       {'min_ver': REMOTE_COPY_API_VERSION,
-                        'current_ver': self.API_VERSION})
-                LOG.error(msg)
+                LOG.error("The primary array must have an API version of "
+                          "%(min_ver)s or higher, but is only on "
+                          "%(current_ver)s, therefore replication is not "
+                          "supported.",
+                          {'min_ver': REMOTE_COPY_API_VERSION,
+                           'current_ver': self.API_VERSION})
         except hpeexceptions.UnsupportedVersion as ex:
             # In the event we cannot contact the configured primary array,
             # we want to allow a failover if replication is enabled.
@@ -447,17 +450,17 @@ class HPE3PARCommon(object):
 
         if context:
             # The context is None except at driver startup.
-            LOG.info(_LI("HPE3PARCommon %(common_ver)s,"
-                         "hpe3parclient %(rest_ver)s"),
+            LOG.info("HPE3PARCommon %(common_ver)s,"
+                     "hpe3parclient %(rest_ver)s",
                      {"common_ver": self.VERSION,
                       "rest_ver": hpe3parclient.get_version_string()})
         if self.config.hpe3par_debug:
             self.client.debug_rest(True)
         if self.API_VERSION < SRSTATLD_API_VERSION:
             # Firmware version not compatible with srstatld
-            LOG.warning(_LW("srstatld requires "
-                            "WSAPI version '%(srstatld_version)s' "
-                            "version '%(version)s' is installed.") %
+            LOG.warning("srstatld requires "
+                        "WSAPI version '%(srstatld_version)s' "
+                        "version '%(version)s' is installed.",
                         {'srstatld_version': SRSTATLD_API_VERSION,
                          'version': self.API_VERSION})
 
@@ -581,13 +584,11 @@ class HPE3PARCommon(object):
             cg_name = self._get_3par_vvs_name(group.id)
             self.client.deleteVolumeSet(cg_name)
         except hpeexceptions.HTTPNotFound:
-            err = (_LW("Virtual Volume Set '%s' doesn't exist on array.") %
-                   cg_name)
-            LOG.warning(err)
+            LOG.warning("Virtual Volume Set '%s' doesn't exist on array.",
+                        cg_name)
         except hpeexceptions.HTTPConflict as e:
-            err = (_LE("Conflict detected in Virtual Volume Set"
-                       " %(volume_set)s: %(error)s"))
-            LOG.error(err,
+            LOG.error("Conflict detected in Virtual Volume Set"
+                      " %(volume_set)s: %(error)s",
                       {"volume_set": cg_name,
                        "error": e})
 
@@ -598,10 +599,10 @@ class HPE3PARCommon(object):
                 self.delete_volume(volume)
                 volume_update['status'] = 'deleted'
             except Exception as ex:
-                LOG.error(_LE("There was an error deleting volume %(id)s: "
-                              "%(error)s."),
+                LOG.error("There was an error deleting volume %(id)s: "
+                          "%(error)s.",
                           {'id': volume.id,
-                           'error': six.text_type(ex)})
+                           'error': ex})
                 volume_update['status'] = 'error'
             volume_model_updates.append(volume_update)
 
@@ -619,7 +620,7 @@ class HPE3PARCommon(object):
             try:
                 self.client.addVolumeToVolumeSet(volume_set_name, volume_name)
             except hpeexceptions.HTTPNotFound:
-                msg = (_LE('Virtual Volume Set %s does not exist.') %
+                msg = (_('Virtual Volume Set %s does not exist.') %
                        volume_set_name)
                 LOG.error(msg)
                 raise exception.InvalidInput(reason=msg)
@@ -630,7 +631,7 @@ class HPE3PARCommon(object):
                 self.client.removeVolumeFromVolumeSet(
                     volume_set_name, volume_name)
             except hpeexceptions.HTTPNotFound:
-                msg = (_LE('Virtual Volume Set %s does not exist.') %
+                msg = (_('Virtual Volume Set %s does not exist.') %
                        volume_set_name)
                 LOG.error(msg)
                 raise exception.InvalidInput(reason=msg)
@@ -693,13 +694,13 @@ class HPE3PARCommon(object):
             except hpeexceptions.HTTPNotFound as ex:
                 # We'll let this act as if it worked
                 # it helps clean up the cinder entries.
-                LOG.warning(_LW("Delete Snapshot id not found. Removing from "
-                                "cinder: %(id)s Ex: %(msg)s"),
+                LOG.warning("Delete Snapshot id not found. Removing from "
+                            "cinder: %(id)s Ex: %(msg)s",
                             {'id': snapshot['id'], 'msg': ex})
                 snapshot_update['status'] = fields.SnapshotStatus.ERROR
             except Exception as ex:
-                LOG.error(_LE("There was an error deleting snapshot %(id)s: "
-                              "%(error)s."),
+                LOG.error("There was an error deleting snapshot %(id)s: "
+                          "%(error)s.",
                           {'id': snapshot['id'],
                            'error': six.text_type(ex)})
                 snapshot_update['status'] = fields.SnapshotStatus.ERROR
@@ -767,35 +768,34 @@ class HPE3PARCommon(object):
         # Ensure that snapCPG is set
         if 'snapCPG' not in vol:
             new_vals['snapCPG'] = vol['userCPG']
-            LOG.info(_LI("Virtual volume %(disp)s '%(new)s' snapCPG "
-                     "is empty so it will be set to: %(cpg)s"),
+            LOG.info("Virtual volume %(disp)s '%(new)s' snapCPG "
+                     "is empty so it will be set to: %(cpg)s",
                      {'disp': display_name, 'new': new_vol_name,
                       'cpg': new_vals['snapCPG']})
 
         # Update the existing volume with the new name and comments.
         self.client.modifyVolume(target_vol_name, new_vals)
 
-        LOG.info(_LI("Virtual volume '%(ref)s' renamed to '%(new)s'."),
+        LOG.info("Virtual volume '%(ref)s' renamed to '%(new)s'.",
                  {'ref': existing_ref['source-name'], 'new': new_vol_name})
 
         retyped = False
         model_update = None
         if volume_type:
-            LOG.info(_LI("Virtual volume %(disp)s '%(new)s' is "
-                         "being retyped."),
+            LOG.info("Virtual volume %(disp)s '%(new)s' is being retyped.",
                      {'disp': display_name, 'new': new_vol_name})
 
             try:
                 retyped, model_update = self._retype_from_no_type(volume,
                                                                   volume_type)
-                LOG.info(_LI("Virtual volume %(disp)s successfully retyped to "
-                             "%(new_type)s."),
+                LOG.info("Virtual volume %(disp)s successfully retyped to "
+                         "%(new_type)s.",
                          {'disp': display_name,
                           'new_type': volume_type.get('name')})
             except Exception:
                 with excutils.save_and_reraise_exception():
-                    LOG.warning(_LW("Failed to manage virtual volume %(disp)s "
-                                    "due to error during retype."),
+                    LOG.warning("Failed to manage virtual volume %(disp)s "
+                                "due to error during retype.",
                                 {'disp': display_name})
                     # Try to undo the rename and clear the new comment.
                     self.client.modifyVolume(
@@ -807,8 +807,7 @@ class HPE3PARCommon(object):
         if retyped and model_update:
             updates.update(model_update)
 
-        LOG.info(_LI("Virtual volume %(disp)s '%(new)s' is "
-                     "now being managed."),
+        LOG.info("Virtual volume %(disp)s '%(new)s' is now being managed.",
                  {'disp': display_name, 'new': new_vol_name})
 
         # Return display name to update the name displayed in the GUI and
@@ -880,12 +879,12 @@ class HPE3PARCommon(object):
         # Update the existing snapshot with the new name and comments.
         self.client.modifyVolume(target_snap_name, new_vals)
 
-        LOG.info(_LI("Snapshot '%(ref)s' renamed to '%(new)s'."),
+        LOG.info("Snapshot '%(ref)s' renamed to '%(new)s'.",
                  {'ref': existing_ref['source-name'], 'new': new_snap_name})
 
         updates = {'display_name': display_name}
 
-        LOG.info(_LI("Snapshot %(disp)s '%(new)s' is now being managed."),
+        LOG.info("Snapshot %(disp)s '%(new)s' is now being managed.",
                  {'disp': display_name, 'new': new_snap_name})
 
         # Return display name to update the name displayed in the GUI.
@@ -952,8 +951,8 @@ class HPE3PARCommon(object):
         new_vol_name = self._get_3par_unm_name(volume['id'])
         self.client.modifyVolume(vol_name, {'newName': new_vol_name})
 
-        LOG.info(_LI("Virtual volume %(disp)s '%(vol)s' is no longer managed. "
-                     "Volume renamed to '%(new)s'."),
+        LOG.info("Virtual volume %(disp)s '%(vol)s' is no longer managed. "
+                 "Volume renamed to '%(new)s'.",
                  {'disp': volume['display_name'],
                   'vol': vol_name,
                   'new': new_vol_name})
@@ -978,8 +977,8 @@ class HPE3PARCommon(object):
         new_snap_name = self._get_3par_ums_name(snapshot['id'])
         self.client.modifyVolume(snap_name, {'newName': new_snap_name})
 
-        LOG.info(_LI("Snapshot %(disp)s '%(vol)s' is no longer managed. "
-                     "Snapshot renamed to '%(new)s'."),
+        LOG.info("Snapshot %(disp)s '%(vol)s' is no longer managed. "
+                 "Snapshot renamed to '%(new)s'.",
                  {'disp': snapshot['display_name'],
                   'vol': snap_name,
                   'new': new_snap_name})
@@ -1045,8 +1044,8 @@ class HPE3PARCommon(object):
                         growth_size_mib,
                         _convert_to_base=True)
                 else:
-                    LOG.error(_LE("Error extending volume: %(vol)s. "
-                                  "Exception: %(ex)s"),
+                    LOG.error("Error extending volume: %(vol)s. "
+                              "Exception: %(ex)s",
                               {'vol': volume_name, 'ex': ex})
         return model_update
 
@@ -1276,9 +1275,9 @@ class HPE3PARCommon(object):
                             interval,
                             history)
                     except Exception as ex:
-                        LOG.warning(_LW("Exception at getCPGStatData() "
-                                        "for cpg: '%(cpg_name)s' "
-                                        "Reason: '%(reason)s'") %
+                        LOG.warning("Exception at getCPGStatData() "
+                                    "for cpg: '%(cpg_name)s' "
+                                    "Reason: '%(reason)s'",
                                     {'cpg_name': cpg_name, 'reason': ex})
                 if 'numTDVVs' in cpg:
                     total_volumes = int(
@@ -1343,7 +1342,7 @@ class HPE3PARCommon(object):
                     AVG_BUSY_PERC: stat_capabilities[AVG_BUSY_PERC],
                     'filter_function': filter_function,
                     'goodness_function': goodness_function,
-                    'multiattach': True,
+                    'multiattach': False,
                     'consistencygroup_support': True,
                     }
 
@@ -1397,7 +1396,7 @@ class HPE3PARCommon(object):
                     break
 
         if found_vlun is None:
-            LOG.info(_LI("3PAR vlun %(name)s not found on host %(host)s"),
+            LOG.info("3PAR vlun %(name)s not found on host %(host)s",
                      {'name': volume_name, 'host': hostname})
         return found_vlun
 
@@ -1431,10 +1430,8 @@ class HPE3PARCommon(object):
                     volume_vluns.append(vlun)
 
         if not volume_vluns:
-            msg = (
-                _LW("3PAR vlun for volume %(name)s not found on "
-                    "host %(host)s"), {'name': volume_name, 'host': hostname})
-            LOG.warning(msg)
+            LOG.warning("3PAR vlun for volume %(name)s not found on host "
+                        "%(host)s", {'name': volume_name, 'host': hostname})
             return
 
         # VLUN Type of MATCHED_SET 4 requires the port to be provided
@@ -1480,9 +1477,9 @@ class HPE3PARCommon(object):
                 # for future needs (e.g. export volume to host set).
 
                 # The log info explains why the host was left alone.
-                LOG.info(_LI("3PAR vlun for volume '%(name)s' was deleted, "
-                             "but the host '%(host)s' was not deleted "
-                             "because: %(reason)s"),
+                LOG.info("3PAR vlun for volume '%(name)s' was deleted, "
+                         "but the host '%(host)s' was not deleted "
+                         "because: %(reason)s",
                          {'name': volume_name, 'host': hostname,
                           'reason': ex.get_description()})
 
@@ -1569,7 +1566,7 @@ class HPE3PARCommon(object):
             self.client.createQoSRules(vvs_name, qosRule)
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE("Error creating QOS rule %s"), qosRule)
+                LOG.error("Error creating QOS rule %s", qosRule)
 
     def get_flash_cache_policy(self, hpe3par_keys):
         if hpe3par_keys is not None:
@@ -1599,11 +1596,11 @@ class HPE3PARCommon(object):
             try:
                 self.client.modifyVolumeSet(vvs_name,
                                             flashCachePolicy=flash_cache)
-                LOG.info(_LI("Flash Cache policy set to %s"), flash_cache)
+                LOG.info("Flash Cache policy set to %s", flash_cache)
             except Exception:
                 with excutils.save_and_reraise_exception():
-                    LOG.error(_LE("Error setting Flash Cache policy "
-                                  "to %s - exception"), flash_cache)
+                    LOG.error("Error setting Flash Cache policy "
+                              "to %s - exception", flash_cache)
 
     def _add_volume_to_volume_set(self, volume, volume_name,
                                   cpg, vvs_name, qos, flash_cache):
@@ -1658,7 +1655,7 @@ class HPE3PARCommon(object):
         otherwise return the persona ID.
 
         :param persona_value:
-        :raises: exception.InvalidInput
+        :raises exception.InvalidInput:
         :returns: persona ID
         """
         if persona_value not in self.valid_persona_values:
@@ -1727,13 +1724,13 @@ class HPE3PARCommon(object):
             # The cpg was specified in a volume type extra spec so it
             # needs to be validated that it's in the correct domain.
             # log warning here
-            msg = _LW("'hpe3par:cpg' is not supported as an extra spec "
-                      "in a volume type.  CPG's are chosen by "
-                      "the cinder scheduler, as a pool, from the "
-                      "cinder.conf entry 'hpe3par_cpg', which can "
-                      "be a list of CPGs.")
+            msg = ("'hpe3par:cpg' is not supported as an extra spec "
+                   "in a volume type.  CPG's are chosen by "
+                   "the cinder scheduler, as a pool, from the "
+                   "cinder.conf entry 'hpe3par_cpg', which can "
+                   "be a list of CPGs.")
             versionutils.report_deprecated_feature(LOG, msg)
-            LOG.info(_LI("Using pool %(pool)s instead of %(cpg)s"),
+            LOG.info("Using pool %(pool)s instead of %(cpg)s",
                      {'pool': pool, 'cpg': cpg})
 
             cpg = pool
@@ -1871,7 +1868,7 @@ class HPE3PARCommon(object):
                 except exception.InvalidInput as ex:
                     # Delete the volume if unable to add it to the volume set
                     self.client.deleteVolume(volume_name)
-                    LOG.error(_LE("Exception: %s"), ex)
+                    LOG.error("Exception: %s", ex)
                     raise exception.CinderException(ex)
 
             # v2 replication check
@@ -1885,16 +1882,16 @@ class HPE3PARCommon(object):
             LOG.error(msg)
             raise exception.Duplicate(msg)
         except hpeexceptions.HTTPBadRequest as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.Invalid(ex.get_description())
         except exception.InvalidInput as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise
         except exception.CinderException as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise
         except Exception as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.CinderException(ex)
 
         return self._get_model_update(volume['host'], cpg,
@@ -1986,7 +1983,7 @@ class HPE3PARCommon(object):
         # let the snapshot die in an hour
         optional['expirationHours'] = 1
 
-        LOG.info(_LI("Creating temp snapshot %(snap)s from volume %(vol)s"),
+        LOG.info("Creating temp snapshot %(snap)s from volume %(vol)s",
                  {'snap': snap_name, 'vol': vol_name})
 
         self.client.createSnapshot(snap_name, vol_name, optional)
@@ -2021,15 +2018,13 @@ class HPE3PARCommon(object):
             if volume['size'] == src_vref['size'] and not (
                back_up_process and vol_chap_enabled):
                 LOG.debug("Creating a clone of volume, using online copy.")
-                # create a temporary snapshot
-                snapshot = self._create_temp_snapshot(src_vref)
 
                 type_info = self.get_volume_settings_from_type(volume)
                 cpg = type_info['cpg']
 
                 # make the 3PAR copy the contents.
                 # can't delete the original until the copy is done.
-                self._copy_volume(snapshot['name'], vol_name, cpg=cpg,
+                self._copy_volume(src_vol_name, vol_name, cpg=cpg,
                                   snap_cpg=type_info['snap_cpg'],
                                   tpvv=type_info['tpvv'],
                                   tdvv=type_info['tdvv'])
@@ -2074,7 +2069,7 @@ class HPE3PARCommon(object):
         except hpeexceptions.HTTPNotFound:
             raise exception.NotFound()
         except Exception as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.CinderException(ex)
 
     def delete_volume(self, volume):
@@ -2106,10 +2101,10 @@ class HPE3PARCommon(object):
                         # the volume once it stops the copy.
                         self.client.stopOnlinePhysicalCopy(volume_name)
                     else:
-                        LOG.error(_LE("Exception: %s"), ex)
+                        LOG.error("Exception: %s", ex)
                         raise
                 else:
-                    LOG.error(_LE("Exception: %s"), ex)
+                    LOG.error("Exception: %s", ex)
                     raise
             except hpeexceptions.HTTPConflict as ex:
                 if ex.get_code() == 34:
@@ -2156,7 +2151,7 @@ class HPE3PARCommon(object):
                         if snap.startswith('tss-'):
                             # looks like we found a temp snapshot.
                             LOG.info(
-                                _LI("Found a temporary snapshot %(name)s"),
+                                "Found a temporary snapshot %(name)s",
                                 {'name': snap})
                             try:
                                 self.client.deleteVolume(snap)
@@ -2175,23 +2170,23 @@ class HPE3PARCommon(object):
                         msg = _("Volume has children and cannot be deleted!")
                         raise exception.VolumeIsBusy(message=msg)
                 else:
-                    LOG.error(_LE("Exception: %s"), ex)
+                    LOG.error("Exception: %s", ex)
                     raise exception.VolumeIsBusy(message=ex.get_description())
 
         except hpeexceptions.HTTPNotFound as ex:
             # We'll let this act as if it worked
             # it helps clean up the cinder entries.
-            LOG.warning(_LW("Delete volume id not found. Removing from "
-                            "cinder: %(id)s Ex: %(msg)s"),
+            LOG.warning("Delete volume id not found. Removing from "
+                        "cinder: %(id)s Ex: %(msg)s",
                         {'id': volume['id'], 'msg': ex})
         except hpeexceptions.HTTPForbidden as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotAuthorized(ex.get_description())
         except hpeexceptions.HTTPConflict as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.VolumeIsBusy(message=ex.get_description())
         except Exception as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.CinderException(ex)
 
     def create_volume_from_snapshot(self, volume, snapshot, snap_name=None,
@@ -2236,20 +2231,22 @@ class HPE3PARCommon(object):
 
             self.client.createSnapshot(volume_name, snap_name, optional)
 
+            # Convert snapshot volume to base volume type
+            LOG.debug('Converting to base volume type: %s.',
+                      volume['id'])
+            model_update = self._convert_to_base_volume(volume)
+
             # Grow the snapshot if needed
             growth_size = volume['size'] - snapshot['volume_size']
             if growth_size > 0:
                 try:
-                    LOG.debug('Converting to base volume type: %s.',
-                              volume['id'])
-                    model_update = self._convert_to_base_volume(volume)
                     growth_size_mib = growth_size * units.Gi / units.Mi
                     LOG.debug('Growing volume: %(id)s by %(size)s GiB.',
                               {'id': volume['id'], 'size': growth_size})
                     self.client.growVolume(volume_name, growth_size_mib)
                 except Exception as ex:
-                    LOG.error(_LE("Error extending volume %(id)s. "
-                                  "Ex: %(ex)s"),
+                    LOG.error("Error extending volume %(id)s. "
+                              "Ex: %(ex)s",
                               {'id': volume['id'], 'ex': ex})
                     # Delete the volume if unable to grow it
                     self.client.deleteVolume(volume_name)
@@ -2268,7 +2265,7 @@ class HPE3PARCommon(object):
                 except Exception as ex:
                     # Delete the volume if unable to add it to the volume set
                     self.client.deleteVolume(volume_name)
-                    LOG.error(_LE("Exception: %s"), ex)
+                    LOG.error("Exception: %s", ex)
                     raise exception.CinderException(ex)
 
             # v2 replication check
@@ -2278,13 +2275,13 @@ class HPE3PARCommon(object):
                 model_update['provider_location'] = self.client.id
 
         except hpeexceptions.HTTPForbidden as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotAuthorized()
         except hpeexceptions.HTTPNotFound as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotFound()
         except Exception as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.CinderException(ex)
         return model_update
 
@@ -2322,10 +2319,10 @@ class HPE3PARCommon(object):
 
             self.client.createSnapshot(snap_name, vol_name, optional)
         except hpeexceptions.HTTPForbidden as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotAuthorized()
         except hpeexceptions.HTTPNotFound as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotFound()
 
     def migrate_volume(self, volume, host):
@@ -2356,8 +2353,8 @@ class HPE3PARCommon(object):
             try:
                 ret = self.retype(volume, volume_type, None, host)
             except Exception as e:
-                LOG.info(_LI('3PAR driver cannot perform migration. '
-                             'Retype exception: %s'), e)
+                LOG.info('3PAR driver cannot perform migration. '
+                         'Retype exception: %s', e)
 
         LOG.debug('leave: migrate_volume: id=%(id)s, host=%(host)s, '
                   'status=%(status)s.', dbg)
@@ -2385,11 +2382,11 @@ class HPE3PARCommon(object):
             try:
                 volumeMods = {'newName': original_name}
                 self.client.modifyVolume(current_name, volumeMods)
-                LOG.info(_LI("Volume name changed from %(tmp)s to %(orig)s"),
+                LOG.info("Volume name changed from %(tmp)s to %(orig)s",
                          {'tmp': current_name, 'orig': original_name})
             except Exception as e:
-                LOG.error(_LE("Changing the volume name from %(tmp)s to "
-                              "%(orig)s failed because %(reason)s"),
+                LOG.error("Changing the volume name from %(tmp)s to "
+                          "%(orig)s failed because %(reason)s",
                           {'tmp': current_name, 'orig': original_name,
                            'reason': e})
                 name_id = new_volume['_name_id'] or new_volume['id']
@@ -2469,23 +2466,20 @@ class HPE3PARCommon(object):
             # Rename the new volume to the original name
             self.client.modifyVolume(temp_vol_name, {'newName': volume_name})
 
-            LOG.info(_LI('Completed: convert_to_base_volume: '
-                         'id=%s.'), volume['id'])
+            LOG.info('Completed: convert_to_base_volume: '
+                     'id=%s.', volume['id'])
         except hpeexceptions.HTTPConflict:
             msg = _("Volume (%s) already exists on array.") % volume_name
             LOG.error(msg)
             raise exception.Duplicate(msg)
         except hpeexceptions.HTTPBadRequest as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.Invalid(ex.get_description())
-        except exception.InvalidInput as ex:
-            LOG.error(_LE("Exception: %s"), ex)
-            raise
         except exception.CinderException as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise
         except Exception as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.CinderException(ex)
 
         return self._get_model_update(volume['host'], cpg)
@@ -2498,13 +2492,13 @@ class HPE3PARCommon(object):
             snap_name = self._get_3par_snap_name(snapshot['id'])
             self.client.deleteVolume(snap_name)
         except hpeexceptions.HTTPForbidden as ex:
-            LOG.error(_LE("Exception: %s"), ex)
+            LOG.error("Exception: %s", ex)
             raise exception.NotAuthorized()
         except hpeexceptions.HTTPNotFound as ex:
             # We'll let this act as if it worked
             # it helps clean up the cinder entries.
-            LOG.warning(_LW("Delete Snapshot id not found. Removing from "
-                            "cinder: %(id)s Ex: %(msg)s"),
+            LOG.warning("Delete Snapshot id not found. Removing from "
+                        "cinder: %(id)s Ex: %(msg)s",
                         {'id': snapshot['id'], 'msg': ex})
         except hpeexceptions.HTTPConflict as ex:
             if (ex.get_code() == 32):
@@ -2514,7 +2508,7 @@ class HPE3PARCommon(object):
                 for snap in snaps:
                     if snap.startswith('tss-'):
                         LOG.info(
-                            _LI("Found a temporary snapshot %(name)s"),
+                            "Found a temporary snapshot %(name)s",
                             {'name': snap})
                         try:
                             self.client.deleteVolume(snap)
@@ -2533,7 +2527,7 @@ class HPE3PARCommon(object):
                     msg = _("Snapshot has children and cannot be deleted!")
                     raise exception.SnapshotIsBusy(message=msg)
             else:
-                LOG.error(_LE("Exception: %s"), ex)
+                LOG.error("Exception: %s", ex)
                 raise exception.SnapshotIsBusy(message=ex.get_description())
 
     def _get_3par_hostname_from_wwn_iqn(self, wwns, iqns):
@@ -2581,24 +2575,24 @@ class HPE3PARCommon(object):
                 # return out of the terminate connection in order for things
                 # to be updated correctly.
                 if self._active_backend_id:
-                    LOG.warning(_LW("Because the host is currently in a "
-                                    "failed-over state, the volume will not "
-                                    "be properly detached from the primary "
-                                    "array. The detach will be considered a "
-                                    "success as far as Cinder is concerned. "
-                                    "The volume can now be attached to the "
-                                    "secondary target."))
+                    LOG.warning("Because the host is currently in a "
+                                "failed-over state, the volume will not "
+                                "be properly detached from the primary "
+                                "array. The detach will be considered a "
+                                "success as far as Cinder is concerned. "
+                                "The volume can now be attached to the "
+                                "secondary target.")
                     return
                 else:
                     # use the wwn to see if we can find the hostname
                     hostname = self._get_3par_hostname_from_wwn_iqn(wwn, iqn)
                     # no 3par host, re-throw
                     if hostname is None:
-                        LOG.error(_LE("Exception: %s"), e)
+                        LOG.error("Exception: %s", e)
                         raise
             else:
                 # not a 'host does not exist' HTTPNotFound exception, re-throw
-                LOG.error(_LE("Exception: %s"), e)
+                LOG.error("Exception: %s", e)
                 raise
 
         # try again with name retrieved from 3par
@@ -2631,9 +2625,9 @@ class HPE3PARCommon(object):
 
         if old_tpvv == new_tpvv and old_tdvv == new_tdvv:
             if new_cpg != old_cpg:
-                LOG.info(_LI("Modifying %(volume_name)s userCPG "
-                             "from %(old_cpg)s"
-                             " to %(new_cpg)s"),
+                LOG.info("Modifying %(volume_name)s userCPG "
+                         "from %(old_cpg)s"
+                         " to %(new_cpg)s",
                          {'volume_name': volume_name,
                           'old_cpg': old_cpg, 'new_cpg': new_cpg})
                 _response, body = self.client.modifyVolume(
@@ -2652,18 +2646,18 @@ class HPE3PARCommon(object):
         else:
             if new_tpvv:
                 cop = self.CONVERT_TO_THIN
-                LOG.info(_LI("Converting %(volume_name)s to thin provisioning "
-                             "with userCPG=%(new_cpg)s"),
+                LOG.info("Converting %(volume_name)s to thin provisioning "
+                         "with userCPG=%(new_cpg)s",
                          {'volume_name': volume_name, 'new_cpg': new_cpg})
             elif new_tdvv:
                 cop = self.CONVERT_TO_DEDUP
-                LOG.info(_LI("Converting %(volume_name)s to thin dedup "
-                             "provisioning with userCPG=%(new_cpg)s"),
+                LOG.info("Converting %(volume_name)s to thin dedup "
+                         "provisioning with userCPG=%(new_cpg)s",
                          {'volume_name': volume_name, 'new_cpg': new_cpg})
             else:
                 cop = self.CONVERT_TO_FULL
-                LOG.info(_LI("Converting %(volume_name)s to full provisioning "
-                             "with userCPG=%(new_cpg)s"),
+                LOG.info("Converting %(volume_name)s to full provisioning "
+                         "with userCPG=%(new_cpg)s",
                          {'volume_name': volume_name, 'new_cpg': new_cpg})
 
             try:
@@ -2678,8 +2672,8 @@ class HPE3PARCommon(object):
                     # Cannot retype with snapshots because we don't want to
                     # use keepVV and have straggling volumes.  Log additional
                     # info and then raise.
-                    LOG.info(_LI("tunevv failed because the volume '%s' "
-                                 "has snapshots."), volume_name)
+                    LOG.info("tunevv failed because the volume '%s' "
+                             "has snapshots.", volume_name)
                     raise
 
             task_id = body['taskid']
@@ -2936,8 +2930,8 @@ class HPE3PARCommon(object):
         """Force failover to a secondary replication target."""
         # Ensure replication is enabled before we try and failover.
         if not self._replication_enabled:
-            msg = _LE("Issuing a fail-over failed because replication is "
-                      "not properly configured.")
+            msg = _("Issuing a fail-over failed because replication is "
+                    "not properly configured.")
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
@@ -2984,12 +2978,12 @@ class HPE3PARCommon(object):
                             {'volume_id': volume['id'],
                              'updates': {'replication_status': 'failed-over'}})
                     except Exception as ex:
-                        msg = (_LE("There was a problem with the failover "
-                                   "(%(error)s) and it was unsuccessful. "
-                                   "Volume '%(volume)s will not be available "
-                                   "on the failed over target."),
-                               {'error': six.text_type(ex),
-                                'volume': volume['id']})
+                        LOG.error("There was a problem with the failover "
+                                  "(%(error)s) and it was unsuccessful. "
+                                  "Volume '%(volume)s will not be available "
+                                  "on the failed over target.",
+                                  {'error': ex,
+                                   'volume': volume['id']})
                         LOG.error(msg)
                         volume_update_list.append(
                             {'volume_id': volume['id'],
@@ -3108,32 +3102,29 @@ class HPE3PARCommon(object):
                     wsapi_version = cl.getWsApiVersion()['build']
 
                     if wsapi_version < REMOTE_COPY_API_VERSION:
-                        msg = (_LW("The secondary array must have an API "
-                                   "version of %(min_ver)s or higher. Array "
-                                   "'%(target)s' is on %(target_ver)s, "
-                                   "therefore it will not be added as a valid "
-                                   "replication target.") %
-                               {'target': array_name,
-                                'min_ver': REMOTE_COPY_API_VERSION,
-                                'target_ver': wsapi_version})
-                        LOG.warning(msg)
+                        LOG.warning("The secondary array must have an API "
+                                    "version of %(min_ver)s or higher. Array "
+                                    "'%(target)s' is on %(target_ver)s, "
+                                    "therefore it will not be added as a "
+                                    "valid replication target.",
+                                    {'target': array_name,
+                                     'min_ver': REMOTE_COPY_API_VERSION,
+                                     'target_ver': wsapi_version})
                     elif not self._is_valid_replication_array(remote_array):
-                        msg = (_LW("'%s' is not a valid replication array. "
-                                   "In order to be valid, backend_id, "
-                                   "replication_mode, "
-                                   "hpe3par_api_url, hpe3par_username, "
-                                   "hpe3par_password, cpg_map, san_ip, "
-                                   "san_login, and san_password "
-                                   "must be specified. If the target is "
-                                   "managed, managed_backend_name must be set "
-                                   "as well.") % array_name)
-                        LOG.warning(msg)
+                        LOG.warning("'%s' is not a valid replication array. "
+                                    "In order to be valid, backend_id, "
+                                    "replication_mode, "
+                                    "hpe3par_api_url, hpe3par_username, "
+                                    "hpe3par_password, cpg_map, san_ip, "
+                                    "san_login, and san_password "
+                                    "must be specified. If the target is "
+                                    "managed, managed_backend_name must be "
+                                    "set as well.", array_name)
                     else:
                         replication_targets.append(remote_array)
                 except Exception:
-                    msg = (_LE("Could not log in to 3PAR array (%s) with the "
-                               "provided credentials.") % array_name)
-                    LOG.error(msg)
+                    LOG.error("Could not log in to 3PAR array (%s) with the "
+                              "provided credentials.", array_name)
                 finally:
                     self._destroy_replication_client(cl)
 
@@ -3156,8 +3147,8 @@ class HPE3PARCommon(object):
         rep_flag = True
         # Make sure there is at least one replication target.
         if len(self._replication_targets) < 1:
-            LOG.error(_LE("There must be at least one valid replication "
-                          "device configured."))
+            LOG.error("There must be at least one valid replication "
+                      "device configured.")
             rep_flag = False
         return rep_flag
 
@@ -3166,17 +3157,17 @@ class HPE3PARCommon(object):
         # Make sure replication_mode is set to either sync|periodic.
         mode = self._get_remote_copy_mode_num(mode)
         if not mode:
-            LOG.error(_LE("Extra spec replication:mode must be set and must "
-                          "be either 'sync' or 'periodic'."))
+            LOG.error("Extra spec replication:mode must be set and must "
+                      "be either 'sync' or 'periodic'.")
             rep_flag = False
         else:
             # If replication:mode is periodic, replication_sync_period must be
             # set between 300 - 31622400 seconds.
             if mode == self.PERIODIC and (
                sync_num < 300 or sync_num > 31622400):
-                LOG.error(_LE("Extra spec replication:sync_period must be "
-                              "greater than 299 and less than 31622401 "
-                              "seconds."))
+                LOG.error("Extra spec replication:sync_period must be "
+                          "greater than 299 and less than 31622401 "
+                          "seconds.")
                 rep_flag = False
         return rep_flag
 
@@ -3586,8 +3577,8 @@ class ModifyVolumeTask(flow_utils.CinderTask):
 
         if new_snap_cpg != old_snap_cpg:
             # Modify the snap_cpg.  This will fail with snapshots.
-            LOG.info(_LI("Modifying %(volume_name)s snap_cpg from "
-                         "%(old_snap_cpg)s to %(new_snap_cpg)s."),
+            LOG.info("Modifying %(volume_name)s snap_cpg from "
+                     "%(old_snap_cpg)s to %(new_snap_cpg)s.",
                      {'volume_name': volume_name,
                       'old_snap_cpg': old_snap_cpg,
                       'new_snap_cpg': new_snap_cpg})
@@ -3597,7 +3588,7 @@ class ModifyVolumeTask(flow_utils.CinderTask):
                  'comment': json.dumps(comment_dict)})
             self.needs_revert = True
         else:
-            LOG.info(_LI("Modifying %s comments."), volume_name)
+            LOG.info("Modifying %s comments.", volume_name)
             common.client.modifyVolume(
                 volume_name,
                 {'comment': json.dumps(comment_dict)})
@@ -3606,8 +3597,8 @@ class ModifyVolumeTask(flow_utils.CinderTask):
     def revert(self, common, volume_name, old_snap_cpg, new_snap_cpg,
                old_comment, **kwargs):
         if self.needs_revert:
-            LOG.info(_LI("Retype revert %(volume_name)s snap_cpg from "
-                         "%(new_snap_cpg)s back to %(old_snap_cpg)s."),
+            LOG.info("Retype revert %(volume_name)s snap_cpg from "
+                     "%(new_snap_cpg)s back to %(old_snap_cpg)s.",
                      {'volume_name': volume_name,
                       'new_snap_cpg': new_snap_cpg,
                       'old_snap_cpg': old_snap_cpg})
@@ -3616,7 +3607,7 @@ class ModifyVolumeTask(flow_utils.CinderTask):
                     volume_name,
                     {'snapCPG': old_snap_cpg, 'comment': old_comment})
             except Exception as ex:
-                LOG.error(_LE("Exception during snapCPG revert: %s"), ex)
+                LOG.error("Exception during snapCPG revert: %s", ex)
 
 
 class TuneVolumeTask(flow_utils.CinderTask):
@@ -3688,8 +3679,8 @@ class ModifySpecsTask(flow_utils.CinderTask):
             except hpeexceptions.HTTPNotFound as ex:
                 # HTTPNotFound(code=102) is OK.  Set does not exist.
                 if ex.get_code() != 102:
-                    LOG.error(_LE("Unexpected error when retype() tried to "
-                                  "deleteVolumeSet(%s)"), vvs_name)
+                    LOG.error("Unexpected error when retype() tried to "
+                              "deleteVolumeSet(%s)", vvs_name)
                     raise
 
             if new_vvs or new_qos or new_flash_cache:
@@ -3710,21 +3701,21 @@ class ModifySpecsTask(flow_utils.CinderTask):
             except hpeexceptions.HTTPNotFound as ex:
                 # HTTPNotFound(code=102) is OK.  Set does not exist.
                 if ex.get_code() != 102:
-                    LOG.error(_LE("Unexpected error when retype() revert "
-                                  "tried to deleteVolumeSet(%s)"), vvs_name)
+                    LOG.error("Unexpected error when retype() revert "
+                              "tried to deleteVolumeSet(%s)", vvs_name)
             except Exception:
-                LOG.error(_LE("Unexpected error when retype() revert "
-                              "tried to deleteVolumeSet(%s)"), vvs_name)
+                LOG.error("Unexpected error when retype() revert "
+                          "tried to deleteVolumeSet(%s)", vvs_name)
 
             if old_vvs is not None or old_qos is not None:
                 try:
                     common._add_volume_to_volume_set(
                         volume, volume_name, old_cpg, old_vvs, old_qos)
                 except Exception as ex:
-                    LOG.error(_LE("%(exception)s: Exception during revert of "
-                                  "retype for volume %(volume_name)s. "
-                                  "Original volume set/QOS settings may not "
-                                  "have been fully restored."),
+                    LOG.error("%(exception)s: Exception during revert of "
+                              "retype for volume %(volume_name)s. "
+                              "Original volume set/QOS settings may not "
+                              "have been fully restored.",
                               {'exception': ex, 'volume_name': volume_name})
 
             if new_vvs is not None and old_vvs != new_vvs:
@@ -3732,10 +3723,10 @@ class ModifySpecsTask(flow_utils.CinderTask):
                     common.client.removeVolumeFromVolumeSet(
                         new_vvs, volume_name)
                 except Exception as ex:
-                    LOG.error(_LE("%(exception)s: Exception during revert of "
-                                  "retype for volume %(volume_name)s. "
-                                  "Failed to remove from new volume set "
-                                  "%(new_vvs)s."),
+                    LOG.error("%(exception)s: Exception during revert of "
+                              "retype for volume %(volume_name)s. "
+                              "Failed to remove from new volume set "
+                              "%(new_vvs)s.",
                               {'exception': ex,
                                'volume_name': volume_name,
                                'new_vvs': new_vvs})

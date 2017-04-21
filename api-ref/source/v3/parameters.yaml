@@ -75,6 +75,20 @@ hostname:
   in: path
   required: false
   type: string
+key_1:
+  description: |
+    The metadata key name for the metadata that you
+    want to remove.
+  in: path
+  required: true
+  type: string
+key_2:
+  description: |
+    The metadata key name for the metadata that you
+    want to see.
+  in: path
+  required: true
+  type: string
 project_id_path:
   description: |
     The UUID of the project in a multi-tenancy cloud.
@@ -106,11 +120,11 @@ user_id_1:
   in: path
   required: false
   type: string
-volume_id_1:
+volume_id_path:
   description: |
     The UUID of the volume.
   in: path
-  required: false
+  required: true
   type: string
 volume_type:
   description: |
@@ -177,6 +191,12 @@ marker:
   in: query
   required: false
   type: string
+message_id:
+  description: |
+    The UUID of the message.
+  in: query
+  required: true
+  type: string
 metadata_query:
   description: |
     Filters results by a metadata key and value pair.
@@ -197,6 +217,13 @@ name_volume:
   in: query
   required: false
   type: string
+offset:
+  description: |
+    Used in conjunction with ``limit`` to return a slice of items. ``offset``
+    is where to start in the list.
+  in: query
+  required: false
+  type: integer
 sort:
   description: |
     Comma-separated list of sort keys and optional
@@ -574,6 +601,12 @@ description_9:
   in: body
   required: true
   type: string
+display_name:
+  description: |
+    The name of volume backend capabilities.
+  in: body
+  required: true
+  type: string
 driver_version:
   description: |
     The driver version.
@@ -595,6 +628,13 @@ encryption:
 encryption_id_body:
   description: |
     The UUID of the encryption.
+  in: body
+  required: true
+  type: string
+event_id:
+  description: |
+    The id of the event to this message, this id could
+    eventually be translated into ``user_message``.
   in: body
   required: true
   type: string
@@ -696,6 +736,13 @@ group_types:
   in: body
   required: true
   type: array
+guaranteed_until:
+  description: |
+    The expire time of the message, this message could be
+    be deleted after this time.
+  in: body
+  required: false
+  type: string
 has_dependent_backups:
   description: |
     If this value is ``true``, the backup depends on
@@ -768,6 +815,12 @@ id_6:
 id_7:
   description: |
     The ID for the quota set.
+  in: body
+  required: true
+  type: integer
+id_8:
+  description: |
+    The ID for the message.
   in: body
   required: true
   type: integer
@@ -911,6 +964,12 @@ links_4:
   in: body
   required: true
   type: array
+links_5:
+  description: |
+    Links for the message.
+  in: body
+  required: false
+  type: array
 location:
   description: |
     Full URL to a service or server.
@@ -950,6 +1009,13 @@ maxTotalVolumes:
   in: body
   required: true
   type: integer
+message_level:
+  description: |
+    The level of the message, possible value is
+    only 'ERROR' now.
+  in: body
+  required: true
+  type: string
 metadata:
   description: |
     One or more metadata key and value pairs for the
@@ -1029,7 +1095,7 @@ mountpoint:
   description: |
     The attaching mount point.
   in: body
-  required: false
+  required: true
   type: string
 multiattach:
   description: |
@@ -1189,6 +1255,12 @@ object_count:
 os-attach:
   description: |
     The ``os-attach`` action.
+  in: body
+  required: true
+  type: object
+os-detach:
+  description: |
+    The ``os-detach`` action.
   in: body
   required: true
   type: object
@@ -1407,6 +1479,19 @@ replication_status:
   in: body
   required: true
   type: string
+replication_targets:
+  description: |
+    A list of volume backends used to replicate volumes
+    on this backend.
+  in: body
+  required: true
+  type: list
+request_id:
+  description: |
+    The id of the request during which the message was created.
+  in: body
+  required: true
+  type: string
 reserved:
   description: |
     Reserved volume size. Visible only if you set the
@@ -1421,6 +1506,25 @@ reserved_percentage:
   in: body
   required: true
   type: integer
+reset_status:
+  description: |
+    The ``reset_status`` action.
+  in: body
+  required: true
+  type: object
+resource_type:
+  description: |
+    The resource type corresponding to ``resource_uuid``.
+  in: body
+  required: false
+  type: string
+resource_uuid:
+  description: |
+    The UUID of the resource during whose operation the
+    message was created.
+  in: body
+  required: false
+  type: string
 restore:
   description: |
     A ``restore`` object.
@@ -1698,6 +1802,12 @@ user_id:
     The UUID of the user.
   in: body
   required: true
+  type: string
+user_message:
+  description: |
+    The translated readable message corresponding to ``event_id``.
+  in: body
+  required: false
   type: string
 vendor_name:
   description: |

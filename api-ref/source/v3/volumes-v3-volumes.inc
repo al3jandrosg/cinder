@@ -1,6 +1,5 @@
 .. -*- rst -*-
 
-=================
 Volumes (volumes)
 =================
 
@@ -45,7 +44,7 @@ status values are:
 
 
 List accessbile volumes with details
-====================================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes/detail
 
@@ -62,8 +61,10 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
-   - sort: sort
+   - sort_key: sort_key
+   - sort_dir: sort_dir
    - limit: limit
+   - offset: offset
    - marker: marker
 
 
@@ -113,7 +114,7 @@ Response Example
 
 
 Create a volume
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes
 
@@ -213,7 +214,7 @@ Response Parameters
 
 
 List accessible volumes
-=======================
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes
 
@@ -230,8 +231,10 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
-   - sort: sort
+   - sort_key: sort_key
+   - sort_dir: sort_dir
    - limit: limit
+   - offset: offset
    - marker: marker
 
 
@@ -257,7 +260,7 @@ Response Example
 
 
 Show a volume's details
-=======================
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes/{volume_id}
 
@@ -327,7 +330,7 @@ Response Example
 
 
 Update a volume
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v3/{project_id}/volumes/{volume_id}
 
@@ -398,7 +401,7 @@ Response Example
 
 
 Delete a volume
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  DELETE /v3/{project_id}/volumes/{volume_id}
 
@@ -446,11 +449,12 @@ Request
 
 
 Create metadata for volume
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/metadata
 
-Creates metadata for a volume.
+Creates or replaces metadata for a volume. Does not modify items that are not
+in the request.
 
 Error response codes:202,
 
@@ -490,7 +494,7 @@ Response Example
 
 
 Show a volume's metadata
-========================
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes/{volume_id}/metadata
 
@@ -529,14 +533,11 @@ Response Example
 
 
 Update a volume's metadata
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v3/{project_id}/volumes/{volume_id}/metadata
 
-Updates metadata for a volume.
-
-Replaces metadata items that match keys. Does not modify items that
-are not in the request.
+Replaces all the volume's metadata with the key-value pairs in the request.
 
 
 Normal response codes: 200
@@ -576,9 +577,66 @@ Response Example
    :language: javascript
 
 
+Show a volume's metadata for a specific key
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  GET /v3/{project_id}/volumes/{volume_id}/metadata/{key}
+
+Shows metadata for a volume for a specific key.
+
+Normal response codes: 200
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - key: key_2
+
+
+Response Parameters
+-------------------
+
+.. rest_parameters:: parameters.yaml
+
+   - metadata: metadata_3
+
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-metadata-show-response.json
+   :language: javascript
+
+
+
+Delete a volume's metadata
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  DELETE /v3/{project_id}/volumes/{volume_id}/metadata/{key}
+
+Deletes metadata for a volume.
+
+Normal response codes: 200
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - key: key_1
+
+
 
 Get volumes summary
-===================
+~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes/summary
 

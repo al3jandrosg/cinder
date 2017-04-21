@@ -1,6 +1,5 @@
 .. -*- rst -*-
 
-============================
 Volume snapshots (snapshots)
 ============================
 
@@ -28,7 +27,7 @@ possible:
 
 
 List snapshots with details
-===========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v2/{tenant_id}/snapshots/detail
 
@@ -71,7 +70,7 @@ Response Example
 
 
 Create snapshot
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v2/{tenant_id}/snapshots
 
@@ -115,7 +114,7 @@ Response Parameters
 
 
 List snapshots
-==============
+~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v2/{tenant_id}/snapshots
 
@@ -160,7 +159,7 @@ Response Example
 
 
 Show snapshot metadata
-======================
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v2/{tenant_id}/snapshots/{snapshot_id}/metadata
 
@@ -204,15 +203,50 @@ Response Example
    :language: javascript
 
 
-Update snapshot metadata
-========================
+Create snapshot metadata
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  PUT /v2/{tenant_id}/snapshots/{snapshot_id}/metadata
+.. rest_method::  POST /v2/{tenant_id}/snapshots/{snapshot_id}/metadata
 
 Updates metadata for a snapshot.
 
-Replaces metadata items that match keys. Does not modify items that
+Creates or replaces metadata items that match keys. Does not modify items that
 are not in the request.
+
+
+Normal response codes: 200
+Error response codes:
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - metadata: metadata
+   - tenant_id: tenant_id
+   - snapshot_id: snapshot_id
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/snapshot-metadata-create-request.json
+   :language: javascript
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/snapshot-metadata-create-response.json
+   :language: javascript
+
+
+Update snapshot metadata
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  PUT /v2/{tenant_id}/snapshots/{snapshot_id}/metadata
+
+Replaces all the snapshot's metadata with the key-value pairs in the request.
 
 
 Normal response codes: 200
@@ -243,7 +277,7 @@ Response Example
 
 
 Show snapshot details
-=====================
+~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v2/{tenant_id}/snapshots/{snapshot_id}
 
@@ -288,7 +322,7 @@ Response Example
 
 
 Update snapshot
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v2/{tenant_id}/snapshots/{snapshot_id}
 
@@ -341,7 +375,7 @@ Response Example
 
 
 Delete snapshot
-===============
+~~~~~~~~~~~~~~~
 
 .. rest_method::  DELETE /v2/{tenant_id}/snapshots/{snapshot_id}
 

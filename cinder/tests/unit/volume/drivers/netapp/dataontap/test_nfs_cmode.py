@@ -212,7 +212,7 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             'QoS_support': True,
             'reserved_percentage': fake.RESERVED_PERCENTAGE,
             'max_over_subscription_ratio': fake.MAX_OVER_SUBSCRIPTION_RATIO,
-            'multiattach': True,
+            'multiattach': False,
             'total_capacity_gb': total_capacity_gb,
             'free_capacity_gb': free_capacity_gb,
             'provisioned_capacity_gb': provisioned_capacity_gb,
@@ -1261,6 +1261,22 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
         self.driver._copy_from_remote_cache.assert_called_once_with(
             fake.VOLUME, fake.IMAGE_FILE_ID, cache_result[0])
         self.driver._post_clone_image.assert_called_once_with(fake.VOLUME)
+
+    def test_copy_from_cache_workflow_remote_location_no_copyoffload(self):
+        cache_result = [('ip1:/openstack', fake.IMAGE_FILE_ID),
+                        ('ip2:/openstack', fake.IMAGE_FILE_ID),
+                        ('ip3:/openstack', fake.IMAGE_FILE_ID)]
+        self.driver._find_image_location = mock.Mock(return_value=[
+            cache_result[0], False])
+        self.driver._copy_from_remote_cache = mock.Mock()
+        self.driver._post_clone_image = mock.Mock()
+        self.driver.configuration.netapp_copyoffload_tool_path = None
+
+        copied = self.driver._copy_from_cache(
+            fake.VOLUME, fake.IMAGE_FILE_ID, cache_result)
+
+        self.assertFalse(copied)
+        self.driver._copy_from_remote_cache.assert_not_called()
 
     def test_copy_from_cache_workflow_local_location(self):
         local_share = '/share'

@@ -59,6 +59,9 @@ class VolumeActionsController(wsgi.Controller):
         # Keep API backward compatibility
         if 'host_name' in body['os-attach']:
             host_name = body['os-attach']['host_name']
+        if 'mountpoint' not in body['os-attach']:
+            msg = _("Must specify 'mountpoint'")
+            raise webob.exc.HTTPBadRequest(explanation=msg)
         mountpoint = body['os-attach']['mountpoint']
         if 'mode' in body['os-attach']:
             mode = body['os-attach']['mode']
@@ -79,8 +82,9 @@ class VolumeActionsController(wsgi.Controller):
         except messaging.RemoteError as error:
             if error.exc_type in ['InvalidVolume', 'InvalidUUID',
                                   'InvalidVolumeAttachMode']:
-                msg = "Error attaching volume - %(err_type)s: %(err_msg)s" % {
-                      'err_type': error.exc_type, 'err_msg': error.value}
+                msg = _("Error attaching volume - %(err_type)s: "
+                        "%(err_msg)s") % {
+                    'err_type': error.exc_type, 'err_msg': error.value}
                 raise webob.exc.HTTPBadRequest(explanation=msg)
             else:
                 # There are also few cases where attach call could fail due to
@@ -105,8 +109,9 @@ class VolumeActionsController(wsgi.Controller):
             self.volume_api.detach(context, volume, attachment_id)
         except messaging.RemoteError as error:
             if error.exc_type in ['VolumeAttachmentNotFound', 'InvalidVolume']:
-                msg = "Error detaching volume - %(err_type)s: %(err_msg)s" % \
-                      {'err_type': error.exc_type, 'err_msg': error.value}
+                msg = _("Error detaching volume - %(err_type)s: "
+                        "%(err_msg)s") % {
+                    'err_type': error.exc_type, 'err_msg': error.value}
                 raise webob.exc.HTTPBadRequest(explanation=msg)
             else:
                 # There are also few cases where detach call could fail due to
@@ -177,6 +182,10 @@ class VolumeActionsController(wsgi.Controller):
         except exception.VolumeBackendAPIException:
             msg = _("Unable to fetch connection information from backend.")
             raise webob.exc.HTTPInternalServerError(explanation=msg)
+        except messaging.RemoteError as error:
+            if error.exc_type == 'InvalidInput':
+                raise exception.InvalidInput(reason=error.value)
+            raise
 
         return {'connection_info': info}
 

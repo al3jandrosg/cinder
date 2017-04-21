@@ -37,7 +37,7 @@ nova_opts = [
                     'the form: '
                     '<service_type>:<service_name>:<endpoint_type>'),
     cfg.StrOpt('nova_catalog_admin_info',
-               default='compute:Compute Service:adminURL',
+               default='compute:Compute Service:publicURL',
                help='Same as nova_catalog_info, but for admin endpoint.'),
     cfg.StrOpt('nova_endpoint_template',
                help='Override service catalog lookup with template for nova '
@@ -59,7 +59,6 @@ CONF.register_opts(nova_opts)
 
 LOG = logging.getLogger(__name__)
 
-# TODO(e0ne): Make Nova version configurable in Mitaka.
 NOVA_API_VERSION = "2.1"
 
 nova_extensions = [ext for ext in

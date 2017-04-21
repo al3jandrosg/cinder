@@ -26,7 +26,7 @@ from oslo_utils import excutils
 import six
 
 from cinder import exception
-from cinder.i18n import _, _LE, _LW
+from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import objects
 from cinder.objects import fields
@@ -49,9 +49,10 @@ volume_opts = [
     cfg.StrOpt('iscsi_target_prefix',
                default='iqn.2010-10.org.openstack:',
                help='Prefix for iSCSI volumes'),
-    cfg.StrOpt('iscsi_ip_address',
-               default='$my_ip',
-               help='The IP address that the iSCSI daemon is listening on'),
+    cfg.HostAddressOpt('iscsi_ip_address',
+                       default='$my_ip',
+                       help='The IP address that the iSCSI daemon is '
+                            'listening on'),
     cfg.ListOpt('iscsi_secondary_ip_addresses',
                 default=[],
                 help='The list of secondary IP addresses of the iSCSI daemon'),
@@ -266,6 +267,11 @@ volume_opts = [
                      "working CI system and testing are marked as unsupported "
                      "until CI is working again.  This also marks a driver as "
                      "deprecated and may be removed in the next release."),
+    cfg.StrOpt('backend_availability_zone',
+               default=None,
+               help='Availability zone for this volume backend. If not set, '
+                    'the storage_availability_zone option value is used as '
+                    'the default for all backends.'),
 ]
 
 # for backward compatibility
@@ -277,9 +283,10 @@ iser_opts = [
     cfg.StrOpt('iser_target_prefix',
                default='iqn.2010-10.org.openstack:',
                help='Prefix for iSER volumes'),
-    cfg.StrOpt('iser_ip_address',
-               default='$my_ip',
-               help='The IP address that the iSER daemon is listening on'),
+    cfg.HostAddressOpt('iser_ip_address',
+                       default='$my_ip',
+                       help='The IP address that the iSER daemon is '
+                            'listening on'),
     cfg.PortOpt('iser_port',
                 default=3260,
                 help='The port that the iSER daemon is listening on'),
@@ -419,8 +426,8 @@ class BaseVD(object):
                         self._is_non_recoverable(ex.stderr, non_recoverable):
                     raise
 
-                LOG.exception(_LE("Recovering from a failed execute.  "
-                                  "Try number %s"), tries)
+                LOG.exception("Recovering from a failed execute. "
+                              "Try number %s", tries)
                 time.sleep(tries ** 2)
 
     def _detach_volume(self, context, attach_info, volume, properties,
@@ -453,8 +460,8 @@ class BaseVD(object):
                 LOG.debug("volume %s: removing export", volume['id'])
                 self.remove_export(context, volume)
             except Exception as ex:
-                LOG.exception(_LE("Error detaching volume %(volume)s, "
-                                  "due to remove export failure."),
+                LOG.exception("Error detaching volume %(volume)s, "
+                              "due to remove export failure.",
                               {"volume": volume['id']})
                 raise exception.RemoveExportException(volume=volume['id'],
                                                       reason=ex)
@@ -475,8 +482,8 @@ class BaseVD(object):
         # flag in the interface is for anticipation that it will be enabled
         # in the future.
         if remote:
-            LOG.error(_LE("Detaching snapshot from a remote node "
-                          "is not supported."))
+            LOG.error("Detaching snapshot from a remote node "
+                      "is not supported.")
             raise exception.NotSupportedOperation(
                 operation=_("detach snapshot from remote node"))
         else:
@@ -496,8 +503,8 @@ class BaseVD(object):
                 LOG.debug("Snapshot %s: removing export.", snapshot.id)
                 self.remove_export_snapshot(context, snapshot)
             except Exception as ex:
-                LOG.exception(_LE("Error detaching snapshot %(snapshot)s, "
-                                  "due to remove export failure."),
+                LOG.exception("Error detaching snapshot %(snapshot)s, "
+                              "due to remove export failure.",
                               {"snapshot": snapshot.id})
                 raise exception.RemoveExportException(volume=snapshot.id,
                                                       reason=ex)
@@ -527,8 +534,8 @@ class BaseVD(object):
                 self._throttle = throttling.BlkioCgroup(int(bps_limit),
                                                         cgroup_name)
             except processutils.ProcessExecutionError as err:
-                LOG.warning(_LW('Failed to activate volume copy throttling: '
-                                '%(err)s'), {'err': err})
+                LOG.warning('Failed to activate volume copy throttling: '
+                            '%(err)s', {'err': err})
         throttling.Throttle.set_default(self._throttle)
 
     def get_version(self):
@@ -732,9 +739,9 @@ class BaseVD(object):
             if ':' in vendor_name:
                 old_name = vendor_name
                 vendor_name = vendor_name.replace(':', '_')
-                LOG.warning(_LW('The colon in vendor name was replaced '
-                                'by underscore. Updated vendor name is '
-                                '%(name)s".'), {'name': vendor_name})
+                LOG.warning('The colon in vendor name was replaced '
+                            'by underscore. Updated vendor name is '
+                            '%(name)s".', {'name': vendor_name})
 
             for key in vendor_prop:
                 # If key has colon in vendor name field, we replace it to
@@ -746,10 +753,10 @@ class BaseVD(object):
                     updated_vendor_prop[new_key] = vendor_prop[key]
                     continue
                 if not key.startswith(vendor_name + ':'):
-                    LOG.warning(_LW('Vendor unique property "%(property)s" '
-                                    'must start with vendor prefix with colon '
-                                    '"%(prefix)s". The property was '
-                                    'not registered on capabilities list.'),
+                    LOG.warning('Vendor unique property "%(property)s" '
+                                'must start with vendor prefix with colon '
+                                '"%(prefix)s". The property was '
+                                'not registered on capabilities list.',
                                 {'prefix': vendor_name + ':',
                                  'property': key})
                     continue
@@ -947,9 +954,9 @@ class BaseVD(object):
                         rpcapi.terminate_connection(context, volume,
                                                     properties, force=True)
                     except Exception:
-                        LOG.warning(_LW("Failed terminating the connection "
-                                        "of volume %(volume_id)s, but it is "
-                                        "acceptable."),
+                        LOG.warning("Failed terminating the connection "
+                                    "of volume %(volume_id)s, but it is "
+                                    "acceptable.",
                                     {'volume_id': volume['id']})
         else:
             # Call local driver's create_export and initialize_connection.
@@ -964,9 +971,9 @@ class BaseVD(object):
                     volume.save()
             except exception.CinderException as ex:
                 if model_update:
-                    LOG.exception(_LE("Failed updating model of volume "
-                                      "%(volume_id)s with driver provided "
-                                      "model %(model)s"),
+                    LOG.exception("Failed updating model of volume "
+                                  "%(volume_id)s with driver provided "
+                                  "model %(model)s",
                                   {'volume_id': volume['id'],
                                    'model': model_update})
                     raise exception.ExportFailure(reason=ex)
@@ -1003,7 +1010,7 @@ class BaseVD(object):
                                         properties, force=True,
                                         remote=remote)
                 except Exception:
-                    LOG.exception(_LE('Error detaching volume %s'),
+                    LOG.exception('Error detaching volume %s',
                                   volume['id'])
             raise
 
@@ -1019,8 +1026,8 @@ class BaseVD(object):
         # flag in the interface is for anticipation that it will be enabled
         # in the future.
         if remote:
-            LOG.error(_LE("Attaching snapshot from a remote node "
-                          "is not supported."))
+            LOG.error("Attaching snapshot from a remote node "
+                      "is not supported.")
             raise exception.NotSupportedOperation(
                 operation=_("attach snapshot from remote node"))
         else:
@@ -1040,9 +1047,9 @@ class BaseVD(object):
                     snapshot.save()
             except exception.CinderException as ex:
                 if model_update:
-                    LOG.exception(_LE("Failed updating model of snapshot "
-                                      "%(snapshot_id)s with driver provided "
-                                      "model %(model)s."),
+                    LOG.exception("Failed updating model of snapshot "
+                                  "%(snapshot_id)s with driver provided "
+                                  "model %(model)s.",
                                   {'snapshot_id': snapshot.id,
                                    'model': model_update})
                     raise exception.ExportFailure(reason=ex)
@@ -1089,7 +1096,7 @@ class BaseVD(object):
             unavailable = not connector.check_valid_device(host_device,
                                                            root_access)
         except Exception:
-            LOG.exception(_LE('Could not validate device %s'), host_device)
+            LOG.exception('Could not validate device %s', host_device)
 
         if unavailable:
             raise exception.DeviceUnavailable(path=host_device,
@@ -2607,8 +2614,7 @@ class ISCSIDriver(VolumeDriver):
     def _do_iscsi_discovery(self, volume):
         # TODO(justinsb): Deprecate discovery and use stored info
         # NOTE(justinsb): Discovery won't work with CHAP-secured targets (?)
-        LOG.warning(_LW("ISCSI provider_location not "
-                        "stored, using discovery"))
+        LOG.warning("ISCSI provider_location not stored, using discovery")
 
         volume_name = volume['name']
 
@@ -2621,7 +2627,7 @@ class ISCSIDriver(VolumeDriver):
                                         volume['host'].split('@')[0],
                                         run_as_root=True)
         except processutils.ProcessExecutionError as ex:
-            LOG.error(_LE("ISCSI discovery attempt failed for:%s"),
+            LOG.error("ISCSI discovery attempt failed for:%s",
                       volume['host'].split('@')[0])
             LOG.debug("Error from iscsiadm -m discovery: %s", ex.stderr)
             return None
@@ -2810,8 +2816,8 @@ class ISCSIDriver(VolumeDriver):
         # iSCSI drivers require the initiator information
         required = 'initiator'
         if required not in connector:
-            LOG.error(_LE('The volume driver requires %(data)s '
-                          'in the connector.'), {'data': required})
+            LOG.error('The volume driver requires %(data)s '
+                      'in the connector.', {'data': required})
             raise exception.InvalidConnectorException(missing=required)
 
     def terminate_connection(self, volume, connector, **kwargs):
@@ -2964,9 +2970,9 @@ class FibreChannelDriver(VolumeDriver):
     def validate_connector_has_setting(connector, setting):
         """Test for non-empty setting in connector."""
         if setting not in connector or not connector[setting]:
-            LOG.error(_LE(
+            LOG.error(
                 "FibreChannelDriver validate_connector failed. "
-                "No '%(setting)s'. Make sure HBA state is Online."),
+                "No '%(setting)s'. Make sure HBA state is Online.",
                 {'setting': setting})
             raise exception.InvalidConnectorException(missing=setting)
 

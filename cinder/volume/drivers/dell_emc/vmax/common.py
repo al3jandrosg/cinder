@@ -22,11 +22,14 @@ from oslo_log import log as logging
 from oslo_utils import units
 import re
 import six
+import uuid
 
 from cinder import exception
-from cinder import utils as cinder_utils
-from cinder.i18n import _, _LE, _LI, _LW
+from cinder.i18n import _
+import cinder.objects.consistencygroup as cg_obj
 from cinder.objects import fields
+import cinder.objects.group as group_obj
+from cinder import utils as cinder_utils
 from cinder.volume.drivers.dell_emc.vmax import fast
 from cinder.volume.drivers.dell_emc.vmax import https
 from cinder.volume.drivers.dell_emc.vmax import masking
@@ -95,7 +98,11 @@ emc_opts = [
     cfg.StrOpt('multi_pool_support',
                default=False,
                help='Use this value to specify '
-                    'multi-pool support for VMAX3')]
+                    'multi-pool support for VMAX3'),
+    cfg.StrOpt('initiator_check',
+               default=False,
+               help='Use this value to enable '
+                    'the initiator_check')]
 
 CONF.register_opts(emc_opts)
 
@@ -114,7 +121,7 @@ class VMAXCommon(object):
              'reserved_percentage': 0,
              'storage_protocol': None,
              'total_capacity_gb': 0,
-             'vendor_name': 'EMC',
+             'vendor_name': 'Dell EMC',
              'volume_backend_name': None,
              'replication_enabled': False,
              'replication_targets': None}
@@ -131,9 +138,8 @@ class VMAXCommon(object):
                  active_backend_id=None):
 
         if not pywbemAvailable:
-            LOG.info(_LI(
-                "Module PyWBEM not installed. "
-                "Install PyWBEM using the python-pywbem package."))
+            LOG.info("Module PyWBEM not installed. Install PyWBEM using the "
+                     "python-pywbem package.")
 
         self.protocol = prtcl
         self.configuration = configuration
@@ -155,6 +161,7 @@ class VMAXCommon(object):
         self.failover = False
         self._get_replication_info()
         self.multiPoolSupportEnabled = False
+        self.initiatorCheck = False
         self._gather_info()
 
     def _gather_info(self):
@@ -213,9 +220,9 @@ class VMAXCommon(object):
                 LOG.debug("The replication configuration is %(rep_config)s.",
                           {'rep_config': self.rep_config})
         elif self.rep_devices and len(self.rep_devices) > 1:
-            LOG.error(_LE("More than one replication target is configured. "
-                          "EMC VMAX only suppports a single replication "
-                          "target. Replication will not be enabled."))
+            LOG.error("More than one replication target is configured. "
+                      "EMC VMAX only suppports a single replication "
+                      "target. Replication will not be enabled.")
 
     def _get_slo_workload_combinations(self, arrayInfoList):
         """Method to query the array for SLO and Workloads.
@@ -225,7 +232,7 @@ class VMAXCommon(object):
 
         :param arrayInfoList:
         :return: finalArrayInfoList
-        :raises: Exception
+        :raises Exception:
         """
         try:
             sloWorkloadSet = set()
@@ -348,9 +355,9 @@ class VMAXCommon(object):
                                             volumeName,
                                             extraSpecs)
 
-        LOG.info(_LI("Leaving create_volume: %(volumeName)s  "
-                     "Return code: %(rc)lu "
-                     "volume dict: %(name)s."),
+        LOG.info("Leaving create_volume: %(volumeName)s  "
+                 "Return code: %(rc)lu "
+                 "volume dict: %(name)s.",
                  {'volumeName': volumeName,
                   'rc': rc,
                   'name': volumeDict})
@@ -370,7 +377,7 @@ class VMAXCommon(object):
         :param volume: volume Object
         :param snapshot: snapshot object
         :returns: model_update, dict
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         LOG.debug("Entering create_volume_from_snapshot.")
         extraSpecs = self._initial_setup(snapshot, host=volume['host'])
@@ -441,12 +448,12 @@ class VMAXCommon(object):
 
         :param volume: volume Object
         """
-        LOG.info(_LI("Deleting Volume: %(volume)s"),
+        LOG.info("Deleting Volume: %(volume)s",
                  {'volume': volume['name']})
 
         rc, volumeName = self._delete_volume(volume)
-        LOG.info(_LI("Leaving delete_volume: %(volumename)s  Return code: "
-                     "%(rc)lu."),
+        LOG.info("Leaving delete_volume: %(volumename)s  Return code: "
+                 "%(rc)lu.",
                  {'volumename': volumeName,
                   'rc': rc})
 
@@ -468,7 +475,7 @@ class VMAXCommon(object):
         :param snapshot: snapshot object
         :param volume: volume Object to create snapshot from
         """
-        LOG.info(_LI("Delete Snapshot: %(snapshotName)s."),
+        LOG.info("Delete Snapshot: %(snapshotName)s.",
                  {'snapshotName': snapshot['name']})
         self._delete_snapshot(snapshot, volume['host'])
 
@@ -501,24 +508,28 @@ class VMAXCommon(object):
 
         :param volume: the volume Object
         :param connector: the connector Object
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         extraSpecs = self._initial_setup(volume)
         if self.utils.is_volume_failed_over(volume):
             extraSpecs = self._get_replication_extraSpecs(
                 extraSpecs, self.rep_config)
         volumename = volume['name']
-        LOG.info(_LI("Unmap volume: %(volume)s."),
+        LOG.info("Unmap volume: %(volume)s.",
                  {'volume': volumename})
 
-        device_info = self.find_device_number(volume, connector['host'])
+        device_info, __, __ = self.find_device_number(
+            volume, connector['host'])
         if 'hostlunid' not in device_info:
-            LOG.info(_LI("Volume %s is not mapped. No volume to unmap."),
+            LOG.info("Volume %s is not mapped. No volume to unmap.",
                      volumename)
             return
 
         vol_instance = self._find_lun(volume)
         storage_system = vol_instance['SystemName']
+
+        if self._is_volume_multiple_masking_views(vol_instance):
+            return
 
         configservice = self.utils.find_controller_configuration_service(
             self.conn, storage_system)
@@ -531,16 +542,23 @@ class VMAXCommon(object):
 
         self._remove_members(configservice, vol_instance, connector,
                              extraSpecs)
-        livemigrationrecord = self.utils.get_live_migration_record(volume,
-                                                                   False)
-        if livemigrationrecord:
-            live_maskingviewdict = livemigrationrecord[0]
-            live_connector = livemigrationrecord[1]
-            live_extraSpecs = livemigrationrecord[2]
-            self._attach_volume(
-                volume, live_connector, live_extraSpecs,
-                live_maskingviewdict, True)
-            self.utils.delete_live_migration_record(volume)
+
+    def _is_volume_multiple_masking_views(self, vol_instance):
+        """Check if volume is in more than one MV.
+
+        :param vol_instance: the volume instance
+        :returns: boolean
+        """
+        storageGroupInstanceNames = (
+            self.masking.get_associated_masking_groups_from_device(
+                self.conn, vol_instance.path))
+
+        for storageGroupInstanceName in storageGroupInstanceNames:
+            mvInstanceNames = self.masking.get_masking_view_from_storage_group(
+                self.conn, storageGroupInstanceName)
+            if len(mvInstanceNames) > 1:
+                return True
+        return False
 
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns device and connection info.
@@ -569,48 +587,49 @@ class VMAXCommon(object):
         :param volume: volume Object
         :param connector: the connector Object
         :returns: dict -- deviceInfoDict - device information dict
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         portGroupName = None
         extraSpecs = self._initial_setup(volume)
         is_multipath = connector.get('multipath', False)
 
         volumeName = volume['name']
-        LOG.info(_LI("Initialize connection: %(volume)s."),
+        LOG.info("Initialize connection: %(volume)s.",
                  {'volume': volumeName})
         self.conn = self._get_ecom_connection()
-        deviceInfoDict = self._wrap_find_device_number(
-            volume, connector['host'])
+
         if self.utils.is_volume_failed_over(volume):
             extraSpecs = self._get_replication_extraSpecs(
                 extraSpecs, self.rep_config)
+        deviceInfoDict, isLiveMigration, sourceInfoDict = (
+            self._wrap_find_device_number(
+                volume, connector['host']))
         maskingViewDict = self._populate_masking_dict(
             volume, connector, extraSpecs)
 
         if ('hostlunid' in deviceInfoDict and
                 deviceInfoDict['hostlunid'] is not None):
-            isSameHost = self._is_same_host(connector, deviceInfoDict)
-            if isSameHost:
-                # Device is already mapped to same host so we will leave
-                # the state as is.
-
-                deviceNumber = deviceInfoDict['hostlunid']
-                LOG.info(_LI("Volume %(volume)s is already mapped. "
-                             "The device number is  %(deviceNumber)s."),
-                         {'volume': volumeName,
-                          'deviceNumber': deviceNumber})
-                # Special case, we still need to get the iscsi ip address.
-                portGroupName = (
-                    self._get_correct_port_group(
-                        deviceInfoDict, maskingViewDict['storageSystemName']))
-
-            else:
+            deviceNumber = deviceInfoDict['hostlunid']
+            LOG.info("Volume %(volume)s is already mapped. "
+                     "The device number is  %(deviceNumber)s.",
+                     {'volume': volumeName,
+                      'deviceNumber': deviceNumber})
+            # Special case, we still need to get the iscsi ip address.
+            portGroupName = (
+                self._get_correct_port_group(
+                    deviceInfoDict, maskingViewDict['storageSystemName']))
+        else:
+            if isLiveMigration:
+                maskingViewDict['storageGroupInstanceName'] = (
+                    self._get_storage_group_from_source(sourceInfoDict))
+                maskingViewDict['portGroupInstanceName'] = (
+                    self._get_port_group_from_source(sourceInfoDict))
                 deviceInfoDict, portGroupName = self._attach_volume(
                     volume, connector, extraSpecs, maskingViewDict, True)
-        else:
-            deviceInfoDict, portGroupName = (
-                self._attach_volume(
-                    volume, connector, extraSpecs, maskingViewDict))
+            else:
+                deviceInfoDict, portGroupName = (
+                    self._attach_volume(
+                        volume, connector, extraSpecs, maskingViewDict))
 
         if self.protocol.lower() == 'iscsi':
             deviceInfoDict['ip_and_iqn'] = (
@@ -635,15 +654,11 @@ class VMAXCommon(object):
         :param isLiveMigration: boolean, can be None
         :returns: dict -- deviceInfoDict
                   String -- port group name
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         volumeName = volume['name']
-        maskingViewDict = self._populate_masking_dict(
-            volume, connector, extraSpecs)
         if isLiveMigration:
             maskingViewDict['isLiveMigration'] = True
-            self.utils.insert_live_migration_record(volume, maskingViewDict,
-                                                    connector, extraSpecs)
         else:
             maskingViewDict['isLiveMigration'] = False
 
@@ -651,17 +666,17 @@ class VMAXCommon(object):
             self.conn, maskingViewDict, extraSpecs)
 
         # Find host lun id again after the volume is exported to the host.
-        deviceInfoDict = self.find_device_number(volume, connector['host'])
+        deviceInfoDict, __, __ = self.find_device_number(
+            volume, connector['host'])
         if 'hostlunid' not in deviceInfoDict:
             # Did not successfully attach to host,
             # so a rollback for FAST is required.
-            LOG.error(_LE("Error Attaching volume %(vol)s."),
+            LOG.error("Error Attaching volume %(vol)s.",
                       {'vol': volumeName})
             if ((rollbackDict['fastPolicyName'] is not None) or
                     (rollbackDict['isV3'] is not None)):
                 (self.masking._check_if_rollback_action_for_masking_required(
                     self.conn, rollbackDict))
-                self.utils.delete_live_migration_record(volume)
             exception_message = (_("Error Attaching volume %(vol)s.")
                                  % {'vol': volumeName})
             raise exception.VolumeBackendAPIException(
@@ -730,6 +745,52 @@ class VMAXCommon(object):
                 data=exception_message)
         return portGroupName
 
+    def _get_storage_group_from_source(self, deviceInfoDict):
+        """Get the storage group from the existing masking view.
+
+        :params deviceInfoDict: the device info dictionary
+        :returns: storage group instance
+        """
+        storageGroupInstanceName = None
+        if ('controller' in deviceInfoDict and
+                deviceInfoDict['controller'] is not None):
+            maskingViewInstanceName = deviceInfoDict['controller']
+
+            # Get the storage group from masking view
+            storageGroupInstanceName = (
+                self.masking._get_storage_group_from_masking_view_instance(
+                    self.conn,
+                    maskingViewInstanceName))
+        else:
+            exception_message = (_("Cannot get the storage group from "
+                                   "the masking view."))
+            raise exception.VolumeBackendAPIException(
+                data=exception_message)
+        return storageGroupInstanceName
+
+    def _get_port_group_from_source(self, deviceInfoDict):
+        """Get the port group from the existing masking view.
+
+        :params deviceInfoDict: the device info dictionary
+        :returns: port group instance
+        """
+        portGroupInstanceName = None
+        if ('controller' in deviceInfoDict and
+                deviceInfoDict['controller'] is not None):
+            maskingViewInstanceName = deviceInfoDict['controller']
+
+            # Get the port group from masking view
+            portGroupInstanceName = (
+                self.masking.get_port_group_from_masking_view_instance(
+                    self.conn,
+                    maskingViewInstanceName))
+        else:
+            exception_message = (_("Cannot get the port group from "
+                                   "the masking view."))
+            raise exception.VolumeBackendAPIException(
+                data=exception_message)
+        return portGroupInstanceName
+
     def check_ig_instance_name(self, initiatorGroupInstanceName):
         """Check if an initiator group instance is on the array.
 
@@ -746,7 +807,7 @@ class VMAXCommon(object):
         :params connector: the connector Object
         """
         volumename = volume['name']
-        LOG.info(_LI("Terminate connection: %(volume)s."),
+        LOG.info("Terminate connection: %(volume)s.",
                  {'volume': volumename})
 
         self._unmap_lun(volume, connector)
@@ -762,7 +823,7 @@ class VMAXCommon(object):
         :params volume: the volume Object
         :params newSize: the new size to increase the volume to
         :returns: dict -- modifiedVolumeDict - the extended volume Object
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         originalVolumeSize = volume['size']
         volumeName = volume['name']
@@ -791,7 +852,7 @@ class VMAXCommon(object):
         :param originalVolumeSize:
         :param extraSpecs: extra specifications
         :return: dict -- modifiedVolumeDict - the extended volume Object
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         if int(originalVolumeSize) > int(newSize):
             exceptionMessage = (_(
@@ -980,7 +1041,7 @@ class VMAXCommon(object):
                         array_max_over_subscription))
             pools.append(pool)
 
-        data = {'vendor_name': "EMC",
+        data = {'vendor_name': "Dell EMC",
                 'driver_version': self.version,
                 'storage_protocol': 'unknown',
                 'volume_backend_name': self.pool_info['backend_name'] or
@@ -1012,11 +1073,11 @@ class VMAXCommon(object):
          provisionedManagedSpaceGbs, array_reserve_percent, wlpEnabled) = (
             self.provisionv3.get_srp_pool_stats(self.conn, arrayInfo))
 
-        LOG.info(_LI(
+        LOG.info(
             "Capacity stats for SRP pool %(poolName)s on array "
             "%(arrayName)s total_capacity_gb=%(total_capacity_gb)lu, "
             "free_capacity_gb=%(free_capacity_gb)lu, "
-            "provisioned_capacity_gb=%(provisioned_capacity_gb)lu"),
+            "provisioned_capacity_gb=%(provisioned_capacity_gb)lu",
             {'poolName': arrayInfo['PoolName'],
              'arrayName': arrayInfo['SerialNumber'],
              'total_capacity_gb': totalManagedSpaceGbs,
@@ -1047,7 +1108,7 @@ class VMAXCommon(object):
 
         volumeName = volume['name']
         volumeStatus = volume['status']
-        LOG.info(_LI("Migrating using retype Volume: %(volume)s."),
+        LOG.info("Migrating using retype Volume: %(volume)s.",
                  {'volume': volumeName})
 
         extraSpecs = self._initial_setup(volume)
@@ -1055,17 +1116,17 @@ class VMAXCommon(object):
 
         volumeInstance = self._find_lun(volume)
         if volumeInstance is None:
-            LOG.error(_LE("Volume %(name)s not found on the array. "
-                          "No volume to migrate using retype."),
+            LOG.error("Volume %(name)s not found on the array. "
+                      "No volume to migrate using retype.",
                       {'name': volumeName})
             return False
 
         if extraSpecs[ISV3]:
             if self.utils.is_replication_enabled(extraSpecs):
-                LOG.error(_LE("Volume %(name)s is replicated - "
-                              "Replicated volumes are not eligible for "
-                              "storage assisted retype. Host assisted "
-                              "retype is supported."),
+                LOG.error("Volume %(name)s is replicated - "
+                          "Replicated volumes are not eligible for "
+                          "storage assisted retype. Host assisted "
+                          "retype is supported.",
                           {'name': volumeName})
                 return False
 
@@ -1089,12 +1150,12 @@ class VMAXCommon(object):
         :returns: boolean -- Always returns True
         :returns: dict -- Empty dict {}
         """
-        LOG.warning(_LW("The VMAX plugin only supports Retype. "
-                        "If a pool based migration is necessary "
-                        "this will happen on a Retype "
-                        "From the command line: "
-                        "cinder --os-volume-api-version 2 retype <volumeId> "
-                        "<volumeType> --migration-policy on-demand"))
+        LOG.warning("The VMAX plugin only supports Retype. "
+                    "If a pool based migration is necessary "
+                    "this will happen on a Retype "
+                    "From the command line: "
+                    "cinder --os-volume-api-version 2 retype <volumeId> "
+                    "<volumeType> --migration-policy on-demand")
         return True, {}
 
     def _migrate_volume(
@@ -1126,11 +1187,11 @@ class VMAXCommon(object):
         if moved is False and sourceFastPolicyName is not None:
             # Return the volume to the default source fast policy storage
             # group because the migrate was unsuccessful.
-            LOG.warning(_LW(
+            LOG.warning(
                 "Failed to migrate: %(volumeName)s from "
                 "default source storage group "
                 "for FAST policy: %(sourceFastPolicyName)s. "
-                "Attempting cleanup... "),
+                "Attempting cleanup... ",
                 {'volumeName': volumeName,
                  'sourceFastPolicyName': sourceFastPolicyName})
             if sourcePoolInstanceName == self.utils.get_assoc_pool_from_volume(
@@ -1154,9 +1215,9 @@ class VMAXCommon(object):
             if not self._migrate_volume_fast_target(
                     volumeInstance, storageSystemName,
                     targetFastPolicyName, volumeName, extraSpecs):
-                LOG.warning(_LW(
+                LOG.warning(
                     "Attempting a rollback of: %(volumeName)s to "
-                    "original pool %(sourcePoolInstanceName)s."),
+                    "original pool %(sourcePoolInstanceName)s.",
                     {'volumeName': volumeName,
                      'sourcePoolInstanceName': sourcePoolInstanceName})
                 self._migrate_rollback(
@@ -1186,7 +1247,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         """
 
-        LOG.warning(_LW("_migrate_rollback on : %(volumeName)s."),
+        LOG.warning("_migrate_rollback on : %(volumeName)s.",
                     {'volumeName': volumeName})
 
         storageRelocationService = self.utils.find_storage_relocation_service(
@@ -1197,10 +1258,10 @@ class VMAXCommon(object):
                 conn, storageRelocationService, volumeInstance.path,
                 sourcePoolInstanceName, extraSpecs)
         except Exception:
-            LOG.error(_LE(
+            LOG.error(
                 "Failed to return volume %(volumeName)s to "
                 "original storage pool. Please contact your system "
-                "administrator to return it to the correct location."),
+                "administrator to return it to the correct location.",
                 {'volumeName': volumeName})
 
         if sourceFastPolicyName is not None:
@@ -1222,7 +1283,7 @@ class VMAXCommon(object):
         :returns: boolean -- True/False
         """
 
-        LOG.warning(_LW("_migrate_cleanup on : %(volumeName)s."),
+        LOG.warning("_migrate_cleanup on : %(volumeName)s.",
                     {'volumeName': volumeName})
         return_to_default = True
         controllerConfigurationService = (
@@ -1271,9 +1332,9 @@ class VMAXCommon(object):
         :returns: boolean -- True/False
         """
         falseRet = False
-        LOG.info(_LI(
+        LOG.info(
             "Adding volume: %(volumeName)s to default storage group "
-            "for FAST policy: %(fastPolicyName)s."),
+            "for FAST policy: %(fastPolicyName)s.",
             {'volumeName': volumeName,
              'fastPolicyName': targetFastPolicyName})
 
@@ -1286,9 +1347,9 @@ class VMAXCommon(object):
                 self.conn, controllerConfigurationService,
                 targetFastPolicyName, volumeInstance, extraSpecs))
         if defaultStorageGroupInstanceName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Unable to create or get default storage group for FAST policy"
-                ": %(fastPolicyName)s."),
+                ": %(fastPolicyName)s.",
                 {'fastPolicyName': targetFastPolicyName})
 
             return falseRet
@@ -1298,9 +1359,9 @@ class VMAXCommon(object):
                 self.conn, controllerConfigurationService, volumeInstance,
                 volumeName, targetFastPolicyName, extraSpecs))
         if defaultStorageGroupInstanceName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Failed to verify that volume was added to storage group for "
-                "FAST policy: %(fastPolicyName)s."),
+                "FAST policy: %(fastPolicyName)s.",
                 {'fastPolicyName': targetFastPolicyName})
             return falseRet
 
@@ -1340,9 +1401,9 @@ class VMAXCommon(object):
         targetPoolInstanceName = self.utils.get_pool_by_name(
             self.conn, targetPoolName, storageSystemName)
         if targetPoolInstanceName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Error finding target pool instance name for pool: "
-                "%(targetPoolName)s."),
+                "%(targetPoolName)s.",
                 {'targetPoolName': targetPoolName})
             return falseRet
         try:
@@ -1352,9 +1413,9 @@ class VMAXCommon(object):
         except Exception:
             # Rollback by deleting the volume if adding the volume to the
             # default storage group were to fail.
-            LOG.exception(_LE(
+            LOG.exception(
                 "Error migrating volume: %(volumename)s. "
-                "to target pool %(targetPoolName)s."),
+                "to target pool %(targetPoolName)s.",
                 {'volumename': volumeName,
                  'targetPoolName': targetPoolName})
             return falseRet
@@ -1367,9 +1428,9 @@ class VMAXCommon(object):
         if (foundPoolInstanceName is None or
                 (foundPoolInstanceName['InstanceID'] !=
                     targetPoolInstanceName['InstanceID'])):
-            LOG.error(_LE(
+            LOG.error(
                 "Volume : %(volumeName)s. was not successfully migrated to "
-                "target pool %(targetPoolName)s."),
+                "target pool %(targetPoolName)s.",
                 {'volumeName': volumeName,
                  'targetPoolName': targetPoolName})
             return falseRet
@@ -1396,7 +1457,7 @@ class VMAXCommon(object):
         :param sourceFastPolicyName: the source FAST policy name
         :param volumeName: the volume Name
         :param extraSpecs: extra specifications
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         controllerConfigurationService = (
             self.utils.find_controller_configuration_service(
@@ -1419,10 +1480,10 @@ class VMAXCommon(object):
             raise exception.VolumeBackendAPIException(data=exceptionMessage)
 
         if defaultStorageGroupInstanceName is None:
-            LOG.warning(_LW(
+            LOG.warning(
                 "The volume: %(volumename)s "
                 "was not first part of the default storage "
-                "group for FAST policy %(fastPolicyName)s."),
+                "group for FAST policy %(fastPolicyName)s.",
                 {'volumename': volumeName,
                  'fastPolicyName': sourceFastPolicyName})
 
@@ -1447,10 +1508,10 @@ class VMAXCommon(object):
                 conn, controllerConfigurationService, volumeInstance,
                 volumeName, targetFastPolicyName, extraSpecs))
         if assocDefaultStorageGroupName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Failed to add %(volumeName)s "
                 "to default storage group for fast policy "
-                "%(fastPolicyName)s."),
+                "%(fastPolicyName)s.",
                 {'volumeName': volumeName,
                  'fastPolicyName': targetFastPolicyName})
 
@@ -1475,7 +1536,7 @@ class VMAXCommon(object):
         """
         falseRet = (False, None, None)
         if 'location_info' not in host['capabilities']:
-            LOG.error(_LE('Error getting array, pool, SLO and workload.'))
+            LOG.error('Error getting array, pool, SLO and workload.')
             return falseRet
         info = host['capabilities']['location_info']
 
@@ -1488,24 +1549,24 @@ class VMAXCommon(object):
             targetSlo = infoDetail[2]
             targetWorkload = infoDetail[3]
         except KeyError:
-            LOG.error(_LE("Error parsing array, pool, SLO and workload."))
+            LOG.error("Error parsing array, pool, SLO and workload.")
 
         if targetArraySerialNumber not in sourceArraySerialNumber:
-            LOG.error(_LE(
+            LOG.error(
                 "The source array : %(sourceArraySerialNumber)s does not "
                 "match the target array: %(targetArraySerialNumber)s "
-                "skipping storage-assisted migration."),
+                "skipping storage-assisted migration.",
                 {'sourceArraySerialNumber': sourceArraySerialNumber,
                  'targetArraySerialNumber': targetArraySerialNumber})
             return falseRet
 
         if targetPoolName not in sourcePoolName:
-            LOG.error(_LE(
+            LOG.error(
                 "Only SLO/workload migration within the same SRP Pool "
                 "is supported in this version "
                 "The source pool : %(sourcePoolName)s does not "
                 "match the target array: %(targetPoolName)s. "
-                "Skipping storage-assisted migration."),
+                "Skipping storage-assisted migration.",
                 {'sourcePoolName': sourcePoolName,
                  'targetPoolName': targetPoolName})
             return falseRet
@@ -1514,9 +1575,9 @@ class VMAXCommon(object):
             self.utils.get_storage_group_from_volume(
                 self.conn, volumeInstanceName, sgName))
         if foundStorageGroupInstanceName is None:
-            LOG.warning(_LW(
+            LOG.warning(
                 "Volume: %(volumeName)s is not currently "
-                "belonging to any storage group."),
+                "belonging to any storage group.",
                 {'volumeName': volumeName})
 
         else:
@@ -1531,10 +1592,10 @@ class VMAXCommon(object):
                 # Check if migration is from compression to non compression
                 # of vice versa
                 if not doChangeCompression:
-                    LOG.error(_LE(
+                    LOG.error(
                         "No action required. Volume: %(volumeName)s is "
                         "already part of slo/workload combination: "
-                        "%(targetCombination)s."),
+                        "%(targetCombination)s.",
                         {'volumeName': volumeName,
                          'targetCombination': targetCombination})
                     return falseRet
@@ -1558,7 +1619,7 @@ class VMAXCommon(object):
         """
         falseRet = (False, None, None)
         if 'location_info' not in host['capabilities']:
-            LOG.error(_LE("Error getting target pool name and array."))
+            LOG.error("Error getting target pool name and array.")
             return falseRet
         info = host['capabilities']['location_info']
 
@@ -1570,14 +1631,14 @@ class VMAXCommon(object):
             targetPoolName = infoDetail[1]
             targetFastPolicy = infoDetail[2]
         except KeyError:
-            LOG.error(_LE(
-                "Error parsing target pool name, array, and fast policy."))
+            LOG.error(
+                "Error parsing target pool name, array, and fast policy.")
 
         if targetArraySerialNumber not in sourceArraySerialNumber:
-            LOG.error(_LE(
+            LOG.error(
                 "The source array : %(sourceArraySerialNumber)s does not "
                 "match the target array: %(targetArraySerialNumber)s, "
-                "skipping storage-assisted migration."),
+                "skipping storage-assisted migration.",
                 {'sourceArraySerialNumber': sourceArraySerialNumber,
                  'targetArraySerialNumber': targetArraySerialNumber})
             return falseRet
@@ -1589,19 +1650,19 @@ class VMAXCommon(object):
         assocPoolInstance = self.conn.GetInstance(
             assocPoolInstanceName)
         if assocPoolInstance['ElementName'] == targetPoolName:
-            LOG.error(_LE(
+            LOG.error(
                 "No action required. Volume: %(volumeName)s is "
-                "already part of pool: %(pool)s."),
+                "already part of pool: %(pool)s.",
                 {'volumeName': volumeName,
                  'pool': targetPoolName})
             return falseRet
 
-        LOG.info(_LI("Volume status is: %s."), volumeStatus)
+        LOG.info("Volume status is: %s.", volumeStatus)
         if (host['capabilities']['storage_protocol'] != self.protocol and
                 (volumeStatus != 'available' and volumeStatus != 'retyping')):
-            LOG.error(_LE(
+            LOG.error(
                 "Only available volumes can be migrated between "
-                "different protocols."))
+                "different protocols.")
             return falseRet
 
         return (True, targetPoolName, targetFastPolicy)
@@ -1635,7 +1696,7 @@ class VMAXCommon(object):
         return extraSpecs, configurationFile, qosSpecs
 
     def _get_multi_pool_support_enabled_flag(self):
-        """Reads the configuration fpr multi pool support flag.
+        """Reads the configuration for multi pool support flag.
 
         :returns: MultiPoolSupportEnabled flag
         """
@@ -1649,11 +1710,26 @@ class VMAXCommon(object):
                 retVal = True
         return retVal
 
+    def _get_initiator_check_flag(self):
+        """Reads the configuration for initator_check flag.
+
+        :returns:  flag
+        """
+
+        confString = (
+            self.configuration.safe_get('initiator_check'))
+        retVal = False
+        stringTrue = "True"
+        if confString:
+            if confString.lower() == stringTrue.lower():
+                retVal = True
+        return retVal
+
     def _get_ecom_connection(self):
         """Get the ecom connection.
 
         :returns: pywbem.WBEMConnection -- conn, the ecom connection
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         ecomx509 = None
         if self.ecomUseSSL:
@@ -1695,7 +1771,7 @@ class VMAXCommon(object):
         :param isv3: True/False
         :returns: foundPoolInstanceName - the CIM Instance Name of the Pool
         :returns: string -- systemNameStr
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         foundPoolInstanceName = None
         systemNameStr = None
@@ -1737,6 +1813,7 @@ class VMAXCommon(object):
         :returns: foundVolumeinstance
         """
         foundVolumeinstance = None
+        targetVolName = None
         volumename = volume['id']
 
         loc = volume['provider_location']
@@ -1747,7 +1824,11 @@ class VMAXCommon(object):
             name = ast.literal_eval(loc)
             keys = name['keybindings']
             systemName = keys['SystemName']
-
+            admin_metadata = {}
+            if 'admin_metadata' in volume:
+                admin_metadata = volume.admin_metadata
+            if 'targetVolumeName' in admin_metadata:
+                targetVolName = admin_metadata['targetVolumeName']
             prefix1 = 'SYMMETRIX+'
             prefix2 = 'SYMMETRIX-+-'
             smiversion = self.utils.get_smi_version(self.conn)
@@ -1766,9 +1847,12 @@ class VMAXCommon(object):
                                      get_volume_element_name(volumename))
                 if not (volumeElementName ==
                         foundVolumeinstance['ElementName']):
-                    foundVolumeinstance = None
+                    # Check if it is a vol created as part of a clone group
+                    if not (targetVolName ==
+                            foundVolumeinstance['ElementName']):
+                        foundVolumeinstance = None
             except Exception as e:
-                LOG.info(_LI("Exception in retrieving volume: %(e)s."),
+                LOG.info("Exception in retrieving volume: %(e)s.",
                          {'e': e})
                 foundVolumeinstance = None
 
@@ -1868,6 +1952,8 @@ class VMAXCommon(object):
         volumeName = volume['name']
         volumeInstance = self._find_lun(volume)
         storageSystemName = volumeInstance['SystemName']
+        isLiveMigration = False
+        source_data = {}
 
         unitnames = self.conn.ReferenceNames(
             volumeInstance.path,
@@ -1912,14 +1998,15 @@ class VMAXCommon(object):
                     data = maskedvol
             if not data:
                 if len(maskedvols) > 0:
-                    data = maskedvols[0]
-                    LOG.warning(_LW(
+                    source_data = maskedvols[0]
+                    LOG.warning(
                         "Volume is masked but not to host %(host)s as is "
-                        "expected. Assuming live migration."),
+                        "expected. Assuming live migration.",
                         {'host': hoststr})
+                    isLiveMigration = True
 
         LOG.debug("Device info: %(data)s.", {'data': data})
-        return data
+        return data, isLiveMigration, source_data
 
     def get_target_wwns(self, storageSystem, connector):
         """Find target WWNs.
@@ -1927,7 +2014,7 @@ class VMAXCommon(object):
         :param storageSystem: the storage system name
         :param connector: the connector dict
         :returns: list -- targetWwns, the target WWN list
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         targetWwns = set()
 
@@ -1951,15 +2038,15 @@ class VMAXCommon(object):
                     self.utils.get_target_endpoints(
                         self.conn, hardwareIdInstance))
                 if not targetEndpoints:
-                    LOG.warning(_LW(
+                    LOG.warning(
                         "Unable to get target endpoints for hardwareId "
-                        "%(instance)s."),
+                        "%(instance)s.",
                         {'instance': hardwareIdInstance})
                     continue
             except Exception:
-                LOG.warning(_LW(
+                LOG.warning(
                     "Unable to get target endpoints for hardwareId "
-                    "%(instance)s."),
+                    "%(instance)s.",
                     {'instance': hardwareIdInstance}, exc_info=True)
                 continue
 
@@ -2059,7 +2146,7 @@ class VMAXCommon(object):
         """Given the array record set the ecom credentials.
 
         :param arrayInfo: record
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         ip = arrayInfo['EcomServerIp']
         port = arrayInfo['EcomServerPort']
@@ -2091,7 +2178,7 @@ class VMAXCommon(object):
         :param volume: the volume Object
         :param volumeTypeId: Optional override of volume['volume_type_id']
         :returns: dict -- extra spec dict
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         try:
             extraSpecs, configurationFile, qosSpecs = (
@@ -2145,7 +2232,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         :returns: poolInstanceName The pool instance name
         :returns: string -- the storage system name
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
 
         try:
@@ -2229,6 +2316,10 @@ class VMAXCommon(object):
 
         maskingViewDict['maskingViewName'] = ("%(prefix)s-MV"
                                               % {'prefix': prefix})
+
+        maskingViewDict['maskingViewNameLM'] = ("%(prefix)s-%(volid)s-MV"
+                                                % {'prefix': prefix,
+                                                   'volid': volume['id'][:8]})
         volumeName = volume['name']
         volumeInstance = self._find_lun(volume)
         storageSystemName = volumeInstance['SystemName']
@@ -2247,6 +2338,10 @@ class VMAXCommon(object):
         maskingViewDict['volumeInstance'] = volumeInstance
         maskingViewDict['volumeName'] = volumeName
         maskingViewDict['storageSystemName'] = storageSystemName
+        if self._get_initiator_check_flag():
+            maskingViewDict['initiatorCheck'] = True
+        else:
+            maskingViewDict['initiatorCheck'] = False
 
         return maskingViewDict
 
@@ -2265,7 +2360,7 @@ class VMAXCommon(object):
         :param fastPolicyName: the fast policy name (String)
         :param extraSpecs: extra specifications
         :returns: dict -- maskingViewDict with masking view information
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         try:
             volumeInstance = self.utils.find_volume_instance(
@@ -2412,9 +2507,9 @@ class VMAXCommon(object):
                 volumeInstance.path, appendVolumeInstanceName, compositeType,
                 extraSpecs)
         else:
-            LOG.error(_LE(
+            LOG.error(
                 "Unable to determine whether %(volumeName)s is "
-                "composite or not."),
+                "composite or not.",
                 {'volumeName': volumeName})
             raise
 
@@ -2457,14 +2552,14 @@ class VMAXCommon(object):
         :param extraSpecs: extra specs
         :param isSnapshot: boolean -- Defaults to False
         :returns: dict -- cloneDict the cloned volume dictionary
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         sourceName = sourceVolume['name']
         cloneName = cloneVolume['name']
 
-        LOG.info(_LI(
+        LOG.info(
             "Create a replica from Volume: Clone Volume: %(cloneName)s "
-            "Source Volume: %(sourceName)s."),
+            "Source Volume: %(sourceName)s.",
             {'cloneName': cloneName,
              'sourceName': sourceName})
 
@@ -2520,8 +2615,8 @@ class VMAXCommon(object):
                     self.conn, sourceInstance))
 
             if cloneVolume['size'] != old_size_gbs:
-                LOG.info(_LI("Extending clone %(cloneName)s to "
-                             "%(newSize)d GBs"),
+                LOG.info("Extending clone %(cloneName)s to "
+                         "%(newSize)d GBs",
                          {'cloneName': cloneName,
                           'newSize': cloneVolume['size']})
                 cloneInstance = self.utils.find_volume_instance(
@@ -2551,7 +2646,7 @@ class VMAXCommon(object):
         :param cloneDict: clone dictionary
         :param cloneName: clone name
         :param extraSpecs: extra specifications
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         # Check if the clone/snapshot volume already part of the default sg.
         cloneInstance = self.utils.find_volume_instance(
@@ -2603,9 +2698,9 @@ class VMAXCommon(object):
 
         volumeInstance = self._find_lun(volume)
         if volumeInstance is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Volume %(name)s not found on the array. "
-                "No volume to delete."),
+                "No volume to delete.",
                 {'name': volumeName})
             return errorRet
 
@@ -2648,17 +2743,20 @@ class VMAXCommon(object):
             self.masking.get_associated_masking_groups_from_device(
                 self.conn, volumeInstanceName))
         if storageGroupInstanceNames:
-            LOG.warning(_LW(
+            LOG.warning(
                 "Pre check for deletion. "
                 "Volume: %(volumeName)s is part of a storage group. "
-                "Attempting removal from %(storageGroupInstanceNames)s."),
+                "Attempting removal from %(storageGroupInstanceNames)s.",
                 {'volumeName': volumeName,
                  'storageGroupInstanceNames': storageGroupInstanceNames})
             for storageGroupInstanceName in storageGroupInstanceNames:
-                self.provision.remove_device_from_storage_group(
+                storageGroupInstance = self.conn.GetInstance(
+                    storageGroupInstanceName)
+                self.masking.remove_device_from_storage_group(
                     self.conn, controllerConfigurationService,
-                    storageGroupInstanceName,
-                    volumeInstanceName, volumeName, extraSpecs)
+                    storageGroupInstanceName, volumeInstanceName,
+                    volumeName, storageGroupInstance['ElementName'],
+                    extraSpecs)
 
     def _find_lunmasking_scsi_protocol_controller(self, storageSystemName,
                                                   connector):
@@ -2737,7 +2835,7 @@ class VMAXCommon(object):
         :param volume: volume object to be deleted
         :param connector: volume object to be deleted
         :returns: int -- numVolumesMapped
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
 
         volumename = volume['name']
@@ -2783,7 +2881,7 @@ class VMAXCommon(object):
         """Helper function to delete the specified snapshot.
 
         :param snapshot: snapshot object to be deleted
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         LOG.debug("Entering _delete_snapshot.")
 
@@ -2791,8 +2889,8 @@ class VMAXCommon(object):
 
         # Delete the target device.
         rc, snapshotname = self._delete_volume(snapshot, True, host)
-        LOG.info(_LI("Leaving delete_snapshot: %(ssname)s  Return code: "
-                     "%(rc)lu."),
+        LOG.info("Leaving delete_snapshot: %(ssname)s  Return code: "
+                 "%(rc)lu.",
                  {'ssname': snapshotname,
                   'rc': rc})
 
@@ -2802,9 +2900,9 @@ class VMAXCommon(object):
         :param context: the context
         :param group: the group object to be created
         :returns: dict -- modelUpdate = {'status': 'available'}
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
-        LOG.info(_LI("Create Consistency Group: %(group)s."),
+        LOG.info("Create Consistency Group: %(group)s.",
                  {'group': group['id']})
 
         modelUpdate = {'status': fields.ConsistencyGroupStatus.AVAILABLE}
@@ -2836,9 +2934,9 @@ class VMAXCommon(object):
         :param volumes: the list of volumes in the consisgroup to be deleted
         :returns: dict -- modelUpdate
         :returns: list -- list of volume objects
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
-        LOG.info(_LI("Delete Consistency Group: %(group)s."),
+        LOG.info("Delete Consistency Group: %(group)s.",
                  {'group': group['id']})
 
         modelUpdate = {}
@@ -2856,7 +2954,7 @@ class VMAXCommon(object):
             cgInstanceName, cgName = self._find_consistency_group(
                 replicationService, six.text_type(group['id']))
             if cgInstanceName is None:
-                LOG.error(_LE("Cannot find CG group %(cgName)s."),
+                LOG.error("Cannot find CG group %(cgName)s.",
                           {'cgName': six.text_type(group['id'])})
                 modelUpdate = {'status': fields.ConsistencyGroupStatus.DELETED}
                 volumes_model_update = self.utils.get_volume_model_updates(
@@ -2936,15 +3034,15 @@ class VMAXCommon(object):
         :param snapshots: snapshots
         :returns: dict -- modelUpdate
         :returns: list -- list of snapshots
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         consistencyGroup = cgsnapshot.get('consistencygroup')
 
         snapshots_model_update = []
 
-        LOG.info(_LI(
+        LOG.info(
             "Create snapshot for Consistency Group %(cgId)s "
-            "cgsnapshotID: %(cgsnapshot)s."),
+            "cgsnapshotID: %(cgsnapshot)s.",
             {'cgsnapshot': cgsnapshot['id'],
              'cgId': cgsnapshot['consistencygroup_id']})
 
@@ -2973,7 +3071,7 @@ class VMAXCommon(object):
                 interval_retries_dict)
             targetCgInstanceName, targetCgName = self._find_consistency_group(
                 replicationService, cgsnapshot['id'])
-            LOG.info(_LI("Create target consistency group %(targetCg)s."),
+            LOG.info("Create target consistency group %(targetCg)s.",
                      {'targetCg': targetCgInstanceName})
 
             for snapshot in snapshots:
@@ -3092,14 +3190,14 @@ class VMAXCommon(object):
         :param snapshots: snapshots
         :returns: dict -- modelUpdate
         :returns: list -- list of snapshots
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         consistencyGroup = cgsnapshot.get('consistencygroup')
         model_update = {}
         snapshots_model_update = []
-        LOG.info(_LI(
+        LOG.info(
             "Delete snapshot for source CG %(cgId)s "
-            "cgsnapshotID: %(cgsnapshot)s."),
+            "cgsnapshotID: %(cgsnapshot)s.",
             {'cgsnapshot': cgsnapshot['id'],
              'cgId': cgsnapshot['consistencygroup_id']})
 
@@ -3174,7 +3272,7 @@ class VMAXCommon(object):
         :returns: int -- return code
         :returns: dict -- volumeDict
         :returns: string -- storageSystemName
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         if not memberCount:
             memberCount, errorDesc = self.utils.determine_member_count(
@@ -3240,9 +3338,9 @@ class VMAXCommon(object):
         # add the volume to the default storage group created for
         # volumes in pools associated with this fast policy.
         if extraSpecs[FASTPOLICY]:
-            LOG.info(_LI(
+            LOG.info(
                 "Adding volume: %(volumeName)s to default storage group"
-                " for FAST policy: %(fastPolicyName)s."),
+                " for FAST policy: %(fastPolicyName)s.",
                 {'volumeName': volumeName,
                  'fastPolicyName': extraSpecs[FASTPOLICY]})
             defaultStorageGroupInstanceName = (
@@ -3278,7 +3376,7 @@ class VMAXCommon(object):
         :returns: int -- return code
         :returns: dict -- volumeDict
         :returns: string -- storageSystemName
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         rc = -1
         volumeDict = {}
@@ -3420,7 +3518,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         :returns: int -- return code
         :returns: dict -- modifiedVolumeDict
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         # Is the volume extendable.
         isConcatenated = self.utils.check_if_volume_is_extendable(
@@ -3513,9 +3611,9 @@ class VMAXCommon(object):
 
         storageSystemName = volumeInstance['SystemName']
         if not isValid:
-            LOG.error(_LE(
+            LOG.error(
                 "Volume %(name)s is not suitable for storage "
-                "assisted migration using retype."),
+                "assisted migration using retype.",
                 {'name': volumeName})
             return False
         if volume['host'] != host['host'] or doChangeCompression:
@@ -3563,9 +3661,9 @@ class VMAXCommon(object):
             self.utils.get_storage_group_from_volume(
                 self.conn, volumeInstance.path, defaultSgName))
         if foundStorageGroupInstanceName is None:
-            LOG.warning(_LW(
+            LOG.warning(
                 "Volume : %(volumeName)s is not currently "
-                "belonging to any storage group."),
+                "belonging to any storage group.",
                 {'volumeName': volumeName})
         else:
             self.masking.remove_and_reset_members(
@@ -3583,8 +3681,8 @@ class VMAXCommon(object):
             poolName, targetSlo, targetWorkload, isCompressionDisabled,
             storageSystemName, extraSpecs)
         if targetSgInstanceName is None:
-            LOG.error(_LE(
-                "Failed to get or create storage group %(storageGroupName)s."),
+            LOG.error(
+                "Failed to get or create storage group %(storageGroupName)s.",
                 {'storageGroupName': storageGroupName})
             return False
 
@@ -3596,9 +3694,9 @@ class VMAXCommon(object):
             self.utils.get_storage_group_from_volume(
                 self.conn, volumeInstance.path, storageGroupName))
         if sgFromVolAddedInstanceName is None:
-            LOG.error(_LE(
+            LOG.error(
                 "Volume : %(volumeName)s has not been "
-                "added to target storage group %(storageGroup)s."),
+                "added to target storage group %(storageGroup)s.",
                 {'volumeName': volumeName,
                  'storageGroup': targetSgInstanceName})
             return False
@@ -3627,9 +3725,9 @@ class VMAXCommon(object):
                 volumeName, volumeStatus))
 
         if not isValid:
-            LOG.error(_LE(
+            LOG.error(
                 "Volume %(name)s is not suitable for storage "
-                "assisted migration using retype."),
+                "assisted migration using retype.",
                 {'name': volumeName})
             return False
         if volume['host'] != host['host']:
@@ -3680,10 +3778,10 @@ class VMAXCommon(object):
                 self.fast.get_capacities_associated_to_policy(
                     self.conn, arrayInfo['SerialNumber'],
                     arrayInfo['FastPolicy']))
-            LOG.info(_LI(
+            LOG.info(
                 "FAST: capacity stats for policy %(fastPolicyName)s on array "
                 "%(arrayName)s. total_capacity_gb=%(total_capacity_gb)lu, "
-                "free_capacity_gb=%(free_capacity_gb)lu."),
+                "free_capacity_gb=%(free_capacity_gb)lu.",
                 {'fastPolicyName': arrayInfo['FastPolicy'],
                  'arrayName': arrayInfo['SerialNumber'],
                  'total_capacity_gb': total_capacity_gb,
@@ -3694,10 +3792,10 @@ class VMAXCommon(object):
                 self.utils.get_pool_capacities(self.conn,
                                                arrayInfo['PoolName'],
                                                arrayInfo['SerialNumber']))
-            LOG.info(_LI(
+            LOG.info(
                 "NON-FAST: capacity stats for pool %(poolName)s on array "
                 "%(arrayName)s total_capacity_gb=%(total_capacity_gb)lu, "
-                "free_capacity_gb=%(free_capacity_gb)lu."),
+                "free_capacity_gb=%(free_capacity_gb)lu.",
                 {'poolName': arrayInfo['PoolName'],
                  'arrayName': arrayInfo['SerialNumber'],
                  'total_capacity_gb': total_capacity_gb,
@@ -3717,7 +3815,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         :param poolRecord: pool record
         :returns: dict -- the extraSpecs
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         try:
             stripedMetaCount = extraSpecs[STRIPECOUNT]
@@ -3775,8 +3873,8 @@ class VMAXCommon(object):
                     sloFromExtraSpec = poolDetails[0]
                     workloadFromExtraSpec = poolDetails[1]
                 except KeyError:
-                    LOG.error(_LE("Error parsing SLO, workload from "
-                                  "the provided extra_specs."))
+                    LOG.error("Error parsing SLO, workload from "
+                              "the provided extra_specs.")
             else:
                 # Throw an exception as it is compulsory to have
                 # pool_name in the extra specs
@@ -3853,7 +3951,7 @@ class VMAXCommon(object):
         :param fastPolicyName: the FAST policy name(if it exists)
         :param extraSpecs: extra specifications
         :returns: int -- return code
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         storageSystemName = volumeInstance['SystemName']
         controllerConfigurationService = (
@@ -3866,10 +3964,10 @@ class VMAXCommon(object):
                     volumeInstance.path, volumeName, fastPolicyName,
                     extraSpecs))
             if defaultStorageGroupInstanceName is None:
-                LOG.warning(_LW(
+                LOG.warning(
                     "The volume: %(volumename)s. was not first part of the "
                     "default storage group for FAST policy %(fastPolicyName)s"
-                    "."),
+                    ".",
                     {'volumename': volumeName,
                      'fastPolicyName': fastPolicyName})
                 # Check if it is part of another storage group.
@@ -3908,12 +4006,12 @@ class VMAXCommon(object):
                         volumeInstance, volumeName, fastPolicyName,
                         extraSpecs))
                 if assocDefaultStorageGroupName is None:
-                    LOG.error(_LE(
+                    LOG.error(
                         "Failed to Roll back to re-add volume %(volumeName)s "
                         "to default storage group for fast policy "
                         "%(fastPolicyName)s. Please contact your sysadmin to "
                         "get the volume returned to the default "
-                        "storage group."),
+                        "storage group.",
                         {'volumeName': volumeName,
                          'fastPolicyName': fastPolicyName})
 
@@ -3934,7 +4032,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         :param volume: the cinder volume object
         :returns: int -- return code
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         storageSystemName = volumeInstance['SystemName']
         controllerConfigurationService = (
@@ -3990,7 +4088,7 @@ class VMAXCommon(object):
         :param isSnapshot: check to see if it is a snapshot
         :param extraSpecs: extra specifications
         :returns: int -- return code
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         # Check if the source volume contains any meta devices.
         metaHeadInstanceName = self.utils.get_volume_meta_head(
@@ -4170,8 +4268,8 @@ class VMAXCommon(object):
                 self._add_clone_to_default_storage_group(
                     fastPolicyName, storageSystemName, cloneDict, cloneName,
                     extraSpecs)
-            LOG.info(_LI("Snapshot creation %(cloneName)s completed. "
-                     "Source Volume: %(sourceName)s."),
+            LOG.info("Snapshot creation %(cloneName)s completed. "
+                     "Source Volume: %(sourceName)s.",
                      {'cloneName': cloneName,
                       'sourceName': sourceName})
 
@@ -4208,8 +4306,8 @@ class VMAXCommon(object):
         if mvInstanceName is not None:
             targetWwns = self.masking.get_target_wwns(
                 self.conn, mvInstanceName)
-            LOG.info(_LI("Target wwns in masking view %(maskingView)s: "
-                     "%(targetWwns)s."),
+            LOG.info("Target wwns in masking view %(maskingView)s: "
+                     "%(targetWwns)s.",
                      {'maskingView': mvInstanceName,
                       'targetWwns': six.text_type(targetWwns)})
         return targetWwns
@@ -4293,7 +4391,7 @@ class VMAXCommon(object):
         operation = self.utils.get_num(DISSOLVE_SNAPVX, '16')
         rsdInstance = None
         targetInstance = None
-        copyState = None
+        copyState = self.utils.get_num(4, '16')
         if isSnapshot:
             rsdInstance = self.utils.set_target_element_supplier_in_rsd(
                 self.conn, repServiceInstanceName, SNAPVX_REPLICATION_TYPE,
@@ -4301,7 +4399,6 @@ class VMAXCommon(object):
         else:
             targetInstance = self._create_duplicate_volume(
                 sourceInstance, cloneName, extraSpecs)
-            copyState = self.utils.get_num(4, '16')
 
         try:
             rc, job = (
@@ -4310,9 +4407,9 @@ class VMAXCommon(object):
                     sourceInstance, extraSpecs, targetInstance, rsdInstance,
                     copyState))
         except Exception:
-            LOG.warning(_LW(
+            LOG.warning(
                 "Clone failed on V3. Cleaning up the target volume. "
-                "Clone name: %(cloneName)s "),
+                "Clone name: %(cloneName)s ",
                 {'cloneName': cloneName})
             if targetInstance:
                 self._cleanup_target(
@@ -4324,7 +4421,7 @@ class VMAXCommon(object):
             self.conn, job['Job'])
         targetVolumeInstance = (
             self.provisionv3.get_volume_from_job(self.conn, job['Job']))
-        LOG.info(_LI("The target instance device id is: %(deviceid)s."),
+        LOG.info("The target instance device id is: %(deviceid)s.",
                  {'deviceid': targetVolumeInstance['DeviceID']})
 
         if not isSnapshot:
@@ -4377,7 +4474,7 @@ class VMAXCommon(object):
         :param extraSpecs: extra specifications
         :returns: dict -- modelUpdate
         :returns: list -- the updated list of member volumes
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         replicationService = self.utils.find_replication_service(
             self.conn, storageSystem)
@@ -4389,10 +4486,10 @@ class VMAXCommon(object):
             replicationService, six.text_type(cgsnapshot['id']))
 
         if cgInstanceName is None:
-            exception_message = (_(
-                "Cannot find CG group %s.") % six.text_type(cgsnapshot['id']))
-            raise exception.VolumeBackendAPIException(
-                data=exception_message)
+            LOG.error("Cannot find CG group %(cgName)s.",
+                      {'cgName': cgsnapshot['id']})
+            modelUpdate = {'status': fields.ConsistencyGroupStatus.DELETED}
+            return modelUpdate, []
 
         memberInstanceNames = self._get_members_of_replication_group(
             cgInstanceName)
@@ -4459,7 +4556,7 @@ class VMAXCommon(object):
         :param volume: the volume Object
         :param extraSpecs: extraSpecs provided in the volume type
         :returns: string -- pool
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         pool = None
         # Volume is None in CG ops.
@@ -4533,7 +4630,7 @@ class VMAXCommon(object):
         :param volume: the volume object including the volume_type_id
         :param external_ref: reference to the existing volume
         :returns: dict -- model_update
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         extraSpecs = self._initial_setup(volume)
         self.conn = self._get_ecom_connection()
@@ -4542,8 +4639,8 @@ class VMAXCommon(object):
 
         # Manage existing volume is not supported if fast enabled.
         if extraSpecs[FASTPOLICY]:
-            LOG.warning(_LW(
-                "FAST is enabled. Policy: %(fastPolicyName)s."),
+            LOG.warning(
+                "FAST is enabled. Policy: %(fastPolicyName)s.",
                 {'fastPolicyName': extraSpecs[FASTPOLICY]})
             exceptionMessage = (_(
                 "Manage volume is not supported if FAST is enable. "
@@ -4561,9 +4658,10 @@ class VMAXCommon(object):
                 self.conn, volumeInstanceName))
 
         for sgInstanceName in sgInstanceNames:
-            mvInstanceName = self.masking.get_masking_view_from_storage_group(
-                self.conn, sgInstanceName)
-            if mvInstanceName:
+            mvInstanceNames = (
+                self.masking.get_masking_view_from_storage_group(
+                    self.conn, sgInstanceName))
+            for mvInstanceName in mvInstanceNames:
                 exceptionMessage = (_(
                     "Unable to import volume %(deviceId)s to cinder. "
                     "Volume is in masking view %(mv)s.")
@@ -4675,7 +4773,7 @@ class VMAXCommon(object):
         Leave the volume intact on the backend array.
 
         :param volume: the volume object
-        :raises: VolumeBackendAPIException
+        :raises VolumeBackendAPIException:
         """
         volumeName = volume['name']
         volumeId = volume['id']
@@ -4706,8 +4804,8 @@ class VMAXCommon(object):
         :param remove_volumes: the volumes uuids you want to remove from
                                the CG
         """
-        LOG.info(_LI("Update Consistency Group: %(group)s. "
-                     "This adds and/or removes volumes from a CG."),
+        LOG.info("Update Consistency Group: %(group)s. "
+                 "This adds and/or removes volumes from a CG.",
                  {'group': group['id']})
 
         modelUpdate = {'status': fields.ConsistencyGroupStatus.AVAILABLE}
@@ -4721,7 +4819,7 @@ class VMAXCommon(object):
         try:
             replicationService, storageSystem, __, __ = (
                 self._get_consistency_group_utils(self.conn, group))
-            cgInstanceName = (
+            cgInstanceName, __ = (
                 self._find_consistency_group(
                     replicationService, six.text_type(group['id'])))
             if cgInstanceName is None:
@@ -4743,7 +4841,7 @@ class VMAXCommon(object):
         except exception.ConsistencyGroupNotFound:
             raise
         except Exception as ex:
-            LOG.error(_LE("Exception: %(ex)s"), {'ex': ex})
+            LOG.error("Exception: %(ex)s", {'ex': ex})
             exceptionMessage = (_("Failed to update consistency group:"
                                   " %(cgName)s.")
                                 % {'cgName': group['id']})
@@ -4762,7 +4860,7 @@ class VMAXCommon(object):
         for volume in volumes:
             volumeInstance = self._find_lun(volume)
             if volumeInstance is None:
-                LOG.error(_LE("Volume %(name)s not found on the array."),
+                LOG.error("Volume %(name)s not found on the array.",
                           {'name': volume['name']})
             else:
                 volumeInstanceNames.append(volumeInstance.path)
@@ -4820,7 +4918,8 @@ class VMAXCommon(object):
                 replicationService, six.text_type(group['id']))
             LOG.debug("Create CG %(targetCg)s from snapshot.",
                       {'targetCg': targetCgInstanceName})
-
+            dictOfVolumeDicts = {}
+            targetVolumeNames = {}
             for volume, source_vol_or_snapshot in zip(
                     volumes, source_vols_or_snapshots):
                 if 'size' in source_vol_or_snapshot:
@@ -4835,10 +4934,15 @@ class VMAXCommon(object):
                         if 'pool_name' in extraSpecs:
                             extraSpecs = self.utils.update_extra_specs(
                                 extraSpecs)
-                        self._create_vol_and_add_to_cg(
+                        # Create a random UUID and use it as volume name
+                        targetVolumeName = six.text_type(uuid.uuid4())
+                        volumeDict = self._create_vol_and_add_to_cg(
                             volumeSizeInbits, replicationService,
                             targetCgInstanceName, targetCgName,
-                            source_vol_or_snapshot['id'], extraSpecs)
+                            source_vol_or_snapshot['id'],
+                            extraSpecs, targetVolumeName)
+                        dictOfVolumeDicts[volume['id']] = volumeDict
+                        targetVolumeNames[volume['id']] = targetVolumeName
 
             interval_retries_dict = self.utils.get_default_intervals_retries()
             self._break_replica_group_relationship(
@@ -4855,7 +4959,35 @@ class VMAXCommon(object):
         volumes_model_update = self.utils.get_volume_model_updates(
             volumes, group['id'], modelUpdate['status'])
 
+        # Update the provider_location
+        for volume_model_update in volumes_model_update:
+            if volume_model_update['id'] in dictOfVolumeDicts:
+                volume_model_update.update(
+                    {'provider_location': six.text_type(
+                        dictOfVolumeDicts[volume_model_update['id']])})
+
+        # Update the volumes_model_update with admin_metadata
+        self.update_admin_metadata(volumes_model_update,
+                                   key='targetVolumeName',
+                                   values=targetVolumeNames)
+
         return modelUpdate, volumes_model_update
+
+    def update_admin_metadata(
+            self, volumes_model_update, key, values):
+        """Update the volume_model_updates with admin metadata
+
+        :param volumes_model_update: List of volume model updates
+        :param key: Key to be updated in the admin_metadata
+        :param values: Dictionary of values per volume id
+        """
+        for volume_model_update in volumes_model_update:
+            volume_id = volume_model_update['id']
+            if volume_id in values:
+                    admin_metadata = {}
+                    admin_metadata.update({key: values[volume_id]})
+                    volume_model_update.update(
+                        {'admin_metadata': admin_metadata})
 
     def _break_replica_group_relationship(
             self, replicationService, source_id, group_id,
@@ -4905,7 +5037,8 @@ class VMAXCommon(object):
 
     def _create_vol_and_add_to_cg(
             self, volumeSizeInbits, replicationService,
-            targetCgInstanceName, targetCgName, source_id, extraSpecs):
+            targetCgInstanceName, targetCgName, source_id,
+            extraSpecs, targetVolumeName):
         """Creates volume and adds to CG.
 
         :param context: the context
@@ -4915,8 +5048,9 @@ class VMAXCommon(object):
         :param targetCgName: target cg name
         :param source_id: source identifier
         :param extraSpecs: additional info
+        :param targetVolumeName: volume name for the target volume
+        :returns volumeDict: volume dictionary for the newly created volume
         """
-        targetVolumeName = 'targetVol'
         volume = {'size': int(self.utils.convert_bits_to_gbs(
             volumeSizeInbits))}
         if extraSpecs[ISV3]:
@@ -4944,6 +5078,7 @@ class VMAXCommon(object):
                                         targetCgName,
                                         targetVolumeName,
                                         extraSpecs)
+        return volumeDict
 
     def _find_ip_protocol_endpoints(self, conn, storageSystemName,
                                     portgroupname):
@@ -5062,37 +5197,29 @@ class VMAXCommon(object):
         extraSpecsDictList = []
         isV3 = False
 
-        volumeTypeIds = group.get('volume_type_ids')
-        if not volumeTypeIds:
-            volumeTypeIds = group.volume_type_id.split(",")
-
-        for volumeTypeId in volumeTypeIds:
-            if volumeTypeId:
-                extraSpecsDict = {}
-                extraSpecs = self.utils.get_volumetype_extraspecs(
-                    None, volumeTypeId)
-                if 'pool_name' in extraSpecs:
-                    isV3 = True
-                    extraSpecs = self.utils.update_extra_specs(
-                        extraSpecs)
-                    extraSpecs[ISV3] = True
-                else:
-                    # Without multipool we cannot support multiple volumetypes.
-                    if len(volumeTypeIds) == 1:
-                        extraSpecs = self._initial_setup(None, volumeTypeId)
-                    else:
-                        msg = (_("We cannot support multiple volume types if "
-                                 "multi pool functionality is not enabled."))
-                        LOG.error(msg)
-                        raise exception.VolumeBackendAPIException(data=msg)
-
-                __, storageSystem = (
-                    self._get_pool_and_storage_system(extraSpecs))
-                if storageSystem:
-                    storageSystems.add(storageSystem)
-                extraSpecsDict["volumeTypeId"] = volumeTypeId
-                extraSpecsDict["extraSpecs"] = extraSpecs
+        if isinstance(group, group_obj.Group):
+            for volume_type in group.volume_types:
+                extraSpecsDict, storageSystems, isV3 = (
+                    self._update_extra_specs_list(
+                        volume_type.extra_specs, len(group.volume_types),
+                        volume_type.id))
                 extraSpecsDictList.append(extraSpecsDict)
+        elif isinstance(group, cg_obj.ConsistencyGroup):
+            volumeTypeIds = group.volume_type_id.split(",")
+            volumeTypeIds = list(filter(None, volumeTypeIds))
+            for volumeTypeId in volumeTypeIds:
+                if volumeTypeId:
+                    extraSpecs = self.utils.get_volumetype_extraspecs(
+                        None, volumeTypeId)
+                    extraSpecsDict, storageSystems, isV3 = (
+                        self._update_extra_specs_list(
+                            extraSpecs, len(volumeTypeIds),
+                            volumeTypeId))
+                extraSpecsDictList.append(extraSpecsDict)
+        else:
+            msg = (_("Unable to get volume type ids."))
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
 
         if len(storageSystems) != 1:
             if not storageSystems:
@@ -5109,6 +5236,40 @@ class VMAXCommon(object):
         replicationService = self.utils.find_replication_service(
             conn, storageSystem)
         return replicationService, storageSystem, extraSpecsDictList, isV3
+
+    def _update_extra_specs_list(
+            self, extraSpecs, list_size, volumeTypeId):
+        """Update the extra specs list.
+
+        :param extraSpecs: extraSpecs
+        :param list_size: the size of volume type list
+        :param volumeTypeId: volume type identifier
+        :return: extraSpecsDictList, storageSystems, isV3
+        """
+        storageSystems = set()
+        extraSpecsDict = {}
+        if 'pool_name' in extraSpecs:
+            isV3 = True
+            extraSpecs = self.utils.update_extra_specs(
+                extraSpecs)
+            extraSpecs[ISV3] = True
+        else:
+            # Without multipool we cannot support multiple volumetypes.
+            if list_size == 1:
+                extraSpecs = self._initial_setup(None, volumeTypeId)
+                isV3 = extraSpecs[ISV3]
+            else:
+                msg = (_("We cannot support multiple volume types if "
+                         "multi pool functionality is not enabled."))
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
+        __, storageSystem = (
+            self._get_pool_and_storage_system(extraSpecs))
+        if storageSystem:
+            storageSystems.add(storageSystem)
+        extraSpecsDict["volumeTypeId"] = volumeTypeId
+        extraSpecsDict["extraSpecs"] = extraSpecs
+        return extraSpecsDict, storageSystems, isV3
 
     def _update_consistency_group_name(self, group):
         """Format id and name consistency group
@@ -5221,7 +5382,7 @@ class VMAXCommon(object):
             sourceVolume, sourceInstance, targetInstance, extraSpecs,
             self.rep_config)
 
-        LOG.info(_LI('Successfully setup replication for %s.'),
+        LOG.info('Successfully setup replication for %s.',
                  sourceVolume['name'])
         replication_status = REPLICATION_ENABLED
         replication_driver_data = rdfDict['keybindings']
@@ -5278,19 +5439,19 @@ class VMAXCommon(object):
                     self._cleanup_remote_target(
                         conn, repServiceInstanceName, sourceInstance,
                         targetInstance, extraSpecs, repExtraSpecs)
-                    LOG.info(_LI('Successfully destroyed replication for '
-                                 'volume: %(volume)s'),
+                    LOG.info('Successfully destroyed replication for '
+                             'volume: %(volume)s',
                              {'volume': volumeName})
                 else:
-                    LOG.warning(_LW('Replication target not found for '
-                                    'replication-enabled volume: %(volume)s'),
+                    LOG.warning('Replication target not found for '
+                                'replication-enabled volume: %(volume)s',
                                 {'volume': volumeName})
         except Exception as e:
-            LOG.error(_LE('Cannot get necessary information to cleanup '
-                          'replication target for volume: %(volume)s. '
-                          'The exception received was: %(e)s. Manual '
-                          'clean-up may be required. Please contact '
-                          'your administrator.'),
+            LOG.error('Cannot get necessary information to cleanup '
+                      'replication target for volume: %(volume)s. '
+                      'The exception received was: %(e)s. Manual '
+                      'clean-up may be required. Please contact '
+                      'your administrator.',
                       {'volume': volumeName, 'e': e})
 
     def _cleanup_remote_target(
@@ -5338,9 +5499,9 @@ class VMAXCommon(object):
         :param volumeDict: the source volume dictionary
         :param extraSpecs: the extra specifications
         """
-        LOG.warning(_LW(
+        LOG.warning(
             "Replication failed. Cleaning up the source volume. "
-            "Volume name: %(sourceName)s "),
+            "Volume name: %(sourceName)s.",
             {'sourceName': volumeName})
         sourceInstance = self.utils.find_volume_instance(
             conn, volumeDict, volumeName)
@@ -5384,11 +5545,11 @@ class VMAXCommon(object):
         repServiceInstanceName = self.utils.find_replication_service(
             conn, storageSystem)
         RDFGroupName = self.rep_config['rdf_group_label']
-        LOG.info(_LI("Replication group: %(RDFGroup)s."),
+        LOG.info("Replication group: %(RDFGroup)s.",
                  {'RDFGroup': RDFGroupName})
         rdfGroupInstance = self.provisionv3.get_rdf_group_instance(
             conn, repServiceInstanceName, RDFGroupName)
-        LOG.info(_LI("Found RDF group instance: %(RDFGroup)s."),
+        LOG.info("Found RDF group instance: %(RDFGroup)s.",
                  {'RDFGroup': rdfGroupInstance})
         if rdfGroupInstance is None:
             exception_message = (_("Cannot find replication group: "
@@ -5497,11 +5658,10 @@ class VMAXCommon(object):
                 rep_data = six.text_type(replication_driver_data)
 
             except Exception as ex:
-                msg = _LE(
+                LOG.error(
                     'Failed to failover volume %(volume_id)s. '
-                    'Error: %(error)s.')
-                LOG.error(msg, {'volume_id': vol['id'],
-                                'error': ex}, )
+                    'Error: %(error)s.',
+                    {'volume_id': vol['id'], 'error': ex})
                 new_status = FAILOVER_ERROR
 
             model_update = {'volume_id': vol['id'],
@@ -5528,7 +5688,7 @@ class VMAXCommon(object):
                     recovery = self.recover_volumes_on_failback(volume)
                     volume_update_list.append(recovery)
 
-        LOG.info(_LI("Failover host complete"))
+        LOG.info("Failover host complete")
 
         return secondary_id, volume_update_list
 
@@ -5633,24 +5793,24 @@ class VMAXCommon(object):
                     targetVolumeInstance, volumeName, repExtraSpecs,
                     None, False)
 
-                LOG.info(_LI("Breaking replication relationship..."))
+                LOG.info("Breaking replication relationship...")
                 self.break_rdf_relationship(
                     self.conn, repServiceInstanceName,
                     storageSynchronizationSv, extraSpecs)
 
                 # extend the source volume
 
-                LOG.info(_LI("Extending source volume..."))
+                LOG.info("Extending source volume...")
                 rc, volumeDict = self._extend_v3_volume(
                     volumeInstance, volumeName, newSize, extraSpecs)
 
                 # extend the target volume
-                LOG.info(_LI("Extending target volume..."))
+                LOG.info("Extending target volume...")
                 self._extend_v3_volume(targetVolumeInstance, volumeName,
                                        newSize, repExtraSpecs)
 
                 # re-create replication relationship
-                LOG.info(_LI("Recreating replication relationship..."))
+                LOG.info("Recreating replication relationship...")
                 self.setup_volume_replication(
                     self.conn, volume, volumeDict,
                     extraSpecs, targetVolumeInstance)
@@ -5726,9 +5886,9 @@ class VMAXCommon(object):
 
         except Exception as e:
             LOG.warning(
-                _LW("Remote replication failed. Cleaning up the target "
-                    "volume and returning source volume to default storage "
-                    "group. Volume name: %(cloneName)s "),
+                "Remote replication failed. Cleaning up the target "
+                "volume and returning source volume to default storage "
+                "group. Volume name: %(cloneName)s ",
                 {'cloneName': volumeName})
 
             self._cleanup_remote_target(
@@ -5858,10 +6018,10 @@ class VMAXCommon(object):
                         extraSpecs[WORKLOAD])
                 except Exception:
                     LOG.warning(
-                        _LW("The target array does not support the storage "
-                            "pool setting for SLO %(slo)s or workload "
-                            "%(workload)s. Not assigning any SLO or "
-                            "workload."),
+                        "The target array does not support the storage "
+                        "pool setting for SLO %(slo)s or workload "
+                        "%(workload)s. Not assigning any SLO or "
+                        "workload.",
                         {'slo': extraSpecs[SLO],
                          'workload': extraSpecs[WORKLOAD]})
                     repExtraSpecs[SLO] = None
@@ -5869,9 +6029,9 @@ class VMAXCommon(object):
                         repExtraSpecs[WORKLOAD] = None
 
             else:
-                LOG.warning(_LW("Cannot determine storage pool settings of "
-                                "target array. Not assigning any SLO or "
-                                "workload"))
+                LOG.warning("Cannot determine storage pool settings of "
+                            "target array. Not assigning any SLO or "
+                            "workload")
                 repExtraSpecs[SLO] = None
                 if extraSpecs[WORKLOAD]:
                     repExtraSpecs[WORKLOAD] = None
@@ -5904,9 +6064,9 @@ class VMAXCommon(object):
                         arrayInfo['Workload'])
                 except Exception:
                     LOG.info(
-                        _LI("The target array does not support the storage "
-                            "pool setting for SLO %(slo)s or workload "
-                            "%(workload)s. SLO stats will not be reported."),
+                        "The target array does not support the storage "
+                        "pool setting for SLO %(slo)s or workload "
+                        "%(workload)s. SLO stats will not be reported.",
                         {'slo': arrayInfo['SLO'],
                          'workload': arrayInfo['Workload']})
                     secondaryInfo['SLO'] = None
@@ -5916,8 +6076,8 @@ class VMAXCommon(object):
                         self.multiPoolSupportEnabled = False
 
             else:
-                LOG.info(_LI("Cannot determine storage pool settings of "
-                             "target array. SLO stats will not be reported."))
+                LOG.info("Cannot determine storage pool settings of "
+                         "target array. SLO stats will not be reported.")
                 secondaryInfo['SLO'] = None
                 if arrayInfo['Workload']:
                     secondaryInfo['Workload'] = None

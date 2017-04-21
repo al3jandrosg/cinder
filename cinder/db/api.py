@@ -296,14 +296,9 @@ def volume_get_all_by_project(context, project_id, marker, limit,
                                           offset=offset)
 
 
-def get_volume_summary_all(context):
-    """Get all volume summary."""
-    return IMPL.get_volume_summary_all(context)
-
-
-def get_volume_summary_by_project(context, project_id):
-    """Get all volume summary belonging to a project."""
-    return IMPL.get_volume_summary_by_project(context, project_id)
+def get_volume_summary(context, project_only):
+    """Get volume summary."""
+    return IMPL.get_volume_summary(context, project_only)
 
 
 def volume_update(context, volume_id, values):
@@ -1037,7 +1032,7 @@ def quota_allocated_update(context, project_id,
                            resource, allocated):
     """Update allocated quota to subprojects or raise if it does not exist.
 
-    :raises: cinder.exception.ProjectQuotaNotFound
+    :raises cinder.exception.ProjectQuotaNotFound:
     """
     return IMPL.quota_allocated_update(context, project_id,
                                        resource, allocated)
@@ -1348,19 +1343,6 @@ def consistencygroup_include_in_cluster(context, cluster, partial_rename=True,
                                                     **filters)
 
 
-def migrate_add_message_prefix(context, max_count, force=False):
-    """Change Message event ids to start with the VOLUME_ prefix.
-
-    :param max_count: The maximum number of messages to consider in
-                      this run.
-    :param force: Ignored in this migration
-    :returns: number of messages needing migration, number of
-              messages migrated (both will always be less than
-              max_count).
-    """
-    return IMPL.migrate_add_message_prefix(context, max_count, force)
-
-
 ###################
 
 
@@ -1444,11 +1426,6 @@ def group_volume_type_mapping_create(context, group_id, volume_type_id):
                                                  volume_type_id)
 
 
-def migrate_consistencygroups_to_groups(context, max_count, force=False):
-    """Migrage CGs to generic volume groups"""
-    return IMPL.migrate_consistencygroups_to_groups(context, max_count, force)
-
-
 ###################
 
 
@@ -1503,9 +1480,11 @@ def group_snapshot_get(context, group_snapshot_id):
     return IMPL.group_snapshot_get(context, group_snapshot_id)
 
 
-def group_snapshot_get_all(context, filters=None):
+def group_snapshot_get_all(context, filters=None, marker=None, limit=None,
+                           offset=None, sort_keys=None, sort_dirs=None):
     """Get all group snapshots."""
-    return IMPL.group_snapshot_get_all(context, filters)
+    return IMPL.group_snapshot_get_all(context, filters, marker, limit,
+                                       offset, sort_keys, sort_dirs)
 
 
 def group_snapshot_create(context, values):
@@ -1513,14 +1492,24 @@ def group_snapshot_create(context, values):
     return IMPL.group_snapshot_create(context, values)
 
 
-def group_snapshot_get_all_by_group(context, group_id, filters=None):
+def group_snapshot_get_all_by_group(context, group_id, filters=None,
+                                    marker=None, limit=None,
+                                    offset=None, sort_keys=None,
+                                    sort_dirs=None):
     """Get all group snapshots belonging to a group."""
-    return IMPL.group_snapshot_get_all_by_group(context, group_id, filters)
+    return IMPL.group_snapshot_get_all_by_group(context, group_id,
+                                                filters, marker, limit,
+                                                offset, sort_keys, sort_dirs)
 
 
-def group_snapshot_get_all_by_project(context, project_id, filters=None):
+def group_snapshot_get_all_by_project(context, project_id, filters=None,
+                                      marker=None, limit=None,
+                                      offset=None, sort_keys=None,
+                                      sort_dirs=None):
     """Get all group snapshots belonging to a project."""
-    return IMPL.group_snapshot_get_all_by_project(context, project_id, filters)
+    return IMPL.group_snapshot_get_all_by_project(context, project_id,
+                                                  filters, marker, limit,
+                                                  offset, sort_keys, sort_dirs)
 
 
 def group_snapshot_update(context, group_snapshot_id, values):

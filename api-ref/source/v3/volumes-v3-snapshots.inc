@@ -1,6 +1,5 @@
 .. -*- rst -*-
 
-============================
 Volume snapshots (snapshots)
 ============================
 
@@ -28,7 +27,7 @@ possible:
 
 
 List snapshots and details
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/snapshots/detail
 
@@ -45,6 +44,11 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - sort_key: sort_key
+   - sort_dir: sort_dir
+   - limit: limit
+   - offset: offset
+   - marker: marker
 
 
 Response Parameters
@@ -71,7 +75,7 @@ Response Example
 
 
 Create a snapshot
-=================
+~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/snapshots
 
@@ -115,7 +119,7 @@ Response Parameters
 
 
 List accessible snapshots
-=========================
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/snapshots
 
@@ -135,6 +139,7 @@ Request
    - sort_key: sort_key
    - sort_dir: sort_dir
    - limit: limit
+   - offset: offset
    - marker: marker
 
 
@@ -160,7 +165,7 @@ Response Example
 
 
 Show a snapshot's metadata
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/snapshots/{snapshot_id}/metadata
 
@@ -204,15 +209,49 @@ Response Example
    :language: javascript
 
 
-Update a snapshot's metadata
-============================
+Create a snapshot's metadata
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  PUT /v3/{project_id}/snapshots/{snapshot_id}/metadata
+.. rest_method::  POST /v3/{project_id}/snapshots/{snapshot_id}/metadata
 
 Updates metadata for a snapshot.
 
-Replaces metadata items that match keys. Does not modify items that
+Creates or replaces metadata items that match keys. Does not modify items that
 are not in the request.
+
+
+Normal response codes: 200
+Error response codes:
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - metadata: metadata
+   - project_id: project_id_path
+   - snapshot_id: snapshot_id
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/snapshot-metadata-create-request.json
+   :language: javascript
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/snapshot-metadata-create-response.json
+   :language: javascript
+
+Update a snapshot's metadata
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  PUT /v3/{project_id}/snapshots/{snapshot_id}/metadata
+
+Replaces all the snapshot's metadata with the key-value pairs in the request.
 
 
 Normal response codes: 200
@@ -243,7 +282,7 @@ Response Example
 
 
 Show a snapshot's details
-=========================
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/snapshots/{snapshot_id}
 
@@ -288,7 +327,7 @@ Response Example
 
 
 Update a snapshot
-=================
+~~~~~~~~~~~~~~~~~
 
 .. rest_method::  PUT /v3/{project_id}/snapshots/{snapshot_id}
 
@@ -341,7 +380,7 @@ Response Example
 
 
 Delete a snapshot
-=================
+~~~~~~~~~~~~~~~~~
 
 .. rest_method::  DELETE /v3/{project_id}/snapshots/{snapshot_id}
 
