@@ -1,3 +1,9 @@
+cinder (2:11.0.0~b1-0ubuntu2) artful; urgency=medium
+
+  * No-change rebuild for sqlalchemy 1.1.x.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 28 Apr 2017 10:01:01 +0100
+
 cinder (2:11.0.0~b1-0ubuntu1) artful; urgency=medium
 
   [ Chuck Short ]
