@@ -23,6 +23,7 @@ import string
 
 from oslo_log import log as logging
 
+from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
@@ -36,10 +37,6 @@ LOG = logging.getLogger(__name__)
 
 LSS_VOL_SLOTS = 0x100
 LSS_SLOTS = 0xFF
-# if use new REST API, please update the verison below
-VALID_REST_VERSION_5_7_MIN = '5.7.51.1047'
-VALID_REST_VERSION_5_8_MIN = '5.8.20.1018'
-VALID_STORAGE_VERSION = '8.1'
 
 VALID_HOST_TYPES = (
     'auto', 'AMDLinuxRHEL', 'AMDLinuxSuse',
@@ -62,6 +59,10 @@ class DS8KCommonHelper(object):
     """Manage the primary backend, it is common class too."""
 
     OPTIONAL_PARAMS = ['ds8k_host_type', 'lss_range_for_cg']
+    # if use new REST API, please update the version below
+    VALID_REST_VERSION_5_7_MIN = '5.7.51.1047'
+    VALID_REST_VERSION_5_8_MIN = ''
+    INVALID_STORAGE_VERSION = '8.0.1'
 
     def __init__(self, conf, HTTPConnectorObject=None):
         self.conf = conf
@@ -186,32 +187,20 @@ class DS8KCommonHelper(object):
             None if ds8k_host_type == 'auto' else ds8k_host_type)
 
     def _verify_version(self):
-        if self.backend['storage_version'] == '8.0.1':
+        if self.backend['storage_version'] == self.INVALID_STORAGE_VERSION:
             raise exception.VolumeDriverException(
-                data=(_("8.0.1 does not support bulk deletion of volumes, "
-                        "if you want to use this version of driver, "
-                        "please upgrade the CCL, and make sure the REST "
-                        "version is not lower than %s.")
-                      % VALID_REST_VERSION_5_8_MIN))
-        else:
-            if (('5.7' in self.backend['rest_version'] and
-               dist_version.LooseVersion(self.backend['rest_version']) <
-               dist_version.LooseVersion(VALID_REST_VERSION_5_7_MIN)) or
-               ('5.8' in self.backend['rest_version'] and
-               dist_version.LooseVersion(self.backend['rest_version']) <
-               dist_version.LooseVersion(VALID_REST_VERSION_5_8_MIN))):
-                raise exception.VolumeDriverException(
-                    data=(_("REST version %(invalid)s is lower than "
-                            "%(valid)s, please upgrade it in DS8K.")
-                          % {'invalid': self.backend['rest_version'],
-                             'valid': (VALID_REST_VERSION_5_7_MIN if '5.7' in
-                                       self.backend['rest_version'] else
-                                       VALID_REST_VERSION_5_8_MIN)}))
-
-        if self._connection_type == storage.XIV_CONNECTION_TYPE_FC_ECKD:
-            if (dist_version.LooseVersion(self.backend['storage_version']) <
-               dist_version.LooseVersion(VALID_STORAGE_VERSION)):
-                self._disable_thin_provision = True
+                message=(_("%s does not support bulk deletion of volumes, "
+                           "if you want to use this version of driver, "
+                           "please upgrade the CCL.")
+                         % self.INVALID_STORAGE_VERSION))
+        if ('5.7' in self.backend['rest_version'] and
+           dist_version.LooseVersion(self.backend['rest_version']) <
+           dist_version.LooseVersion(self.VALID_REST_VERSION_5_7_MIN)):
+            raise exception.VolumeDriverException(
+                message=(_("REST version %(invalid)s is lower than "
+                           "%(valid)s, please upgrade it in DS8K.")
+                         % {'invalid': self.backend['rest_version'],
+                            'valid': self.VALID_REST_VERSION_5_7_MIN}))
 
     def _verify_pools(self):
         if self._connection_type == storage.XIV_CONNECTION_TYPE_FC:
@@ -396,16 +385,6 @@ class DS8KCommonHelper(object):
         LOG.info('LSS in PPRC paths are: %s.', ','.join(lss_ids))
         return lss_ids
 
-    def _find_host(self, vol_id):
-        host_ids = []
-        hosts = self._get_hosts()
-        for host in hosts:
-            vol_ids = [vol['volume_id'] for vol in host['mappings_briefs']]
-            if vol_id in vol_ids:
-                host_ids.append(host['id'])
-        LOG.info('_find_host: host IDs are %s.', ','.join(host_ids))
-        return host_ids
-
     def wait_flashcopy_finished(self, src_luns, tgt_luns):
         finished = False
         try:
@@ -489,6 +468,7 @@ class DS8KCommonHelper(object):
             htype = 'LinuxRHEL'
         return collections.namedtuple('Host', ('name', 'type'))(hname, htype)
 
+    @coordination.synchronized('ibm-ds8k-{connector[host]}')
     def initialize_connection(self, vol_id, connector, **kwargs):
         host = self._get_host(connector)
         # Find defined host and undefined host ports
@@ -535,21 +515,15 @@ class DS8KCommonHelper(object):
             }
         }
 
+    @coordination.synchronized('ibm-ds8k-{connector[host]}')
     def terminate_connection(self, vol_id, connector, force, **kwargs):
-        # If a fake connector is generated by nova when the host
-        # is down, then the connector will not have a wwpns property.
-        if 'wwpns' in connector:
-            host = self._get_host(connector)
-            host_wwpn_set = set(wwpn.upper() for wwpn in connector['wwpns'])
-            host_ports = self._get_host_ports(host_wwpn_set)
-            defined_hosts = set(
-                hp['host_id'] for hp in host_ports if hp['host_id'])
-            delete_ports = set(
-                hp['wwpn'] for hp in host_ports if not hp['host_id'])
-        else:
-            host_ports = None
-            delete_ports = None
-            defined_hosts = self._find_host(vol_id)
+        host = self._get_host(connector)
+        host_wwpn_set = set(wwpn.upper() for wwpn in connector['wwpns'])
+        host_ports = self._get_host_ports(host_wwpn_set)
+        defined_hosts = set(
+            hp['host_id'] for hp in host_ports if hp['host_id'])
+        delete_ports = set(
+            hp['wwpn'] for hp in host_ports if not hp['host_id'])
         LOG.debug("terminate_connection: host_ports: %(host)s, "
                   "defined_hosts: %(defined)s, delete_ports: %(delete)s.",
                   {"host": host_ports,
@@ -581,14 +555,13 @@ class DS8KCommonHelper(object):
                 'data': {}
             }
             if len(mappings) == len(lun_ids):
-                if delete_ports:
-                    self._delete_host_ports(",".join(delete_ports))
+                for port in delete_ports:
+                    self._delete_host_ports(port)
                 self._delete_host(host_id)
-                if 'wwpns' in connector:
-                    target_ports = [p['wwpn'] for p in self._get_ioports()]
-                    target_map = {initiator.upper(): target_ports
-                                  for initiator in connector['wwpns']}
-                    ret_info['data']['initiator_target_map'] = target_map
+                target_ports = [p['wwpn'] for p in self._get_ioports()]
+                target_map = {initiator.upper(): target_ports
+                              for initiator in connector['wwpns']}
+                ret_info['data']['initiator_target_map'] = target_map
             return ret_info
 
     def create_group(self, group):
@@ -718,13 +691,8 @@ class DS8KCommonHelper(object):
         self._client.send(
             'DELETE', '/hosts%5Bid=' + host_id + '%5D/mappings/' + lun_id)
 
-    def _delete_host_ports(self, ports):
-        self._client.send(
-            'DELETE', '/host_ports', params={'wwpns': ports})
-
-    def _get_hosts(self):
-        return self._client.fetchall(
-            'GET', '/hosts', fields=['id', 'mappings_briefs'])
+    def _delete_host_ports(self, port):
+        self._client.send('DELETE', '/host_ports/%s' % port)
 
     def _delete_host(self, host_id):
         # delete the host will delete all of the ports belong to it
@@ -925,6 +893,11 @@ class DS8KECKDHelper(DS8KCommonHelper):
 
     OPTIONAL_PARAMS = ['ds8k_host_type', 'port_pairs', 'ds8k_ssid_prefix',
                        'lss_range_for_cg']
+    # if use new REST API, please update the version below
+    VALID_REST_VERSION_5_7_MIN = '5.7.51.1068'
+    VALID_REST_VERSION_5_8_MIN = '5.8.20.1059'
+    MIN_VALID_STORAGE_VERSION = '8.1'
+    INVALID_STORAGE_VERSION = '8.0.1'
 
     @staticmethod
     def _gb2cyl(gb):
@@ -959,6 +932,32 @@ class DS8KECKDHelper(DS8KCommonHelper):
         self.backend['device_mapping'] = self._check_and_verify_lcus()
         self._verify_version()
         self._verify_pools()
+
+    def _verify_version(self):
+        if self.backend['storage_version'] == self.INVALID_STORAGE_VERSION:
+            raise exception.VolumeDriverException(
+                message=(_("%s does not support bulk deletion of volumes, "
+                           "if you want to use this version of driver, "
+                           "please upgrade the CCL.")
+                         % self.INVALID_STORAGE_VERSION))
+        # DS8K supports ECKD ESE volume from 8.1
+        if (dist_version.LooseVersion(self.backend['storage_version']) <
+           dist_version.LooseVersion(self.MIN_VALID_STORAGE_VERSION)):
+            self._disable_thin_provision = True
+
+        if (('5.7' in self.backend['rest_version'] and
+           dist_version.LooseVersion(self.backend['rest_version']) <
+           dist_version.LooseVersion(self.VALID_REST_VERSION_5_7_MIN)) or
+           ('5.8' in self.backend['rest_version'] and
+           dist_version.LooseVersion(self.backend['rest_version']) <
+           dist_version.LooseVersion(self.VALID_REST_VERSION_5_8_MIN))):
+            raise exception.VolumeDriverException(
+                message=(_("REST version %(invalid)s is lower than "
+                           "%(valid)s, please upgrade it in DS8K.")
+                         % {'invalid': self.backend['rest_version'],
+                            'valid': (self.VALID_REST_VERSION_5_7_MIN if '5.7'
+                                      in self.backend['rest_version'] else
+                                      self.VALID_REST_VERSION_5_8_MIN)}))
 
     @proxy.logger
     def _check_and_verify_lcus(self):

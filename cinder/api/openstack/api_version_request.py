@@ -80,15 +80,25 @@ REST_API_VERSION_HISTORY = """
     * 3.27 - Add attachment API
     * 3.28 - Add filters support to get_pools
     * 3.29 - Add filter, sorter and pagination support in group snapshot.
-
+    * 3.30 - Support sort snapshots with "name".
+    * 3.31 - Add support for configure resource query filters.
+    * 3.32 - Add set-log and get-log service actions.
+    * 3.33 - Add ``resource_filters`` API to retrieve configured
+             resource filters.
+    * 3.34 - Add like filter support in ``volume``, ``backup``, ``snapshot``,
+             ``message``, ``attachment``, ``group`` and ``group-snapshot``
+             list APIs.
+    * 3.35 - Add ``volume-type`` filter to Get-Pools API.
+    * 3.36 - Add metadata to volumes/summary response body.
+    * 3.37 - Support sort backup by "name".
 """
 
 # The minimum and maximum versions of the API supported
 # The default api version request is defined to be the
 # minimum version of the API supported.
-# Explicitly using /v1 or /v2 enpoints will still work
+# Explicitly using /v1 or /v2 endpoints will still work
 _MIN_API_VERSION = "3.0"
-_MAX_API_VERSION = "3.29"
+_MAX_API_VERSION = "3.37"
 _LEGACY_API_VERSION1 = "1.0"
 _LEGACY_API_VERSION2 = "2.0"
 

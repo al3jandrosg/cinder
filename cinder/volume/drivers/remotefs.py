@@ -37,6 +37,7 @@ from cinder.image import image_utils
 from cinder.objects import fields
 from cinder import utils
 from cinder.volume import driver
+from cinder.volume import utils as volume_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class RemoteFSDriver(driver.BaseVD):
     driver_volume_type = None
     driver_prefix = 'remotefs'
     volume_backend_name = None
+    vendor_name = 'Open Source'
     SHARE_FORMAT_REGEX = r'.+:/.+'
 
     def __init__(self, *args, **kwargs):
@@ -147,6 +149,11 @@ class RemoteFSDriver(driver.BaseVD):
         self._mounted_shares = []
         self._execute_as_root = True
         self._is_voldb_empty_at_startup = kwargs.pop('is_vol_db_empty', None)
+        self._supports_encryption = False
+
+        # We let the drivers inheriting this specify
+        # whether thin provisioning is supported or not.
+        self._thin_provisioning_support = False
 
         if self.configuration:
             self.configuration.append_config_values(nas_opts)
@@ -234,10 +241,14 @@ class RemoteFSDriver(driver.BaseVD):
         :returns: provider_location update dict for database
         """
 
+        if volume.encryption_key_id and not self._supports_encryption:
+            message = _("Encryption is not yet supported.")
+            raise exception.VolumeDriverException(message=message)
+
         LOG.debug('Creating volume %(vol)s', {'vol': volume.id})
         self._ensure_shares_mounted()
 
-        volume.provider_location = self._find_share(volume.size)
+        volume.provider_location = self._find_share(volume)
 
         LOG.info('casted to %s', volume.provider_location)
 
@@ -350,11 +361,6 @@ class RemoteFSDriver(driver.BaseVD):
                       'bs=%dM' % block_size_mb,
                       'count=%d' % block_count,
                       run_as_root=self._execute_as_root)
-
-    def _fallocate(self, path, size):
-        """Creates a raw file of given size in GiB using fallocate."""
-        self._execute('fallocate', '--length=%sG' % size,
-                      path, run_as_root=self._execute_as_root)
 
     def _create_qcow2_file(self, path, size_gb):
         """Creates a QCOW2 file of a given size in GiB."""
@@ -549,7 +555,7 @@ class RemoteFSDriver(driver.BaseVD):
     def _get_capacity_info(self, share):
         raise NotImplementedError()
 
-    def _find_share(self, volume_size_in_gib):
+    def _find_share(self, volume):
         raise NotImplementedError()
 
     def _ensure_share_mounted(self, share):
@@ -697,14 +703,17 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
         with open(info_path, 'w') as f:
             json.dump(snap_info, f, indent=1, sort_keys=True)
 
-    def _qemu_img_info_base(self, path, volume_name, basedir):
+    def _qemu_img_info_base(self, path, volume_name, basedir,
+                            run_as_root=False):
         """Sanitize image_utils' qemu_img_info.
 
         This code expects to deal only with relative filenames.
         """
 
+        run_as_root = run_as_root or self._execute_as_root
+
         info = image_utils.qemu_img_info(path,
-                                         run_as_root=self._execute_as_root)
+                                         run_as_root=run_as_root)
         if info.image:
             info.image = os.path.basename(info.image)
         if info.backing_file:
@@ -1012,9 +1021,10 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
                             else 'offline')})
 
         volume_status = snapshot.volume.status
-        if volume_status not in ['available', 'in-use', 'backing-up']:
-            msg = _("Volume status must be 'available', 'in-use' or "
-                    "'backing-up' but is: "
+        if volume_status not in ['available', 'in-use',
+                                 'backing-up', 'deleting']:
+            msg = _("Volume status must be 'available', 'in-use', "
+                    "'backing-up' or 'deleting' but is: "
                     "%(status)s.") % {'status': volume_status}
 
             raise exception.InvalidVolume(msg)
@@ -1153,7 +1163,7 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
 
         self._ensure_shares_mounted()
 
-        volume.provider_location = self._find_share(volume.size)
+        volume.provider_location = self._find_share(volume)
 
         self._do_create_volume(volume)
 
@@ -1457,6 +1467,17 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
 
             del(snap_info[snapshot.id])
 
+        self._nova_assisted_vol_snap_delete(context, snapshot, delete_info)
+
+        # Write info file updated above
+        self._write_info_file(info_path, snap_info)
+
+        # Delete stale file
+        path_to_delete = os.path.join(
+            self._local_volume_dir(snapshot.volume), file_to_delete)
+        self._delete(path_to_delete)
+
+    def _nova_assisted_vol_snap_delete(self, context, snapshot, delete_info):
         try:
             self._nova.delete_volume_snapshot(
                 context,
@@ -1502,15 +1523,6 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
                         'for deletion of snapshot %(id)s.') %\
                     {'id': snapshot.id}
                 raise exception.RemoteFSException(msg)
-
-        # Write info file updated above
-        self._write_info_file(info_path, snap_info)
-
-        # Delete stale file
-        path_to_delete = os.path.join(
-            self._local_volume_dir(snapshot.volume), file_to_delete)
-        self._execute('rm', '-f', path_to_delete,
-                      run_as_root=self._execute_as_root)
 
 
 class RemoteFSSnapDriver(RemoteFSSnapDriverBase):
@@ -1573,3 +1585,64 @@ class RemoteFSSnapDriverDistributed(RemoteFSSnapDriverBase):
 
         return self._copy_volume_to_image(context, volume, image_service,
                                           image_meta)
+
+
+class RemoteFSPoolMixin(object):
+    """Drivers inheriting this will report each share as a pool."""
+
+    def _find_share(self, volume):
+        # We let the scheduler choose a pool for us.
+        pool_name = self._get_pool_name_from_volume(volume)
+        share = self._get_share_from_pool_name(pool_name)
+        return share
+
+    def _get_pool_name_from_volume(self, volume):
+        pool_name = volume_utils.extract_host(volume['host'],
+                                              level='pool')
+        return pool_name
+
+    def _get_pool_name_from_share(self, share):
+        raise NotImplementedError()
+
+    def _get_share_from_pool_name(self, pool_name):
+        # To be implemented by drivers using pools.
+        raise NotImplementedError()
+
+    def _update_volume_stats(self):
+        data = {}
+        pools = []
+        backend_name = self.configuration.safe_get('volume_backend_name')
+        data['volume_backend_name'] = backend_name or self.volume_backend_name
+        data['vendor_name'] = self.vendor_name
+        data['driver_version'] = self.get_version()
+        data['storage_protocol'] = self.driver_volume_type
+
+        self._ensure_shares_mounted()
+
+        for share in self._mounted_shares:
+            (share_capacity,
+             share_free,
+             share_used) = self._get_capacity_info(share)
+
+            pool = {'pool_name': self._get_pool_name_from_share(share),
+                    'total_capacity_gb': share_capacity / float(units.Gi),
+                    'free_capacity_gb': share_free / float(units.Gi),
+                    'provisioned_capacity_gb': share_used / float(units.Gi),
+                    'allocated_capacity_gb': (
+                        share_capacity - share_free) / float(units.Gi),
+                    'reserved_percentage': (
+                        self.configuration.reserved_percentage),
+                    'max_over_subscription_ratio': (
+                        self.configuration.max_over_subscription_ratio),
+                    'thin_provisioning_support': (
+                        self._thin_provisioning_support),
+                    'QoS_support': False,
+                    }
+
+            pools.append(pool)
+
+        data['total_capacity_gb'] = 0
+        data['free_capacity_gb'] = 0
+        data['pools'] = pools
+
+        self._stats = data

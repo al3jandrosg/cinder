@@ -349,7 +349,8 @@ class API(base.Base):
         with flow_utils.DynamicLogListener(flow_engine, logger=LOG):
             flow_engine.run()
             vref = flow_engine.storage.fetch('volume')
-            LOG.info("Volume created successfully.", resource=vref)
+            LOG.info("Create volume request issued successfully.",
+                     resource=vref)
             return vref
 
     @wrap_check_policy
@@ -467,9 +468,12 @@ class API(base.Base):
         if encryption_key_id is not None:
             try:
                 self.key_manager.delete(context, encryption_key_id)
-            except Exception as e:
+            except exception.CinderException as e:
                 LOG.warning("Unable to delete encryption key for "
                             "volume: %s.", e.msg, resource=volume)
+            except Exception:
+                LOG.exception("Unable to delete encryption key for "
+                              "volume.")
 
         self.volume_rpcapi.delete_volume(context,
                                          volume,
@@ -1346,20 +1350,8 @@ class API(base.Base):
             'volume_id': volume.id
         }
 
-        try:
-            self.scheduler_rpcapi.extend_volume(context, volume, new_size,
-                                                reservations, request_spec)
-        except exception.ServiceTooOld as e:
-            # NOTE(erlon): During rolling upgrades scheduler and volume can
-            # have different versions. This check makes sure that a new
-            # version of the volume service won't break.
-            msg = ("Failed to send extend volume request to scheduler. "
-                   "Falling back to old behaviour. This is normal during a "
-                   "live-upgrade. Error: %(e)s")
-            LOG.warning(msg, {'e': e})
-            # TODO(erlon): Remove in Pike
-            self.volume_rpcapi.extend_volume(context, volume, new_size,
-                                             reservations)
+        self.scheduler_rpcapi.extend_volume(context, volume, new_size,
+                                            reservations, request_spec)
 
         LOG.info("Extend volume request issued successfully.",
                  resource=volume)
@@ -1386,7 +1378,7 @@ class API(base.Base):
                                             cluster_name=svc_cluster,
                                             backend_match_level='pool')
         except exception.ServiceNotFound:
-            msg = _('No available service named %s') % cluster_name or host
+            msg = _("No available service named '%s'") % (cluster_name or host)
             LOG.error(msg)
             raise exception.InvalidHost(reason=msg)
         # Even if we were requested to do a migration to a host, if the host is
@@ -1918,11 +1910,23 @@ class API(base.Base):
                                if vref.multiattach
                                else ('available', 'downloading'))}
         result = vref.conditional_update({'status': 'reserved'}, expected)
+
         if not result:
-            msg = (_('Volume %(vol_id)s status must be %(statuses)s') %
-                   {'vol_id': vref.id,
-                    'statuses': utils.build_or_str(expected['status'])})
-            raise exception.InvalidVolume(reason=msg)
+            # Make sure we're not going to the same instance, in which case
+            # it could be a live-migrate or similar scenario (LP BUG: 1694530)
+            override = False
+            if instance_uuid:
+                override = True
+                for attachment in vref.volume_attachment:
+                    if attachment.instance_uuid != instance_uuid:
+                        override = False
+                        break
+
+            if not override:
+                msg = (_('Volume %(vol_id)s status must be %(statuses)s') %
+                       {'vol_id': vref.id,
+                        'statuses': utils.build_or_str(expected['status'])})
+                raise exception.InvalidVolume(reason=msg)
 
         values = {'volume_id': vref.id,
                   'volume_host': vref.host,

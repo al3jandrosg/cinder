@@ -1269,307 +1269,6 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                                          vmdk_path,
                                                          dc)
 
-    @mock.patch.object(image_transfer, 'copy_stream_optimized_disk')
-    @mock.patch('cinder.volume.drivers.vmware.vmdk.open', create=True)
-    @mock.patch.object(VMDK_DRIVER, '_temporary_file')
-    @mock.patch('oslo_utils.uuidutils.generate_uuid')
-    @mock.patch.object(VMDK_DRIVER, '_create_backing')
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    @mock.patch.object(VMDK_DRIVER, 'session')
-    def test_backup_volume(self, session, vops, create_backing, generate_uuid,
-                           temporary_file, file_open, copy_disk):
-        self._test_backup_volume(session, vops, create_backing, generate_uuid,
-                                 temporary_file, file_open, copy_disk)
-
-    def _test_backup_volume(self, session, vops, create_backing, generate_uuid,
-                            temporary_file, file_open, copy_disk):
-        volume = {'name': 'vol-1', 'id': 1, 'size': 1}
-        self._db.volume_get.return_value = volume
-
-        vops.get_backing.return_value = None
-        backing = mock.sentinel.backing
-        create_backing.return_value = backing
-
-        uuid = "c1037b23-c5e9-4446-815f-3e097cbf5bb0"
-        generate_uuid.return_value = uuid
-        tmp_file_path = mock.sentinel.tmp_file_path
-        temporary_file_ret = mock.Mock()
-        temporary_file.return_value = temporary_file_ret
-        temporary_file_ret.__enter__ = mock.Mock(return_value=tmp_file_path)
-        temporary_file_ret.__exit__ = mock.Mock(return_value=None)
-
-        vmdk_path = mock.sentinel.vmdk_path
-        vops.get_vmdk_path.return_value = vmdk_path
-
-        tmp_file = mock.sentinel.tmp_file
-        file_open_ret = mock.Mock()
-        file_open.return_value = file_open_ret
-        file_open_ret.__enter__ = mock.Mock(return_value=tmp_file)
-        file_open_ret.__exit__ = mock.Mock(return_value=None)
-
-        context = mock.sentinel.context
-        backup = {'id': 2, 'volume_id': 1}
-        backup_service = mock.Mock()
-        self._driver.backup_volume(context, backup, backup_service)
-
-        create_backing.assert_called_once_with(volume)
-        temporary_file.assert_called_once_with(suffix=".vmdk", prefix=uuid)
-        self.assertEqual(mock.call(tmp_file_path, "wb"),
-                         file_open.call_args_list[0])
-        copy_disk.assert_called_once_with(
-            context, self.IMG_TX_TIMEOUT, tmp_file, session=session,
-            host=self.IP, port=self.PORT, vm=backing, vmdk_file_path=vmdk_path,
-            vmdk_size=volume['size'] * units.Gi)
-        self.assertEqual(mock.call(tmp_file_path, "rb"),
-                         file_open.call_args_list[1])
-        backup_service.backup.assert_called_once_with(backup, tmp_file)
-
-    @mock.patch.object(VMDK_DRIVER, 'extend_volume')
-    @mock.patch.object(VMDK_DRIVER, '_restore_backing')
-    @mock.patch('cinder.volume.drivers.vmware.vmdk.open', create=True)
-    @mock.patch.object(VMDK_DRIVER, '_temporary_file')
-    @mock.patch('oslo_utils.uuidutils.generate_uuid')
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    def test_restore_backup(self, vops, generate_uuid, temporary_file,
-                            file_open, restore_backing, extend_volume):
-        self._test_restore_backup(vops, generate_uuid, temporary_file,
-                                  file_open, restore_backing, extend_volume)
-
-    def _test_restore_backup(
-            self, vops, generate_uuid, temporary_file, file_open,
-            restore_backing, extend_volume):
-        volume = {'name': 'vol-1', 'id': 1, 'size': 1}
-        backup = {'id': 2, 'size': 1}
-        context = mock.sentinel.context
-        backup_service = mock.Mock()
-
-        backing = mock.sentinel.backing
-        vops.get_backing.return_value = backing
-        vops.snapshot_exists.return_value = True
-        self.assertRaises(
-            cinder_exceptions.InvalidVolume, self._driver.restore_backup,
-            context, backup, volume, backup_service)
-
-        uuid = "c1037b23-c5e9-4446-815f-3e097cbf5bb0"
-        generate_uuid.return_value = uuid
-        tmp_file_path = mock.sentinel.tmp_file_path
-        temporary_file_ret = mock.Mock()
-        temporary_file.return_value = temporary_file_ret
-        temporary_file_ret.__enter__ = mock.Mock(return_value=tmp_file_path)
-        temporary_file_ret.__exit__ = mock.Mock(return_value=None)
-
-        tmp_file = mock.sentinel.tmp_file
-        file_open_ret = mock.Mock()
-        file_open.return_value = file_open_ret
-        file_open_ret.__enter__ = mock.Mock(return_value=tmp_file)
-        file_open_ret.__exit__ = mock.Mock(return_value=None)
-
-        vops.snapshot_exists.return_value = False
-        self._driver.restore_backup(context, backup, volume, backup_service)
-
-        temporary_file.assert_called_once_with(suffix=".vmdk", prefix=uuid)
-        file_open.assert_called_once_with(tmp_file_path, "wb")
-        backup_service.restore.assert_called_once_with(
-            backup, volume['id'], tmp_file)
-        restore_backing.assert_called_once_with(
-            context, volume, backing, tmp_file_path, backup['size'] * units.Gi)
-        self.assertFalse(extend_volume.called)
-
-        temporary_file.reset_mock()
-        file_open.reset_mock()
-        backup_service.reset_mock()
-        restore_backing.reset_mock()
-        volume = {'name': 'vol-1', 'id': 1, 'size': 2}
-        self._driver.restore_backup(context, backup, volume, backup_service)
-
-        temporary_file.assert_called_once_with(suffix=".vmdk", prefix=uuid)
-        file_open.assert_called_once_with(tmp_file_path, "wb")
-        backup_service.restore.assert_called_once_with(
-            backup, volume['id'], tmp_file)
-        restore_backing.assert_called_once_with(
-            context, volume, backing, tmp_file_path, backup['size'] * units.Gi)
-        extend_volume.assert_called_once_with(volume, volume['size'])
-
-    @mock.patch.object(VMDK_DRIVER, '_delete_temp_backing')
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    @mock.patch(
-        'cinder.volume.drivers.vmware.vmdk.VMwareVcVmdkDriver._get_disk_type')
-    @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
-    @mock.patch.object(VMDK_DRIVER,
-                       '_create_backing_from_stream_optimized_file')
-    @mock.patch('oslo_utils.uuidutils.generate_uuid')
-    def test_restore_backing(
-            self, generate_uuid, create_backing, select_ds, get_disk_type,
-            vops, delete_temp_backing):
-        self._test_restore_backing(
-            generate_uuid, create_backing, select_ds, get_disk_type, vops,
-            delete_temp_backing)
-
-    def _test_restore_backing(
-            self, generate_uuid, create_backing, select_ds, get_disk_type,
-            vops, delete_temp_backing):
-        src_uuid = "c1037b23-c5e9-4446-815f-3e097cbf5bb0"
-        generate_uuid.return_value = src_uuid
-
-        src = mock.sentinel.src
-        create_backing.return_value = src
-
-        summary = mock.Mock()
-        summary.datastore = mock.sentinel.datastore
-        select_ds.return_value = (mock.sentinel.host, mock.sentinel.rp,
-                                  mock.sentinel.folder, summary)
-
-        disk_type = vmdk.THIN_VMDK_TYPE
-        get_disk_type.return_value = disk_type
-
-        dest = mock.sentinel.dest
-        vops.clone_backing.return_value = dest
-
-        context = mock.sentinel.context
-        volume = {'name': 'vol-1',
-                  'id': 'bd45dfe5-d411-435d-85ac-2605fe7d5d8f', 'size': 1}
-        backing = None
-        tmp_file_path = mock.sentinel.tmp_file_path
-        backup_size = units.Gi
-        self._driver._restore_backing(
-            context, volume, backing, tmp_file_path, backup_size)
-
-        create_backing.assert_called_once_with(
-            context, src_uuid, volume, tmp_file_path, backup_size)
-        vops.clone_backing.assert_called_once_with(
-            volume['name'], src, None, volumeops.FULL_CLONE_TYPE,
-            summary.datastore, disk_type=disk_type, host=mock.sentinel.host,
-            resource_pool=mock.sentinel.rp, folder=mock.sentinel.folder)
-        vops.update_backing_disk_uuid.assert_called_once_with(dest,
-                                                              volume['id'])
-        delete_temp_backing.assert_called_once_with(src)
-
-        create_backing.reset_mock()
-        vops.clone_backing.reset_mock()
-        vops.update_backing_disk_uuid.reset_mock()
-        delete_temp_backing.reset_mock()
-
-        dest_uuid = "de4b0708-f947-4abe-98f8-75e52ce03b7b"
-        tmp_uuid = "82c2a4f0-9064-4d95-bd88-6567a36018fa"
-        generate_uuid.side_effect = [src_uuid, dest_uuid, tmp_uuid]
-
-        backing = mock.sentinel.backing
-        self._driver._restore_backing(
-            context, volume, backing, tmp_file_path, backup_size)
-
-        create_backing.assert_called_once_with(
-            context, src_uuid, volume, tmp_file_path, backup_size)
-        vops.clone_backing.assert_called_once_with(
-            dest_uuid, src, None, volumeops.FULL_CLONE_TYPE,
-            summary.datastore, disk_type=disk_type, host=mock.sentinel.host,
-            resource_pool=mock.sentinel.rp, folder=mock.sentinel.folder)
-        vops.update_backing_disk_uuid.assert_called_once_with(dest,
-                                                              volume['id'])
-        exp_rename_calls = [mock.call(backing, tmp_uuid),
-                            mock.call(dest, volume['name'])]
-        self.assertEqual(exp_rename_calls, vops.rename_backing.call_args_list)
-        exp_delete_temp_backing_calls = [mock.call(backing), mock.call(src)]
-        self.assertEqual(exp_delete_temp_backing_calls,
-                         delete_temp_backing.call_args_list)
-
-        delete_temp_backing.reset_mock()
-        vops.rename_backing.reset_mock()
-
-        def vops_rename(backing, new_name):
-            if backing == dest and new_name == volume['name']:
-                raise exceptions.VimException("error")
-
-        vops.rename_backing.side_effect = vops_rename
-        generate_uuid.side_effect = [src_uuid, dest_uuid, tmp_uuid]
-        self.assertRaises(
-            exceptions.VimException, self._driver._restore_backing, context,
-            volume, backing, tmp_file_path, backup_size)
-        exp_rename_calls = [mock.call(backing, tmp_uuid),
-                            mock.call(dest, volume['name']),
-                            mock.call(backing, volume['name'])]
-        self.assertEqual(exp_rename_calls, vops.rename_backing.call_args_list)
-        exp_delete_temp_backing_calls = [mock.call(dest), mock.call(src)]
-        self.assertEqual(exp_delete_temp_backing_calls,
-                         delete_temp_backing.call_args_list)
-
-    @mock.patch.object(VMDK_DRIVER, '_delete_temp_backing')
-    @mock.patch.object(image_transfer, 'download_stream_optimized_data')
-    @mock.patch('cinder.volume.drivers.vmware.vmdk.open', create=True)
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
-    @mock.patch.object(VMDK_DRIVER, '_get_storage_profile_id')
-    @mock.patch.object(VMDK_DRIVER, 'session')
-    @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
-    def test_create_backing_from_stream_optimized_file(
-            self, select_ds, session, get_storage_profile_id, get_disk_type,
-            vops, file_open, download_data, delete_temp_backing):
-        self._test_create_backing_from_stream_optimized_file(
-            select_ds, session, get_storage_profile_id, get_disk_type, vops,
-            file_open, download_data, delete_temp_backing)
-
-    def _test_create_backing_from_stream_optimized_file(
-            self, select_ds, session, get_storage_profile_id, get_disk_type,
-            vops, file_open, download_data, delete_temp_backing):
-        rp = mock.sentinel.rp
-        folder = mock.sentinel.folder
-        summary = mock.Mock()
-        summary.name = mock.sentinel.name
-        select_ds.return_value = (mock.ANY, rp, folder, summary)
-
-        import_spec = mock.Mock()
-        session.vim.client.factory.create.return_value = import_spec
-
-        profile_id = 'profile-1'
-        get_storage_profile_id.return_value = profile_id
-
-        disk_type = vmdk.THIN_VMDK_TYPE
-        get_disk_type.return_value = disk_type
-
-        create_spec = mock.Mock()
-        vops.get_create_spec.return_value = create_spec
-
-        tmp_file = mock.sentinel.tmp_file
-        file_open_ret = mock.Mock()
-        file_open.return_value = file_open_ret
-        file_open_ret.__enter__ = mock.Mock(return_value=tmp_file)
-        file_open_ret.__exit__ = mock.Mock(return_value=None)
-
-        vm_ref = mock.sentinel.vm_ref
-        download_data.return_value = vm_ref
-
-        context = mock.sentinel.context
-        name = 'vm-1'
-        volume = {'name': 'vol-1',
-                  'id': 'd11a82de-ddaa-448d-b50a-a255a7e61a1e',
-                  'size': 1}
-        tmp_file_path = mock.sentinel.tmp_file_path
-        file_size_bytes = units.Gi
-        ret = self._driver._create_backing_from_stream_optimized_file(
-            context, name, volume, tmp_file_path, file_size_bytes)
-
-        self.assertEqual(vm_ref, ret)
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
-                        volumeops.BACKING_UUID_KEY: volume['id']}
-        vops.get_create_spec.assert_called_once_with(
-            name, 0, disk_type, summary.name, profileId=profile_id,
-            extra_config=extra_config)
-        file_open.assert_called_once_with(tmp_file_path, "rb")
-        download_data.assert_called_once_with(
-            context, self._config.vmware_image_transfer_timeout_secs, tmp_file,
-            session=session, host=self._config.vmware_host_ip,
-            port=self._config.vmware_host_port, resource_pool=rp,
-            vm_folder=folder, vm_import_spec=import_spec,
-            image_size=file_size_bytes)
-
-        download_data.side_effect = exceptions.VimException("error")
-        backing = mock.sentinel.backing
-        vops.get_backing.return_value = backing
-        self.assertRaises(
-            exceptions.VimException,
-            self._driver._create_backing_from_stream_optimized_file,
-            context, name, volume, tmp_file_path, file_size_bytes)
-        delete_temp_backing.assert_called_once_with(backing)
-
     @mock.patch.object(VMDK_DRIVER, 'session')
     @mock.patch('oslo_vmware.vim_util.get_vc_version')
     def test_get_vc_version(self, get_vc_version, session):
@@ -2224,6 +1923,9 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         get_storage_profile.assert_called_once_with(volume)
         get_profile_id_by_name.assert_called_once_with(session, 'gold')
 
+    @mock.patch.object(VMDK_DRIVER, 'volumeops')
+    @mock.patch.object(VMDK_DRIVER, 'session')
+    @mock.patch('oslo_vmware.image_transfer.download_flat_image')
     def _test_copy_image(self, download_flat_image, session, vops,
                          expected_cacerts=False):
 
@@ -2257,114 +1959,100 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             file_path=upload_file_path,
             cacerts=expected_cacerts)
 
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    @mock.patch.object(VMDK_DRIVER, 'session')
-    @mock.patch('oslo_vmware.image_transfer.download_flat_image')
-    def test_copy_image(self, download_flat_image, session, vops):
+    def test_copy_image(self):
         # Default value of vmware_ca_file is not None; it should be passed
         # to download_flat_image as cacerts.
-        self._test_copy_image(download_flat_image, session, vops,
-                              expected_cacerts=self._config.vmware_ca_file)
+        self._test_copy_image(expected_cacerts=self._config.vmware_ca_file)
 
-    @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    @mock.patch.object(VMDK_DRIVER, 'session')
-    @mock.patch('oslo_vmware.image_transfer.download_flat_image')
-    def test_copy_image_insecure(self, download_flat_image, session, vops):
+    def test_copy_image_insecure(self):
         # Set config options to allow insecure connections.
         self._config.vmware_ca_file = None
         self._config.vmware_insecure = True
         # Since vmware_ca_file is unset and vmware_insecure is True,
         # dowload_flat_image should be called with cacerts=False.
-        self._test_copy_image(download_flat_image, session, vops)
+        self._test_copy_image()
 
     @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
+    @mock.patch.object(VMDK_DRIVER, '_get_storage_profile_id')
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
-    def test_create_backing_with_params(self, vops, select_ds_for_volume):
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
+    def _test_create_backing(
+            self, get_disk_type, vops, get_storage_profile_id,
+            select_ds_for_volume, create_params=None):
+        create_params = create_params or {}
+
         host = mock.sentinel.host
         resource_pool = mock.sentinel.resource_pool
         folder = mock.sentinel.folder
         summary = mock.sentinel.summary
         select_ds_for_volume.return_value = (host, resource_pool, folder,
                                              summary)
+
+        profile_id = mock.sentinel.profile_id
+        get_storage_profile_id.return_value = profile_id
+
         backing = mock.sentinel.backing
         vops.create_backing_disk_less.return_value = backing
-
-        volume = {'name': 'vol-1', 'volume_type_id': None, 'size': 1,
-                  'id': 'd11a82de-ddaa-448d-b50a-a255a7e61a1e'}
-        create_params = {vmdk.CREATE_PARAM_DISK_LESS: True}
-        ret = self._driver._create_backing(volume, host, create_params)
-
-        self.assertEqual(backing, ret)
-        extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
-                        volumeops.BACKING_UUID_KEY: volume['id']}
-        vops.create_backing_disk_less.assert_called_once_with(
-            'vol-1',
-            folder,
-            resource_pool,
-            host,
-            summary.name,
-            profileId=None,
-            extra_config=extra_config)
-        self.assertFalse(vops.update_backing_disk_uuid.called)
-
         vops.create_backing.return_value = backing
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
+
+        volume = self._create_volume_dict()
+        ret = self._driver._create_backing(volume, host, create_params)
+
+        self.assertEqual(backing, ret)
+        select_ds_for_volume.assert_called_once_with(volume, host)
+        get_storage_profile_id.assert_called_once_with(volume)
+
+        exp_extra_config = {vmdk.EXTRA_CONFIG_VOLUME_ID_KEY: volume['id'],
+                            volumeops.BACKING_UUID_KEY: volume['id']}
+        if create_params.get(vmdk.CREATE_PARAM_DISK_LESS):
+            vops.create_backing_disk_less.assert_called_once_with(
+                volume['name'],
+                folder,
+                resource_pool,
+                host,
+                summary.name,
+                profileId=profile_id,
+                extra_config=exp_extra_config)
+            vops.update_backing_disk_uuid.assert_not_called()
+        else:
+            get_disk_type.assert_called_once_with(volume)
+            exp_backing_name = (
+                create_params.get(vmdk.CREATE_PARAM_BACKING_NAME) or
+                volume['name'])
+            exp_adapter_type = (
+                create_params.get(vmdk.CREATE_PARAM_ADAPTER_TYPE) or
+                'lsiLogic')
+            vops.create_backing.assert_called_once_with(
+                exp_backing_name,
+                volume['size'] * units.Mi,
+                disk_type,
+                folder,
+                resource_pool,
+                host,
+                summary.name,
+                profileId=profile_id,
+                adapter_type=exp_adapter_type,
+                extra_config=exp_extra_config)
+            vops.update_backing_disk_uuid.assert_called_once_with(backing,
+                                                                  volume['id'])
+
+    def test_create_backing_disk_less(self):
+        create_params = {vmdk.CREATE_PARAM_DISK_LESS: True}
+        self._test_create_backing(create_params=create_params)
+
+    def test_create_backing_with_adapter_type_override(self):
         create_params = {vmdk.CREATE_PARAM_ADAPTER_TYPE: 'ide'}
-        ret = self._driver._create_backing(volume, host, create_params)
+        self._test_create_backing(create_params=create_params)
 
-        self.assertEqual(backing, ret)
-        vops.create_backing.assert_called_once_with('vol-1',
-                                                    units.Mi,
-                                                    vmdk.THIN_VMDK_TYPE,
-                                                    folder,
-                                                    resource_pool,
-                                                    host,
-                                                    summary.name,
-                                                    profileId=None,
-                                                    adapter_type='ide',
-                                                    extra_config=extra_config)
-        vops.update_backing_disk_uuid.assert_called_once_with(backing,
-                                                              volume['id'])
+    def test_create_backing_with_backing_name_override(self):
+        create_params = {vmdk.CREATE_PARAM_BACKING_NAME: 'foo'}
+        self._test_create_backing(create_params=create_params)
 
-        vops.create_backing.reset_mock()
-        vops.update_backing_disk_uuid.reset_mock()
-        backing_name = "temp-vol"
-        create_params = {vmdk.CREATE_PARAM_BACKING_NAME: backing_name}
-        ret = self._driver._create_backing(volume, host, create_params)
-
-        self.assertEqual(backing, ret)
-        vops.create_backing.assert_called_once_with(backing_name,
-                                                    units.Mi,
-                                                    vmdk.THIN_VMDK_TYPE,
-                                                    folder,
-                                                    resource_pool,
-                                                    host,
-                                                    summary.name,
-                                                    profileId=None,
-                                                    adapter_type='lsiLogic',
-                                                    extra_config=extra_config)
-        vops.update_backing_disk_uuid.assert_called_once_with(backing,
-                                                              volume['id'])
-
-    @mock.patch('oslo_utils.fileutils.ensure_tree')
-    @mock.patch('oslo_utils.fileutils.delete_if_exists')
-    @mock.patch('tempfile.mkstemp')
-    @mock.patch('os.close')
-    def test_temporary_file(
-            self, close, mkstemp, delete_if_exists, ensure_tree):
-        fd = mock.sentinel.fd
-        tmp = mock.sentinel.tmp
-        mkstemp.return_value = (fd, tmp)
-        prefix = ".vmdk"
-        suffix = "test"
-        with self._driver._temporary_file(prefix=prefix,
-                                          suffix=suffix) as tmp_file:
-            self.assertEqual(tmp, tmp_file)
-            ensure_tree.assert_called_once_with(self.TMP_DIR)
-            mkstemp.assert_called_once_with(dir=self.TMP_DIR,
-                                            prefix=prefix,
-                                            suffix=suffix)
-            close.assert_called_once_with(fd)
-        delete_if_exists.assert_called_once_with(tmp)
+    def test_create_backing(self):
+        self._test_create_backing()
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     def test_get_hosts(self, vops):
@@ -2469,7 +2157,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     @mock.patch.object(VMDK_DRIVER, 'ds_sel')
     def test_relocate_backing_nop(self, ds_sel, get_profile, vops):
         self._driver._storage_policy_enabled = True
-        volume = {'name': 'vol-1', 'size': 1}
+        volume = self._create_volume_dict()
 
         datastore = mock.sentinel.datastore
         vops.get_datastore.return_value = datastore
@@ -2496,7 +2184,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     def test_relocate_backing_with_no_datastore(
             self, ds_sel, get_profile, vops):
         self._driver._storage_policy_enabled = True
-        volume = {'name': 'vol-1', 'size': 1}
+        volume = self._create_volume_dict()
 
         profile = mock.sentinel.profile
         get_profile.return_value = profile
@@ -2526,8 +2214,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     @mock.patch.object(VMDK_DRIVER, 'ds_sel')
     def test_relocate_backing(
             self, ds_sel, get_volume_group_folder, get_dc, vops):
-        volume = {'name': 'vol-1', 'size': 1,
-                  'project_id': '63c19a12292549818c09946a5e59ddaf'}
+        volume = self._create_volume_dict()
 
         vops.is_datastore_accessible.return_value = False
         ds_sel.is_datastore_compliant.return_value = True
@@ -2565,7 +2252,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     def test_relocate_backing_with_pbm_disabled(
             self, ds_sel, get_volume_group_folder, get_dc, vops):
         self._driver._storage_policy_enabled = False
-        volume = {'name': 'vol-1', 'size': 1, 'project_id': 'abc'}
+        volume = self._create_volume_dict()
 
         vops.is_datastore_accessible.return_value = False
 
@@ -2750,10 +2437,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     def test_extend_volume_with_no_backing(self, extend_backing, vops):
         vops.get_backing.return_value = None
 
-        volume = {'name': 'volume-51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'volume_type_id': None, 'size': 1,
-                  'id': '51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'display_name': 'foo'}
+        volume = self._create_volume_dict()
         self._driver.extend_volume(volume, 2)
 
         self.assertFalse(extend_backing.called)
@@ -2764,10 +2448,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         backing = mock.sentinel.backing
         vops.get_backing.return_value = backing
 
-        volume = {'name': 'volume-51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'volume_type_id': None, 'size': 1,
-                  'id': '51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'display_name': 'foo'}
+        volume = self._create_volume_dict()
         new_size = 2
         self._driver.extend_volume(volume, new_size)
 
@@ -2790,10 +2471,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         summary = mock.Mock(datastore=datastore)
         select_ds_for_volume.return_value = (host, rp, folder, summary)
 
-        volume = {'name': 'volume-51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'volume_type_id': None, 'size': 1,
-                  'id': '51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'display_name': 'foo'}
+        volume = self._create_volume_dict()
         new_size = 2
         self._driver.extend_volume(volume, new_size)
 
@@ -2818,10 +2496,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         extend_backing.side_effect = exceptions.VimException("Error")
 
-        volume = {'name': 'volume-51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'volume_type_id': None, 'size': 1,
-                  'id': '51e47214-8e3c-475d-b44b-aea6cd3eef53',
-                  'display_name': 'foo'}
+        volume = self._create_volume_dict()
         new_size = 2
         self.assertRaises(exceptions.VimException, self._driver.extend_volume,
                           volume, new_size)
@@ -2852,21 +2527,22 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                                             new_folder)
 
 
+@ddt.ddt
 class ImageDiskTypeTest(test.TestCase):
     """Unit tests for ImageDiskType."""
 
-    def test_is_valid(self):
-        self.assertTrue(vmdk.ImageDiskType.is_valid("thin"))
-        self.assertTrue(vmdk.ImageDiskType.is_valid("preallocated"))
-        self.assertTrue(vmdk.ImageDiskType.is_valid("streamOptimized"))
-        self.assertTrue(vmdk.ImageDiskType.is_valid("sparse"))
-        self.assertFalse(vmdk.ImageDiskType.is_valid("thick"))
+    @ddt.data('thin', 'preallocated', 'streamOptimized', 'sparse')
+    def test_is_valid(self, image_disk_type):
+        self.assertTrue(vmdk.ImageDiskType.is_valid(image_disk_type))
 
-    def test_validate(self):
-        vmdk.ImageDiskType.validate("thin")
-        vmdk.ImageDiskType.validate("preallocated")
-        vmdk.ImageDiskType.validate("streamOptimized")
-        vmdk.ImageDiskType.validate("sparse")
+    def test_is_valid_with_invalid_type(self):
+        self.assertFalse(vmdk.ImageDiskType.is_valid('thick'))
+
+    @ddt.data('thin', 'preallocated', 'streamOptimized', 'sparse')
+    def test_validate(self, image_disk_type):
+        vmdk.ImageDiskType.validate(image_disk_type)
+
+    def test_validate_with_invalid_type(self):
         self.assertRaises(cinder_exceptions.ImageUnacceptable,
                           vmdk.ImageDiskType.validate,
                           "thick")

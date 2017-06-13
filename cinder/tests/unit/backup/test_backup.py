@@ -16,6 +16,7 @@
 
 import copy
 import ddt
+import os
 import uuid
 
 import mock
@@ -37,7 +38,7 @@ from cinder import test
 from cinder.tests import fake_driver
 from cinder.tests.unit.backup import fake_service_with_verify as fake_service
 from cinder.tests.unit import utils
-from cinder.volume import driver
+from cinder.volume import rpcapi as volume_rpcapi
 
 
 CONF = cfg.CONF
@@ -256,12 +257,9 @@ class BackupTestCase(BaseBackupTest):
 
         mock_get_admin_context.side_effect = get_admin_context
         self.volume = importutils.import_object(CONF.volume_manager)
-        self.backup_mgr.volume_managers = {'driver': self.volume}
         self.backup_mgr.init_host()
 
-        mock_setup.assert_called_once_with(self.ctxt)
-        mock_check.assert_called_once_with()
-        mock_set_initialized.assert_called_once_with()
+        self.assertEqual({}, self.backup_mgr.volume_managers)
 
         vol1 = db.volume_get(self.ctxt, vol1_id)
         self.assertEqual('available', vol1['status'])
@@ -345,13 +343,6 @@ class BackupTestCase(BaseBackupTest):
 
     def test_is_working(self):
         self.assertTrue(self.backup_mgr.is_working())
-
-    def test_get_volume_backend(self):
-        backup_mgr = manager.BackupManager()
-        backup_mgr.volume_managers = {'backend1': 'backend1',
-                                      'backend2': 'backend2'}
-        backend = backup_mgr._get_volume_backend(allow_null_host=True)
-        self.assertIn(backend, backup_mgr.volume_managers)
 
     def test_cleanup_incomplete_backup_operations_with_exceptions(self):
         """Test cleanup resilience in the face of exceptions."""
@@ -573,11 +564,33 @@ class BackupTestCase(BaseBackupTest):
         self.assertEqual(fields.BackupStatus.ERROR, backup['status'])
         self.assertTrue(mock_run_backup.called)
 
+    @mock.patch('cinder.backup.manager.BackupManager._run_backup',
+                side_effect=FakeBackupException(str(uuid.uuid4())))
+    def test_create_backup_with_snapshot_error(self, mock_run_backup):
+        """Test error handling when error occurs during backup creation."""
+        vol_id = self._create_volume_db_entry(size=1)
+        snapshot = self._create_snapshot_db_entry(status='backing-up',
+                                                  volume_id=vol_id)
+        backup = self._create_backup_db_entry(volume_id=vol_id,
+                                              snapshot_id=snapshot.id)
+        self.assertRaises(FakeBackupException,
+                          self.backup_mgr.create_backup,
+                          self.ctxt,
+                          backup)
+
+        snapshot.refresh()
+        self.assertEqual('available', snapshot.status)
+
+        backup.refresh()
+        self.assertEqual(fields.BackupStatus.ERROR, backup.status)
+        self.assertTrue(mock_run_backup.called)
+
     @mock.patch('cinder.utils.brick_get_connector_properties')
     @mock.patch('cinder.volume.rpcapi.VolumeAPI.get_backup_device')
     @mock.patch('cinder.utils.temporary_chown')
     @mock.patch('six.moves.builtins.open')
-    def test_create_backup(self, mock_open, mock_temporary_chown,
+    @mock.patch.object(os.path, 'isdir', return_value=False)
+    def test_create_backup(self, mock_isdir, mock_open, mock_temporary_chown,
                            mock_get_backup_device, mock_get_conn):
         """Test normal backup creation."""
         vol_size = 1
@@ -619,6 +632,37 @@ class BackupTestCase(BaseBackupTest):
         self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
         self.assertEqual(vol_size, backup['size'])
 
+    @mock.patch('cinder.utils.brick_get_connector_properties')
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.get_backup_device')
+    @mock.patch('cinder.utils.temporary_chown')
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch.object(os.path, 'isdir', return_value=True)
+    def test_run_backup_with_dir_device_path(self, mock_isdir,
+                                             mock_open,
+                                             mock_chown,
+                                             mock_backup_device,
+                                             mock_brick):
+        backup_service = lambda: None
+        backup_service.backup = mock.Mock()
+        self.backup_mgr.service.get_backup_driver = lambda x: backup_service
+
+        vol_id = self._create_volume_db_entry()
+        backup = self._create_backup_db_entry(volume_id=vol_id)
+        volume = objects.Volume.get_by_id(self.ctxt, vol_id)
+
+        # device_path is represented by a directory
+        device_path = '/fake/disk/path/'
+        attach_info = {'device': {'path': device_path}}
+        self.backup_mgr._attach_device = mock.Mock(
+            return_value=attach_info)
+        self.backup_mgr._detach_device = mock.Mock()
+        self.backup_mgr._run_backup(self.ctxt, backup, volume)
+
+        mock_chown.assert_not_called()
+        mock_open.assert_not_called()
+        backup_service.backup.assert_called_once_with(
+            backup, device_path)
+
     @mock.patch('cinder.backup.manager.BackupManager._run_backup')
     @ddt.data((fields.SnapshotStatus.BACKING_UP, 'available'),
               (fields.SnapshotStatus.BACKING_UP, 'in-use'),
@@ -648,18 +692,19 @@ class BackupTestCase(BaseBackupTest):
     @mock.patch('cinder.volume.rpcapi.VolumeAPI.get_backup_device')
     @mock.patch('cinder.utils.temporary_chown')
     @mock.patch('six.moves.builtins.open')
-    def test_create_backup_with_temp_snapshot(self, mock_open,
+    @mock.patch.object(os.path, 'isdir', return_value=False)
+    def test_create_backup_with_temp_snapshot(self, mock_isdir,
+                                              mock_open,
                                               mock_temporary_chown,
                                               mock_get_backup_device,
                                               mock_get_conn):
         """Test backup in-use volume using temp snapshot."""
         self.override_config('backup_use_same_host', True)
-        self.backup_mgr._setup_volume_drivers()
         vol_size = 1
         vol_id = self._create_volume_db_entry(size=vol_size,
                                               previous_status='in-use')
         backup = self._create_backup_db_entry(volume_id=vol_id)
-        snap = self._create_snapshot_db_entry(volume_id = vol_id)
+        snap = self._create_snapshot_db_entry(volume_id=vol_id)
 
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
         mock_get_backup_device.return_value = (
@@ -672,29 +717,34 @@ class BackupTestCase(BaseBackupTest):
             'device': {'path': '/dev/null'},
             'conn': {'data': {}},
             'connector': fake.FakeConnector(None)}
-        mock_detach_snapshot = self.mock_object(driver.BaseVD,
-                                                '_detach_snapshot')
-        mock_attach_snapshot = self.mock_object(driver.BaseVD,
-                                                '_attach_snapshot')
-        mock_attach_snapshot.return_value = attach_info
+        mock_terminate_connection_snapshot = self.mock_object(
+            volume_rpcapi.VolumeAPI,
+            'terminate_connection_snapshot')
+        mock_initialize_connection_snapshot = self.mock_object(
+            volume_rpcapi.VolumeAPI,
+            'initialize_connection_snapshot')
+        mock_connect_device = self.mock_object(
+            manager.BackupManager,
+            '_connect_device')
+        mock_connect_device.return_value = attach_info
         properties = {}
         mock_get_conn.return_value = properties
         mock_open.return_value = open('/dev/null', 'rb')
 
         self.backup_mgr.create_backup(self.ctxt, backup)
         mock_temporary_chown.assert_called_once_with('/dev/null')
-        mock_attach_snapshot.assert_called_once_with(self.ctxt, snap,
-                                                     properties)
+        mock_initialize_connection_snapshot.assert_called_once_with(
+            self.ctxt, snap, properties)
         mock_get_backup_device.assert_called_once_with(self.ctxt, backup, vol)
         mock_get_conn.assert_called_once_with()
-        mock_detach_snapshot.assert_called_once_with(self.ctxt, attach_info,
-                                                     snap, properties, False)
+        mock_terminate_connection_snapshot.assert_called_once_with(
+            self.ctxt, snap, properties, force=False)
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
         self.assertEqual('in-use', vol['status'])
         self.assertEqual('backing-up', vol['previous_status'])
-        backup = db.backup_get(self.ctxt, backup.id)
-        self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
-        self.assertEqual(vol_size, backup['size'])
+        backup = objects.Backup.get_by_id(self.ctxt, backup.id)
+        self.assertEqual(fields.BackupStatus.AVAILABLE, backup.status)
+        self.assertEqual(vol_size, backup.size)
 
     @mock.patch.object(fake_driver.FakeLoggingVolumeDriver, 'create_snapshot')
     def test_create_temp_snapshot(self, mock_create_snapshot):
@@ -740,7 +790,7 @@ class BackupTestCase(BaseBackupTest):
         vol_id = self._create_volume_db_entry(size=vol_size,
                                               previous_status='in-use')
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
-        snap = self._create_snapshot_db_entry(volume_id = vol_id)
+        snap = self._create_snapshot_db_entry(volume_id=vol_id)
         mock_create_vol_from_snap.return_value = {'provider_id':
                                                   'fake_provider_id'}
 
@@ -845,8 +895,9 @@ class BackupTestCase(BaseBackupTest):
     @mock.patch('cinder.utils.brick_get_connector_properties')
     @mock.patch('cinder.utils.temporary_chown')
     @mock.patch('six.moves.builtins.open')
-    def test_restore_backup(self, mock_open, mock_temporary_chown,
-                            mock_get_conn):
+    @mock.patch.object(os.path, 'isdir', return_value=False)
+    def test_restore_backup(self, mock_isdir, mock_open,
+                            mock_temporary_chown, mock_get_conn):
         """Test normal backup restoration."""
         vol_size = 1
         vol_id = self._create_volume_db_entry(status='restoring-backup',

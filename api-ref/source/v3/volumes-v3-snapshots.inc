@@ -31,11 +31,13 @@ List snapshots and details
 
 .. rest_method::  GET /v3/{project_id}/snapshots/detail
 
-Lists all Block Storage snapshots, with details, that the project can access.
+Lists all Block Storage snapshots, with details, that the project can access,
+since v3.31 if non-admin users specify invalid filters in the url, API will
+return bad request.
 
 
 Normal response codes: 200
-Error response codes:
+Error response codes: badRequest(400)
 
 
 Request
@@ -81,7 +83,7 @@ Create a snapshot
 
 Creates a volume snapshot, which is a point-in-time, complete copy of a volume. You can create a volume from a snapshot.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -123,11 +125,13 @@ List accessible snapshots
 
 .. rest_method::  GET /v3/{project_id}/snapshots
 
-Lists all Block Storage snapshots, with summary information, that the project can access.
+Lists all Block Storage snapshots, with summary information,
+that the project can access, since v3.31 if non-admin users
+specify invalid filters in the url, API will return bad request.
 
 
 Normal response codes: 200
-Error response codes:
+Error response codes: badRequest(400)
 
 
 Request
@@ -386,7 +390,7 @@ Delete a snapshot
 
 Deletes a snapshot.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request

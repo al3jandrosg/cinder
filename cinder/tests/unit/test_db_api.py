@@ -19,14 +19,17 @@ import datetime
 import ddt
 import enum
 import mock
+from mock import call
 from oslo_config import cfg
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
+from sqlalchemy.sql import operators
 
 from cinder.api import common
 from cinder import context
 from cinder import db
 from cinder.db.sqlalchemy import api as sqlalchemy_api
+from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder import objects
 from cinder.objects import fields
@@ -75,6 +78,82 @@ class BaseTest(test.TestCase, test.ModelsObjectComparatorMixin):
     def setUp(self):
         super(BaseTest, self).setUp()
         self.ctxt = context.get_admin_context()
+
+
+@ddt.ddt
+class DBCommonFilterTestCase(BaseTest):
+
+    def setUp(self):
+        super(DBCommonFilterTestCase, self).setUp()
+        self.fake_volume = db.volume_create(self.ctxt,
+                                            {'display_name': 'fake_name'})
+        self.fake_group = utils.create_group(
+            self.ctxt,
+            group_type_id=fake.GROUP_TYPE_ID,
+            volume_type_ids=[fake.VOLUME_TYPE_ID])
+
+    @mock.patch('sqlalchemy.orm.query.Query.filter')
+    def test__process_model_like_filter(self, mock_filter):
+        filters = {'display_name': 'fake_name',
+                   'display_description': 'fake_description',
+                   'host': 123,
+                   'status': []}
+        session = sqlalchemy_api.get_session()
+        query = session.query(models.Volume)
+        mock_filter.return_value = query
+        with mock.patch.object(operators.Operators, 'op') as mock_op:
+            def fake_operator(value):
+                return value
+            mock_op.return_value = fake_operator
+            sqlalchemy_api._process_model_like_filter(models.Volume,
+                                                      query, filters)
+            calls = [call('%fake_description%'),
+                     call('%fake_name%'), call('%123%')]
+            mock_filter.assert_has_calls(calls, any_order=True)
+
+    @ddt.data({'handler': [db.volume_create, db.volume_get_all],
+               'column': 'display_name',
+               'resource': 'volume'},
+              {'handler': [db.snapshot_create, db.snapshot_get_all],
+               'column': 'display_name',
+               'resource': 'snapshot'},
+              {'handler': [db.message_create, db.message_get_all],
+               'column': 'message_level',
+               'resource': 'message'},
+              {'handler': [db.backup_create, db.backup_get_all],
+               'column': 'display_name',
+               'resource': 'backup'},
+              {'handler': [db.group_create, db.group_get_all],
+               'column': 'name',
+               'resource': 'group'},
+              {'handler': [utils.create_group_snapshot,
+                           db.group_snapshot_get_all],
+               'column': 'name',
+               'resource': 'group_snapshot'})
+    @ddt.unpack
+    def test_resource_get_all_like_filter(self, handler, column, resource):
+        for index in ['001', '002']:
+            option = {column: "fake_%s_%s" % (column, index)}
+            if resource in ['snapshot', 'backup']:
+                option['volume_id'] = self.fake_volume.id
+            if resource in ['message']:
+                option['project_id'] = fake.PROJECT_ID
+                option['event_id'] = fake.UUID1
+            if resource in ['group_snapshot']:
+                handler[0](self.ctxt, self.fake_group.id,
+                           name="fake_%s_%s" % (column, index))
+            else:
+                handler[0](self.ctxt, option)
+
+        # test exact match
+        exact_filter = {column: 'fake_%s' % column}
+        resources = handler[1](self.ctxt, filters=exact_filter)
+        self.assertEqual(0, len(resources))
+
+        # test inexact match
+        inexact_filter = {"%s~" % column: 'fake_%s' % column}
+        resources = handler[1](self.ctxt, filters=inexact_filter)
+        self.assertEqual(2, len(resources))
 
 
 @ddt.ddt
@@ -2155,6 +2234,40 @@ class DBAPIReservationTestCase(BaseTest):
                              'project1'))
 
 
+class DBAPIMessageTestCase(BaseTest):
+
+    """Tests for message operations"""
+    def setUp(self):
+        super(DBAPIMessageTestCase, self).setUp()
+        self.context = context.get_admin_context()
+
+    def _create_fake_messages(self, m_id, time):
+        db.message_create(self.context,
+                          {'id': m_id,
+                           'event_id': m_id,
+                           'message_level': 'error',
+                           'project_id': 'fake_id',
+                           'expires_at': time})
+
+    def test_cleanup_expired_messages(self):
+        now = timeutils.utcnow()
+        # message expired 1 day ago
+        self._create_fake_messages(
+            uuidutils.generate_uuid(), now - datetime.timedelta(days=1))
+        # message expired now
+        self._create_fake_messages(
+            uuidutils.generate_uuid(), now)
+        # message expired 1 day after
+        self._create_fake_messages(
+            uuidutils.generate_uuid(), now + datetime.timedelta(days=1))
+
+        with mock.patch.object(timeutils, 'utcnow') as mock_time_now:
+            mock_time_now.return_value = now
+            db.cleanup_expired_messages(self.context)
+            messages = db.message_get_all(self.context)
+            self.assertEqual(2, len(messages))
+
+
 class DBAPIQuotaClassTestCase(BaseTest):
 
     """Tests for db.api.quota_class_* methods."""
@@ -2913,16 +3026,21 @@ class DBAPIGenericTestCase(BaseTest):
 
 @ddt.ddt
 class DBAPIBackendTestCase(BaseTest):
-    @ddt.data(True, False)
-    def test_is_backend_frozen_service(self, frozen):
+    @ddt.data((True, True), (True, False), (False, True), (False, False))
+    @ddt.unpack
+    def test_is_backend_frozen_service(self, frozen, pool):
         service = utils.create_service(self.ctxt, {'frozen': frozen})
         utils.create_service(self.ctxt, {'host': service.host + '2',
                                          'frozen': not frozen})
-        self.assertEqual(frozen, db.is_backend_frozen(self.ctxt, service.host,
+        host = service.host
+        if pool:
+            host += '#poolname'
+        self.assertEqual(frozen, db.is_backend_frozen(self.ctxt, host,
                                                       service.cluster_name))
 
-    @ddt.data(True, False)
-    def test_is_backend_frozen_cluster(self, frozen):
+    @ddt.data((True, True), (True, False), (False, True), (False, False))
+    @ddt.unpack
+    def test_is_backend_frozen_cluster(self, frozen, pool):
         cluster = utils.create_cluster(self.ctxt, frozen=frozen)
         utils.create_service(self.ctxt, {'frozen': frozen, 'host': 'hostA',
                                          'cluster_name': cluster.name})
@@ -2932,5 +3050,10 @@ class DBAPIBackendTestCase(BaseTest):
                                         'cluster_name': cluster.name})
         utils.create_populated_cluster(self.ctxt, 3, 0, frozen=not frozen,
                                        name=cluster.name + '2')
-        self.assertEqual(frozen, db.is_backend_frozen(self.ctxt, service.host,
-                                                      service.cluster_name))
+        host = service.host
+        cluster = service.cluster_name
+        if pool:
+            host += '#poolname'
+            cluster += '#poolname'
+        self.assertEqual(frozen,
+                         db.is_backend_frozen(self.ctxt, host, cluster))

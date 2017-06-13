@@ -24,10 +24,12 @@ import math
 from os_brick.initiator import connector
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_log import versionutils
 from oslo_utils import units
 import re
 import requests
 import six
+from six.moves import http_client
 from six.moves import urllib
 
 from cinder import context
@@ -36,9 +38,12 @@ from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
 from cinder import utils
+
+from cinder.objects import fields
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume import qos_specs
+from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
 
 CONF = cfg.CONF
@@ -99,7 +104,6 @@ QOS_IOPS_PER_GB = 'maxIOPSperGB'
 QOS_BANDWIDTH_PER_GB = 'maxBWSperGB'
 
 BLOCK_SIZE = 8
-OK_STATUS_CODE = 200
 VOLUME_NOT_FOUND_ERROR = 79
 # This code belongs to older versions of ScaleIO
 OLD_VOLUME_NOT_FOUND_ERROR = 78
@@ -114,9 +118,10 @@ SIO_MAX_OVERSUBSCRIPTION_RATIO = 10.0
 class ScaleIODriver(driver.VolumeDriver):
     """Dell EMC ScaleIO Driver."""
 
-    VERSION = "2.0.1"
+    VERSION = "2.0.2"
     # Major changes
     # 2.0.1: Added support for SIO 1.3x in addition to 2.0.x
+    # 2.0.2: Added consistency group support to generic volume groups
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_ScaleIO_CI"
@@ -249,6 +254,14 @@ class ScaleIODriver(driver.VolumeDriver):
                    {'sio_ratio': SIO_MAX_OVERSUBSCRIPTION_RATIO,
                     'ratio': self.configuration.max_over_subscription_ratio})
             raise exception.InvalidInput(reason=msg)
+
+        server_api_version = self._get_server_api_version(fromcache=False)
+        if not self._version_greater_than_or_equal(
+                server_api_version, "2.0.0"):
+            # we are running against a pre-2.0.0 ScaleIO instance
+            msg = (_("Using ScaleIO versions less than v2.0.0 has been "
+                     "deprecated and will be removed in a future version"))
+            versionutils.report_deprecated_feature(LOG, msg)
 
     def _find_storage_pool_id_from_storage_type(self, storage_type):
         # Default to what was configured in configuration file if not defined.
@@ -397,7 +410,7 @@ class ScaleIODriver(driver.VolumeDriver):
                        % self.protection_domain_name)
                 LOG.error(msg)
                 raise exception.VolumeBackendAPIException(data=msg)
-            if r.status_code != OK_STATUS_CODE and "errorCode" in domain_id:
+            if r.status_code != http_client.OK and "errorCode" in domain_id:
                 msg = (_("Error getting domain id from name %(name)s: %(id)s.")
                        % {'name': self.protection_domain_name,
                           'id': domain_id['message']})
@@ -426,7 +439,7 @@ class ScaleIODriver(driver.VolumeDriver):
                           'domain_id': domain_id})
                 LOG.error(msg)
                 raise exception.VolumeBackendAPIException(data=msg)
-            if r.status_code != OK_STATUS_CODE and "errorCode" in pool_id:
+            if r.status_code != http_client.OK and "errorCode" in pool_id:
                 msg = (_("Error getting pool id from name %(pool_name)s: "
                          "%(err_msg)s.")
                        % {'pool_name': pool_name,
@@ -458,7 +471,7 @@ class ScaleIODriver(driver.VolumeDriver):
 
         LOG.info("Add volume response: %s", response)
 
-        if r.status_code != OK_STATUS_CODE and "errorCode" in response:
+        if r.status_code != http_client.OK and "errorCode" in response:
             msg = (_("Error creating volume: %s.") % response['message'])
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
@@ -498,7 +511,7 @@ class ScaleIODriver(driver.VolumeDriver):
                    "/api/instances/System/action/snapshotVolumes") % req_vars
         r, response = self._execute_scaleio_post_request(params, request)
         LOG.info("Snapshot volume response: %s.", response)
-        if r.status_code != OK_STATUS_CODE and "errorCode" in response:
+        if r.status_code != http_client.OK and "errorCode" in response:
             msg = (_("Failed creating snapshot for volume %(volname)s: "
                      "%(response)s.") %
                    {'volname': vol_id,
@@ -527,7 +540,8 @@ class ScaleIODriver(driver.VolumeDriver):
 
     def _check_response(self, response, request, is_get_request=True,
                         params=None):
-        if response.status_code == 401 or response.status_code == 403:
+        if (response.status_code == http_client.UNAUTHORIZED or
+                response.status_code == http_client.FORBIDDEN):
             LOG.info("Token is invalid, going to re-login and get "
                      "a new one.")
             login_request = (
@@ -567,7 +581,7 @@ class ScaleIODriver(driver.VolumeDriver):
                 ":" + self.server_port + "/api/version")
             r, unused = self._execute_scaleio_get_request(request)
 
-            if r.status_code == OK_STATUS_CODE:
+            if r.status_code == http_client.OK:
                 self.server_api_version = r.text.replace('\"', '')
                 LOG.info("REST API Version: %(api_version)s",
                          {'api_version': self.server_api_version})
@@ -650,7 +664,7 @@ class ScaleIODriver(driver.VolumeDriver):
 
         params = {'sizeInGB': six.text_type(volume_new_size)}
         r, response = self._execute_scaleio_post_request(params, request)
-        if r.status_code != OK_STATUS_CODE:
+        if r.status_code != http_client.OK:
             response = r.json()
             msg = (_("Error extending volume %(vol)s: %(err)s.")
                    % {'vol': vol_id,
@@ -714,7 +728,7 @@ class ScaleIODriver(driver.VolumeDriver):
                    "/action/removeVolume") % req_vars
         r, response = self._execute_scaleio_post_request(params, request)
 
-        if r.status_code != OK_STATUS_CODE:
+        if r.status_code != http_client.OK:
             error_code = response['errorCode']
             if error_code == VOLUME_NOT_FOUND_ERROR:
                 LOG.warning("Ignoring error in delete volume %s:"
@@ -826,7 +840,7 @@ class ScaleIODriver(driver.VolumeDriver):
         stats['storage_protocol'] = 'scaleio'
         stats['reserved_percentage'] = 0
         stats['QoS_support'] = True
-        stats['consistencygroup_support'] = True
+        stats['consistent_group_snapshot_enabled'] = True
         stats['thick_provisioning_support'] = True
         stats['thin_provisioning_support'] = True
         pools = []
@@ -863,7 +877,7 @@ class ScaleIODriver(driver.VolumeDriver):
                        % self.protection_domain_name)
                 LOG.error(msg)
                 raise exception.VolumeBackendAPIException(data=msg)
-            if r.status_code != OK_STATUS_CODE and "errorCode" in domain_id:
+            if r.status_code != http_client.OK and "errorCode" in domain_id:
                 msg = (_("Error getting domain id from name %(name)s: "
                          "%(err)s.")
                        % {'name': self.protection_domain_name,
@@ -890,7 +904,7 @@ class ScaleIODriver(driver.VolumeDriver):
                           'domain': domain_id})
                 LOG.error(msg)
                 raise exception.VolumeBackendAPIException(data=msg)
-            if r.status_code != OK_STATUS_CODE and "errorCode" in pool_id:
+            if r.status_code != http_client.OK and "errorCode" in pool_id:
                 msg = (_("Error getting pool id from name %(pool)s: "
                          "%(err)s.")
                        % {'pool': pool_name,
@@ -951,7 +965,7 @@ class ScaleIODriver(driver.VolumeDriver):
                     'total_capacity_gb': total_capacity_gb,
                     'free_capacity_gb': free_capacity_gb,
                     'QoS_support': True,
-                    'consistencygroup_support': True,
+                    'consistent_group_snapshot_enabled': True,
                     'reserved_percentage': 0,
                     'thin_provisioning_support': True,
                     'thick_provisioning_support': True,
@@ -1119,7 +1133,7 @@ class ScaleIODriver(driver.VolumeDriver):
         params = {'newName': new_name}
         r, response = self._execute_scaleio_post_request(params, request)
 
-        if r.status_code != OK_STATUS_CODE:
+        if r.status_code != http_client.OK:
             error_code = response['errorCode']
             if ((error_code == VOLUME_NOT_FOUND_ERROR or
                  error_code == OLD_VOLUME_NOT_FOUND_ERROR or
@@ -1234,7 +1248,7 @@ class ScaleIODriver(driver.VolumeDriver):
 
     @staticmethod
     def _manage_existing_check_legal_response(response, existing_ref):
-        if response.status_code != OK_STATUS_CODE:
+        if response.status_code != http_client.OK:
             reason = (_("Error managing volume: %s.") % response.json()[
                 'message'])
             raise exception.ManageExistingInvalidReference(
@@ -1251,24 +1265,44 @@ class ScaleIODriver(driver.VolumeDriver):
                 reason=reason
             )
 
-    def create_consistencygroup(self, context, group):
-        """Creates a consistency group.
+    def create_group(self, context, group):
+        """Creates a group.
+
+        :param context: the context of the caller.
+        :param group: the group object.
+        :returns: model_update
 
         ScaleIO won't create CG until cg-snapshot creation,
         db will maintain the volumes and CG relationship.
         """
-        LOG.info("Creating Consistency Group")
-        model_update = {'status': 'available'}
+
+        # let generic volume group support handle non-cgsnapshots
+        if not volume_utils.is_group_a_cg_snapshot_type(group):
+            raise NotImplementedError()
+
+        LOG.info("Creating Group")
+        model_update = {'status': fields.GroupStatus.AVAILABLE}
         return model_update
 
-    def delete_consistencygroup(self, context, group, volumes):
-        """Deletes a consistency group.
+    def delete_group(self, context, group, volumes):
+        """Deletes a group.
+
+        :param context: the context of the caller.
+        :param group: the group object.
+        :param volumes: a list of volume objects in the group.
+        :returns: model_update, volumes_model_update
 
         ScaleIO will delete the volumes of the CG.
         """
-        LOG.info("Deleting Consistency Group")
-        model_update = {'status': 'deleted'}
-        error_statuses = ['error', 'error_deleting']
+
+        # let generic volume group support handle non-cgsnapshots
+        if not volume_utils.is_group_a_cg_snapshot_type(group):
+            raise NotImplementedError()
+
+        LOG.info("Deleting Group")
+        model_update = {'status': fields.GroupStatus.DELETED}
+        error_statuses = [fields.GroupStatus.ERROR,
+                          fields.GroupStatus.ERROR_DELETING]
         volumes_model_update = []
         for volume in volumes:
             try:
@@ -1282,20 +1316,31 @@ class ScaleIODriver(driver.VolumeDriver):
                 volumes_model_update.append(update_item)
                 if model_update['status'] not in error_statuses:
                     model_update['status'] = 'error_deleting'
-                LOG.error("Failed to delete the volume %(vol)s of CG. "
+                LOG.error("Failed to delete the volume %(vol)s of group. "
                           "Exception: %(exception)s.",
                           {'vol': volume['name'], 'exception': err})
         return model_update, volumes_model_update
 
-    def create_cgsnapshot(self, context, cgsnapshot, snapshots):
-        """Creates a cgsnapshot."""
+    def create_group_snapshot(self, context, group_snapshot, snapshots):
+        """Creates a group snapshot.
+
+        :param context: the context of the caller.
+        :param group_snapshot: the GroupSnapshot object to be created.
+        :param snapshots: a list of Snapshot objects in the group_snapshot.
+        :returns: model_update, snapshots_model_update
+        """
+
+        # let generic volume group support handle non-cgsnapshots
+        if not volume_utils.is_group_a_cg_snapshot_type(group_snapshot):
+            raise NotImplementedError()
+
         get_scaleio_snapshot_params = lambda snapshot: {
             'volumeId': snapshot.volume['provider_id'],
             'snapshotName': self._id_to_base64(snapshot['id'])}
         snapshot_defs = list(map(get_scaleio_snapshot_params, snapshots))
         r, response = self._snapshot_volume_group(snapshot_defs)
         LOG.info("Snapshot volume response: %s.", response)
-        if r.status_code != OK_STATUS_CODE and "errorCode" in response:
+        if r.status_code != http_client.OK and "errorCode" in response:
             msg = (_("Failed creating snapshot for group: "
                      "%(response)s.") %
                    {'response': response['message']})
@@ -1304,46 +1349,74 @@ class ScaleIODriver(driver.VolumeDriver):
         snapshot_model_update = []
         for snapshot, scaleio_id in zip(snapshots, response['volumeIdList']):
             update_item = {'id': snapshot['id'],
-                           'status': 'available',
+                           'status': fields.SnapshotStatus.AVAILABLE,
                            'provider_id': scaleio_id}
             snapshot_model_update.append(update_item)
-        model_update = {'status': 'available'}
+        model_update = {'status': fields.GroupStatus.AVAILABLE}
         return model_update, snapshot_model_update
 
-    def delete_cgsnapshot(self, context, cgsnapshot, snapshots):
-        """Deletes a cgsnapshot."""
-        error_statuses = ['error', 'error_deleting']
-        model_update = {'status': cgsnapshot['status']}
+    def delete_group_snapshot(self, context, group_snapshot, snapshots):
+        """Deletes a snapshot.
+
+        :param context: the context of the caller.
+        :param group_snapshot: the GroupSnapshot object to be deleted.
+        :param snapshots: a list of snapshot objects in the group_snapshot.
+        :returns: model_update, snapshots_model_update
+        """
+
+        # let generic volume group support handle non-cgsnapshots
+        if not volume_utils.is_group_a_cg_snapshot_type(group_snapshot):
+            raise NotImplementedError()
+
+        error_statuses = [fields.SnapshotStatus.ERROR,
+                          fields.SnapshotStatus.ERROR_DELETING]
+        model_update = {'status': group_snapshot['status']}
         snapshot_model_update = []
         for snapshot in snapshots:
             try:
                 self._delete_volume(snapshot.provider_id)
                 update_item = {'id': snapshot['id'],
-                               'status': 'deleted'}
+                               'status': fields.SnapshotStatus.DELETED}
                 snapshot_model_update.append(update_item)
             except exception.VolumeBackendAPIException as err:
                 update_item = {'id': snapshot['id'],
-                               'status': 'error_deleting'}
+                               'status': fields.SnapshotStatus.ERROR_DELETING}
                 snapshot_model_update.append(update_item)
                 if model_update['status'] not in error_statuses:
-                    model_update['status'] = 'error_deleting'
+                    model_update['status'] = (
+                        fields.SnapshotStatus.ERROR_DELETING)
                 LOG.error("Failed to delete the snapshot %(snap)s "
-                          "of cgsnapshot: %(cgsnapshot_id)s. "
+                          "of snapshot: %(snapshot_id)s. "
                           "Exception: %(exception)s.",
                           {'snap': snapshot['name'],
                            'exception': err,
-                           'cgsnapshot_id': cgsnapshot.id})
-        model_update['status'] = 'deleted'
+                           'snapshot_id': group_snapshot.id})
+        model_update['status'] = fields.GroupSnapshotStatus.DELETED
         return model_update, snapshot_model_update
 
-    def create_consistencygroup_from_src(self, context, group, volumes,
-                                         cgsnapshot=None, snapshots=None,
-                                         source_cg=None, source_vols=None):
-        """Creates a consistency group from a source."""
+    def create_group_from_src(self, context, group, volumes,
+                              group_snapshot=None, snapshots=None,
+                              source_group=None, source_vols=None):
+        """Creates a group from source.
+
+        :param context: the context of the caller.
+        :param group: the Group object to be created.
+        :param volumes: a list of Volume objects in the group.
+        :param group_snapshot: the GroupSnapshot object as source.
+        :param snapshots: a list of snapshot objects in group_snapshot.
+        :param source_group: the Group object as source.
+        :param source_vols: a list of volume objects in the source_group.
+        :returns: model_update, volumes_model_update
+        """
+
+        # let generic volume group support handle non-cgsnapshots
+        if not volume_utils.is_group_a_cg_snapshot_type(group):
+            raise NotImplementedError()
+
         get_scaleio_snapshot_params = lambda src_volume, trg_volume: {
             'volumeId': src_volume['provider_id'],
             'snapshotName': self._id_to_base64(trg_volume['id'])}
-        if cgsnapshot and snapshots:
+        if group_snapshot and snapshots:
             snapshot_defs = map(get_scaleio_snapshot_params,
                                 snapshots,
                                 volumes)
@@ -1353,7 +1426,7 @@ class ScaleIODriver(driver.VolumeDriver):
                                 volumes)
         r, response = self._snapshot_volume_group(list(snapshot_defs))
         LOG.info("Snapshot volume response: %s.", response)
-        if r.status_code != OK_STATUS_CODE and "errorCode" in response:
+        if r.status_code != http_client.OK and "errorCode" in response:
             msg = (_("Failed creating snapshot for group: "
                      "%(response)s.") %
                    {'response': response['message']})
@@ -1365,17 +1438,29 @@ class ScaleIODriver(driver.VolumeDriver):
                            'status': 'available',
                            'provider_id': scaleio_id}
             volumes_model_update.append(update_item)
-        model_update = {'status': 'available'}
+        model_update = {'status': fields.GroupStatus.AVAILABLE}
         return model_update, volumes_model_update
 
-    def update_consistencygroup(self, context, group,
-                                add_volumes=None, remove_volumes=None):
-        """Update a consistency group.
+    def update_group(self, context, group,
+                     add_volumes=None, remove_volumes=None):
+        """Update a  group.
+
+        :param context: the context of the caller.
+        :param group: the group object.
+        :param add_volumes: a list of volume objects to be added.
+        :param remove_volumes: a list of volume objects to be removed.
+        :returns: model_update, add_volumes_update, remove_volumes_update
 
         ScaleIO does not handle volume grouping.
         Cinder maintains volumes and CG relationship.
         """
-        return None, None, None
+
+        if volume_utils.is_group_a_cg_snapshot_type(group):
+            return None, None, None
+
+        # we'll rely on the generic group implementation if it is not a
+        # consistency group request.
+        raise NotImplementedError()
 
     def _snapshot_volume_group(self, snapshot_defs):
         LOG.info("ScaleIO snapshot group of volumes")

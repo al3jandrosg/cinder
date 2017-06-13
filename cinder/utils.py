@@ -165,19 +165,19 @@ def check_metadata_properties(metadata=None):
         metadata = {}
 
     for k, v in metadata.items():
-        if len(k) == 0:
-            msg = _("Metadata property key blank.")
-            LOG.debug(msg)
-            raise exception.InvalidVolumeMetadata(reason=msg)
+        try:
+            check_string_length(k, "Metadata key: %s" % k, min_length=1)
+            check_string_length(v, "Value for metadata key: %s" % k)
+        except exception.InvalidInput as exc:
+            raise exception.InvalidVolumeMetadata(reason=exc)
+        # for backward compatibility
         if len(k) > 255:
             msg = _("Metadata property key %s greater than 255 "
                     "characters.") % k
-            LOG.debug(msg)
             raise exception.InvalidVolumeMetadataSize(reason=msg)
         if len(v) > 255:
             msg = _("Metadata property key %s value greater than "
                     "255 characters.") % k
-            LOG.debug(msg)
             raise exception.InvalidVolumeMetadataSize(reason=msg)
 
 
@@ -1035,11 +1035,10 @@ def validate_integer(value, name, min_value=None, max_value=None):
     :param max_length: the max_length of the integer
     :returns: integer
     """
-    try:
-        value = int(value)
-    except (TypeError, ValueError, UnicodeEncodeError):
+    if not strutils.is_int_like(value):
         raise webob.exc.HTTPBadRequest(explanation=(
             _('%s must be an integer.') % name))
+    value = int(value)
 
     if min_value is not None and value < min_value:
         raise webob.exc.HTTPBadRequest(
@@ -1103,3 +1102,31 @@ def if_notifications_enabled(f):
             return f(*args, **kwargs)
         return DO_NOTHING
     return wrapped
+
+
+LOG_LEVELS = ('INFO', 'WARNING', 'ERROR', 'DEBUG')
+
+
+def get_log_method(level_string):
+    level_string = level_string or ''
+    upper_level_string = level_string.upper()
+    if upper_level_string not in LOG_LEVELS:
+        raise exception.InvalidInput(
+            reason=_('%s is not a valid log level.') % level_string)
+    return getattr(logging, upper_level_string)
+
+
+def set_log_levels(prefix, level_string):
+    level = get_log_method(level_string)
+    prefix = prefix or ''
+
+    for k, v in logging._loggers.items():
+        if k and k.startswith(prefix):
+            v.logger.setLevel(level)
+
+
+def get_log_levels(prefix):
+    prefix = prefix or ''
+    return {k: logging.logging.getLevelName(v.logger.getEffectiveLevel())
+            for k, v in logging._loggers.items()
+            if k and k.startswith(prefix)}

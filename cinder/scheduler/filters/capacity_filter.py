@@ -33,6 +33,7 @@ class CapacityFilter(filters.BaseBackendFilter):
     def backend_passes(self, backend_state, filter_properties):
         """Return True if host has sufficient capacity."""
 
+        volid = None
         # If the volume already exists on this host, don't fail it for
         # insufficient capacity (e.g., if we are retyping)
         if backend_state.backend_id == filter_properties.get('vol_exists_on'):
@@ -59,6 +60,10 @@ class CapacityFilter(filters.BaseBackendFilter):
                       {'grouping': grouping,
                        'grouping_name': backend_state.backend_id, 'id': volid,
                        'size': requested_size})
+
+        # requested_size is 0 means that it's a manage request.
+        if requested_size == 0:
+            return True
 
         if backend_state.free_capacity_gb is None:
             # Fail Safe
@@ -94,6 +99,7 @@ class CapacityFilter(filters.BaseBackendFilter):
                          "grouping": grouping,
                          "grouping_name": backend_state.backend_id})
             return False
+
         # Calculate how much free space is left after taking into account
         # the reserved space.
         free = free_space - math.floor(total * reserved)

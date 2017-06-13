@@ -13,12 +13,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import inspect
-import json
 import os
 import sys
 
-import decorator
 from os_brick.remotefs import windows_remotefs as remotefs_brick
 from os_win import utilsfactory
 from oslo_config import cfg
@@ -26,6 +23,8 @@ from oslo_log import log as logging
 from oslo_utils import fileutils
 from oslo_utils import units
 
+from cinder import context
+from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder.image import image_utils
@@ -43,7 +42,10 @@ volume_opts = [
     cfg.StrOpt('smbfs_allocation_info_file_path',
                default=r'C:\OpenStack\allocation_data.txt',
                help=('The path of the automatically generated file containing '
-                     'information about volume disk space allocation.')),
+                     'information about volume disk space allocation.'),
+               deprecated_for_removal=True,
+               deprecated_since="11.0.0",
+               deprecated_reason="This allocation file is no longer used."),
     cfg.StrOpt('smbfs_default_volume_format',
                default='vhd',
                choices=['vhd', 'vhdx'],
@@ -67,33 +69,21 @@ volume_opts = [
     cfg.StrOpt('smbfs_mount_point_base',
                default=r'C:\OpenStack\_mnt',
                help=('Base dir containing mount points for smbfs shares.')),
+    cfg.DictOpt('smbfs_pool_mappings',
+                default={},
+                help=('Mappings between share locations and pool names. '
+                      'If not specified, the share names will be used as '
+                      'pool names. Example: '
+                      '//addr/share:pool_name,//addr/share2:pool_name2')),
 ]
 
 CONF = cfg.CONF
 CONF.register_opts(volume_opts)
 
 
-def update_allocation_data(delete=False):
-    @decorator.decorator
-    def wrapper(func, inst, *args, **kwargs):
-        ret_val = func(inst, *args, **kwargs)
-
-        call_args = inspect.getcallargs(func, inst, *args, **kwargs)
-        volume = call_args['volume']
-        requested_size = call_args.get('size_gb', None)
-
-        if delete:
-            allocated_size_gb = None
-        else:
-            allocated_size_gb = requested_size or volume.size
-
-        inst.update_disk_allocation_data(volume, allocated_size_gb)
-        return ret_val
-    return wrapper
-
-
 @interface.volumedriver
-class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
+class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
+                         remotefs_drv.RemoteFSSnapDriverDistributed):
     VERSION = VERSION
 
     driver_volume_type = 'smbfs'
@@ -131,11 +121,9 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
         self._pathutils = utilsfactory.get_pathutils()
         self._smbutils = utilsfactory.get_smbutils()
 
-        self._alloc_info_file_path = (
-            self.configuration.smbfs_allocation_info_file_path)
-
     def do_setup(self, context):
         self._check_os_platform()
+        super(WindowsSmbfsDriver, self).do_setup(context)
 
         image_utils.check_qemu_img_version(self._MINIMUM_QEMU_IMG_VERSION)
 
@@ -169,9 +157,31 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
 
         self.shares = {}  # address : options
         self._ensure_shares_mounted()
-        self._setup_allocation_data()
+        self._setup_pool_mappings()
 
-    @remotefs_drv.locked_volume_id_operation
+    def _setup_pool_mappings(self):
+        self._pool_mappings = self.configuration.smbfs_pool_mappings
+
+        pools = list(self._pool_mappings.values())
+        duplicate_pools = set([pool for pool in pools
+                               if pools.count(pool) > 1])
+        if duplicate_pools:
+            msg = _("Found multiple mappings for pools %(pools)s. "
+                    "Requested pool mappings: %(pool_mappings)s")
+            raise exception.SmbfsException(
+                msg % dict(pools=duplicate_pools,
+                           pool_mappings=self._pool_mappings))
+
+        shares_missing_mappings = (
+            set(self.shares).difference(set(self._pool_mappings)))
+        for share in shares_missing_mappings:
+            msg = ("No pool name was requested for share %(share)s "
+                   "Using the share name instead.")
+            LOG.warning(msg, dict(share=share))
+
+            self._pool_mappings[share] = self._get_share_name(share)
+
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def initialize_connection(self, volume, connector):
         """Allow connection to connector and return connection info.
 
@@ -199,121 +209,14 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
                      "driver supports only Win32 platforms.") % sys.platform
             raise exception.SmbfsException(_msg)
 
-    def _setup_allocation_data(self):
-        if not os.path.exists(self._alloc_info_file_path):
-            fileutils.ensure_tree(
-                os.path.dirname(self._alloc_info_file_path))
-            self._allocation_data = {}
-            self._update_allocation_data_file()
-        else:
-            with open(self._alloc_info_file_path, 'r') as f:
-                self._allocation_data = json.load(f)
-
-    def update_disk_allocation_data(self, volume, virtual_size_gb=None):
-        volume_name = volume.name
-        smbfs_share = volume.provider_location
-        if smbfs_share:
-            share_hash = self._get_hash_str(smbfs_share)
-        else:
-            return
-
-        share_alloc_data = self._allocation_data.get(share_hash, {})
-        old_virtual_size = share_alloc_data.get(volume_name, 0)
-        total_allocated = share_alloc_data.get('total_allocated', 0)
-
-        if virtual_size_gb:
-            share_alloc_data[volume_name] = virtual_size_gb
-            total_allocated += virtual_size_gb - old_virtual_size
-        elif share_alloc_data.get(volume_name):
-            # The volume is deleted.
-            del share_alloc_data[volume_name]
-            total_allocated -= old_virtual_size
-
-        share_alloc_data['total_allocated'] = total_allocated
-        self._allocation_data[share_hash] = share_alloc_data
-        self._update_allocation_data_file()
-
-    def _update_allocation_data_file(self):
-        with open(self._alloc_info_file_path, 'w') as f:
-            json.dump(self._allocation_data, f)
-
     def _get_total_allocated(self, smbfs_share):
-        share_hash = self._get_hash_str(smbfs_share)
-        share_alloc_data = self._allocation_data.get(share_hash, {})
-        total_allocated = share_alloc_data.get('total_allocated', 0) << 30
-        return float(total_allocated)
+        pool_name = self._get_pool_name_from_share(smbfs_share)
+        host = "#".join([self.host, pool_name])
 
-    def _find_share(self, volume_size_in_gib):
-        """Choose SMBFS share among available ones for given volume size.
-
-        For instances with more than one share that meets the criteria, the
-        share with the least "allocated" space will be selected.
-
-        :param volume_size_in_gib: int size in GB
-        """
-
-        if not self._mounted_shares:
-            raise exception.SmbfsNoSharesMounted()
-
-        target_share = None
-        target_share_reserved = 0
-
-        for smbfs_share in self._mounted_shares:
-            if not self._is_share_eligible(smbfs_share, volume_size_in_gib):
-                continue
-            total_allocated = self._get_total_allocated(smbfs_share)
-            if target_share is not None:
-                if target_share_reserved > total_allocated:
-                    target_share = smbfs_share
-                    target_share_reserved = total_allocated
-            else:
-                target_share = smbfs_share
-                target_share_reserved = total_allocated
-
-        if target_share is None:
-            raise exception.SmbfsNoSuitableShareFound(
-                volume_size=volume_size_in_gib)
-
-        LOG.debug('Selected %s as target smbfs share.', target_share)
-
-        return target_share
-
-    def _is_share_eligible(self, smbfs_share, volume_size_in_gib):
-        """Verifies SMBFS share is eligible to host volume with given size.
-
-        First validation step: ratio of actual space (used_space / total_space)
-        is less than 'smbfs_used_ratio'. Second validation step: apparent space
-        allocated (differs from actual space used when using sparse files)
-        and compares the apparent available
-        space (total_available * smbfs_oversub_ratio) to ensure enough space is
-        available for the new volume.
-
-        :param smbfs_share: smbfs share
-        :param volume_size_in_gib: int size in GB
-        """
-
-        used_ratio = self.configuration.smbfs_used_ratio
-        oversub_ratio = self.configuration.smbfs_oversub_ratio
-        requested_volume_size = volume_size_in_gib * units.Gi
-
-        total_size, total_available, total_allocated = \
-            self._get_capacity_info(smbfs_share)
-
-        apparent_size = max(0, total_size * oversub_ratio)
-        apparent_available = max(0, apparent_size - total_allocated)
-        used = (total_size - total_available) / total_size
-
-        if used > used_ratio:
-            LOG.debug('%s is above smbfs_used_ratio.', smbfs_share)
-            return False
-        if apparent_available <= requested_volume_size:
-            LOG.debug('%s is above smbfs_oversub_ratio.', smbfs_share)
-            return False
-        if total_allocated / total_size >= oversub_ratio:
-            LOG.debug('%s reserved space is above smbfs_oversub_ratio.',
-                      smbfs_share)
-            return False
-        return True
+        vol_sz_sum = self.db.volume_data_get_for_host(
+            context=context.get_admin_context(),
+            host=host)[1]
+        return float(vol_sz_sum * units.Gi)
 
     def local_path(self, volume):
         """Get volume path (mounted locally fs path) for given volume.
@@ -382,10 +285,10 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
         extra_specs.update(volume.metadata or {})
 
         return (extra_specs.get('volume_format') or
+                extra_specs.get('smbfs:volume_format') or
                 self.configuration.smbfs_default_volume_format)
 
-    @remotefs_drv.locked_volume_id_operation
-    @update_allocation_data()
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def create_volume(self, volume):
         return super(WindowsSmbfsDriver, self).create_volume(volume)
 
@@ -410,8 +313,7 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
             mnt_flags = self.shares[smbfs_share]
         self._remotefsclient.mount(smbfs_share, mnt_flags)
 
-    @remotefs_drv.locked_volume_id_operation
-    @update_allocation_data(delete=True)
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def delete_volume(self, volume):
         """Deletes a logical volume."""
         if not volume.provider_location:
@@ -482,23 +384,18 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
                          backing_file_name)
 
     def _do_create_snapshot(self, snapshot, backing_file, new_snap_path):
+        if snapshot.volume.status == 'in-use':
+            LOG.debug("Snapshot is in-use. Performing Nova "
+                      "assisted creation.")
+            return
+
         backing_file_full_path = os.path.join(
             self._local_volume_dir(snapshot.volume),
             backing_file)
         self._vhdutils.create_differencing_vhd(new_snap_path,
                                                backing_file_full_path)
 
-    def _create_snapshot_online(self, snapshot, backing_filename,
-                                new_snap_path):
-        msg = _("This driver does not support snapshotting in-use volumes.")
-        raise exception.SmbfsException(msg)
-
-    def _delete_snapshot_online(self, context, snapshot, info):
-        msg = _("This driver does not support deleting in-use snapshots.")
-        raise exception.SmbfsException(msg)
-
-    @remotefs_drv.locked_volume_id_operation
-    @update_allocation_data()
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def extend_volume(self, volume, size_gb):
         LOG.info('Extending volume %s.', volume.id)
 
@@ -514,6 +411,45 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
         self._vhdutils.resize_vhd(volume_path, size_gb * units.Gi,
                                   is_file_max_size=False)
 
+    def _delete_snapshot(self, snapshot):
+        # NOTE(lpetrut): We're slightly diverging from the super class
+        # workflow. The reason is that we cannot query in-use vhd/x images,
+        # nor can we add or remove images from a vhd/x chain in this case.
+        volume_status = snapshot.volume.status
+        if volume_status != 'in-use':
+            return super(WindowsSmbfsDriver, self)._delete_snapshot(snapshot)
+
+        info_path = self._local_path_volume_info(snapshot.volume)
+        snap_info = self._read_info_file(info_path, empty_if_missing=True)
+
+        if snapshot.id not in snap_info:
+            LOG.info('Snapshot record for %s is not present, allowing '
+                     'snapshot_delete to proceed.', snapshot.id)
+            return
+
+        file_to_merge = snap_info[snapshot.id]
+        delete_info = {'file_to_merge': file_to_merge,
+                       'volume_id': snapshot.volume.id}
+        self._nova_assisted_vol_snap_delete(
+            snapshot._context, snapshot, delete_info)
+
+        # At this point, the image file should no longer be in use, so we
+        # may safely query it so that we can update the 'active' image
+        # reference, if needed.
+        merged_img_path = os.path.join(
+            self._local_volume_dir(snapshot.volume),
+            file_to_merge)
+        if snap_info['active'] == file_to_merge:
+            new_active_file_path = self._vhdutils.get_vhd_parent_path(
+                merged_img_path)
+            snap_info['active'] = os.path.basename(new_active_file_path)
+
+        self._delete(merged_img_path)
+
+        # TODO(lpetrut): drop snapshot info file usage.
+        del(snap_info[snapshot.id])
+        self._write_info_file(info_path, snap_info)
+
     def _check_extend_volume_support(self, volume, size_gb):
         volume_path = self.local_path(volume)
         active_file = self.get_active_image_from_info(volume)
@@ -525,14 +461,7 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
                     'driver when no snapshots exist.')
             raise exception.InvalidVolume(msg)
 
-        extend_by = int(size_gb) - volume.size
-        if not self._is_share_eligible(volume.provider_location,
-                                       extend_by):
-            raise exception.ExtendVolumeError(reason='Insufficient space to '
-                                              'extend volume %s to %sG.'
-                                              % (volume.id, size_gb))
-
-    @remotefs_drv.locked_volume_id_operation
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
 
@@ -547,11 +476,11 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
         temp_path = None
 
         try:
-            if backing_file or root_file_fmt == self._DISK_FORMAT_VHDX:
+            if backing_file:
                 temp_file_name = '%s.temp_image.%s.%s' % (
                     volume.id,
                     image_meta['id'],
-                    self._DISK_FORMAT_VHD)
+                    root_file_fmt)
                 temp_path = os.path.join(self._local_volume_dir(volume),
                                          temp_file_name)
 
@@ -564,7 +493,7 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
                                       image_service,
                                       image_meta,
                                       upload_path,
-                                      self._DISK_FORMAT_VHD)
+                                      root_file_fmt)
         finally:
             if temp_path:
                 self._delete(temp_path)
@@ -583,17 +512,6 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
         self._vhdutils.resize_vhd(self.local_path(volume),
                                   volume.size * units.Gi,
                                   is_file_max_size=False)
-
-    @remotefs_drv.locked_volume_id_operation
-    @update_allocation_data()
-    def create_volume_from_snapshot(self, volume, snapshot):
-        return self._create_volume_from_snapshot(volume, snapshot)
-
-    @remotefs_drv.locked_volume_id_operation
-    @update_allocation_data()
-    def create_cloned_volume(self, volume, src_vref):
-        """Creates a clone of the specified volume."""
-        return self._create_cloned_volume(volume, src_vref)
 
     def _copy_volume_from_snapshot(self, snapshot, volume, volume_size):
         """Copy data from snapshot to destination volume."""
@@ -622,3 +540,22 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSSnapDriver):
                                    volume_path)
         self._vhdutils.resize_vhd(volume_path, volume_size * units.Gi,
                                   is_file_max_size=False)
+
+    def _get_share_name(self, share):
+        return share.replace('/', '\\').lstrip('\\').split('\\', 1)[1]
+
+    def _get_pool_name_from_share(self, share):
+        return self._pool_mappings[share]
+
+    def _get_share_from_pool_name(self, pool_name):
+        mappings = {pool: share
+                    for share, pool in self._pool_mappings.items()}
+        share = mappings.get(pool_name)
+
+        if not share:
+            msg = _("Could not find any share for pool %(pool_name)s. "
+                    "Pool mappings: %(pool_mappings)s.")
+            raise exception.SmbfsException(
+                msg % dict(pool_name=pool_name,
+                           pool_mappings=self._pool_mappings))
+        return share

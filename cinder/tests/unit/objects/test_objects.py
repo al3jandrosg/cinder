@@ -34,12 +34,14 @@ object_data = {
     'CGSnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'ConsistencyGroup': '1.4-7bf01a79b82516639fc03cd3ab6d9c01',
     'ConsistencyGroupList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
+    'LogLevel': '1.0-7a8200b6b5063b33ec7b569dc6be66d2',
+    'LogLevelList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'ManageableSnapshot': '1.0-5be933366eb17d12db0115c597158d0d',
     'ManageableSnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'ManageableVolume': '1.0-5fd0152237ec9dfb7b5c7095b8b09ffa',
     'ManageableVolumeList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'QualityOfServiceSpecs': '1.0-0b212e0a86ee99092229874e03207fe8',
-    'QualityOfServiceSpecsList': '1.0-1b54e51ad0fc1f3a8878f5010e7e16dc',
+    'QualityOfServiceSpecsList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'RequestSpec': '1.1-b0bd1a28d191d75648901fa853e8a733',
     'Service': '1.4-c7d011989d1718ca0496ccf640b42712',
     'ServiceList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
@@ -47,13 +49,13 @@ object_data = {
     'SnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'Volume': '1.6-7d3bc8577839d5725670d55e480fe95f',
     'VolumeList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'VolumeAttachment': '1.1-ed82a5fdd56655e14d9f86396c130aea',
+    'VolumeAttachment': '1.2-b68b357a1756582b706006ea9de40c9a',
     'VolumeAttachmentList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'VolumeProperties': '1.1-cadac86b2bdc11eb79d1dcea988ff9e8',
     'VolumeType': '1.3-a5d8c3473db9bc3bbcdbab9313acf4d1',
     'VolumeTypeList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'GroupType': '1.0-d4a7b272199d0b0d6fc3ceed58539d30',
-    'GroupTypeList': '1.0-1b54e51ad0fc1f3a8878f5010e7e16dc',
+    'GroupTypeList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'Group': '1.1-bd853b1d1ee05949d9ce4b33f80ac1a0',
     'GroupList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'GroupSnapshot': '1.0-9af3e994e889cbeae4427c3e351fa91d',
@@ -68,9 +70,14 @@ class TestObjectVersions(test.TestCase):
             base.CinderObjectRegistry.obj_classes())
         expected, actual = checker.test_hashes(object_data)
         self.assertEqual(expected, actual,
-                         'Some objects have changed; please make sure the '
-                         'versions have been bumped, and then update their '
-                         'hashes in the object_data map in this test module.')
+                         "Some objects have changed; please make sure the "
+                         "versions have been bumped and backporting "
+                         "compatibility code has been added to "
+                         "obj_make_compatible if necessary, and then update "
+                         "their hashes in the object_data map in this test "
+                         "module.  If we don't need to add backporting code "
+                         "then it means we also don't need the version bump "
+                         "and we just have to change the hash in this module.")
 
     def test_versions_history(self):
         classes = base.CinderObjectRegistry.obj_classes()

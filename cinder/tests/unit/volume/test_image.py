@@ -40,6 +40,7 @@ from cinder.volume import manager as vol_manager
 
 
 QUOTAS = quota.QUOTAS
+NON_EXISTENT_IMAGE_ID = '003f540f-ec6b-4293-a3f9-7c68646b0f5c'
 
 
 class FakeImageService(object):
@@ -157,7 +158,7 @@ class CopyVolumeToImageTestCase(base.BaseVolumeTestCase):
         self.assertEqual('available', volume['status'])
 
     def test_copy_volume_to_image_exception(self):
-        self.image_meta['id'] = self.FAKE_UUID
+        self.image_meta['id'] = NON_EXISTENT_IMAGE_ID
         # creating volume testdata
         self.volume_attrs['status'] = 'in-use'
         db.volume_create(self.context, self.volume_attrs)
@@ -499,7 +500,7 @@ class ImageVolumeTestCases(base.BaseVolumeTestCase):
                           self.volume.create_volume,
                           self.context,
                           volume,
-                          {'image_id': self.FAKE_UUID})
+                          {'image_id': NON_EXISTENT_IMAGE_ID})
         volume = objects.Volume.get_by_id(self.context, volume.id)
         self.assertEqual("error", volume['status'])
         self.assertFalse(volume['bootable'])
@@ -549,6 +550,33 @@ class ImageVolumeTestCases(base.BaseVolumeTestCase):
         already been attached to confirm that it detaches the volume.
         """
         mock_secure.side_effect = NameError
+        image_info = imageutils.QemuImgInfo()
+        image_info.virtual_size = '1073741824'
+        mock_qemu_info.return_value = image_info
+
+        unbound_copy_method = cinder.volume.driver.BaseVD.copy_image_to_volume
+        bound_copy_method = unbound_copy_method.__get__(self.volume.driver)
+        with mock.patch.object(self.volume.driver, 'copy_image_to_volume',
+                               side_effect=bound_copy_method):
+            self.assertRaises(exception.ImageCopyFailure,
+                              self._create_volume_from_image,
+                              fakeout_copy_image_to_volume=False)
+        # We must have called detach method.
+        self.assertEqual(1, mock_detach.call_count)
+
+    @mock.patch('cinder.utils.brick_get_connector_properties')
+    @mock.patch('cinder.utils.brick_get_connector')
+    @mock.patch('cinder.volume.driver.BaseVD._connect_device')
+    @mock.patch('cinder.volume.driver.BaseVD._detach_volume')
+    @mock.patch('cinder.image.image_utils.qemu_img_info')
+    def test_create_volume_from_image_unavailable_no_attach_info(
+            self, mock_qemu_info, mock_detach, mock_connect, *args):
+        """Test create volume with ImageCopyFailure
+
+        We'll raise an exception on _connect_device call to confirm that it
+        detaches the volume even if the exception doesn't have attach_info.
+        """
+        mock_connect.side_effect = NameError
         image_info = imageutils.QemuImgInfo()
         image_info.virtual_size = '1073741824'
         mock_qemu_info.return_value = image_info

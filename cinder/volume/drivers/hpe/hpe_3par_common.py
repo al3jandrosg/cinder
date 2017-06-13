@@ -74,6 +74,7 @@ LOG = logging.getLogger(__name__)
 MIN_CLIENT_VERSION = '4.2.0'
 DEDUP_API_VERSION = 30201120
 FLASH_CACHE_API_VERSION = 30201200
+COMPRESSION_API_VERSION = 30301215
 SRSTATLD_API_VERSION = 30201200
 REMOTE_COPY_API_VERSION = 30202290
 
@@ -251,10 +252,16 @@ class HPE3PARCommon(object):
                  while doing online copy in create_cloned_volume call.
                  Bug #1661541
         3.0.29 - Fix convert snapshot volume to base volume type. bug #1656186
+        3.0.30 - Handle manage and unmanage hosts present. bug #1648067
+        3.0.31 - Enable HPE-3PAR Compression Feature.
+        3.0.32 - Add consistency group capability to generic volume group
+                 in HPE-3APR
+        3.0.33 - Added replication feature in retype flow. bug #1680313
+        3.0.34 - Add cloned volume to vvset in online copy. bug #1664464
 
     """
 
-    VERSION = "3.0.29"
+    VERSION = "3.0.34"
 
     stats = {}
 
@@ -288,6 +295,7 @@ class HPE3PARCommon(object):
     THIN_PROV_LIC = "Thin Provisioning"
     REMOTE_COPY_LIC = "Remote Copy"
     SYSTEM_REPORTER_LIC = "System Reporter"
+    COMPRESSION_LIC = "Compression"
 
     # Valid values for volume type extra specs
     # The first value in the list is the default value
@@ -307,7 +315,7 @@ class HPE3PARCommon(object):
                     'priority']
     qos_priority_level = {'low': 1, 'normal': 2, 'high': 3}
     hpe3par_valid_keys = ['cpg', 'snap_cpg', 'provisioning', 'persona', 'vvs',
-                          'flash_cache']
+                          'flash_cache', 'compression']
 
     def __init__(self, config, active_backend_id=None):
         self.config = config
@@ -521,34 +529,46 @@ class HPE3PARCommon(object):
         growth_size_mib = growth_size * units.Ki
         self._extend_volume(volume, volume_name, growth_size_mib)
 
-    def create_consistencygroup(self, context, group):
-        """Creates a consistencygroup."""
+    def create_group(self, context, group):
+        """Creates a group."""
+        if not volume_utils.is_group_a_cg_snapshot_type(group):
+            raise NotImplementedError()
+        if group.volume_type_ids is not None:
+            for volume_type in group.volume_types:
+                allow_type = self.is_volume_group_snap_type(
+                    volume_type)
+                if not allow_type:
+                    msg = _('For a volume type to be a part of consistent '
+                            'group, volume type extra spec must have '
+                            'consistent_group_snapshot_enabled="<is> True"')
+                    LOG.error(msg)
+                    raise exception.InvalidInput(reason=msg)
 
         pool = volume_utils.extract_host(group.host, level='pool')
         domain = self.get_domain(pool)
         cg_name = self._get_3par_vvs_name(group.id)
 
-        extra = {'consistency_group_id': group.id}
-        if group.cgsnapshot_id:
-            extra['cgsnapshot_id'] = group.cgsnapshot_id
+        extra = {'group_id': group.id}
+        if group.group_snapshot_id is not None:
+            extra['group_snapshot_id'] = group.group_snapshot_id
 
         self.client.createVolumeSet(cg_name, domain=domain,
                                     comment=six.text_type(extra))
 
-        model_update = {'status': fields.ConsistencyGroupStatus.AVAILABLE}
+        model_update = {'status': fields.GroupStatus.AVAILABLE}
         return model_update
 
-    def create_consistencygroup_from_src(self, context, group, volumes,
-                                         cgsnapshot=None, snapshots=None,
-                                         source_cg=None, source_vols=None):
+    def create_group_from_src(self, context, group, volumes,
+                              group_snapshot=None, snapshots=None,
+                              source_group=None, source_vols=None):
 
-        self.create_consistencygroup(context, group)
+        self.create_group(context, group)
         vvs_name = self._get_3par_vvs_name(group.id)
-        if cgsnapshot and snapshots:
-            cgsnap_name = self._get_3par_snap_name(cgsnapshot.id)
+        if group_snapshot and snapshots:
+            cgsnap_name = self._get_3par_snap_name(group_snapshot.id)
             snap_base = cgsnap_name
-        elif source_cg and source_vols:
-            cg_id = source_cg.id
+        elif source_group and source_vols:
+            cg_id = source_group.id
             # Create a brand new uuid for the temp snap.
             snap_uuid = uuid.uuid4().hex
 
@@ -565,22 +585,33 @@ class HPE3PARCommon(object):
 
         for i, volume in enumerate(volumes):
             snap_name = snap_base + "-" + six.text_type(i)
-            volume_name = self._get_3par_vol_name(volume['id'])
+            volume_name = self._get_3par_vol_name(volume.id)
             type_info = self.get_volume_settings_from_type(volume)
             cpg = type_info['cpg']
+            snapcpg = type_info['snap_cpg']
             tpvv = type_info.get('tpvv', False)
             tdvv = type_info.get('tdvv', False)
-            optional = {'online': True, 'snapCPG': cpg,
+
+            compression = self.get_compression_policy(
+                type_info['hpe3par_keys'])
+
+            optional = {'online': True, 'snapCPG': snapcpg,
                         'tpvv': tpvv, 'tdvv': tdvv}
+
+            if compression is not None:
+                optional['compression'] = compression
+
             self.client.copyVolume(snap_name, volume_name, cpg, optional)
             self.client.addVolumeToVolumeSet(vvs_name, volume_name)
 
         return None, None
 
-    def delete_consistencygroup(self, context, group, volumes):
-        """Deletes a consistency group."""
+    def delete_group(self, context, group, volumes):
+        """Deletes a group."""
 
         try:
+            if not volume_utils.is_group_a_cg_snapshot_type(group):
+                raise NotImplementedError()
             cg_name = self._get_3par_vvs_name(group.id)
             self.client.deleteVolumeSet(cg_name)
         except hpeexceptions.HTTPNotFound:
@@ -605,20 +636,31 @@ class HPE3PARCommon(object):
                            'error': ex})
                 volume_update['status'] = 'error'
             volume_model_updates.append(volume_update)
-
         model_update = {'status': group.status}
-
         return model_update, volume_model_updates
 
-    def update_consistencygroup(self, context, group,
-                                add_volumes=None, remove_volumes=None):
-
+    def update_group(self, context, group, add_volumes=None,
+                     remove_volumes=None):
+        grp_snap_enable = volume_utils.is_group_a_cg_snapshot_type(group)
+        if not grp_snap_enable:
+            raise NotImplementedError()
         volume_set_name = self._get_3par_vvs_name(group.id)
-
         for volume in add_volumes:
-            volume_name = self._get_3par_vol_name(volume['id'])
+            volume_name = self._get_3par_vol_name(volume.id)
+            vol_snap_enable = self.is_volume_group_snap_type(
+                volume.volume_type)
             try:
-                self.client.addVolumeToVolumeSet(volume_set_name, volume_name)
+                if grp_snap_enable and vol_snap_enable:
+                    self.client.addVolumeToVolumeSet(volume_set_name,
+                                                     volume_name)
+                else:
+                    msg = (_('Volume with volume id %s is not '
+                             'supported as extra specs of this '
+                             'volume does not have '
+                             'consistent_group_snapshot_enabled="<is> True"'
+                             ) % volume['id'])
+                    LOG.error(msg)
+                    raise exception.InvalidInput(reason=msg)
             except hpeexceptions.HTTPNotFound:
                 msg = (_('Virtual Volume Set %s does not exist.') %
                        volume_set_name)
@@ -626,7 +668,7 @@ class HPE3PARCommon(object):
                 raise exception.InvalidInput(reason=msg)
 
         for volume in remove_volumes:
-            volume_name = self._get_3par_vol_name(volume['id'])
+            volume_name = self._get_3par_vol_name(volume.id)
             try:
                 self.client.removeVolumeFromVolumeSet(
                     volume_set_name, volume_name)
@@ -638,17 +680,19 @@ class HPE3PARCommon(object):
 
         return None, None, None
 
-    def create_cgsnapshot(self, context, cgsnapshot, snapshots):
-        """Creates a cgsnapshot."""
+    def create_group_snapshot(self, context, group_snapshot, snapshots):
+        """Creates a group snapshot."""
+        if not volume_utils.is_group_a_cg_snapshot_type(group_snapshot):
+            raise NotImplementedError()
 
-        cg_id = cgsnapshot.consistencygroup_id
-        snap_shot_name = self._get_3par_snap_name(cgsnapshot.id) + (
+        cg_id = group_snapshot.group_id
+        snap_shot_name = self._get_3par_snap_name(group_snapshot.id) + (
             "-@count@")
         copy_of_name = self._get_3par_vvs_name(cg_id)
 
-        extra = {'cgsnapshot_id': cgsnapshot.id}
-        extra['consistency_group_id'] = cg_id
-        extra['description'] = cgsnapshot.description
+        extra = {'group_snapshot_id': group_snapshot.id}
+        extra['group_id'] = cg_id
+        extra['description'] = group_snapshot.description
 
         optional = {'comment': json.dumps(extra),
                     'readOnly': False}
@@ -675,14 +719,15 @@ class HPE3PARCommon(object):
                                'status': fields.SnapshotStatus.AVAILABLE}
             snapshot_model_updates.append(snapshot_update)
 
-        model_update = {'status': 'available'}
+        model_update = {'status': fields.GroupSnapshotStatus.AVAILABLE}
 
         return model_update, snapshot_model_updates
 
-    def delete_cgsnapshot(self, context, cgsnapshot, snapshots):
-        """Deletes a cgsnapshot."""
-
-        cgsnap_name = self._get_3par_snap_name(cgsnapshot.id)
+    def delete_group_snapshot(self, context, group_snapshot, snapshots):
+        """Deletes a group snapshot."""
+        if not volume_utils.is_group_a_cg_snapshot_type(group_snapshot):
+            raise NotImplementedError()
+        cgsnap_name = self._get_3par_snap_name(group_snapshot.id)
 
         snapshot_model_updates = []
         for i, snapshot in enumerate(snapshots):
@@ -706,7 +751,7 @@ class HPE3PARCommon(object):
                 snapshot_update['status'] = fields.SnapshotStatus.ERROR
             snapshot_model_updates.append(snapshot_update)
 
-        model_update = {'status': cgsnapshot.status}
+        model_update = {'status': fields.GroupSnapshotStatus.DELETED}
 
         return model_update, snapshot_model_updates
 
@@ -1124,6 +1169,25 @@ class HPE3PARCommon(object):
     def _delete_3par_host(self, hostname):
         self.client.deleteHost(hostname)
 
+    def _get_prioritized_host_on_3par(self, host, hosts, hostname):
+        # Check whether host with wwn/iqn of initiator present on 3par
+        if hosts and hosts['members'] and 'name' in hosts['members'][0]:
+            # Retrieving 'host' and 'hosts' from 3par using hostname
+            # and wwn/iqn respectively. Compare hostname of 'host' and 'hosts',
+            # if they do not match it means 3par has a pre-existing host
+            # with some other name.
+            if host['name'] != hosts['members'][0]['name']:
+                hostname = hosts['members'][0]['name']
+                LOG.info(("Prioritize the host retrieved from wwn/iqn "
+                          "Hostname : %(hosts)s  is used instead "
+                          "of Hostname: %(host)s"),
+                         {'hosts': hostname,
+                          'host': host['name']})
+                host = self._get_3par_host(hostname)
+                return host, hostname
+
+        return host, hostname
+
     def _create_3par_vlun(self, volume, hostname, nsp, lun_id=None):
         try:
             location = None
@@ -1239,6 +1303,7 @@ class HPE3PARCommon(object):
         thin_support = True
         remotecopy_support = True
         sr_support = True
+        compression_support = False
         if 'licenseInfo' in info:
             if 'licenses' in info['licenseInfo']:
                 valid_licenses = info['licenseInfo']['licenses']
@@ -1254,6 +1319,9 @@ class HPE3PARCommon(object):
                 sr_support = self._check_license_enabled(
                     valid_licenses, self.SYSTEM_REPORTER_LIC,
                     "System_reporter_support")
+                compression_support = self._check_license_enabled(
+                    valid_licenses, self.COMPRESSION_LIC,
+                    "Compression")
 
         for cpg_name in self._client_conf['hpe3par_cpg']:
             try:
@@ -1343,7 +1411,8 @@ class HPE3PARCommon(object):
                     'filter_function': filter_function,
                     'goodness_function': goodness_function,
                     'multiattach': False,
-                    'consistencygroup_support': True,
+                    'consistent_group_snapshot_enabled': True,
+                    'compression': compression_support,
                     }
 
             if remotecopy_support:
@@ -1588,6 +1657,40 @@ class HPE3PARCommon(object):
                     else:
                         return self.client.FLASH_CACHE_DISABLED
 
+        return None
+
+    def get_compression_policy(self, hpe3par_keys):
+        if hpe3par_keys is not None:
+            # here it should return true/false/None
+            val = self._get_key_value(hpe3par_keys, 'compression', None)
+            compression_support = False
+        if val is not None:
+            info = self.client.getStorageSystemInfo()
+            if 'licenseInfo' in info:
+                if 'licenses' in info['licenseInfo']:
+                    valid_licenses = info['licenseInfo']['licenses']
+                    compression_support = self._check_license_enabled(
+                        valid_licenses, self.COMPRESSION_LIC,
+                        "Compression")
+            # here check the wsapi version
+            if self.API_VERSION < COMPRESSION_API_VERSION:
+                err = (_("Compression Policy requires "
+                         "WSAPI version '%(compression_version)s' "
+                         "version '%(version)s' is installed.") %
+                       {'compression_version': COMPRESSION_API_VERSION,
+                        'version': self.API_VERSION})
+                LOG.error(err)
+                raise exception.InvalidInput(reason=err)
+            else:
+                if val.lower() == 'true':
+                    if not compression_support:
+                        msg = _('Compression is not supported on '
+                                'underlying hardware')
+                        LOG.error(msg)
+                        raise exception.InvalidInput(reason=msg)
+                    return True
+                else:
+                    return False
         return None
 
     def _set_flash_cache_policy_in_vvs(self, flash_cache, vvs_name):
@@ -1835,8 +1938,10 @@ class HPE3PARCommon(object):
             tdvv = type_info['tdvv']
             flash_cache = self.get_flash_cache_policy(
                 type_info['hpe3par_keys'])
+            compression = self.get_compression_policy(
+                type_info['hpe3par_keys'])
 
-            cg_id = volume.get('consistencygroup_id', None)
+            cg_id = volume.get('group_id', None)
             if cg_id:
                 vvs_name = self._get_3par_vvs_name(cg_id)
 
@@ -1859,6 +1964,10 @@ class HPE3PARCommon(object):
 
             capacity = self._capacity_from_size(volume['size'])
             volume_name = self._get_3par_vol_name(volume['id'])
+
+            if compression is not None:
+                extras['compression'] = compression
+
             self.client.createVolume(volume_name, cpg, capacity, extras)
             if qos or vvs_name or flash_cache is not None:
                 try:
@@ -1899,7 +2008,7 @@ class HPE3PARCommon(object):
                                       provider_location=self.client.id)
 
     def _copy_volume(self, src_name, dest_name, cpg, snap_cpg=None,
-                     tpvv=True, tdvv=False):
+                     tpvv=True, tdvv=False, compression=None):
         # Virtual volume sets are not supported with the -online option
         LOG.debug('Creating clone of a volume %(src)s to %(dest)s.',
                   {'src': src_name, 'dest': dest_name})
@@ -1910,6 +2019,10 @@ class HPE3PARCommon(object):
 
         if self.API_VERSION >= DEDUP_API_VERSION:
             optional['tdvv'] = tdvv
+
+        if (compression is not None and
+                self.API_VERSION >= COMPRESSION_API_VERSION):
+            optional['compression'] = compression
 
         body = self.client.copyVolume(src_name, dest_name, cpg, optional)
         return body['taskid']
@@ -2021,13 +2134,35 @@ class HPE3PARCommon(object):
 
                 type_info = self.get_volume_settings_from_type(volume)
                 cpg = type_info['cpg']
+                qos = type_info['qos']
+                vvs_name = type_info['vvs_name']
+                flash_cache = self.get_flash_cache_policy(
+                    type_info['hpe3par_keys'])
 
+                compression_val = self.get_compression_policy(
+                    type_info['hpe3par_keys'])
                 # make the 3PAR copy the contents.
                 # can't delete the original until the copy is done.
                 self._copy_volume(src_vol_name, vol_name, cpg=cpg,
                                   snap_cpg=type_info['snap_cpg'],
                                   tpvv=type_info['tpvv'],
-                                  tdvv=type_info['tdvv'])
+                                  tdvv=type_info['tdvv'],
+                                  compression=compression_val)
+
+                if qos or vvs_name or flash_cache is not None:
+                    try:
+                        self._add_volume_to_volume_set(
+                            volume, vol_name, cpg, vvs_name, qos, flash_cache)
+                    except exception.InvalidInput as ex:
+                        # Delete volume if unable to add it to the volume set
+                        self.client.deleteVolume(vol_name)
+                        dbg = {'volume': vol_name,
+                               'vvs_name': vvs_name,
+                               'err': six.text_type(ex)}
+                        msg = _("Failed to add volume '%(volume)s' to vvset "
+                                "'%(vvs_name)s' because '%(err)s'") % dbg
+                        LOG.error(msg)
+                        raise exception.CinderException(msg)
 
                 # v2 replication check
                 replication_flag = False
@@ -2342,7 +2477,6 @@ class HPE3PARCommon(object):
                'status': volume['status']}
         LOG.debug('enter: migrate_volume: id=%(id)s, host=%(host)s, '
                   'status=%(status)s.', dbg)
-
         ret = False, None
 
         if volume['status'] in ['available', 'in-use']:
@@ -2433,10 +2567,13 @@ class HPE3PARCommon(object):
             volume_name = self._get_3par_vol_name(volume['id'])
             temp_vol_name = volume_name.replace("osv-", "omv-")
 
+            compression = self.get_compression_policy(
+                type_info['hpe3par_keys'])
             # Create a physical copy of the volume
             task_id = self._copy_volume(volume_name, temp_vol_name,
                                         cpg, cpg, type_info['tpvv'],
-                                        type_info['tdvv'])
+                                        type_info['tdvv'],
+                                        compression)
 
             LOG.debug('Copy volume scheduled: convert_to_base_volume: '
                       'id=%s.', volume['id'])
@@ -2612,7 +2749,7 @@ class HPE3PARCommon(object):
         return portPos
 
     def tune_vv(self, old_tpvv, new_tpvv, old_tdvv, new_tdvv,
-                old_cpg, new_cpg, volume_name):
+                old_cpg, new_cpg, volume_name, new_compression):
         """Tune the volume to change the userCPG and/or provisioningType.
 
         The volume will be modified/tuned/converted to the new userCPG and
@@ -2622,6 +2759,10 @@ class HPE3PARCommon(object):
         is no longer active.  When the task is no longer active, then it must
         either be done or it is in a state that we need to treat as an error.
         """
+
+        compression = False
+        if new_compression is not None:
+            compression = new_compression
 
         if old_tpvv == new_tpvv and old_tdvv == new_tdvv:
             if new_cpg != old_cpg:
@@ -2661,12 +2802,21 @@ class HPE3PARCommon(object):
                          {'volume_name': volume_name, 'new_cpg': new_cpg})
 
             try:
-                response, body = self.client.modifyVolume(
-                    volume_name,
-                    {'action': 6,
-                     'tuneOperation': 1,
-                     'userCPG': new_cpg,
-                     'conversionOperation': cop})
+                if self.API_VERSION < COMPRESSION_API_VERSION:
+                    response, body = self.client.modifyVolume(
+                        volume_name,
+                        {'action': 6,
+                         'tuneOperation': 1,
+                         'userCPG': new_cpg,
+                         'conversionOperation': cop})
+                else:
+                    response, body = self.client.modifyVolume(
+                        volume_name,
+                        {'action': 6,
+                         'tuneOperation': 1,
+                         'userCPG': new_cpg,
+                         'compression': compression,
+                         'conversionOperation': cop})
             except hpeexceptions.HTTPBadRequest as ex:
                 if ex.get_code() == 40 and "keepVV" in six.text_type(ex):
                     # Cannot retype with snapshots because we don't want to
@@ -2733,7 +2883,7 @@ class HPE3PARCommon(object):
                 old_tpvv, new_tpvv, old_tdvv, new_tdvv,
                 old_vvs, new_vvs, old_qos, new_qos,
                 old_flash_cache, new_flash_cache,
-                old_comment):
+                old_comment, new_compression):
 
         action = "volume:retype"
 
@@ -2749,7 +2899,8 @@ class HPE3PARCommon(object):
         retype_flow.add(
             ModifyVolumeTask(action),
             ModifySpecsTask(action),
-            TuneVolumeTask(action))
+            TuneVolumeTask(action),
+            ReplicateVolumeTask(action))
 
         taskflow.engines.run(
             retype_flow,
@@ -2764,7 +2915,8 @@ class HPE3PARCommon(object):
                    'old_flash_cache': old_flash_cache,
                    'new_flash_cache': new_flash_cache,
                    'new_type_name': new_type_name, 'new_type_id': new_type_id,
-                   'old_comment': old_comment
+                   'old_comment': old_comment,
+                   'new_compression': new_compression
                    })
 
     def _retype_from_old_to_new(self, volume, new_type, old_volume_settings,
@@ -2808,6 +2960,9 @@ class HPE3PARCommon(object):
             new_persona = new_hpe3par_keys['persona']
         new_flash_cache = self.get_flash_cache_policy(new_hpe3par_keys)
 
+        # it will return None / True /False$
+        new_compression = self.get_compression_policy(new_hpe3par_keys)
+
         old_qos = old_volume_settings['qos']
         old_vvs = old_volume_settings['vvs_name']
         old_hpe3par_keys = old_volume_settings['hpe3par_keys']
@@ -2834,7 +2989,7 @@ class HPE3PARCommon(object):
                      old_snap_cpg, new_snap_cpg, old_tpvv, new_tpvv,
                      old_tdvv, new_tdvv, old_vvs, new_vvs,
                      old_qos, new_qos, old_flash_cache, new_flash_cache,
-                     old_comment)
+                     old_comment, new_compression)
 
         if host:
             return True, self._get_model_update(host['host'], new_cpg)
@@ -3171,6 +3326,15 @@ class HPE3PARCommon(object):
                 rep_flag = False
         return rep_flag
 
+    def is_volume_group_snap_type(self, volume_type):
+        consis_group_snap_type = False
+        if volume_type:
+            extra_specs = volume_type.extra_specs
+            if 'consistent_group_snapshot_enabled' in extra_specs:
+                gsnap_val = extra_specs['consistent_group_snapshot_enabled']
+                consis_group_snap_type = (gsnap_val == "<is> True")
+        return consis_group_snap_type
+
     def _volume_of_replicated_type(self, volume):
         replicated_type = False
         volume_type_id = volume.get('volume_type_id')
@@ -3293,7 +3457,8 @@ class HPE3PARCommon(object):
 
         return replication_targets
 
-    def _do_volume_replication_setup(self, volume):
+    def _do_volume_replication_setup(self, volume, retype=False,
+                                     dist_type_id=None):
         """This function will do or ensure the following:
 
         -Create volume on main array (already done in create_volume)
@@ -3320,7 +3485,11 @@ class HPE3PARCommon(object):
             # Grab the extra_spec entries for replication and make sure they
             # are set correctly.
             volume_type = self._get_volume_type(volume["volume_type_id"])
-            extra_specs = volume_type.get("extra_specs")
+            if retype and dist_type_id is not None:
+                dist_type = self._get_volume_type(dist_type_id)
+                extra_specs = dist_type.get("extra_specs")
+            else:
+                extra_specs = volume_type.get("extra_specs")
             replication_mode = extra_specs.get(
                 self.EXTRA_SPEC_REP_MODE, self.DEFAULT_REP_MODE)
             replication_mode_num = self._get_remote_copy_mode_num(
@@ -3428,7 +3597,8 @@ class HPE3PARCommon(object):
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
-    def _do_volume_replication_destroy(self, volume, rcg_name=None):
+    def _do_volume_replication_destroy(self, volume, rcg_name=None,
+                                       retype=False):
         """This will completely remove all traces of a remote copy group.
 
         It should be used when deleting a replication enabled volume
@@ -3464,7 +3634,8 @@ class HPE3PARCommon(object):
 
         # Delete volume on the main array.
         try:
-            self.client.deleteVolume(vol_name)
+            if not retype:
+                self.client.deleteVolume(vol_name)
         except Exception:
             pass
 
@@ -3517,6 +3688,49 @@ class HPE3PARCommon(object):
                                initial_delay=self.initial_delay).wait()
 
 
+class ReplicateVolumeTask(flow_utils.CinderTask):
+
+    """Task to replicate a volume.
+
+    This is a task for adding/removing the replication feature to volume.
+    It is intended for use during retype(). This task has no revert.
+    # TODO(sumit): revert back to original volume extra-spec
+    """
+
+    def __init__(self, action, **kwargs):
+        super(ReplicateVolumeTask, self).__init__(addons=[action])
+
+    def execute(self, common, volume, new_type_id):
+
+        new_replicated_type = False
+
+        if new_type_id:
+            new_volume_type = common._get_volume_type(new_type_id)
+
+            extra_specs = new_volume_type.get('extra_specs', None)
+            if extra_specs and 'replication_enabled' in extra_specs:
+                rep_val = extra_specs['replication_enabled']
+                new_replicated_type = (rep_val == "<is> True")
+
+        if common._volume_of_replicated_type(volume) and new_replicated_type:
+            # Retype from replication enabled to replication enable.
+            common._do_volume_replication_destroy(volume, retype=True)
+            common._do_volume_replication_setup(
+                volume,
+                retype=True,
+                dist_type_id=new_type_id)
+        elif (not common._volume_of_replicated_type(volume)
+              and new_replicated_type):
+            # Retype from replication disabled to replication enable.
+            common._do_volume_replication_setup(
+                volume,
+                retype=True,
+                dist_type_id=new_type_id)
+        elif common._volume_of_replicated_type(volume):
+            # Retype from replication enabled to replication disable.
+            common._do_volume_replication_destroy(volume, retype=True)
+
+
 class ModifyVolumeTask(flow_utils.CinderTask):
 
     """Task to change a volume's snapCPG and comment.
@@ -3544,6 +3758,7 @@ class ModifyVolumeTask(flow_utils.CinderTask):
 
     def _get_new_comment(self, old_comment, new_vvs, new_qos,
                          new_type_name, new_type_id):
+
         # Modify the comment during ModifyVolume
         comment_dict = dict(ast.literal_eval(old_comment))
         if 'vvs' in comment_dict:
@@ -3614,19 +3829,21 @@ class TuneVolumeTask(flow_utils.CinderTask):
 
     """Task to change a volume's CPG and/or provisioning type.
 
-    This is a task for changing the CPG and/or provisioning type.  It is
-    intended for use during retype().  This task has no revert.  The current
-    design is to do this task last and do revert-able tasks first. Un-doing a
-    tunevv can be expensive and should be avoided.
+    This is a task for changing the CPG and/or provisioning type.
+    It is intended for use during retype().
+
+    This task has no revert.  The current design is to do this task last
+    and do revert-able tasks first. Un-doing a tunevv can be expensive
+    and should be avoided.
     """
 
     def __init__(self, action, **kwargs):
         super(TuneVolumeTask, self).__init__(addons=[action])
 
     def execute(self, common, old_tpvv, new_tpvv, old_tdvv, new_tdvv,
-                old_cpg, new_cpg, volume_name):
+                old_cpg, new_cpg, volume_name, new_compression):
         common.tune_vv(old_tpvv, new_tpvv, old_tdvv, new_tdvv,
-                       old_cpg, new_cpg, volume_name)
+                       old_cpg, new_cpg, volume_name, new_compression)
 
 
 class ModifySpecsTask(flow_utils.CinderTask):

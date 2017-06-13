@@ -43,7 +43,6 @@ cinder.openstack.common.notifier.rpc_notifier2 = oslo_messaging.notify.messaging
 cinder.openstack.common.notifier.test_notifier = oslo_messaging.notify._impl_test:TestDriver
 
 [oslo_middleware]
-cinder.api.middleware.sizelimit = oslo_middleware.sizelimit
 cinder.openstack.common.middleware.request_id = oslo_middleware.request_id
 
 [tempest.test_plugins]

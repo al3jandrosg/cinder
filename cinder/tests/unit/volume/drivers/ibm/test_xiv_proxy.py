@@ -14,18 +14,20 @@
 #    under the License.
 #
 import mock
-import unittest
+import six
 from xml.etree import ElementTree
 
 from cinder import context
 from cinder import exception
-from cinder.objects import consistencygroup
-from cinder.objects import fields
+from cinder import objects
+from cinder import test
 from cinder.tests.unit import fake_constants as fake
+from cinder.tests.unit import utils as testutils
 from cinder.tests.unit.volume.drivers.ibm import fake_pyxcli
 import cinder.volume.drivers.ibm.ibm_storage as storage
 from cinder.volume.drivers.ibm.ibm_storage import cryptish
 from cinder.volume.drivers.ibm.ibm_storage.xiv_proxy import XIVProxy
+from cinder.volume import group_types
 
 errors = fake_pyxcli.pyxcli_client.errors
 
@@ -35,46 +37,14 @@ module_patcher = mock.MagicMock()
 test_mock.cinder.exception = exception
 
 
-class dummyException(Exception):
-    pass
-
-
 TEST_LOG_PREFIX = storage.XIV_LOG_PREFIX
 TEST_VOLUME = {
     'name': 'BLA',
     'id': 23,
     'size': 17,
-    'consistencygroup_id': fake.CONSISTENCY_GROUP_ID,
-}
-TEST_CLONED_VOLUME = {
-    'name': 'CLONE',
-    'id': 46,
-    'size': 17,
-}
-TEST_CONS_GROUP = {
-    'name': 'WTF32',
-    'id': 'WTF32',
-    'volume_type_ids': ['WTF32'],
-}
-TEST_CG_SNAPSHOT = {
-    'id': 'WTF',
-    'consistencygroup_id': "WTF32"
+    'group_id': fake.CONSISTENCY_GROUP_ID,
 }
 
-
-class TestSnapshot(dict):
-
-    def volume_name(self):
-        return self.volume_name
-
-TEST_SNAPSHOT = TestSnapshot({
-    'name': 'SNAP',
-    'id': 32,
-    'volume_id': 23,
-    'size': 17,
-    'volume_size': 17,
-    'volume_name': 'volume-32',
-})
 TEST_EXTRA_SPECS = {
     'replication_enabled': '<is> False',
 }
@@ -99,6 +69,8 @@ TEST_CHAP_SECRET = 'V1RGNjRfXw=='
 
 FC_TARGETS_OPTIMIZED = [
     "50017380FE020160", "50017380FE020190", "50017380FE020192"]
+FC_TARGETS_OPTIMIZED_WITH_HOST = [
+    "50017380FE020160", "50017380FE020192"]
 FC_TARGETS_BEFORE_SORTING = [
     "50017380FE020160", "50017380FE020161", "50017380FE020162",
     "50017380FE020190", "50017380FE020191", "50017380FE020192"]
@@ -107,18 +79,28 @@ FC_TARGETS_AFTER_SORTING = [
     "50017380FE020161", "50017380FE020162", "50017380FE020192"]
 
 FC_PORT_LIST_OUTPUT = [
-    {'port_state': 'Online', 'role': 'Target', 'wwpn': '50017380FE020160'},
-    {'port_state': 'Link Problem', 'role': 'Target',
-     'wwpn': '50017380FE020161'},
-    {'port_state': 'Online', 'role': 'Initiator', 'wwpn': '50017380FE020162'},
-    {'port_state': 'Link Problem', 'role': 'Initiator',
-     'wwpn': '50017380FE020163'},
-    {'port_state': 'Online', 'role': 'Target', 'wwpn': '50017380FE020190'},
-    {'port_state': 'Link Problem', 'role': 'Target',
-     'wwpn': '50017380FE020191'},
-    {'port_state': 'Online', 'role': 'Target', 'wwpn': '50017380FE020192'},
-    {'port_state': 'Link Problem', 'role': 'Initiator',
-     'wwpn': '50017380FE020193'}]
+    {'component_id': '1:FC_Port:4:1', 'port_state': 'Online', 'role': 'Target',
+     'wwpn': '50017380FE020160'},
+    {'component_id': '1:FC_Port:5:1', 'port_state': 'Link Problem',
+     'role': 'Target', 'wwpn': '50017380FE020161'},
+    {'component_id': '1:FC_Port:6:1', 'port_state': 'Online',
+     'role': 'Initiator', 'wwpn': '50017380FE020162'},
+    {'component_id': '1:FC_Port:7:1', 'port_state': 'Link Problem',
+     'role': 'Initiator', 'wwpn': '50017380FE020163'},
+    {'component_id': '1:FC_Port:8:1', 'port_state': 'Online', 'role': 'Target',
+     'wwpn': '50017380FE020190'},
+    {'component_id': '1:FC_Port:9:1', 'port_state': 'Link Problem',
+     'role': 'Target', 'wwpn': '50017380FE020191'},
+    {'component_id': '1:FC_Port:4:1', 'port_state': 'Online', 'role': 'Target',
+     'wwpn': '50017380FE020192'},
+    {'component_id': '1:FC_Port:5:1', 'port_state': 'Link Problem',
+     'role': 'Initiator', 'wwpn': '50017380FE020193'}]
+
+HOST_CONNECTIVITY_LIST = [
+    {'host': 'nova-compute-c5507606d5680e05', 'host_port': '10000000C97D26DB',
+     'local_fc_port': '1:FC_Port:4:1', 'local_iscsi_port': '',
+     'module': '1:Module:4', 'type': 'FC'}]
+
 REPLICA_ID = 'WTF32'
 REPLICA_IP = '1.2.3.4'
 REPLICA_USER = 'WTF64'
@@ -132,17 +114,13 @@ REPLICA_PARAMS = {
 }
 
 
-class XIVProxyTest(unittest.TestCase):
+class XIVProxyTest(test.TestCase):
 
     """Tests the main Proxy driver"""
 
-    test_cg = consistencygroup.ConsistencyGroup(
-        context=None, name='WTF32', id=fake.CONSISTENCY_GROUP_ID,
-        volume_type_id=fake.VOLUME_TYPE_ID,
-        status=fields.ConsistencyGroupStatus.AVAILABLE)
-
     def setUp(self):
         """import at setup to ensure module patchers are in place"""
+        super(XIVProxyTest, self).setUp()
 
         self.proxy = XIVProxy
         self.version = "cinder"
@@ -176,9 +154,9 @@ class XIVProxyTest(unittest.TestCase):
 
         p = self.proxy(storage_info, mock.MagicMock(),
                        test_mock.cinder.exception)
-        with self.assertRaises(
-                test_mock.cinder.exception.InvalidParameterValue):
-            p.setup({})
+
+        self.assertRaises(test_mock.cinder.exception.InvalidParameterValue,
+                          p.setup, {})
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy.client."
                 "XCLIClient")
@@ -200,8 +178,8 @@ class XIVProxyTest(unittest.TestCase):
             side_effect=errors.CredentialsError(
                 'bla', 'bla', ElementTree.Element("bla")))
 
-        with self.assertRaises(test_mock.cinder.exception.NotAuthorized):
-            p.setup({})
+        self.assertRaises(test_mock.cinder.exception.NotAuthorized,
+                          p.setup, {})
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
                 "xiv_proxy.client.XCLIClient")
@@ -223,8 +201,8 @@ class XIVProxyTest(unittest.TestCase):
             side_effect=errors.ConnectionError(
                 'bla', 'bla', ElementTree.Element("bla")))
 
-        with self.assertRaises(test_mock.cinder.exception.HostNotFound):
-            p.setup({})
+        self.assertRaises(test_mock.cinder.exception.HostNotFound,
+                          p.setup, {})
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy."
                 "client.XCLIClient")
@@ -254,6 +232,80 @@ class XIVProxyTest(unittest.TestCase):
 
         self.assertEqual("BLA", p.meta.get('ibm_storage_iqn'))
         self.assertEqual("WTF32:3260", p.meta.get('ibm_storage_portal'))
+
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy."
+                "client.XCLIClient")
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.storage.get_online_iscsi_ports",
+                mock.MagicMock(return_value=['WTF32']))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.socket.getfqdn", new=mock.MagicMock(
+                    return_value='test_hostname'))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.XIVProxy._get_target_params",
+                mock.MagicMock(return_value=REPLICA_PARAMS))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.XIVProxy._get_target",
+                mock.MagicMock(return_value="BLABLA"))
+    def test_setup_should_succeed_if_replica_is_set(self, mock_xcli):
+        """Test setup
+
+        Setup should succeed if replica is set
+        """
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception)
+
+        cmd = mock_xcli.connect_multiendpoint_ssl.return_value.cmd
+        item = cmd.config_get.return_value.as_dict.return_value.__getitem__
+        item.return_value.value = "BLA"
+
+        SCHEDULE_LIST_RESPONSE = {
+            '00:01:00': {'interval': 120},
+            '00:02:00': {'interval': 300},
+            '00:05:00': {'interval': 600},
+            '00:10:00': {'interval': 1200},
+        }
+        cmd = mock_xcli.connect_multiendpoint_ssl.return_value.cmd
+        cmd.schedule_list.return_value\
+            .as_dict.return_value = SCHEDULE_LIST_RESPONSE
+
+        p.setup({})
+
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy."
+                "client.XCLIClient")
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.storage.get_online_iscsi_ports",
+                mock.MagicMock(return_value=['WTF32']))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.socket.getfqdn", new=mock.MagicMock(
+                    return_value='test_hostname'))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.XIVProxy._get_target_params",
+                mock.MagicMock(return_value=REPLICA_PARAMS))
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.XIVProxy._get_target",
+                mock.MagicMock(return_value="BLABLA"))
+    def test_setup_should_fail_if_schedule_create_fails(self, mock_xcli):
+        """Test setup
+
+        Setup should fail if replica is set and schedule_create fails
+        """
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception)
+
+        cmd = mock_xcli.connect_multiendpoint_ssl.return_value.cmd
+        item = cmd.config_get.return_value.as_dict.return_value.__getitem__
+        item.return_value.value = "BLA"
+        cmd.schedule_list.return_value.as_dict.return_value = {}
+        cmd.schedule_create.side_effect = (
+            errors.XCLIError('bla'))
+
+        self.assertRaises(exception.VolumeBackendAPIException, p.setup, {})
 
     def test_create_volume_should_call_xcli(self):
         """Create volume should call xcli with the correct parameters"""
@@ -297,8 +349,7 @@ class XIVProxyTest(unittest.TestCase):
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_volume({'size': 16, 'name': 'WTF32'})
+        self.assertRaises(ex, p.create_volume, {'size': 16, 'name': 'WTF32'})
 
     def test_create_volume_with_consistency_group(self):
         """Test Create volume with consistency_group"""
@@ -313,7 +364,7 @@ class XIVProxyTest(unittest.TestCase):
 
         p.ibm_storage_cli = mock.MagicMock()
 
-        volume = {'size': 16, 'name': 'WTF32', 'consistencygroup_id': 'WTF'}
+        volume = {'size': 16, 'name': 'WTF32', 'group_id': 'WTF'}
         p.create_volume(volume)
 
         p.ibm_storage_cli.cmd.vol_create.assert_called_once_with(
@@ -371,10 +422,9 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli = mock.MagicMock()
 
         volume = {'size': 16, 'name': 'WTF32',
-                  'consistencygroup_id': 'WTF', 'volume_type_id': 'WTF'}
+                  'group_id': 'WTF', 'volume_type_id': 'WTF'}
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_volume(volume)
+        self.assertRaises(ex, p.create_volume, volume)
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
                 "xiv_proxy.XIVProxy._get_targets",
@@ -401,8 +451,7 @@ class XIVProxyTest(unittest.TestCase):
 
         volume = {'size': 16, 'name': 'WTF32', 'volume_type_id': 'WTF'}
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_volume(volume)
+        self.assertRaises(ex, p.create_volume, volume)
 
     def test_delete_volume_should_pass_the_correct_parameters(self):
         """Delete volume should call xcli with the correct parameters"""
@@ -488,8 +537,7 @@ class XIVProxyTest(unittest.TestCase):
                   'name': 'WTF32', 'volume_type_id': 'WTF'}
         target = 'Invalid'
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.failover_host({}, [volume], target)
+        self.assertRaises(ex, p.failover_host, {}, [volume], target)
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
                 "xiv_proxy.client.XCLIClient")
@@ -515,8 +563,7 @@ class XIVProxyTest(unittest.TestCase):
                   'name': 'WTF32', 'volume_type_id': 'WTF'}
         target = REPLICA_ID
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.failover_host({}, [volume], target)
+        self.assertRaises(ex, p.failover_host, {}, [volume], target)
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
                 "xiv_proxy.client.XCLIClient")
@@ -585,10 +632,11 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
-        p.ibm_storage_cli.cmd.perf_class_list.side_effect = errors.XCLIError(
-            '')
+        p.ibm_storage_cli.cmd.perf_class_list.side_effect = (
+            errors.XCLIError(''))
 
-        self.assertRaises(errors.XCLIError)
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p._check_perf_class_on_backend, {'bw': '100'})
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
                 "xiv_proxy.XIVProxy._check_storage_version_for_qos_support",
@@ -718,9 +766,8 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_list.return_value.as_list = []
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.manage_volume(volume={'name': 'WTF32'},
-                            reference={'source-name': 'WTF64'})
+        self.assertRaises(ex, p.manage_volume, volume={'name': 'WTF32'},
+                          reference={'source-name': 'WTF64'})
 
     def test_manage_volume_get_size_if_volume_exists(self):
         """Manage volume get size should return size"""
@@ -822,9 +869,9 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_list.return_value.as_list = []
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.manage_volume_get_size(volume={'name': 'WTF32'},
-                                     reference={'source-name': 'WTF64'})
+        self.assertRaises(ex, p.manage_volume_get_size,
+                          volume={'name': 'WTF32'},
+                          reference={'source-name': 'WTF64'})
 
     def test_initialize_connection(self):
         """Test initialize_connection
@@ -876,8 +923,8 @@ class XIVProxyTest(unittest.TestCase):
         connector['initiator'] = None
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.initialize_connection(TEST_VOLUME, connector)
+        self.assertRaises(ex, p.initialize_connection, TEST_VOLUME,
+                          connector)
 
     def test_initialize_connection_bad_iqn(self):
         """Initialize connection raises exception on bad formatted IQN"""
@@ -895,8 +942,8 @@ class XIVProxyTest(unittest.TestCase):
         connector['initiator'] = 5555
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.initialize_connection(TEST_VOLUME, connector)
+        self.assertRaises(ex, p.initialize_connection, TEST_VOLUME,
+                          connector)
 
     def test_get_fc_targets_returns_optimized_wwpns_list(self):
         driver = mock.MagicMock()
@@ -911,7 +958,26 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli = mock.MagicMock()
         p.ibm_storage_cli.cmd.fc_port_list.return_value = FC_PORT_LIST_OUTPUT
         fc_targets = p._get_fc_targets(None)
-        self.assertEqual(FC_TARGETS_OPTIMIZED, fc_targets,
+        six.assertCountEqual(self, FC_TARGETS_OPTIMIZED, fc_targets)
+
+    def test_get_fc_targets_returns_host_optimized_wwpns_list(self):
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        hostname = storage.get_host_or_create_from_iqn(TEST_CONNECTOR)
+        host = {'name': hostname}
+        p.ibm_storage_cli = mock.MagicMock()
+        p.ibm_storage_cli.cmd.fc_port_list.return_value = FC_PORT_LIST_OUTPUT
+        p.ibm_storage_cli.cmd.host_connectivity_list.return_value = (
+            HOST_CONNECTIVITY_LIST)
+        fc_targets = p._get_fc_targets(host)
+        self.assertEqual(FC_TARGETS_OPTIMIZED_WITH_HOST, fc_targets,
                          "FC targets are different from the expected")
 
     def test_define_ports_returns_sorted_wwpns_list(self):
@@ -1093,8 +1159,8 @@ class XIVProxyTest(unittest.TestCase):
         p._define_host_according_to_chap = mock.MagicMock()
         p._define_host_according_to_chap.return_value = dict(id=100)
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.initialize_connection(TEST_VOLUME, TEST_CONNECTOR)
+        self.assertRaises(ex, p.initialize_connection, TEST_VOLUME,
+                          TEST_CONNECTOR)
 
     def _get_test_host(self):
         host = {
@@ -1106,9 +1172,41 @@ class XIVProxyTest(unittest.TestCase):
         }
         return host
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+    def _create_test_group(self, g_name='group', is_cg=True):
+        extra_specs = {}
+        if is_cg:
+            extra_specs['consistent_group_snapshot_enabled'] = '<is> True'
+
+        group_type = group_types.create(self.ctxt, g_name, extra_specs)
+        return testutils.create_group(self.ctxt,
+                                      host=self._get_test_host()['name'],
+                                      group_type_id=group_type.id,
+                                      volume_type_ids=[])
+
+    def _create_test_cgsnapshot(self, group_id):
+        group_type = group_types.create(
+            self.ctxt, 'group_snapshot',
+            {'consistent_group_snapshot_enabled': '<is> True'})
+        return testutils.create_group_snapshot(self.ctxt, group_id=group_id,
+                                               group_type_id=group_type.id)
+
+    def test_create_generic_group(self):
+        """test create generic group"""
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group(is_cg=False)
+
+        self.assertRaises(NotImplementedError,
+                          p.create_group, {}, group_obj)
+
     def test_create_consistencygroup(self):
         """test a successful cg create"""
         driver = mock.MagicMock()
@@ -1121,18 +1219,16 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
 
-        model_update = p.create_consistencygroup({}, self.test_cg)
+        model_update = p.create_group({}, group_obj)
 
         p.ibm_storage_cli.cmd.cg_create.assert_called_once_with(
-            cg=p._cg_name_from_id(fake.CONSISTENCY_GROUP_ID),
+            cg=p._cg_name_from_id(group_obj.id),
             pool='WTF32')
 
         self.assertEqual('available', model_update['status'])
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
     def test_create_consistencygroup_already_exists(self):
         """test create_consistenygroup when cg already exists"""
         driver = mock.MagicMock()
@@ -1150,12 +1246,8 @@ class XIVProxyTest(unittest.TestCase):
             'bla', 'bla', ElementTree.Element('bla'))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_consistencygroup({}, TEST_CONS_GROUP)
+        self.assertRaises(ex, p.create_group, {}, self._create_test_group())
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
     def test_create_consistencygroup_reached_limit(self):
         """test create_consistenygroup when reached maximum CGs"""
         driver = mock.MagicMock()
@@ -1174,12 +1266,8 @@ class XIVProxyTest(unittest.TestCase):
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_consistencygroup({}, TEST_CONS_GROUP)
+        self.assertRaises(ex, p.create_group, {}, self._create_test_group())
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS_REPL))
     def test_create_consistencygroup_with_replication(self):
         """test create_consistenygroup when replication is set"""
 
@@ -1190,13 +1278,19 @@ class XIVProxyTest(unittest.TestCase):
 
         p.ibm_storage_cli = mock.MagicMock()
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            p.create_consistencygroup({}, TEST_CONS_GROUP)
+        group_obj = self._create_test_group()
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        vol_type = objects.VolumeType(context=self.ctxt,
+                                      name='volume_type_rep',
+                                      extra_specs=(
+                                          {'replication_enabled': '<is> True',
+                                           'replication_type': 'sync'}))
+        group_obj.volume_types = objects.VolumeTypeList(context=self.ctxt,
+                                                        objects=[vol_type])
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group, {}, group_obj)
+
     def test_create_consistencygroup_from_src_cgsnapshot(self):
         """test a successful cg create from cgsnapshot"""
         driver = mock.MagicMock()
@@ -1211,19 +1305,21 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli = mock.MagicMock()
         p.ibm_storage_cli.cmd.create_volume_from_snapshot.return_value = []
 
-        model_update, vols_model_update = p.create_consistencygroup_from_src(
-            {}, self.test_cg, [TEST_VOLUME],
-            TEST_CG_SNAPSHOT, [TEST_SNAPSHOT], None, None)
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-        p.ibm_storage_cli.cmd.cg_create.assert_called_once_with(
-            cg=p._cg_name_from_volume(TEST_VOLUME),
-            pool='WTF32')
+        volume = testutils.create_volume(self.ctxt)
+        snapshot = testutils.create_snapshot(self.ctxt, volume.id)
+
+        model_update, vols_model_update = p.create_group_from_src(
+            {}, group_obj, [volume],
+            cgsnap_group_obj, [snapshot], None, None)
+
+        p.ibm_storage_cli.cmd.cg_create.assert_called_once_with(cg=group_obj,
+                                                                pool='WTF32')
 
         self.assertEqual('available', model_update['status'])
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
     def test_create_consistencygroup_from_src_cg(self):
         """test a successful cg create from consistencygroup"""
         driver = mock.MagicMock()
@@ -1238,19 +1334,21 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli = mock.MagicMock()
         p.ibm_storage_cli.cmd.create_volume_from_snapshot.return_value = []
 
-        model_update, vols_model_update = p.create_consistencygroup_from_src(
-            {}, self.test_cg, [TEST_VOLUME],
-            None, None, TEST_CONS_GROUP, [TEST_CLONED_VOLUME])
+        group_obj = self._create_test_group()
+        src_group_obj = self._create_test_group(g_name='src_group')
 
-        p.ibm_storage_cli.cmd.cg_create.assert_called_once_with(
-            cg=p._cg_name_from_volume(TEST_VOLUME),
-            pool='WTF32')
+        volume = testutils.create_volume(self.ctxt)
+        src_volume = testutils.create_volume(self.ctxt)
+
+        model_update, vols_model_update = p.create_group_from_src(
+            {}, group_obj, [volume],
+            None, None, src_group_obj, [src_volume])
+
+        p.ibm_storage_cli.cmd.cg_create.assert_called_once_with(cg=group_obj,
+                                                                pool='WTF32')
 
         self.assertEqual('available', model_update['status'])
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
     def test_create_consistencygroup_from_src_fails_cg_create_from_cgsnapshot(
             self):
         """test cg create from cgsnapshot fails on cg_create"""
@@ -1267,15 +1365,17 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_create.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                TEST_CG_SNAPSHOT, [TEST_SNAPSHOT], None, None)
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        volume = testutils.create_volume(self.ctxt)
+        snapshot = testutils.create_snapshot(self.ctxt, volume.id)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {},
+                          group_obj, [volume], cgsnap_group_obj,
+                          [snapshot], None, None)
+
     def test_create_consistencygroup_from_src_fails_cg_create_from_cg(self):
         """test cg create from cg fails on cg_create"""
         driver = mock.MagicMock()
@@ -1291,15 +1391,17 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_create.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                None, None, TEST_CONS_GROUP, [TEST_CLONED_VOLUME])
+        group_obj = self._create_test_group()
+        src_group_obj = self._create_test_group(g_name='src_group')
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        volume = testutils.create_volume(self.ctxt)
+        src_volume = testutils.create_volume(self.ctxt)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {},
+                          group_obj, [volume], None, None,
+                          src_group_obj, [src_volume])
+
     def test_create_consistencygroup_from_src_fails_vol_create_from_cgsnapshot(
             self):
         """test cg create from cgsnapshot fails on vol_create"""
@@ -1316,15 +1418,17 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_create.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                TEST_CG_SNAPSHOT, [TEST_SNAPSHOT], None, None)
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        volume = testutils.create_volume(self.ctxt)
+        snapshot = testutils.create_snapshot(self.ctxt, volume.id)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {},
+                          group_obj, [volume], cgsnap_group_obj,
+                          [snapshot], None, None)
+
     def test_create_consistencygroup_from_src_fails_vol_create_from_cg(self):
         """test cg create from cg fails on vol_create"""
         driver = mock.MagicMock()
@@ -1340,15 +1444,17 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_create.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                None, None, TEST_CONS_GROUP, [TEST_CLONED_VOLUME])
+        group_obj = self._create_test_group()
+        src_group_obj = self._create_test_group(g_name='src_group')
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        volume = testutils.create_volume(self.ctxt)
+        src_volume = testutils.create_volume(self.ctxt)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {},
+                          group_obj, [volume], None, None,
+                          src_group_obj, [src_volume])
+
     def test_create_consistencygroup_from_src_fails_vol_copy_from_cgsnapshot(
             self):
         """test cg create from cgsnapshot fails on vol_copy"""
@@ -1365,15 +1471,17 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_copy.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                TEST_CG_SNAPSHOT, [TEST_SNAPSHOT], None, None)
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
-                "xiv_proxy.XIVProxy._get_extra_specs",
-                mock.MagicMock(return_value=TEST_EXTRA_SPECS))
+        volume = testutils.create_volume(self.ctxt)
+        snapshot = testutils.create_snapshot(self.ctxt, volume.id)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {}, group_obj,
+                          [volume], cgsnap_group_obj, [snapshot],
+                          None, None)
+
     def test_create_consistencygroup_from_src_fails_vol_copy_from_cg(self):
         """test cg create from cg fails on vol_copy"""
         driver = mock.MagicMock()
@@ -1389,15 +1497,18 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.vol_copy.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, vols_update = p.create_consistencygroup_from_src(
-                {}, TEST_CONS_GROUP, [TEST_VOLUME],
-                None, None, TEST_CONS_GROUP, [TEST_CLONED_VOLUME])
+        group_obj = self._create_test_group()
+        src_group_obj = self._create_test_group(g_name='src_group')
 
-    @mock.patch("cinder.db.volume_get_all_by_group", new=mock.MagicMock(
-        return_value=[]))
-    def test_delete_consistencygroup(self):
+        volume = testutils.create_volume(self.ctxt)
+        src_volume = testutils.create_volume(self.ctxt)
+
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.create_group_from_src, {},
+                          group_obj, [volume], None, None,
+                          src_group_obj, [src_volume])
+
+    def test_delete_consistencygroup_with_no_volumes(self):
         """test a successful cg delete"""
         driver = mock.MagicMock()
         driver.VERSION = "VERSION"
@@ -1410,17 +1521,16 @@ class XIVProxyTest(unittest.TestCase):
 
         p.ibm_storage_cli = mock.MagicMock()
 
-        model_update, volumes = p.delete_consistencygroup(
-            {}, TEST_CONS_GROUP, [])
+        group_obj = self._create_test_group()
+
+        model_update, volumes = p.delete_group({}, group_obj, [])
 
         p.ibm_storage_cli.cmd.cg_delete.assert_called_once_with(
-            cg='cg_WTF32')
+            cg=p._cg_name_from_id(group_obj.id))
 
         self.assertEqual('deleted', model_update['status'])
 
-    @mock.patch("cinder.db.volume_get_all_by_group", new=mock.MagicMock(
-        return_value=[]))
-    def test_delete_consistencygroup_already_exists(self):
+    def test_delete_consistencygroup_not_exists(self):
         """test delete_consistenygroup when CG does not exist"""
         driver = mock.MagicMock()
         driver.VERSION = "VERSION"
@@ -1437,17 +1547,16 @@ class XIVProxyTest(unittest.TestCase):
             errors.CgDoesNotExistError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
-        model_update, volumes = p.delete_consistencygroup(
-            {}, TEST_CONS_GROUP, [])
+        group_obj = self._create_test_group()
+
+        model_update, volumes = p.delete_group({}, group_obj, [])
 
         p.ibm_storage_cli.cmd.cg_delete.assert_called_once_with(
-            cg='cg_WTF32')
+            cg=p._cg_name_from_id(group_obj.id))
 
         self.assertEqual('deleted', model_update['status'])
 
-    @mock.patch("cinder.db.volume_get_all_by_group", new=mock.MagicMock(
-        return_value=[]))
-    def test_delete_consistencygroup_already_exists_2(self):
+    def test_delete_consistencygroup_not_exists_2(self):
         """test delete_consistenygroup when CG does not exist bad name"""
         driver = mock.MagicMock()
         driver.VERSION = "VERSION"
@@ -1464,16 +1573,14 @@ class XIVProxyTest(unittest.TestCase):
             errors.CgBadNameError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
-        model_update, volumes = p.delete_consistencygroup(
-            {}, TEST_CONS_GROUP, [])
+        group_obj = self._create_test_group()
+        model_update, volumes = p.delete_group({}, group_obj, [])
 
         p.ibm_storage_cli.cmd.cg_delete.assert_called_once_with(
-            cg='cg_WTF32')
+            cg=p._cg_name_from_id(group_obj.id))
 
         self.assertEqual('deleted', model_update['status'])
 
-    @mock.patch("cinder.db.volume_get_all_by_group", new=mock.MagicMock(
-        return_value=[]))
     def test_delete_consistencygroup_not_empty(self):
         """test delete_consistenygroup when CG is not empty"""
         driver = mock.MagicMock()
@@ -1490,13 +1597,11 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_delete.side_effect = errors.CgNotEmptyError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, volumes = p.delete_consistencygroup(
-                {}, TEST_CONS_GROUP, [])
+        group_obj = self._create_test_group()
 
-    @mock.patch("cinder.db.volume_get_all_by_group", new=mock.MagicMock(
-        return_value=[]))
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.delete_group, {}, group_obj, [])
+
     def test_delete_consistencygroup_is_mirrored(self):
         """test delete_consistenygroup when CG is mirroring"""
         driver = mock.MagicMock()
@@ -1513,10 +1618,10 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_delete.side_effect = errors.CgHasMirrorError(
             'bla', 'bla', ElementTree.Element('bla'))
 
+        group_obj = self._create_test_group()
+
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, volumes = p.delete_consistencygroup(
-                {}, TEST_CONS_GROUP, [])
+        self.assertRaises(ex, p.delete_group, {}, group_obj, [])
 
     def test_update_consistencygroup(self):
         """test update_consistencygroup"""
@@ -1531,14 +1636,17 @@ class XIVProxyTest(unittest.TestCase):
 
         p.ibm_storage_cli = mock.MagicMock()
 
+        group_obj = self._create_test_group()
+        vol_add = testutils.create_volume(self.ctxt, display_name='WTF32')
+        vol_remove = testutils.create_volume(self.ctxt, display_name='WTF64')
+
         model_update, add_model_update, remove_model_update = (
-            p.update_consistencygroup({}, TEST_CONS_GROUP,
-                                      [{'name': 'WTF32'}],
-                                      [{'name': 'WTF64'}]))
+            p.update_group({}, group_obj, [vol_add], [vol_remove]))
+
         p.ibm_storage_cli.cmd.cg_add_vol.assert_called_once_with(
-            vol='WTF32', cg='cg_WTF32')
+            vol=vol_add['name'], cg=p._cg_name_from_id(group_obj.id))
         p.ibm_storage_cli.cmd.cg_remove_vol.assert_called_once_with(
-            vol='WTF64')
+            vol=vol_remove['name'])
         self.assertEqual('available', model_update['status'])
 
     def test_update_consistencygroup_exception_in_add_vol(self):
@@ -1556,12 +1664,11 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_add_vol.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
+        group_obj = self._create_test_group()
+        vol_add = testutils.create_volume(self.ctxt, display_name='WTF32')
+
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, add_model_update, remove_model_update = (
-                p.update_consistencygroup({}, TEST_CONS_GROUP,
-                                          [{'name': 'WTF32'}],
-                                          [{'name': 'WTF64'}]))
+        self.assertRaises(ex, p.update_group, {}, group_obj, [vol_add], [])
 
     def test_update_consistencygroup_exception_in_remove_vol(self):
         """test update_consistencygroup with exception in cg_remove_vol"""
@@ -1578,15 +1685,13 @@ class XIVProxyTest(unittest.TestCase):
         p.ibm_storage_cli.cmd.cg_remove_vol.side_effect = errors.XCLIError(
             'bla', 'bla', ElementTree.Element('bla'))
 
-        ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, add_model_update, remove_model_update = (
-                p.update_consistencygroup({}, TEST_CONS_GROUP,
-                                          [{'name': 'WTF32'}],
-                                          [{'name': 'WTF64'}]))
+        group_obj = self._create_test_group()
+        vol_remove = testutils.create_volume(self.ctxt)
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
+        ex = getattr(p, "_get_exception")()
+        self.assertRaises(ex, p.update_group, {},
+                          group_obj, [], [vol_remove])
+
     def test_create_cgsnapshot(self):
         """test a successful cgsnapshot create"""
         driver = mock.MagicMock()
@@ -1599,17 +1704,18 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-        model_update, snapshots_model_update = p.create_cgsnapshot(
-            {}, TEST_CG_SNAPSHOT, [])
+        model_update, snapshots_model_update = (
+            p.create_group_snapshot({}, cgsnap_group_obj, []))
 
         p.ibm_storage_cli.cmd.cg_snapshots_create.assert_called_once_with(
-            cg='cg_WTF32', snap_group='cgs_WTF')
+            cg=p._cg_name_from_cgsnapshot(cgsnap_group_obj),
+            snap_group=p._group_name_from_cgsnapshot(cgsnap_group_obj))
 
         self.assertEqual('available', model_update['status'])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_create_cgsnapshot_is_empty(self):
         """test create_cgsnapshot when CG is empty"""
         driver = mock.MagicMock()
@@ -1622,17 +1728,16 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.cg_snapshots_create.side_effect = (
             errors.CgEmptyError('bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.create_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.create_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_create_cgsnapshot_cg_not_exist(self):
         """test create_cgsnapshot when CG does not exist"""
         driver = mock.MagicMock()
@@ -1645,18 +1750,17 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.cg_snapshots_create.side_effect = (
             errors.CgDoesNotExistError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.create_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.create_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_create_cgsnapshot_snapshot_limit(self):
         """test create_cgsnapshot when reached snapshot limit"""
         driver = mock.MagicMock()
@@ -1669,18 +1773,17 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.cg_snapshots_create.side_effect = (
             errors.PoolSnapshotLimitReachedError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.create_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.create_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_delete_cgsnapshot(self):
         """test a successful cgsnapshot delete"""
         driver = mock.MagicMock()
@@ -1693,17 +1796,17 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
-        model_update, snapshots_model_update = p.delete_cgsnapshot(
-            {}, TEST_CG_SNAPSHOT, [])
+        model_update, snapshots_model_update = p.delete_group_snapshot(
+            {}, cgsnap_group_obj, [])
 
         p.ibm_storage_cli.cmd.snap_group_delete.assert_called_once_with(
-            snap_group='cgs_WTF')
+            snap_group=p._group_name_from_cgsnapshot(cgsnap_group_obj))
 
         self.assertEqual('deleted', model_update['status'])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_delete_cgsnapshot_cg_does_not_exist(self):
         """test delete_cgsnapshot with bad CG name"""
         driver = mock.MagicMock()
@@ -1716,18 +1819,17 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.snap_group_delete.side_effect = (
             errors.CgDoesNotExistError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.delete_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.delete_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_delete_cgsnapshot_no_space_left_for_snapshots(self):
         """test delete_cgsnapshot when no space left for snapshots"""
         driver = mock.MagicMock()
@@ -1740,18 +1842,17 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.snap_group_delete.side_effect = (
             errors.PoolSnapshotLimitReachedError(
                 'bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.delete_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.delete_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
-    @mock.patch("cinder.db.snapshot_get_all_for_cgsnapshot",
-                new=mock.MagicMock(return_value=[]))
     def test_delete_cgsnapshot_with_empty_consistency_group(self):
         """test delete_cgsnapshot with empty consistency group"""
         driver = mock.MagicMock()
@@ -1764,14 +1865,15 @@ class XIVProxyTest(unittest.TestCase):
             driver)
 
         p.ibm_storage_cli = mock.MagicMock()
+        group_obj = self._create_test_group()
+        cgsnap_group_obj = self._create_test_cgsnapshot(group_obj.id)
 
         p.ibm_storage_cli.cmd.snap_group_delete.side_effect = (
             errors.CgEmptyError('bla', 'bla', ElementTree.Element('bla')))
 
         ex = getattr(p, "_get_exception")()
-        with self.assertRaises(ex):
-            model_update, snapshots_model_update = p.delete_cgsnapshot(
-                {}, TEST_CG_SNAPSHOT, [])
+        self.assertRaises(ex, p.delete_group_snapshot, {},
+                          cgsnap_group_obj, [])
 
     def test_silent_delete_volume(self):
         """test _silent_delete_volume fails silently without exception"""

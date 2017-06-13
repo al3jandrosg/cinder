@@ -25,6 +25,7 @@ from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import units
+import paramiko
 import six
 
 from cinder import context
@@ -83,8 +84,39 @@ gpfs_opts = [
                help=('Specifies the storage pool that volumes are assigned '
                      'to. By default, the system storage pool is used.')),
 ]
+
+gpfs_remote_ssh_opts = [
+    cfg.ListOpt('gpfs_hosts',
+                default=[],
+                help='Comma-separated list of IP address or '
+                     'hostnames of GPFS nodes.'),
+    cfg.StrOpt('gpfs_user_login',
+               default='root',
+               help='Username for GPFS nodes.'),
+    cfg.StrOpt('gpfs_user_password',
+               default='',
+               help='Password for GPFS node user.',
+               secret=True),
+    cfg.StrOpt('gpfs_private_key',
+               default='',
+               help='Filename of private key to use for SSH authentication.'),
+    cfg.PortOpt('gpfs_ssh_port',
+                default=22,
+                help='SSH port to use.'),
+    cfg.StrOpt('gpfs_hosts_key_file',
+               default='$state_path/ssh_known_hosts',
+               help='File containing SSH host keys for the gpfs nodes '
+                    'with which driver needs to communicate. '
+                    'Default=$state_path/ssh_known_hosts'),
+    cfg.BoolOpt('gpfs_strict_host_key_policy',
+                default=False,
+                help='Option to enable strict gpfs host key checking while '
+                     'connecting to gpfs nodes. Default=False'),
+]
+
 CONF = cfg.CONF
 CONF.register_opts(gpfs_opts)
+CONF.register_opts(gpfs_remote_ssh_opts)
 
 
 def _different(difference_tuple):
@@ -130,6 +162,7 @@ class GPFSDriver(driver.CloneableImageVD,
         self.configuration.append_config_values(gpfs_opts)
         self.gpfs_execute = self._gpfs_local_execute
         self._execute = utils.execute
+        self.GPFS_PATH = ''
 
     def _gpfs_local_execute(self, *cmd, **kwargs):
         if 'run_as_root' not in kwargs:
@@ -140,7 +173,7 @@ class GPFSDriver(driver.CloneableImageVD,
     def _get_gpfs_state(self):
         """Return GPFS state information."""
         try:
-            (out, err) = self.gpfs_execute('mmgetstate', '-Y')
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmgetstate', '-Y')
             return out
         except processutils.ProcessExecutionError as exc:
             LOG.error('Failed to issue mmgetstate command, error: %s.',
@@ -175,7 +208,8 @@ class GPFSDriver(driver.CloneableImageVD,
     def _get_gpfs_cluster_id(self):
         """Return the id for GPFS cluster being used."""
         try:
-            (out, err) = self.gpfs_execute('mmlsconfig', 'clusterId', '-Y')
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmlsconfig',
+                                           'clusterId', '-Y')
             lines = out.splitlines()
             value_token = lines[0].split(':').index('value')
             cluster_id = lines[1].split(':')[value_token]
@@ -189,7 +223,8 @@ class GPFSDriver(driver.CloneableImageVD,
         """Return the GPFS fileset for specified path."""
         fs_regex = re.compile(r'.*fileset.name:\s+(?P<fileset>\w+)', re.S)
         try:
-            (out, err) = self.gpfs_execute('mmlsattr', '-L', path)
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmlsattr', '-L',
+                                           path)
         except processutils.ProcessExecutionError as exc:
             LOG.error('Failed to issue mmlsattr command on path %(path)s, '
                       'error: %(error)s',
@@ -210,7 +245,8 @@ class GPFSDriver(driver.CloneableImageVD,
     def _verify_gpfs_pool(self, storage_pool):
         """Return true if the specified pool is a valid GPFS storage pool."""
         try:
-            self.gpfs_execute('mmlspool', self._gpfs_device, storage_pool)
+            self.gpfs_execute(self.GPFS_PATH + 'mmlspool', self._gpfs_device,
+                              storage_pool)
             return True
         except processutils.ProcessExecutionError:
             return False
@@ -227,7 +263,8 @@ class GPFSDriver(driver.CloneableImageVD,
             raise exception.VolumeBackendAPIException(data=msg)
 
         try:
-            self.gpfs_execute('mmchattr', '-P', new_pool, local_path)
+            self.gpfs_execute(self.GPFS_PATH + 'mmchattr', '-P', new_pool,
+                              local_path)
             LOG.debug('Updated storage pool with mmchattr to %s.', new_pool)
             return True
         except processutils.ProcessExecutionError as exc:
@@ -244,7 +281,8 @@ class GPFSDriver(driver.CloneableImageVD,
         """
         filesystem = self._get_filesystem_from_path(path)
         try:
-            (out, err) = self.gpfs_execute('mmlsfs', filesystem, '-V', '-Y')
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmlsfs',
+                                           filesystem, '-V', '-Y')
         except processutils.ProcessExecutionError as exc:
             LOG.error('Failed to issue mmlsfs command for path %(path)s, '
                       'error: %(error)s.',
@@ -263,7 +301,7 @@ class GPFSDriver(driver.CloneableImageVD,
     def _get_gpfs_cluster_release_level(self):
         """Return the GPFS version of current cluster."""
         try:
-            (out, err) = self.gpfs_execute('mmlsconfig',
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmlsconfig',
                                            'minreleaseLeveldaemon',
                                            '-Y')
         except processutils.ProcessExecutionError as exc:
@@ -282,7 +320,7 @@ class GPFSDriver(driver.CloneableImageVD,
         If not part of a gpfs file system, raise ProcessExecutionError.
         """
         try:
-            self.gpfs_execute('mmlsattr', directory)
+            self.gpfs_execute(self.GPFS_PATH + 'mmlsattr', directory)
         except processutils.ProcessExecutionError as exc:
             LOG.error('Failed to issue mmlsattr command '
                       'for path %(path)s, '
@@ -463,7 +501,7 @@ class GPFSDriver(driver.CloneableImageVD,
     def _gpfs_change_attributes(self, options, path):
         """Update GPFS attributes on the specified file."""
 
-        cmd = ['mmchattr']
+        cmd = [self.GPFS_PATH + 'mmchattr']
         cmd.extend(options)
         cmd.append(path)
         LOG.debug('Update volume attributes with mmchattr to %s.', options)
@@ -532,8 +570,8 @@ class GPFSDriver(driver.CloneableImageVD,
         clone = False
         ctxt = context.get_admin_context()
         snap_parent_vol = self.db.volume_get(ctxt, snapshot['volume_id'])
-        if (volume['consistencygroup_id'] ==
-                snap_parent_vol['consistencygroup_id']):
+        if (volume['group_id'] ==
+                snap_parent_vol['group_id']):
             clone = True
         volume_path = self._get_volume_path(volume)
         if clone:
@@ -557,7 +595,7 @@ class GPFSDriver(driver.CloneableImageVD,
     def _create_cloned_volume(self, volume, src_vref):
         src = self._get_volume_path(src_vref)
         dest = self._get_volume_path(volume)
-        if (volume['consistencygroup_id'] == src_vref['consistencygroup_id']):
+        if (volume['group_id'] == src_vref['group_id']):
             self._create_gpfs_clone(src, dest)
         else:
             self._gpfs_full_copy(src, dest)
@@ -582,7 +620,8 @@ class GPFSDriver(driver.CloneableImageVD,
             if not os.path.exists(fchild_local_path):
                 return
 
-        (out, err) = self.gpfs_execute('mmclone', 'show', fchild)
+        (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'show',
+                                       fchild)
         fparent = None
         delete_parent = False
         inode_regex = re.compile(
@@ -660,13 +699,13 @@ class GPFSDriver(driver.CloneableImageVD,
         max_depth = self.configuration.gpfs_max_clone_depth
         if max_depth == 0:
             return False
-        (out, err) = self.gpfs_execute('mmclone', 'show', src)
+        (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'show', src)
         depth_regex = re.compile(r'.*\s+no\s+(?P<depth>\d+)', re.M | re.S)
         match = depth_regex.match(out)
         if match:
             depth = int(match.group('depth'))
             if depth > max_depth:
-                self.gpfs_execute('mmclone', 'redirect', src)
+                self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'redirect', src)
                 return True
         return False
 
@@ -680,7 +719,7 @@ class GPFSDriver(driver.CloneableImageVD,
 
     def _create_gpfs_copy(self, src, dest):
         """Create a GPFS file clone copy for the specified file."""
-        self.gpfs_execute('mmclone', 'copy', src, dest)
+        self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'copy', src, dest)
 
     def _gpfs_full_copy(self, src, dest):
         """Create a full copy from src to dest."""
@@ -689,13 +728,14 @@ class GPFSDriver(driver.CloneableImageVD,
     def _create_gpfs_snap(self, src, dest=None):
         """Create a GPFS file clone snapshot for the specified file."""
         if dest is None:
-            self.gpfs_execute('mmclone', 'snap', src)
+            self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'snap', src)
         else:
-            self.gpfs_execute('mmclone', 'snap', src, dest)
+            self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'snap', src, dest)
 
     def _is_gpfs_parent_file(self, gpfs_file):
         """Return true if the specified file is a gpfs clone parent."""
-        out, err = self.gpfs_execute('mmclone', 'show', gpfs_file)
+        out, err = self.gpfs_execute(self.GPFS_PATH + 'mmclone', 'show',
+                                     gpfs_file)
         ptoken = out.splitlines().pop().split()[0]
         return ptoken == 'yes'
 
@@ -731,8 +771,8 @@ class GPFSDriver(driver.CloneableImageVD,
         """Return the local path for the specified volume."""
         # Check if the volume is part of a consistency group and return
         # the local_path accordingly.
-        if volume['consistencygroup_id'] is not None:
-            cgname = "consisgroup-%s" % volume['consistencygroup_id']
+        if volume['group_id'] is not None:
+            cgname = "consisgroup-%s" % volume['group_id']
             volume_path = os.path.join(
                 self.configuration.gpfs_mount_point_base,
                 cgname,
@@ -748,7 +788,8 @@ class GPFSDriver(driver.CloneableImageVD,
     def _get_gpfs_encryption_status(self):
         """Determine if the backend is configured with key manager."""
         try:
-            (out, err) = self.gpfs_execute('mmlsfs', self._gpfs_device,
+            (out, err) = self.gpfs_execute(self.GPFS_PATH + 'mmlsfs',
+                                           self._gpfs_device,
                                            '--encryption', '-Y')
             lines = out.splitlines()
             value_token = lines[0].split(':').index('data')
@@ -940,44 +981,6 @@ class GPFSDriver(driver.CloneableImageVD,
                                   image_meta,
                                   self.local_path(volume))
 
-    def _create_backup_source(self, volume, backup):
-        src_path = self._get_volume_path(volume)
-        dest_path = '%s_%s' % (src_path, backup['id'])
-        self._create_gpfs_clone(src_path, dest_path)
-        self._gpfs_redirect(src_path)
-        return dest_path
-
-    def _do_backup(self, backup_path, backup, backup_service):
-        with utils.temporary_chown(backup_path):
-            with open(backup_path) as backup_file:
-                backup_service.backup(backup, backup_file)
-
-    def backup_volume(self, context, backup, backup_service):
-        """Create a new backup from an existing volume."""
-        volume = self.db.volume_get(context, backup['volume_id'])
-        volume_path = self.local_path(volume)
-        backup_path = '%s_%s' % (volume_path, backup['id'])
-        # create a snapshot that will be used as the backup source
-        self._create_backup_source(volume, backup)
-        try:
-            LOG.debug('Begin backup of volume %s.', volume['name'])
-            self._do_backup(backup_path, backup, backup_service)
-        finally:
-            # clean up snapshot file.  If it is a clone parent, delete
-            # will fail silently, but be cleaned up when volume is
-            # eventually removed.  This ensures we do not accumulate
-            # more than gpfs_max_clone_depth snap files.
-            self._delete_gpfs_file(backup_path)
-
-    def restore_backup(self, context, backup, volume, backup_service):
-        """Restore an existing backup to a new or existing volume."""
-        LOG.debug('Begin restore of backup %s.', backup['id'])
-
-        volume_path = self.local_path(volume)
-        with utils.temporary_chown(volume_path):
-            with open(volume_path, 'wb') as volume_file:
-                backup_service.restore(backup, volume['id'], volume_file)
-
     def _migrate_volume(self, volume, host):
         """Migrate vol if source and dest are managed by same GPFS cluster."""
         LOG.debug('Migrate volume request %(vol)s to %(host)s.',
@@ -1100,8 +1103,8 @@ class GPFSDriver(driver.CloneableImageVD,
         if not mounted:
             return 0, 0
 
-        out, err = self._execute('df', '-P', '-B', '1', path,
-                                 run_as_root=True)
+        out, err = self.gpfs_execute('df', '-P', '-B', '1', path,
+                                     run_as_root=True)
         out = out.splitlines()[1]
         size = int(out.split()[1])
         available = int(out.split()[3])
@@ -1124,7 +1127,7 @@ class GPFSDriver(driver.CloneableImageVD,
         cgpath = os.path.join(self.configuration.gpfs_mount_point_base,
                               cgname)
         try:
-            self.gpfs_execute('mmcrfileset', fsdev, cgname,
+            self.gpfs_execute(self.GPFS_PATH + 'mmcrfileset', fsdev, cgname,
                               '--inode-space', 'new')
         except processutils.ProcessExecutionError as e:
             msg = (_('Failed to create consistency group: %(cgid)s. '
@@ -1134,7 +1137,7 @@ class GPFSDriver(driver.CloneableImageVD,
             raise exception.VolumeBackendAPIException(data=msg)
 
         try:
-            self.gpfs_execute('mmlinkfileset', fsdev, cgname,
+            self.gpfs_execute(self.GPFS_PATH + 'mmlinkfileset', fsdev, cgname,
                               '-J', cgpath)
         except processutils.ProcessExecutionError as e:
             msg = (_('Failed to link fileset for the share %(cgname)s. '
@@ -1160,36 +1163,50 @@ class GPFSDriver(driver.CloneableImageVD,
         """Delete consistency group of GPFS volumes."""
         cgname = "consisgroup-%s" % group['id']
         fsdev = self._gpfs_device
+        delete_fileset = True
 
         model_update = {}
         model_update['status'] = group['status']
 
+        try:
+            self.gpfs_execute(self.GPFS_PATH + 'mmlsfileset', fsdev, cgname)
+        except processutils.ProcessExecutionError as e:
+            if e.exit_code == 2:
+                msg = (_('The fileset associated with consistency group '
+                         '%(cgname)s does not exist') %
+                       {'cgname': cgname})
+                LOG.info(msg)
+                delete_fileset = False
+
         # Unlink and delete the fileset associated with the consistency group.
         # All of the volumes and volume snapshot data will also be deleted.
-        try:
-            self.gpfs_execute('mmunlinkfileset', fsdev, cgname, '-f')
-        except processutils.ProcessExecutionError as e:
-            msg = (_('Failed to unlink fileset for consistency group '
-                     '%(cgname)s. Error: %(excmsg)s.') %
-                   {'cgname': cgname, 'excmsg': six.text_type(e)})
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+        if delete_fileset:
+            try:
+                self.gpfs_execute(self.GPFS_PATH + 'mmunlinkfileset', fsdev,
+                                  cgname, '-f')
+            except processutils.ProcessExecutionError as e:
+                msg = (_('Failed to unlink fileset for consistency group '
+                         '%(cgname)s. Error: %(excmsg)s.') %
+                       {'cgname': cgname, 'excmsg': six.text_type(e)})
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
 
-        try:
-            self.gpfs_execute('mmdelfileset', fsdev, cgname, '-f')
-        except processutils.ProcessExecutionError as e:
-            msg = (_('Failed to delete fileset for consistency group '
-                     '%(cgname)s. Error: %(excmsg)s.') %
-                   {'cgname': cgname, 'excmsg': six.text_type(e)})
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            try:
+                self.gpfs_execute(self.GPFS_PATH + 'mmdelfileset',
+                                  fsdev, cgname, '-f')
+            except processutils.ProcessExecutionError as e:
+                msg = (_('Failed to delete fileset for consistency group '
+                         '%(cgname)s. Error: %(excmsg)s.') %
+                       {'cgname': cgname, 'excmsg': six.text_type(e)})
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
 
         for volume_ref in volumes:
             volume_ref['status'] = 'deleted'
 
         model_update = {'status': group['status']}
 
-        return model_update, volumes
+        return None, None
 
     def create_cgsnapshot(self, context, cgsnapshot, snapshots):
         """Create snapshot of a consistency group of GPFS volumes."""
@@ -1235,6 +1252,141 @@ class GPFSDriver(driver.CloneableImageVD,
 
         return model_update, snapshots_model_update
 
+    def update_consistencygroup(self, context, group,
+                                add_volumes=None, remove_volumes=None):
+        msg = _('Updating a consistency group is not supported.')
+        LOG.error(msg)
+        raise exception.GPFSDriverUnsupportedOperation(msg=msg)
+
+    def create_consistencygroup_from_src(self, context, group, volumes,
+                                         cgsnapshot=None, snapshots=None,
+                                         source_cg=None, source_vols=None):
+        msg = _('Creating a consistency group from any source consistency '
+                'group or consistency group snapshot is not supported.')
+        LOG.error(msg)
+        raise exception.GPFSDriverUnsupportedOperation(msg=msg)
+
+
+@interface.volumedriver
+class GPFSRemoteDriver(GPFSDriver, san.SanDriver):
+    """GPFS cinder driver extension.
+
+    This extends the capability of existing GPFS cinder driver
+    to be able to run the driver when cinder volume service
+    is not running on GPFS node where as Nova Compute is a GPFS
+    client. This deployment is typically in Container based
+    OpenStack environment.
+    """
+
+    VERSION = "1.0"
+
+    # ThirdPartySystems wiki page
+    CI_WIKI_NAME = "IBM_GPFS_REMOTE_CI"
+
+    def __init__(self, *args, **kwargs):
+        super(GPFSRemoteDriver, self).__init__(*args, **kwargs)
+        self.configuration.append_config_values(san.san_opts)
+        self.configuration.append_config_values(gpfs_remote_ssh_opts)
+        self.configuration.san_login = self.configuration.gpfs_user_login
+        self.configuration.san_password = (
+            self.configuration.gpfs_user_password)
+        self.configuration.san_private_key = (
+            self.configuration.gpfs_private_key)
+        self.configuration.san_ssh_port = self.configuration.gpfs_ssh_port
+        self.gpfs_execute = self._gpfs_remote_execute
+        self.GPFS_PATH = '/usr/lpp/mmfs/bin/'
+
+    def _gpfs_remote_execute(self, *cmd, **kwargs):
+        check_exit_code = kwargs.pop('check_exit_code', None)
+        return self._run_ssh(cmd, check_exit_code)
+
+    def do_setup(self, ctxt):
+        self.configuration.san_ip = self._get_active_gpfs_node_ip()
+        super(GPFSRemoteDriver, self).do_setup(ctxt)
+
+    def _get_active_gpfs_node_ip(self):
+        """Set the san_ip to active gpfs node IP"""
+        active_gpfs_node_ip = None
+        gpfs_node_ips = self.configuration.gpfs_hosts
+        ssh = paramiko.SSHClient()
+
+        # Validate good config setting here.
+        # Paramiko handles the case where the file is inaccessible.
+        if not self.configuration.gpfs_hosts_key_file:
+            raise exception.ParameterNotFound(param='gpfs_hosts_key_file')
+        elif not os.path.isfile(self.configuration.gpfs_hosts_key_file):
+            # If using the default path, just create the file.
+            if CONF.state_path in self.configuration.gpfs_hosts_key_file:
+                open(self.configuration.gpfs_hosts_key_file, 'a').close()
+            else:
+                msg = (_("Unable to find ssh_hosts_key_file: %s") %
+                       self.configuration.gpfs_hosts_key_file)
+                raise exception.InvalidInput(reason=msg)
+
+        ssh.load_host_keys(self.configuration.gpfs_hosts_key_file)
+        if self.configuration.gpfs_strict_host_key_policy:
+            ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
+        else:
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        if ((not self.configuration.gpfs_user_password) and
+                (not self.configuration.gpfs_private_key)):
+            msg = _("Specify a password or private_key")
+            raise exception.VolumeDriverException(msg)
+        for ip in gpfs_node_ips:
+            try:
+                if self.configuration.gpfs_user_password:
+                    ssh.connect(ip,
+                                port=self.configuration.gpfs_ssh_port,
+                                username=self.configuration.gpfs_user_login,
+                                password=self.configuration.gpfs_user_password,
+                                timeout=self.configuration.ssh_conn_timeout)
+                elif self.configuration.gpfs_private_key:
+                    pkfile = os.path.expanduser(
+                        self.configuration.gpfs_private_key)
+                    privatekey = paramiko.RSAKey.from_private_key_file(pkfile)
+                    ssh.connect(ip,
+                                port=self.configuration.gpfs_ssh_port,
+                                username=self.configuration.gpfs_user_login,
+                                pkey=privatekey,
+                                timeout=self.configuration.ssh_conn_timeout)
+            except Exception as e:
+                LOG.info("Cannot connect to GPFS node %(ip)s. "
+                         "Error is: %(err)s. "
+                         "Continuing to next node",
+                         {'ip': ip, 'err': e})
+                continue
+            try:
+                # check if GPFS state is active on the node
+                (out, __) = processutils.ssh_execute(ssh, self.GPFS_PATH +
+                                                     'mmgetstate -Y')
+                lines = out.splitlines()
+                state_token = lines[0].split(':').index('state')
+                gpfs_state = lines[1].split(':')[state_token]
+                if gpfs_state != 'active':
+                    LOG.info("GPFS is not active on node %(ip)s. "
+                             "Continuing to next node",
+                             {'ip': ip})
+                    continue
+                # check if filesystem is mounted on the node
+                processutils.ssh_execute(
+                    ssh,
+                    'df ' + self.configuration.gpfs_mount_point_base)
+            except processutils.ProcessExecutionError as e:
+                LOG.info("GPFS is not active on node %(ip)s. "
+                         "Error is: %(err)s. "
+                         "Continuing to next node",
+                         {'ip': ip, 'err': e})
+                continue
+            # set the san_ip to the active gpfs node IP
+            LOG.debug("Setting active GPFS node IP to %s", ip)
+            active_gpfs_node_ip = ip
+            break
+        else:
+            msg = _("No GPFS node is active")
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+        return active_gpfs_node_ip
+
 
 @interface.volumedriver
 class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
@@ -1244,6 +1396,11 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
     to be able to create cinder volumes when cinder volume service
     is not running on GPFS node.
     """
+
+    VERSION = "1.0"
+
+    # ThirdPartySystems wiki page
+    CI_WIKI_NAME = "IBM_GPFS_NFS_CI"
 
     def __init__(self, *args, **kwargs):
         self._context = None
@@ -1258,6 +1415,7 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
         self.configuration.san_private_key = (
             self.configuration.nas_private_key)
         self.configuration.san_ssh_port = self.configuration.nas_ssh_port
+        self.GPFS_PATH = '/usr/lpp/mmfs/bin/'
 
     def _gpfs_remote_execute(self, *cmd, **kwargs):
         check_exit_code = kwargs.pop('check_exit_code', None)
@@ -1315,8 +1473,8 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
     def _get_volume_path(self, volume):
         """Returns remote GPFS path for the given volume."""
         export_path = self.configuration.gpfs_mount_point_base
-        if volume['consistencygroup_id'] is not None:
-            cgname = "consisgroup-%s" % volume['consistencygroup_id']
+        if volume['group_id'] is not None:
+            cgname = "consisgroup-%s" % volume['group_id']
             volume_path = os.path.join(export_path, cgname, volume['name'])
         else:
             volume_path = os.path.join(export_path, volume['name'])
@@ -1329,8 +1487,8 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
 
         # Check if the volume is part of a consistency group and return
         # the local_path accordingly.
-        if volume['consistencygroup_id'] is not None:
-            cgname = "consisgroup-%s" % volume['consistencygroup_id']
+        if volume['group_id'] is not None:
+            cgname = "consisgroup-%s" % volume['group_id']
             volume_path = os.path.join(base_local_path, cgname, volume['name'])
         else:
             volume_path = os.path.join(base_local_path, volume['name'])
@@ -1348,7 +1506,7 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
     def create_volume(self, volume):
         """Creates a GPFS volume."""
         super(GPFSNFSDriver, self).create_volume(volume)
-        volume['provider_location'] = self._find_share(volume['size'])
+        volume['provider_location'] = self._find_share(volume)
         return {'provider_location': volume['provider_location']}
 
     def delete_volume(self, volume):
@@ -1365,31 +1523,13 @@ class GPFSNFSDriver(GPFSDriver, nfs.NfsDriver, san.SanDriver):
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a GPFS volume from a snapshot."""
         self._create_volume_from_snapshot(volume, snapshot)
-        volume['provider_location'] = self._find_share(volume['size'])
+        volume['provider_location'] = self._find_share(volume)
         self._resize_volume_file(volume, volume['size'])
         return {'provider_location': volume['provider_location']}
 
     def create_cloned_volume(self, volume, src_vref):
         """Create a GPFS volume from another volume."""
         self._create_cloned_volume(volume, src_vref)
-        volume['provider_location'] = self._find_share(volume['size'])
+        volume['provider_location'] = self._find_share(volume)
         self._resize_volume_file(volume, volume['size'])
         return {'provider_location': volume['provider_location']}
-
-    def backup_volume(self, context, backup, backup_service):
-        """Create a new backup from an existing volume."""
-        volume = self.db.volume_get(context, backup['volume_id'])
-        volume_path = self.local_path(volume)
-        backup_path = '%s_%s' % (volume_path, backup['id'])
-        # create a snapshot that will be used as the backup source
-        backup_remote_path = self._create_backup_source(volume, backup)
-        try:
-            LOG.debug('Begin backup of volume %s.', volume['name'])
-            self._do_backup(backup_path, backup, backup_service)
-        finally:
-            # clean up snapshot file.  If it is a clone parent, delete
-            # will fail silently, but be cleaned up when volume is
-            # eventually removed.  This ensures we do not accumulate
-            # more than gpfs_max_clone_depth snap files.
-            backup_mount_path = os.path.dirname(backup_path)
-            self._delete_gpfs_file(backup_remote_path, backup_mount_path)

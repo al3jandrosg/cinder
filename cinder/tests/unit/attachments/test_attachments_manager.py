@@ -17,6 +17,7 @@ from oslo_utils import importutils
 from cinder import context
 from cinder import db
 from cinder import exception
+from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import utils as tests_utils
@@ -41,6 +42,31 @@ class AttachmentManagerTestCase(test.TestCase):
         self.manager.stats = {'allocated_capacity_gb': 100,
                               'pools': {}}
 
+    @mock.patch.object(db, 'volume_admin_metadata_update')
+    @mock.patch('cinder.message.api.API.create', mock.Mock())
+    def test_attachment_update_with_readonly_volume(self, mock_update):
+        mock_update.return_value = {'readonly': 'True'}
+        vref = tests_utils.create_volume(self.context, **{'status':
+                                                          'available'})
+        self.manager.create_volume(self.context, vref)
+        attachment_ref = db.volume_attach(self.context,
+                                          {'volume_id': vref.id,
+                                           'volume_host': vref.host,
+                                           'attach_status': 'reserved',
+                                           'instance_uuid': fake.UUID1})
+
+        with mock.patch.object(self.manager,
+                               '_notify_about_volume_usage',
+                               return_value=None), mock.patch.object(
+                self.manager, '_connection_create'):
+            self.assertRaises(exception.InvalidVolumeAttachMode,
+                              self.manager.attachment_update,
+                              self.context, vref, {}, attachment_ref.id)
+            attachment = db.volume_attachment_get(self.context,
+                                                  attachment_ref.id)
+            self.assertEqual(fields.VolumeAttachStatus.ERROR_ATTACHING,
+                             attachment['attach_status'])
+
     def test_attachment_update(self):
         """Test attachment_update."""
         volume_params = {'status': 'available'}
@@ -55,13 +81,14 @@ class AttachmentManagerTestCase(test.TestCase):
         vref = tests_utils.create_volume(self.context, **volume_params)
         self.manager.create_volume(self.context, vref)
         values = {'volume_id': vref.id,
-                  'volume_host': vref.host,
+                  'attached_host': vref.host,
                   'attach_status': 'reserved',
                   'instance_uuid': fake.UUID1}
         attachment_ref = db.volume_attach(self.context, values)
-        with mock.patch.object(self.manager,
-                               '_notify_about_volume_usage',
-                               return_value=None):
+        with mock.patch.object(
+                self.manager, '_notify_about_volume_usage',
+                return_value=None), mock.patch.object(
+                self.manager.driver, 'attach_volume') as mock_driver:
             expected = {
                 'encrypted': False,
                 'qos_specs': None,
@@ -75,6 +102,24 @@ class AttachmentManagerTestCase(test.TestCase):
                                  vref,
                                  connector,
                                  attachment_ref.id))
+            mock_driver.assert_called_once_with(self.context,
+                                                vref,
+                                                attachment_ref.instance_uuid,
+                                                "tempest-1",
+                                                "na")
+            new_attachment_ref = db.volume_attachment_get(self.context,
+                                                          attachment_ref.id)
+            for attr, expected in (('instance_uuid',
+                                    attachment_ref.instance_uuid),
+                                   ('attached_host', connector['host']),
+                                   ('mountpoint', 'na'),
+                                   ('attach_mode', 'rw')):
+                self.assertEqual(expected, new_attachment_ref[attr])
+            new_volume_ref = db.volume_get(self.context,
+                                           vref.id)
+            self.assertEqual('in-use', new_volume_ref['status'])
+            self.assertEqual(fields.VolumeAttachStatus.ATTACHED,
+                             new_volume_ref['attach_status'])
 
     def test_attachment_delete(self):
         """Test attachment_delete."""

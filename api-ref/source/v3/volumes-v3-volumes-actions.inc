@@ -32,7 +32,7 @@ Troubleshooting
   request. If the request fails again, investigate the storage back
   end.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -43,7 +43,7 @@ Request
    - os-extend: os-extend
    - new_size: new_size
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -64,7 +64,7 @@ Reset a volume's statuses
 
 Administrator only. Resets the status, attach status, and migration status for a volume. Specify the ``os-reset_status`` action in the request body.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -77,7 +77,7 @@ Request
    - os-reset_status: os-reset_status
    - attach_status: attach_status
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -98,7 +98,7 @@ Set image metadata for a volume
 
 Sets the image metadata for a volume. Specify the ``os-set_image_metadata`` action in the request body.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -109,7 +109,7 @@ Request
    - os-set_image_metadata: os-set_image_metadata
    - metadata: metadata
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -130,7 +130,7 @@ Remove image metadata from a volume
 
 Removes image metadata, by key, from a volume. Specify the ``os-unset_image_metadata`` action in the request body and the ``key`` for the metadata key and value pair that you want to remove.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -141,7 +141,7 @@ Request
    - os-unset_image_metadata: os-unset_image_metadata
    - key: key
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -168,7 +168,7 @@ Preconditions
 
 - You should set ``instance_uuid`` or ``host_name``.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -217,7 +217,7 @@ Request
    - attachment_id: attachment_id
    - os-detach: os-detach
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -242,7 +242,7 @@ Preconditions
 
 - Volume status must be ``available``.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -252,7 +252,7 @@ Request
 
    - os-unmanage: os-unmanage
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -276,7 +276,7 @@ Forces a volume to detach. Specify the ``os-force_detach`` action in the request
 Rolls back an unsuccessful detach operation after you disconnect
 the volume.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -288,7 +288,7 @@ Request
    - attachment_id: attachment_id
    - os-force_detach: os-force_detach
    - project_id: project_id_path
-   - volume_id: volume_id
+   - volume_id: volume_id_path
 
 Request Example
 ---------------
@@ -301,4 +301,99 @@ Request Example
 
 
 
+
+Retype a volume
+~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Change type of existing volume. Specify the ``os-retype`` action in the request body.
+
+Change the volume type of existing volume, Cinder may migrate the volume to
+proper volume host according to the new volume type.
+
+Normal response codes: 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - new_type: new_type
+   - migration_policy: migration_policy
+   - os-retype: os-retype
+   - volume_id: volume_id_path
+   - project_id: project_id_path
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-os-retype-request.json
+   :language: javascript
+
+
+
+
+
+
+
+Force delete a volume
+~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Attempts force-delete of volume, regardless of state. Specify the ``os-force_delete`` action
+in the request body.
+
+
+Normal response codes: 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - os-force_delete: os-force_delete
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-force-delete-request.json
+   :language: javascript
+
+
+
+
+
+
+
+Update a volume's bootable status
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Update the bootable status for a volume, mark it as a bootable volume. Specify the ``os-set_bootable`` action in the request body.
+
+Normal response codes: 200
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-set_bootable: os-set_bootable
+   - bootable: bootable
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-bootable-status-update-request.json
+   :language: javascript
 

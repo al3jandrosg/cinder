@@ -41,6 +41,7 @@ from oslo_log import log as logging
 from oslo_utils import strutils
 from oslo_utils import units
 import six
+from six.moves import http_client
 
 from cinder import context
 from cinder import exception
@@ -105,54 +106,56 @@ class XtremIOClient(object):
         elif ver == 'v2':
             return 'https://%s/api/json/v2/types' % self.configuration.san_ip
 
-    @utils.retry(exception.XtremIOArrayBusy,
-                 CONF.xtremio_array_busy_retry_count,
-                 CONF.xtremio_array_busy_retry_interval, 1)
     def req(self, object_type='volumes', method='GET', data=None,
             name=None, idx=None, ver='v1'):
-        if not data:
-            data = {}
-        if name and idx:
-            msg = _("can't handle both name and index in req")
-            LOG.error(msg)
-            raise exception.VolumeDriverException(message=msg)
+        @utils.retry(exception.XtremIOArrayBusy,
+                     self.configuration.xtremio_array_busy_retry_count,
+                     self.configuration.xtremio_array_busy_retry_interval, 1)
+        def _do_req(object_type, method, data, name, idx, ver):
+            if not data:
+                data = {}
+            if name and idx:
+                msg = _("can't handle both name and index in req")
+                LOG.error(msg)
+                raise exception.VolumeDriverException(message=msg)
 
-        url = '%s/%s' % (self.get_base_url(ver), object_type)
-        params = {}
-        key = None
-        if name:
-            params['name'] = name
-            key = name
-        elif idx:
-            url = '%s/%d' % (url, idx)
-            key = str(idx)
-        if method in ('GET', 'DELETE'):
-            params.update(data)
-            self.update_url(params, self.cluster_id)
-        if method != 'GET':
-            self.update_data(data, self.cluster_id)
-            LOG.debug('data: %s', data)
-        LOG.debug('%(type)s %(url)s', {'type': method, 'url': url})
-        try:
-            response = requests.request(method, url, params=params,
-                                        data=json.dumps(data),
-                                        verify=self.verify,
-                                        auth=(self.configuration.san_login,
+            url = '%s/%s' % (self.get_base_url(ver), object_type)
+            params = {}
+            key = None
+            if name:
+                params['name'] = name
+                key = name
+            elif idx:
+                url = '%s/%d' % (url, idx)
+                key = str(idx)
+            if method in ('GET', 'DELETE'):
+                params.update(data)
+                self.update_url(params, self.cluster_id)
+            if method != 'GET':
+                self.update_data(data, self.cluster_id)
+                LOG.debug('data: %s', data)
+            LOG.debug('%(type)s %(url)s', {'type': method, 'url': url})
+            try:
+                response = requests.request(
+                    method, url, params=params, data=json.dumps(data),
+                    verify=self.verify, auth=(self.configuration.san_login,
                                               self.configuration.san_password))
-        except requests.exceptions.RequestException as exc:
-            msg = (_('Exception: %s') % six.text_type(exc))
-            raise exception.VolumeDriverException(message=msg)
+            except requests.exceptions.RequestException as exc:
+                msg = (_('Exception: %s') % six.text_type(exc))
+                raise exception.VolumeDriverException(message=msg)
 
-        if 200 <= response.status_code < 300:
-            if method in ('GET', 'POST'):
-                return response.json()
-            else:
-                return ''
+            if (http_client.OK <= response.status_code <
+                    http_client.MULTIPLE_CHOICES):
+                if method in ('GET', 'POST'):
+                    return response.json()
+                else:
+                    return ''
 
-        self.handle_errors(response, key, object_type)
+            self.handle_errors(response, key, object_type)
+        return _do_req(object_type, method, data, name, idx, ver)
 
     def handle_errors(self, response, key, object_type):
-        if response.status_code == 400:
+        if response.status_code == http_client.BAD_REQUEST:
             error = response.json()
             err_msg = error.get('message')
             if err_msg.endswith(OBJ_NOT_FOUND_ERR):
@@ -208,6 +211,14 @@ class XtremIOClient(object):
 
     def add_vol_to_cg(self, vol_id, cg_id):
         pass
+
+    def get_initiators_igs(self, port_addresses):
+        ig_indexes = set()
+        for port_address in port_addresses:
+            initiator = self.get_initiator(port_address)
+            ig_indexes.add(initiator['ig-id'][XTREMIO_OID_INDEX])
+
+        return list(ig_indexes)
 
 
 class XtremIOClient3(XtremIOClient):
@@ -356,10 +367,21 @@ class XtremIOClient4(XtremIOClient):
             pass
 
 
+class XtremIOClient42(XtremIOClient4):
+    def get_initiators_igs(self, port_addresses):
+        init_filter = ','.join('port-address:eq:{}'.format(port_address) for
+                               port_address in port_addresses)
+        initiators = self.req('initiators',
+                              data={'filter': init_filter,
+                                    'full': 1, 'prop': 'ig-id'})['initiators']
+        return list(set(ig_id['ig-id'][XTREMIO_OID_INDEX]
+                        for ig_id in initiators))
+
+
 class XtremIOVolumeDriver(san.SanDriver):
     """Executes commands relating to Volumes."""
 
-    VERSION = '1.0.8'
+    VERSION = '1.0.9'
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_XIO_CI"
@@ -403,9 +425,23 @@ class XtremIOVolumeDriver(san.SanDriver):
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
         else:
-            LOG.info('XtremIO SW version %s', version_text)
+            LOG.info('XtremIO Cluster version %s', version_text)
+        client_ver = '3'
         if ver[0] >= 4:
-            self.client = XtremIOClient4(self.configuration, self.cluster_id)
+            # get XMS version
+            xms = self.client.req('xms', idx=1)['content']
+            xms_version = tuple([int(i) for i in
+                                 xms['sw-version'].split('-')[0].split('.')])
+            LOG.info('XtremIO XMS version %s', version_text)
+            if xms_version >= (4, 2):
+                self.client = XtremIOClient42(self.configuration,
+                                              self.cluster_id)
+                client_ver = '4.2'
+            else:
+                self.client = XtremIOClient4(self.configuration,
+                                             self.cluster_id)
+                client_ver = '4'
+        LOG.info('Using XtremIO Client %s', client_ver)
 
     def create_volume(self, volume):
         """Creates a volume."""
@@ -632,13 +668,14 @@ class XtremIOVolumeDriver(san.SanDriver):
 
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector"""
-        tg = self.client.req('target-groups', name='Default')['content']
-        vol = self.client.req('volumes', name=volume['id'])['content']
+        tg_index = '1'
+        vol = self.client.req('volumes', name=volume['id'],
+                              data={'prop': 'index'})['content']
 
         for ig_idx in self._get_ig_indexes_from_initiators(connector):
             lm_name = '%s_%s_%s' % (six.text_type(vol['index']),
                                     six.text_type(ig_idx),
-                                    six.text_type(tg['index']))
+                                    tg_index)
             LOG.debug('Removing lun map %s.', lm_name)
             try:
                 self.client.req('lun-maps', 'DELETE', name=lm_name)
@@ -670,14 +707,7 @@ class XtremIOVolumeDriver(san.SanDriver):
 
     def _get_ig_indexes_from_initiators(self, connector):
         initiator_names = self._get_initiator_names(connector)
-        ig_indexes = set()
-
-        for initiator_name in initiator_names:
-            initiator = self.client.get_initiator(initiator_name)
-
-            ig_indexes.add(initiator['ig-id'][XTREMIO_OID_INDEX])
-
-        return list(ig_indexes)
+        return self.client.get_initiators_igs(initiator_names)
 
     def _get_initiator_names(self, connector):
         raise NotImplementedError()

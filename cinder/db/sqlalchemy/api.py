@@ -60,6 +60,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import utils as vol_utils
 
 
 CONF = cfg.CONF
@@ -575,10 +576,10 @@ def is_backend_frozen(context, host, cluster_name):
     """Check if a storage backend is frozen based on host and cluster_name."""
     if cluster_name:
         model = models.Cluster
-        conditions = [model.name == cluster_name]
+        conditions = [model.name == vol_utils.extract_host(cluster_name)]
     else:
         model = models.Service
-        conditions = [model.host == host]
+        conditions = [model.host == vol_utils.extract_host(host)]
     conditions.extend((~model.deleted, model.frozen))
     query = get_session().query(sql.exists().where(and_(*conditions)))
     frozen = query.scalar()
@@ -1724,6 +1725,46 @@ def volume_detached(context, volume_id, attachment_id):
         return (volume_updates, attachment_updates)
 
 
+def _process_model_like_filter(model, query, filters):
+    """Applies regex expression filtering to a query.
+
+    :param model: model to apply filters to
+    :param query: query to apply filters to
+    :param filters: dictionary of filters with regex values
+    :returns: the updated query.
+    """
+    if query is None:
+        return query
+
+    for key in sorted(filters):
+        column_attr = getattr(model, key)
+        if 'property' == type(column_attr).__name__:
+            continue
+        value = filters[key]
+        if not (isinstance(value, six.string_types) or isinstance(value, int)):
+            continue
+        query = query.filter(
+            column_attr.op('LIKE')(u'%%%s%%' % value))
+    return query
+
+
+def apply_like_filters(model):
+    def decorator_filters(process_exact_filters):
+        def _decorator(query, filters):
+            exact_filters = filters.copy()
+            regex_filters = {}
+            for key, value in filters.items():
+                # NOTE(tommylikehu): For inexact match, the filter keys
+                # are in the format of 'key~=value'
+                if key.endswith('~'):
+                    exact_filters.pop(key)
+                    regex_filters[key.rstrip('~')] = value
+            query = process_exact_filters(query, exact_filters)
+            return _process_model_like_filter(model, query, regex_filters)
+        return _decorator
+    return decorator_filters
+
+
 @require_context
 def _volume_get_query(context, session=None, project_only=False,
                       joined_load=True):
@@ -1814,6 +1855,7 @@ def _attachment_get_query(context, session=None, project_only=False):
                        project_only=project_only).options(joinedload('volume'))
 
 
+@apply_like_filters(model=models.VolumeAttachment)
 def _process_attachment_filters(query, filters):
     if filters:
         project_id = filters.pop('project_id', None)
@@ -2050,14 +2092,30 @@ def get_volume_summary(context, project_only):
     if not (project_only or is_admin_context(context)):
         raise exception.AdminRequired()
     query = model_query(context, func.count(models.Volume.id),
-                        func.sum(models.Volume.size), read_deleted="no",
-                        project_only=project_only)
+                        func.sum(models.Volume.size), read_deleted="no")
+    if project_only:
+        query = query.filter_by(project_id=context.project_id)
 
     if query is None:
         return []
 
     result = query.first()
-    return (result[0] or 0, result[1] or 0)
+
+    query_metadata = model_query(
+        context, models.VolumeMetadata.key, models.VolumeMetadata.value,
+        read_deleted="no")
+    if project_only:
+        query_metadata = query_metadata.join(
+            models.Volume,
+            models.Volume.id == models.VolumeMetadata.volume_id).filter_by(
+            project_id=context.project_id)
+    result_metadata = query_metadata.distinct().all()
+
+    result_metadata_list = collections.defaultdict(list)
+    for key, value in result_metadata:
+        result_metadata_list[key].append(value)
+
+    return (result[0] or 0, result[1] or 0, result_metadata_list)
 
 
 @require_admin_context
@@ -2225,6 +2283,7 @@ def _generate_paginate_query(context, session, marker, limit, sort_keys,
                                           offset=offset)
 
 
+@apply_like_filters(model=models.Volume)
 def _process_volume_filters(query, filters):
     """Common filter processing for Volume queries.
 
@@ -2898,6 +2957,7 @@ def _snaps_get_query(context, session=None, project_only=False):
         options(joinedload('snapshot_metadata'))
 
 
+@apply_like_filters(model=models.Snapshot)
 def _process_snaps_filters(query, filters):
     if filters:
         filters = filters.copy()
@@ -3221,6 +3281,7 @@ def volume_type_create(context, values, projects=None):
         values['id'] = str(uuid.uuid4())
 
     projects = projects or []
+    orm_projects = []
 
     session = get_session()
     with session.begin():
@@ -3247,7 +3308,9 @@ def volume_type_create(context, values, projects=None):
             access_ref.update({"volume_type_id": volume_type_ref.id,
                                "project_id": project})
             access_ref.save(session=session)
-        return volume_type_ref
+            orm_projects.append(access_ref)
+    volume_type_ref.projects = orm_projects
+    return volume_type_ref
 
 
 @handle_db_data_error
@@ -3915,13 +3978,12 @@ def group_type_destroy(context, id):
     session = get_session()
     with session.begin():
         _group_type_get(context, id, session)
-        # TODO(xyang): Uncomment the following after groups table is added.
-        # results = model_query(context, models.Group, session=session). \
-        #     filter_by(group_type_id=id).all()
-        # if results:
-        #     LOG.error('GroupType %s deletion failed, '
-        #               'GroupType in use.', id)
-        #     raise exception.GroupTypeInUse(group_type_id=id)
+        results = model_query(context, models.Group, session=session). \
+            filter_by(group_type_id=id).all()
+        if results:
+            LOG.error('GroupType %s deletion failed, '
+                      'GroupType in use.', id)
+            raise exception.GroupTypeInUse(group_type_id=id)
         model_query(context, models.GroupTypes, session=session).\
             filter_by(id=id).\
             update({'deleted': True,
@@ -4912,6 +4974,7 @@ def _backups_get_query(context, session=None, project_only=False):
                        project_only=project_only)
 
 
+@apply_like_filters(model=models.Backup)
 def _process_backups_filters(query, filters):
     if filters:
         # Ensure that filters' keys exist on the model
@@ -5497,6 +5560,7 @@ def _group_snapshot_get_query(context, session=None, project_only=False):
                        project_only=project_only)
 
 
+@apply_like_filters(model=models.Group)
 def _process_groups_filters(query, filters):
     if filters:
         # Ensure that filters' keys exist on the model
@@ -5506,6 +5570,7 @@ def _process_groups_filters(query, filters):
     return query
 
 
+@apply_like_filters(model=models.GroupSnapshot)
 def _process_group_snapshot_filters(query, filters):
     if filters:
         # Ensure that filters' keys exist on the model
@@ -5640,13 +5705,11 @@ def group_create(context, values, group_snapshot_id=None,
                 mapping['group_id'] = values['id']
                 session.add(mapping)
         else:
-            mappings = []
             for item in values.get('volume_type_ids') or []:
                 mapping = models.GroupVolumeTypeMapping()
                 mapping['volume_type_id'] = item
                 mapping['group_id'] = values['id']
-                mappings.append(mapping)
-            values['volume_types'] = mappings
+                session.add(mapping)
 
             group = group_model()
             group.update(values)
@@ -5784,6 +5847,7 @@ def is_valid_model_filters(model, filters, exclude_list=None):
         if exclude_list and key in exclude_list:
             continue
         try:
+            key = key.rstrip('~')
             getattr(model, key)
         except AttributeError:
             LOG.debug("'%s' filter key is not valid.", key)
@@ -6183,6 +6247,7 @@ def message_get_all(context, filters=None, marker=None, limit=None,
         return _translate_messages(results)
 
 
+@apply_like_filters(model=models.Message)
 def _process_messages_filters(query, filters):
     if filters:
         # Ensure that filters' keys exist on the model
@@ -6222,6 +6287,17 @@ def message_destroy(context, message):
             update(updated_values))
     del updated_values['updated_at']
     return updated_values
+
+
+@require_admin_context
+def cleanup_expired_messages(context):
+    session = get_session()
+    now = timeutils.utcnow()
+    with session.begin():
+        # NOTE(tommylikehu): Directly delete the expired
+        # messages here.
+        return session.query(models.Message).filter(
+            models.Message.expires_at < now).delete()
 
 
 ###############################

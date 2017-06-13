@@ -11,7 +11,7 @@ admin_project_id:
   description: |
     The UUID of the administrative project.
   in: path
-  required: false
+  required: true
   type: string
 all_tenants:
   description: |
@@ -19,12 +19,24 @@ all_tenants:
   in: path
   required: false
   type: string
+attachment_id_1:
+  description: |
+    The ID of the attachment.
+  in: path
+  required: true
+  type: string
 backup_id:
   description: |
     The UUID for a backup.
   in: path
   required: false
   type: string
+cascade:
+  description: |
+    Remove any snapshots along with the volume. Default=False.
+  in: path
+  required: false
+  type: boolean
 cgsnapshot_id_1:
   description: |
     The ID of the consistency group snapshot.
@@ -73,7 +85,7 @@ hostname:
     The name of the host that hosts the storage back
     end.
   in: path
-  required: false
+  required: true
   type: string
 key_1:
   description: |
@@ -93,11 +105,23 @@ project_id_path:
   description: |
     The UUID of the project in a multi-tenancy cloud.
   in: path
-  required: false
+  required: true
   type: string
 qos_id:
   description: |
     The ID of the QoS specification.
+  in: path
+  required: true
+  type: string
+quotas_project_id:
+  description: |
+    The UUID of the tenant in a multi-tenancy cloud.
+  in: path
+  required: true
+  type: string
+resource:
+  description: |
+    Filter filters by resource name.
   in: path
   required: false
   type: string
@@ -119,6 +143,12 @@ user_id_1:
     ``user_id={user_id}``.
   in: path
   required: false
+  type: string
+vol_type_id:
+  description: |
+    The UUID for an existing volume type.
+  in: path
+  required: true
   type: string
 volume_id_path:
   description: |
@@ -296,9 +326,22 @@ alias:
   in: body
   required: true
   type: string
+attach_mode:
+  description: |
+    The attach mode of attachment, read-only ('ro') or
+    read-and-write ('rw'), default is 'ro'.
+  in: body
+  required: false
+  type: string
 attach_status:
   description: |
     The volume attach status.
+  in: body
+  required: false
+  type: string
+attached_at:
+  description: |
+    The time when attachment is attached.
   in: body
   required: false
   type: string
@@ -307,6 +350,12 @@ attachment_id:
     The interface ID.
   in: body
   required: false
+  type: string
+attachment_id_2:
+  description: |
+    The ID of attachment.
+  in: body
+  required: true
   type: string
 attachments:
   description: |
@@ -388,6 +437,12 @@ cgsnapshot_id:
   in: body
   required: false
   type: string
+cinder_id:
+  description: |
+    The UUID of the snapshot in Cinder.
+  in: body
+  required: false
+  type: string
 cipher:
   description: |
     The encryption algorithm or mode. For example, aes-xts-plain64. The default
@@ -402,11 +457,17 @@ cluster_mutex:
   in: body
   required: false
   type: string
+connection_info:
+  description: |
+    The connection info used for server to connect the volume.
+  in: body
+  required: true
+  type: object
 connector:
   description: |
     The ``connector`` object.
   in: body
-  required: true
+  required: false
   type: object
 consistencygroup_id:
   description: |
@@ -473,6 +534,15 @@ created_at:
 created_at_1:
   description: |
     Date and time when the volume was created.
+  in: body
+  required: true
+  type: string
+data_timestamp:
+  description: |
+    The time when the data on the volume was first saved. If it is
+    a backup from volume, it will be the same as ``created_at``
+    for a backup. If it is a backup from a snapshot, it will be the
+    same as ``created_at`` for the snapshot.
   in: body
   required: true
   type: string
@@ -601,6 +671,12 @@ description_9:
   in: body
   required: true
   type: string
+detached_at:
+  description: |
+    The time when attachment is detached.
+  in: body
+  required: false
+  type: string
 display_name:
   description: |
     The name of volume backend capabilities.
@@ -637,6 +713,12 @@ event_id:
     eventually be translated into ``user_message``.
   in: body
   required: true
+  type: string
+extra_info:
+  description: |
+    More information about the resource.
+  in: body
+  required: false
   type: string
 extra_specs:
   description: |
@@ -770,6 +852,12 @@ host_name:
   in: body
   required: false
   type: string
+host_service:
+  description: |
+    The name of the service which is running on the host.
+  in: body
+  required: true
+  type: string
 id:
   description: |
     The UUID of the volume transfer.
@@ -872,6 +960,12 @@ instance_uuid:
     The UUID of the attaching instance.
   in: body
   required: false
+  type: string
+instance_uuid_1:
+  description: |
+    The UUID of the attaching instance.
+  in: body
+  required: true
   type: string
 instances:
   description: |
@@ -977,6 +1071,18 @@ location:
   in: body
   required: true
   type: string
+manageable-snapshots:
+  description: |
+    A list of manageable snapshots.
+  in: body
+  required: true
+  type: list
+manageable-volumes:
+  description: |
+    A list of manageable volumes.
+  in: body
+  required: true
+  type: list
 maxTotalBackupGigabytes:
   description: |
     The maximum total amount of backups, in gibibytes
@@ -1079,6 +1185,13 @@ metadata_items:
   in: body
   required: true
   type: integer
+migration_policy:
+  description: |
+    Specify if make migration when retyping volume, the value is 'on-demand'
+    or 'never'.
+  in: body
+  required: false
+  type: string
 migration_status:
   description: |
     The volume migration status.
@@ -1227,6 +1340,12 @@ name_9:
   in: body
   required: true
   type: string
+name_optional:
+  description: |
+    The name of the Volume Backup.
+  in: body
+  required: false
+  type: string
 namespace:
   description: |
     Link associated to the extension.
@@ -1246,6 +1365,12 @@ new_size:
   in: body
   required: true
   type: integer
+new_type:
+  description: |
+    The new volume type that volume is changed with.
+  in: body
+  required: true
+  type: string
 object_count:
   description: |
     The number of objects in the backup.
@@ -1300,11 +1425,23 @@ os-reset_status:
   in: body
   required: true
   type: object
+os-retype:
+  description: |
+    The ``os-retype`` action.
+  in: body
+  required: true
+  type: object
 OS-SCH-HNT:scheduler_hints:
   description: |
     The dictionary of data to send to the scheduler.
   in: body
   required: false
+  type: object
+os-set_bootable:
+  description: |
+    The ``os-set_bootable`` action.
+  in: body
+  required: true
   type: object
 os-set_image_metadata:
   description: |
@@ -1448,6 +1585,12 @@ rate:
   in: body
   required: true
   type: array
+reason_not_safe:
+  description: |
+    The reason why the resource can't be managed.
+  in: body
+  required: false
+  type: string
 ref:
   description: |
     A reference to the existing volume. The internal
@@ -1463,6 +1606,12 @@ ref_1:
     structure of this reference is dependent on the implementation of
     the volume driver, see the specific driver's documentation for
     details of the required elements in the structure.
+  in: body
+  required: true
+  type: object
+reference:
+  description: |
+    Some information for the resource.
   in: body
   required: true
   type: object
@@ -1512,6 +1661,18 @@ reset_status:
   in: body
   required: true
   type: object
+resource_1:
+  description: |
+    Resource which the filters will be applied to.
+  in: body
+  required: true
+  type: string
+resource_filters:
+  description: |
+    The resource filter array.
+  in: body
+  required: true
+  type: array
 resource_type:
   description: |
     The resource type corresponding to ``resource_uuid``.
@@ -1531,6 +1692,12 @@ restore:
   in: body
   required: true
   type: object
+safe_to_manage:
+  description: |
+    If the resource can be managed or not.
+  in: body
+  required: true
+  type: boolean
 security_group_rules:
   description: |
     The number of rules that are allowed for each
@@ -1545,6 +1712,18 @@ security_groups:
   in: body
   required: true
   type: integer
+service_state:
+  description: |
+    The state of the service. One of ``available`` or ``unavailable``.
+  in: body
+  required: true
+  type: string
+service_status:
+  description: |
+    The status of the service. One of ``enabled`` or ``disabled``.
+  in: body
+  required: true
+  type: string
 size:
   description: |
     The size of the volume, in gibibytes (GiB).
@@ -1592,6 +1771,12 @@ snapshot_id_3:
   in: body
   required: true
   type: string
+source-name:
+  description: |
+    The resource's name.
+  in: body
+  required: true
+  type: string
 source_cgid:
   description: |
     The UUID of the source consistency group.
@@ -1604,6 +1789,12 @@ source_group_id:
   in: body
   required: false
   type: string
+source_reference:
+  description: |
+    The snapshot's origin volume information.
+  in: body
+  required: true
+  type: object
 source_replica:
   description: |
     The UUID of the primary volume to clone.
@@ -1695,6 +1886,12 @@ status_7:
 status_8:
   description: |
     The status of the generic group.
+  in: body
+  required: true
+  type: string
+status_9:
+  description: |
+    The status of the attachment.
   in: body
   required: true
   type: string
@@ -1884,6 +2081,19 @@ volume_id_6:
     restore a backup.
   in: body
   required: false
+  type: string
+volume_id_7:
+  description: |
+    The UUID of the volume which the attachment belongs
+    to.
+  in: body
+  required: true
+  type: string
+volume_name:
+  description: |
+    The volume name.
+  in: body
+  required: true
   type: string
 volume_type_1:
   description: |

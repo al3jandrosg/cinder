@@ -25,9 +25,15 @@ status values are:
 +------------------+--------------------------------------------------------+
 | attaching        | The volume is attaching to an instance.                |
 +------------------+--------------------------------------------------------+
+| detaching        | The volume is detaching from an instance.              |
++------------------+--------------------------------------------------------+
 | in-use           | The volume is attached to an instance.                 |
 +------------------+--------------------------------------------------------+
+| maintenance      | The volume is locked and being migrated.               |
++------------------+--------------------------------------------------------+
 | deleting         | The volume is being deleted.                           |
++------------------+--------------------------------------------------------+
+| awaiting-transfer| The volume is awaiting for transfer.                   |
 +------------------+--------------------------------------------------------+
 | error            | A volume creation error occurred.                      |
 +------------------+--------------------------------------------------------+
@@ -37,22 +43,34 @@ status values are:
 +------------------+--------------------------------------------------------+
 | restoring-backup | A backup is being restored to the volume.              |
 +------------------+--------------------------------------------------------+
+| error_backing-up | A backup error occurred.                               |
++------------------+--------------------------------------------------------+
 | error_restoring  | A backup restoration error occurred.                   |
 +------------------+--------------------------------------------------------+
 | error_extending  | An error occurred while attempting to extend a volume. |
 +------------------+--------------------------------------------------------+
+| downloading      | The volume is downloading an image.                    |
++------------------+--------------------------------------------------------+
+| uploading        | The volume is being uploaded to an image.              |
++------------------+--------------------------------------------------------+
+| retyping         | The volume is changing type to another volume type.    |
++------------------+--------------------------------------------------------+
+| extending        | The volume is being extended.                          |
++------------------+--------------------------------------------------------+
 
 
-List accessbile volumes with details
+List accessible volumes with details
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/volumes/detail
 
-Lists all Block Storage volumes, with details, that the project can access.
+Lists all Block Storage volumes, with details, that the project can access,
+since v3.31 if non-admin users specify invalid filters in the url, API will
+return bad request.
 
 
 Normal response codes: 200
-Error response codes:
+Error response codes: badRequest(400)
 
 
 Request
@@ -149,7 +167,7 @@ Troubleshooting
 - The storage node needs enough free storage space to match the size
   of the volume creation request.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -218,11 +236,13 @@ List accessible volumes
 
 .. rest_method::  GET /v3/{project_id}/volumes
 
-Lists summary information for all Block Storage volumes that the project can access.
+Lists summary information for all Block Storage volumes that the
+project can access, since v3.31 if non-admin users specify invalid
+filters in the url, API will return bad request.
 
 
 Normal response codes: 200
-Error response codes:
+Error response codes: badRequest(400)
 
 
 Request
@@ -432,7 +452,7 @@ Troubleshooting
 - The volume managed by OpenStack Block Storage is not deleted from
   the storage system.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request
@@ -442,6 +462,7 @@ Request
 
    - project_id: project_id_path
    - volume_id: volume_id
+   - cascade: cascade
 
 
 
@@ -456,7 +477,7 @@ Create metadata for volume
 Creates or replaces metadata for a volume. Does not modify items that are not
 in the request.
 
-Error response codes:202,
+Normal response codes: 202
 
 
 Request

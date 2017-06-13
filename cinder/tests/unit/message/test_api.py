@@ -106,6 +106,13 @@ class MessageApiTest(test.TestCase):
         self.message_api.db.message_destroy.assert_called_once_with(
             admin_context, 'fake_id')
 
+    def test_cleanup_expired_messages(self):
+        admin_context = mock.Mock()
+        self.mock_object(self.ctxt, 'elevated', return_value=admin_context)
+        self.message_api.cleanup_expired_messages(self.ctxt)
+        self.message_api.db.cleanup_expired_messages.assert_called_once_with(
+            admin_context)
+
     def create_message_for_tests(self):
         """Create messages to test pagination functionality"""
         utils.create_message(
@@ -127,7 +134,7 @@ class MessageApiTest(test.TestCase):
         req.method = 'GET'
         req.content_type = 'application/json'
         req.headers = {version_header_name: 'volume 3.5'}
-        req.api_version_request = api_version.max_api_version()
+        req.api_version_request = api_version.APIVersionRequest('3.30')
         req.environ['cinder.context'].is_admin = True
 
         res = self.controller.index(req)
@@ -138,7 +145,7 @@ class MessageApiTest(test.TestCase):
         req.method = 'GET'
         req.content_type = 'application/json'
         req.headers = {version_header_name: 'volume 3.5'}
-        req.api_version_request = api_version.max_api_version()
+        req.api_version_request = api_version.APIVersionRequest('3.30')
         req.environ['cinder.context'].is_admin = True
 
         res = self.controller.index(req)
@@ -241,7 +248,7 @@ class MessageApiTest(test.TestCase):
         req.method = 'GET'
         req.content_type = 'application/json'
         req.headers = {version_header_name: 'volume 3.5'}
-        req.api_version_request = api_version.max_api_version()
+        req.api_version_request = api_version.APIVersionRequest('3.30')
         req.environ['cinder.context'].is_admin = True
 
         res = self.controller.index(req)

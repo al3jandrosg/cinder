@@ -11,7 +11,7 @@ user documentation.
   The 3.0 Cinder API includes all v2 core APIs existing prior to
   the introduction of microversions.  The /v3 URL is used to call
   3.0 APIs.
-  This it the initial version of the Cinder API which supports
+  This is the initial version of the Cinder API which supports
   microversions.
 
   A user can specify a header in the API request::
@@ -42,7 +42,7 @@ user documentation.
   Before V3.2, 'GET API request' to fetch volume list returns non-bootable
   volumes if bootable filter value is any of the false or False.
   For any other value provided to this filter, it always returns
-  bootable volumes list.
+  bootable volume list.
 
   But in V3.2, this behavior is updated.
   In V3.2, bootable volume list will be returned for any of the
@@ -173,7 +173,7 @@ user documentation.
 
 3.11
 ----
-  Added group types and group specs API.
+  Added group types and group specs APIs.
 
 3.12
 ----
@@ -256,7 +256,7 @@ user documentation.
   has at least another service to do the cleanup.
 
   API will return a dictionary with 2 lists, one with services that have been
-  issued a cleanup request (``cleaning`` key) and another list with services
+  issued a cleanup request (``cleaning`` key) and the other with services
   that cannot be cleaned right now because there is no alternative service to
   do the cleanup in that cluster (``unavailable`` key).
 
@@ -283,7 +283,7 @@ user documentation.
 
 3.27 (Maximum in Ocata)
 -----------------------
-  Added new attachment API's
+  Added new attachment APIs
 
 3.28
 ----
@@ -292,3 +292,36 @@ user documentation.
 3.29
 ----
   Add filter, sorter and pagination support in group snapshot.
+
+3.30
+----
+  Support sort snapshots with "name".
+
+3.31
+----
+  Add support for configure resource query filters.
+
+3.32
+----
+  Added ``set-log`` and ``get-log`` service actions.
+
+3.33
+----
+  Add ``resource_filters`` API to retrieve configured resource filters.
+
+3.34
+----
+  Add like filter support in ``volume``, ``backup``, ``snapshot``, ``message``,
+  ``attachment``, ``group`` and ``group-snapshot`` list APIs.
+
+3.35
+----
+  Add ``volume-type`` filter to Get-Pools API.
+
+3.36
+----
+  Add metadata to volumes/summary response body.
+
+3.37
+----
+  Support sort backup by "name".

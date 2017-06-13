@@ -1,4 +1,4 @@
-# Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -26,7 +26,6 @@ import six
 
 from cinder import exception
 from cinder.i18n import _
-from cinder.image import image_utils
 from cinder import interface
 from cinder import utils
 from cinder.volume import driver
@@ -403,24 +402,44 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                   volume['name'])
         LOG.debug('zfssa.create_volume_from_snapshot: snapshot=%s',
                   snapshot['name'])
-        if not self._verify_clone_size(snapshot, volume['size'] * units.Gi):
-            exception_msg = (_('Error verifying clone size on '
-                               'Volume clone: %(clone)s '
-                               'Size: %(size)d on '
-                               'Snapshot: %(snapshot)s')
-                             % {'clone': volume['name'],
-                                'size': volume['size'],
-                                'snapshot': snapshot['name']})
+
+        lcfg = self.configuration
+
+        parent_lun = self.zfssa.get_lun(lcfg.zfssa_pool,
+                                        lcfg.zfssa_project,
+                                        snapshot['volume_name'])
+        parent_size = parent_lun['size']
+
+        child_size = volume['size'] * units.Gi
+
+        if child_size < parent_size:
+            exception_msg = (_('Error clone [%(clone_id)s] '
+                               'size [%(clone_size)d] cannot '
+                               'be smaller than parent volume '
+                               '[%(parent_id)s] size '
+                               '[%(parent_size)d]')
+                             % {'parent_id': snapshot['volume_name'],
+                                'parent_size': parent_size / units.Gi,
+                                'clone_id': volume['name'],
+                                'clone_size': volume['size']})
             LOG.error(exception_msg)
             raise exception.InvalidInput(reason=exception_msg)
 
-        lcfg = self.configuration
         self.zfssa.clone_snapshot(lcfg.zfssa_pool,
                                   lcfg.zfssa_project,
                                   snapshot['volume_name'],
                                   snapshot['name'],
                                   lcfg.zfssa_project,
                                   volume['name'])
+
+        if child_size > parent_size:
+            LOG.debug('zfssa.create_volume_from_snapshot:  '
+                      'Parent size [%d], Child size [%d] - '
+                      'resizing' % (parent_size, child_size))
+            self.zfssa.set_lun_props(lcfg.zfssa_pool,
+                                     lcfg.zfssa_project,
+                                     volume['name'],
+                                     volsize=child_size)
 
     def _update_volume_status(self):
         """Retrieve status info from volume group."""
@@ -536,26 +555,30 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         LOG.debug('Cloning image %(image)s to volume %(volume)s',
                   {'image': image_meta['id'], 'volume': volume['name']})
         lcfg = self.configuration
-        cachevol_size = 0
         if not lcfg.zfssa_enable_local_cache:
             return None, False
 
-        with image_utils.TemporaryImages.fetch(image_service,
-                                               context,
-                                               image_meta['id']) as tmp_image:
-            info = image_utils.qemu_img_info(tmp_image)
-            cachevol_size = int(math.ceil(float(info.virtual_size) / units.Gi))
+        cachevol_size = image_meta['size']
+        if 'virtual_size' in image_meta and image_meta['virtual_size']:
+            cachevol_size = image_meta['virtual_size']
 
-        if cachevol_size > volume['size']:
+        cachevol_size_gb = int(math.ceil(float(cachevol_size) / units.Gi))
+
+        # Make sure the volume is big enough since cloning adds extra metadata.
+        # Having it as X Gi can cause creation failures.
+        if cachevol_size % units.Gi == 0:
+            cachevol_size_gb += 1
+
+        if cachevol_size_gb > volume['size']:
             exception_msg = ('Image size %(img_size)dGB is larger '
                              'than volume size %(vol_size)dGB.',
-                             {'img_size': cachevol_size,
+                             {'img_size': cachevol_size_gb,
                               'vol_size': volume['size']})
             LOG.error(exception_msg)
             return None, False
 
         specs = self._get_voltype_specs(volume)
-        cachevol_props = {'size': cachevol_size}
+        cachevol_props = {'size': cachevol_size_gb}
 
         try:
             cache_vol, cache_snap = self._verify_cache_volume(context,
@@ -571,7 +594,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                                       cache_snap,
                                       lcfg.zfssa_project,
                                       volume['name'])
-            if cachevol_size < volume['size']:
+            if cachevol_size_gb < volume['size']:
                 self.extend_volume(volume, volume['size'])
         except exception.VolumeBackendAPIException as exc:
             exception_msg = ('Cannot clone image %(image)s to '
@@ -722,14 +745,6 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
     def local_path(self, volume):
         """Not implemented."""
         pass
-
-    def _verify_clone_size(self, snapshot, size):
-        """Check whether the clone size is the same as the parent volume."""
-        lcfg = self.configuration
-        lun = self.zfssa.get_lun(lcfg.zfssa_pool,
-                                 lcfg.zfssa_project,
-                                 snapshot['volume_name'])
-        return lun['size'] == size
 
     def initialize_connection(self, volume, connector):
         lcfg = self.configuration

@@ -13,7 +13,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import mock
+import os
 import re
+
+from oslo_config import cfg
 
 from cinder import context
 from cinder import exception
@@ -42,6 +45,7 @@ class TestCommonAdapter(test.TestCase):
         vnx_utils.init_ops(self.configuration)
         self.configuration.san_ip = '192.168.1.1'
         self.configuration.storage_vnx_authentication_type = 'global'
+        self.configuration.config_group = 'vnx_backend'
         self.ctxt = context.get_admin_context()
 
     def tearDown(self):
@@ -294,6 +298,7 @@ class TestCommonAdapter(test.TestCase):
         self.assertTrue(stats['deduplication_support'])
         self.assertTrue(stats['thin_provisioning_support'])
         self.assertTrue(stats['consistencygroup_support'])
+        self.assertTrue(stats['consistent_group_snapshot_enabled'])
 
     @res_mock.patch_common_adapter
     def test_get_pool_stats(self, vnx_common, mocked):
@@ -306,6 +311,7 @@ class TestCommonAdapter(test.TestCase):
             'deduplication_support': True,
             'thin_provisioning_support': True,
             'consistencygroup_support': True,
+            'consistent_group_snapshot_enabled': True,
 
         }
         pool_stats = vnx_common.get_pool_stats(stats)
@@ -336,6 +342,7 @@ class TestCommonAdapter(test.TestCase):
             'deduplication_support': True,
             'thin_provisioning_support': True,
             'consistencygroup_support': True,
+            'consistent_group_snapshot_enabled': True,
 
         }
         pool_stats = vnx_common.get_pool_stats(stats)
@@ -354,6 +361,7 @@ class TestCommonAdapter(test.TestCase):
             'deduplication_support': True,
             'thin_provisioning_support': True,
             'consistencygroup_support': True,
+            'consistent_group_snapshot_enabled': True,
 
         }
         vnx_common.reserved_percentage = 15
@@ -1030,11 +1038,11 @@ class TestCommonAdapter(test.TestCase):
     def test_initialize_connection_snapshot(self, common_adapter, mocked_res,
                                             mocked_input):
         common_adapter.client.attach_snapshot = mock.Mock()
-        common_adapter._initialize_connection = mock.Mock()
+        common_adapter._initialize_connection = mock.Mock(return_value='fake')
 
         snapshot = mocked_input['snapshot']
         smp_name = 'tmp-smp-' + snapshot.id
-        common_adapter.initialize_connection_snapshot(snapshot, None)
+        conn = common_adapter.initialize_connection_snapshot(snapshot, None)
         common_adapter.client.attach_snapshot.assert_called_once_with(
             smp_name, snapshot.name)
         lun = mocked_res['lun']
@@ -1044,6 +1052,7 @@ class TestCommonAdapter(test.TestCase):
                              called_volume.vnx_lun_id))
         self.assertIsNone(
             common_adapter._initialize_connection.call_args[0][1])
+        self.assertIs(common_adapter._initialize_connection(), conn)
 
     @res_mock.mock_driver_input
     @res_mock.patch_common_adapter
@@ -1074,6 +1083,8 @@ class TestCommonAdapter(test.TestCase):
         fake_mirror.secondary_client.create_lun.return_value = (
             mocked_res['lun'])
         common_adapter.mirror_view = fake_mirror
+        common_adapter.config.replication_device = (
+            [utils.get_replication_device()])
         rep_update = common_adapter.setup_lun_replication(
             vol1, 111)
         fake_mirror.create_mirror.assert_called_once_with(
@@ -1234,6 +1245,15 @@ class TestCommonAdapter(test.TestCase):
         self.assertEqual(mocked_input['new_volume'].provider_location,
                          data['provider_location'])
         self.assertEqual('True', data['metadata']['snapcopy'])
+
+    @res_mock.patch_common_adapter
+    def test_normalize_config_queue_path(self, common_adapter,
+                                         mocked_res):
+        common_adapter._normalize_config()
+        self.assertEqual(os.path.join(cfg.CONF.state_path,
+                                      'vnx',
+                                      'vnx_backend'),
+                         common_adapter.queue_path)
 
     @res_mock.patch_common_adapter
     def test_normalize_config_naviseccli_path(self, common_adapter,

@@ -65,7 +65,7 @@ class BackupsController(backups_v2.BackupsController):
 
     def show(self, req, id):
         """Return data about the given backup."""
-        LOG.debug('show called for member %s', id)
+        LOG.debug('Show backup with id %s.', id)
         context = req.environ['cinder.context']
         req_version = req.api_version_request
 
@@ -95,6 +95,10 @@ class BackupsController(backups_v2.BackupsController):
             except exception.PolicyNotAuthorized:
                 pass
         return resp_backup
+
+    def _convert_sort_name(self, req_version, sort_keys):
+        if req_version.matches("3.37") and 'name' in sort_keys:
+            sort_keys[sort_keys.index('name')] = 'display_name'
 
 
 def create_resource():

@@ -20,7 +20,6 @@ import os
 import tempfile
 
 from eventlet import tpool
-from os_brick.initiator import linuxrbd
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import fileutils
@@ -117,6 +116,7 @@ class RBDVolumeProxy(object):
                                            utils.convert_str(name),
                                            snapshot=snapshot,
                                            read_only=read_only)
+            self.volume = tpool.Proxy(self.volume)
         except driver.rbd.Error:
             LOG.exception("error opening rbd image %s", name)
             driver._disconnect_from_rados(client, ioctx)
@@ -280,43 +280,45 @@ class RBDDriver(driver.CloneableImageVD,
 
         return args
 
-    @utils.retry(exception.VolumeBackendAPIException,
-                 CONF.rados_connection_interval,
-                 CONF.rados_connection_retries)
     def _connect_to_rados(self, pool=None, remote=None, timeout=None):
+        @utils.retry(exception.VolumeBackendAPIException,
+                     self.configuration.rados_connection_interval,
+                     self.configuration.rados_connection_retries)
+        def _do_conn(pool, remote, timeout):
+            name, conf, user = self._get_config_tuple(remote)
 
-        name, conf, user = self._get_config_tuple(remote)
+            if pool is not None:
+                pool = utils.convert_str(pool)
+            else:
+                pool = self.configuration.rbd_pool
 
-        if pool is not None:
-            pool = utils.convert_str(pool)
-        else:
-            pool = self.configuration.rbd_pool
+            if timeout is None:
+                timeout = self.configuration.rados_connect_timeout
 
-        if timeout is None:
-            timeout = self.configuration.rados_connect_timeout
+            LOG.debug("connecting to %(name)s (timeout=%(timeout)s).",
+                      {'name': name, 'timeout': timeout})
 
-        LOG.debug("connecting to %(name)s (timeout=%(timeout)s).",
-                  {'name': name, 'timeout': timeout})
+            client = self.rados.Rados(rados_id=user,
+                                      clustername=name,
+                                      conffile=conf)
 
-        client = self.rados.Rados(rados_id=user,
-                                  clustername=name,
-                                  conffile=conf)
+            try:
+                if timeout >= 0:
+                    timeout = six.text_type(timeout)
+                    client.conf_set('rados_osd_op_timeout', timeout)
+                    client.conf_set('rados_mon_op_timeout', timeout)
+                    client.conf_set('client_mount_timeout', timeout)
 
-        try:
-            if timeout >= 0:
-                timeout = six.text_type(timeout)
-                client.conf_set('rados_osd_op_timeout', timeout)
-                client.conf_set('rados_mon_op_timeout', timeout)
-                client.conf_set('client_mount_timeout', timeout)
+                client.connect()
+                ioctx = client.open_ioctx(pool)
+                return client, ioctx
+            except self.rados.Error:
+                msg = _("Error connecting to ceph cluster.")
+                LOG.exception(msg)
+                client.shutdown()
+                raise exception.VolumeBackendAPIException(data=msg)
 
-            client.connect()
-            ioctx = client.open_ioctx(pool)
-            return client, ioctx
-        except self.rados.Error:
-            msg = _("Error connecting to ceph cluster.")
-            LOG.exception(msg)
-            client.shutdown()
-            raise exception.VolumeBackendAPIException(data=msg)
+        return _do_conn(pool, remote, timeout)
 
     def _disconnect_from_rados(self, client, ioctx):
         # closing an ioctx cannot raise an exception
@@ -443,6 +445,19 @@ class RBDDriver(driver.CloneableImageVD,
 
         return self._get_clone_depth(client, parent, depth + 1)
 
+    def _extend_if_required(self, volume, src_vref):
+        """Extends a volume if required
+
+        In case src_vref size is smaller than the size if the requested
+        new volume call _resize().
+        """
+        if volume.size != src_vref.size:
+            LOG.debug("resize volume '%(dst_vol)s' from %(src_size)d to "
+                      "%(dst_size)d",
+                      {'dst_vol': volume.name, 'src_size': src_vref.size,
+                       'dst_size': volume.size})
+            self._resize(volume)
+
     def create_cloned_volume(self, volume, src_vref):
         """Create a cloned volume from another volume.
 
@@ -462,15 +477,15 @@ class RBDDriver(driver.CloneableImageVD,
         if self.configuration.rbd_max_clone_depth <= 0:
             with RBDVolumeProxy(self, src_name, read_only=True) as vol:
                 vol.copy(vol.ioctx, dest_name)
-
+                self._extend_if_required(volume, src_vref)
             return
 
         # Otherwise do COW clone.
         with RADOSClient(self) as client:
             depth = self._get_clone_depth(client, src_name)
             # If source volume is a clone and rbd_max_clone_depth reached,
-            # flatten the source before cloning. Zero rbd_max_clone_depth means
-            # infinite is allowed.
+            # flatten the source before cloning. Zero rbd_max_clone_depth
+            # means infinite is allowed.
             if depth == self.configuration.rbd_max_clone_depth:
                 LOG.debug("maximum clone depth (%d) has been reached - "
                           "flattening source volume",
@@ -529,12 +544,7 @@ class RBDDriver(driver.CloneableImageVD,
             finally:
                 src_volume.close()
 
-        if volume.size != src_vref.size:
-            LOG.debug("resize volume '%(dst_vol)s' from %(src_size)d to "
-                      "%(dst_size)d",
-                      {'dst_vol': volume.name, 'src_size': src_vref.size,
-                       'dst_size': volume.size})
-            self._resize(volume)
+            self._extend_if_required(volume, src_vref)
 
         LOG.debug("clone created successfully")
         return volume_update
@@ -896,8 +906,8 @@ class RBDDriver(driver.CloneableImageVD,
 
     def _exec_on_volume(self, volume_name, remote, operation, *args, **kwargs):
         @utils.retry(rbd.ImageBusy,
-                     CONF.rados_connection_interval,
-                     CONF.rados_connection_retries)
+                     self.configuration.rados_connection_interval,
+                     self.configuration.rados_connection_retries)
         def _do_exec():
             timeout = self.configuration.replication_connect_timeout
             with RBDVolumeProxy(self, volume_name, self.configuration.rbd_pool,
@@ -1035,6 +1045,7 @@ class RBDDriver(driver.CloneableImageVD,
                 'secret_type': 'ceph',
                 'secret_uuid': self.configuration.rbd_secret_uuid,
                 'volume_id': volume.id,
+                "discard": True,
             }
         }
         LOG.debug('connection data: %s', data)
@@ -1174,34 +1185,6 @@ class RBDDriver(driver.CloneableImageVD,
             image_utils.upload_volume(context, image_service,
                                       image_meta, tmp_file)
         os.unlink(tmp_file)
-
-    def backup_volume(self, context, backup, backup_service):
-        """Create a new backup from an existing volume."""
-        volume = self.db.volume_get(context, backup.volume_id)
-
-        with RBDVolumeProxy(self, volume.name,
-                            self.configuration.rbd_pool) as rbd_image:
-            rbd_meta = linuxrbd.RBDImageMetadata(
-                rbd_image, self.configuration.rbd_pool,
-                self.configuration.rbd_user,
-                self.configuration.rbd_ceph_conf)
-            rbd_fd = linuxrbd.RBDVolumeIOWrapper(rbd_meta)
-            backup_service.backup(backup, rbd_fd)
-
-        LOG.debug("volume backup complete.")
-
-    def restore_backup(self, context, backup, volume, backup_service):
-        """Restore an existing backup to a new or existing volume."""
-        with RBDVolumeProxy(self, volume.name,
-                            self.configuration.rbd_pool) as rbd_image:
-            rbd_meta = linuxrbd.RBDImageMetadata(
-                rbd_image, self.configuration.rbd_pool,
-                self.configuration.rbd_user,
-                self.configuration.rbd_ceph_conf)
-            rbd_fd = linuxrbd.RBDVolumeIOWrapper(rbd_meta)
-            backup_service.restore(backup, volume.id, rbd_fd)
-
-        LOG.debug("volume restore complete.")
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume."""

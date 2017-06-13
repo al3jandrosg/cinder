@@ -833,7 +833,7 @@ class GPFSDriverTestCase(test.TestCase):
                                          mock_resize_volume_file):
         mock_resize_volume_file.return_value = 5 * units.Gi
         volume = self._fake_volume()
-        volume['consistencygroup_id'] = None
+        volume['group_id'] = None
         self.driver.db = mock.Mock()
         self.driver.db.volume_get = mock.Mock()
         self.driver.db.volume_get.return_value = volume
@@ -866,7 +866,7 @@ class GPFSDriverTestCase(test.TestCase):
                                                   mock_resize_volume_file):
         mock_resize_volume_file.return_value = 5 * units.Gi
         volume = self._fake_volume()
-        volume['consistencygroup_id'] = None
+        volume['group_id'] = None
         self.driver.db = mock.Mock()
         self.driver.db.volume_get = mock.Mock()
         self.driver.db.volume_get.return_value = volume
@@ -1401,45 +1401,6 @@ class GPFSDriverTestCase(test.TestCase):
         volume = self._fake_volume()
         self.driver.copy_volume_to_image('', volume, '', '')
 
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver._delete_gpfs_file')
-    @mock.patch('six.moves.builtins.open')
-    @mock.patch('cinder.utils.temporary_chown')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver._gpfs_redirect')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.'
-                '_create_gpfs_clone')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.local_path')
-    def test_backup_volume(self,
-                           mock_local_path,
-                           mock_create_gpfs_clone,
-                           mock_gpfs_redirect,
-                           mock_temp_chown,
-                           mock_file_open,
-                           mock_delete_gpfs_file):
-        volume = self._fake_volume()
-        self.driver.db = mock.Mock()
-        self.driver.db.volume_get = mock.Mock()
-        self.driver.db.volume_get.return_value = volume
-        backup = {}
-        backup['volume_id'] = 'test'
-        backup['id'] = '123456'
-        backup_service = mock.Mock()
-        mock_local_path.return_value = self.volumes_path
-        self.driver.backup_volume('', backup, backup_service)
-
-    @mock.patch('six.moves.builtins.open')
-    @mock.patch('cinder.utils.temporary_chown')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.local_path')
-    def test_restore_backup(self,
-                            mock_local_path,
-                            mock_temp_chown,
-                            mock_file_open):
-        volume = self._fake_volume()
-        backup = {}
-        backup['id'] = '123456'
-        backup_service = mock.Mock()
-        mock_local_path.return_value = self.volumes_path
-        self.driver.restore_backup('', backup, volume, backup_service)
-
     @mock.patch('cinder.utils.execute')
     @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.'
                 '_can_migrate_locally')
@@ -1667,10 +1628,33 @@ class GPFSDriverTestCase(test.TestCase):
         self.driver.delete_consistencygroup(ctxt, group, [])
         fsdev = self.driver._gpfs_device
         cgname = "consisgroup-%s" % group['id']
+        cmd = ['mmlsfileset', fsdev, cgname]
+        mock_exec.assert_any_call(*cmd)
         cmd = ['mmunlinkfileset', fsdev, cgname, '-f']
         mock_exec.assert_any_call(*cmd)
         cmd = ['mmdelfileset', fsdev, cgname, '-f']
         mock_exec.assert_any_call(*cmd)
+
+    @mock.patch('cinder.utils.execute')
+    def test_delete_consistencygroup_no_fileset(self, mock_exec):
+        ctxt = self.context
+        group = self._fake_group()
+        group['status'] = fields.ConsistencyGroupStatus.AVAILABLE
+        volume = self._fake_volume()
+        volume['status'] = 'available'
+        volumes = []
+        volumes.append(volume)
+        self.driver.db = mock.Mock()
+        self.driver.db.volume_get_all_by_group = mock.Mock()
+        self.driver.db.volume_get_all_by_group.return_value = volumes
+        mock_exec.side_effect = (
+            processutils.ProcessExecutionError(exit_code=2))
+
+        self.driver.delete_consistencygroup(ctxt, group, [])
+        fsdev = self.driver._gpfs_device
+        cgname = "consisgroup-%s" % group['id']
+        cmd = ['mmlsfileset', fsdev, cgname]
+        mock_exec.assert_called_once_with(*cmd)
 
     @mock.patch('cinder.utils.execute')
     def test_delete_consistencygroup_fail(self, mock_exec):
@@ -1685,6 +1669,19 @@ class GPFSDriverTestCase(test.TestCase):
             processutils.ProcessExecutionError(stdout='test', stderr='test'))
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.delete_consistencygroup, ctxt, group, [])
+
+    def test_update_consistencygroup(self):
+        ctxt = self.context
+        group = self._fake_group()
+        self.assertRaises(exception.GPFSDriverUnsupportedOperation,
+                          self.driver.update_consistencygroup, ctxt, group)
+
+    def test_create_consisgroup_from_src(self):
+        ctxt = self.context
+        group = self._fake_group()
+        self.assertRaises(exception.GPFSDriverUnsupportedOperation,
+                          self.driver.create_consistencygroup_from_src,
+                          ctxt, group, [])
 
     @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.create_snapshot')
     def test_create_cgsnapshot(self, mock_create_snap):
@@ -1736,7 +1733,7 @@ class GPFSDriverTestCase(test.TestCase):
 
     def test_local_path_volume_not_in_cg(self):
         volume = self._fake_volume()
-        volume['consistencygroup_id'] = None
+        volume['group_id'] = None
         volume_path = os.path.join(
             self.driver.configuration.gpfs_mount_point_base,
             volume['name']
@@ -1746,7 +1743,7 @@ class GPFSDriverTestCase(test.TestCase):
 
     def test_local_path_volume_in_cg(self):
         volume = self._fake_volume()
-        cgname = "consisgroup-%s" % volume['consistencygroup_id']
+        cgname = "consisgroup-%s" % volume['group_id']
         volume_path = os.path.join(
             self.driver.configuration.gpfs_mount_point_base,
             cgname,
@@ -1785,7 +1782,7 @@ class GPFSDriverTestCase(test.TestCase):
         volume['metadata'] = {'key1': 'val1'}
         volume['_name_id'] = None
         volume['size'] = 1000
-        volume['consistencygroup_id'] = fake.CONSISTENCY_GROUP_ID
+        volume['group_id'] = fake.CONSISTENCY_GROUP_ID
 
         return objects.Volume(self.context, **volume)
 
@@ -1802,7 +1799,7 @@ class GPFSDriverTestCase(test.TestCase):
 
     def _fake_volume_in_cg(self):
         volume = self._fake_volume()
-        volume.consistencygroup_id = fake.CONSISTENCY_GROUP_ID
+        volume.group_id = fake.CONSISTENCY_GROUP_ID
         return volume
 
     def _fake_group(self):
@@ -1813,7 +1810,7 @@ class GPFSDriverTestCase(test.TestCase):
 
     def _fake_cgsnapshot(self):
         snapshot = self._fake_snapshot()
-        snapshot.consistencygroup_id = fake.CONSISTENCY_GROUP_ID
+        snapshot.group_id = fake.CONSISTENCY_GROUP_ID
         return snapshot
 
     def _fake_qemu_qcow2_image_info(self, path):
@@ -1855,6 +1852,136 @@ class GPFSDriverTestCase(test.TestCase):
         return (volume, new_type, diff, host)
 
 
+class GPFSRemoteDriverTestCase(test.TestCase):
+    """Unit tests for GPFSRemoteDriver class"""
+    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSRemoteDriver.'
+                '_get_active_gpfs_node_ip')
+    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSRemoteDriver.'
+                '_run_ssh')
+    def test_gpfs_remote_execute(self,
+                                 mock_run_ssh,
+                                 mock_active_gpfs_ip):
+        configuration = conf.Configuration(None)
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        self.driver._gpfs_remote_execute('test', check_exit_code=True)
+        expected = [mock.call(('test',), True)]
+        self.assertEqual(expected, mock_run_ssh.mock_calls)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=True)
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('os.path.expanduser')
+    @mock.patch('paramiko.RSAKey.from_private_key_file')
+    @mock.patch('oslo_concurrency.processutils.ssh_execute')
+    def test_get_active_gpfs_node_ip(self, mock_ssh_execute,
+                                     mock_pkey_file, mock_path,
+                                     mock_open, mock_isfile):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_mount_point_base = '/gpfs'
+        configuration.gpfs_private_key = '/test/fake_private_key'
+        mmgetstate_fake_out = "mmgetstate::state:\nmmgetstate::active:"
+        mock_ssh_execute.side_effect = [(mmgetstate_fake_out, ''), ('', '')]
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        san_ip = self.driver._get_active_gpfs_node_ip()
+        self.assertEqual('10.0.0.1', san_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=True)
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('os.path.expanduser')
+    @mock.patch('paramiko.RSAKey.from_private_key_file')
+    @mock.patch('oslo_concurrency.processutils.ssh_execute')
+    def test_get_active_gpfs_node_ip_with_password(self, mock_ssh_execute,
+                                                   mock_pkey_file, mock_path,
+                                                   mock_open, mock_isfile):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_mount_point_base = '/gpfs'
+        configuration.gpfs_user_password = 'FakePassword'
+        mmgetstate_fake_out = "mmgetstate::state:\nmmgetstate::active:"
+        mock_ssh_execute.side_effect = [(mmgetstate_fake_out, ''), ('', '')]
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        san_ip = self.driver._get_active_gpfs_node_ip()
+        self.assertEqual('10.0.0.1', san_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=True)
+    @mock.patch('six.moves.builtins.open')
+    def test_get_active_gpfs_node_ip_missing_key_and_password(self, mock_open,
+                                                              mock_isfile):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_mount_point_base = '/gpfs'
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        self.assertRaises(exception.VolumeDriverException,
+                          self.driver._get_active_gpfs_node_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=True)
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('os.path.expanduser')
+    @mock.patch('paramiko.RSAKey.from_private_key_file')
+    @mock.patch('oslo_concurrency.processutils.ssh_execute')
+    def test_get_active_gpfs_node_ip_second(self, mock_ssh_execute,
+                                            mock_pkey_file, mock_path,
+                                            mock_open, mock_isfile):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_mount_point_base = '/gpfs'
+        configuration.gpfs_private_key = '/test/fake_private_key'
+        mmgetstate_active_fake_out = "mmgetstate::state:\nmmgetstate::active:"
+        mmgetstate_down_fake_out = "mmgetstate::state:\nmmgetstate::down:"
+        mock_ssh_execute.side_effect = [(mmgetstate_down_fake_out, ''),
+                                        (mmgetstate_active_fake_out, ''),
+                                        ('', '')]
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        san_ip = self.driver._get_active_gpfs_node_ip()
+        self.assertEqual('10.0.0.2', san_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    def test_missing_ssh_host_key_config(self):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_hosts_key_file = None
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        self.assertRaises(exception.ParameterNotFound,
+                          self.driver._get_active_gpfs_node_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=False)
+    def test_init_missing_ssh_host_key_file(self,
+                                            mock_is_file):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_hosts_key_file = '/test'
+        self.flags(state_path='/var/lib/cinder')
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        self.assertRaises(exception.InvalidInput,
+                          self.driver._get_active_gpfs_node_ip)
+
+    @mock.patch('paramiko.SSHClient', new=mock.MagicMock())
+    @mock.patch('os.path.isfile', return_value=True)
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('os.path.expanduser')
+    @mock.patch('paramiko.RSAKey.from_private_key_file')
+    @mock.patch('oslo_concurrency.processutils.ssh_execute')
+    def test_get_active_gpfs_node_ip_exception(self, mock_ssh_execute,
+                                               mock_pkey_file, mock_path,
+                                               mock_open, mock_isfile):
+        configuration = conf.Configuration(None)
+        configuration.gpfs_hosts = ['10.0.0.1', '10.0.0.2']
+        configuration.gpfs_mount_point_base = '/gpfs'
+        configuration.gpfs_private_key = "/test/fake_private_key"
+        mmgetstate_down_fake_out = "mmgetstate::state:\nmmgetstate::down:"
+        mock_ssh_execute.side_effect = [(mmgetstate_down_fake_out, ''),
+                                        processutils.ProcessExecutionError(
+                                        stderr='test')]
+        self.driver = gpfs.GPFSRemoteDriver(configuration=configuration)
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver._get_active_gpfs_node_ip)
+
+
 class GPFSNFSDriverTestCase(test.TestCase):
     driver_name = "cinder.volume.drivers.gpfs.GPFSNFSDriver"
     TEST_NFS_EXPORT = 'nfs-host1:/export'
@@ -1880,7 +2007,7 @@ class GPFSNFSDriverTestCase(test.TestCase):
         volume['id'] = '123456'
         volume['name'] = 'test'
         volume['size'] = 1000
-        volume['consistencygroup_id'] = 'cg-1234'
+        volume['group_id'] = 'cg-1234'
         return volume
 
     def _fake_snapshot(self):
@@ -1935,7 +2062,7 @@ class GPFSNFSDriverTestCase(test.TestCase):
         volume = self._fake_volume()
         self.assertEqual('/export/consisgroup-cg-1234/test',
                          self.driver._get_volume_path(volume))
-        volume['consistencygroup_id'] = None
+        volume['group_id'] = None
         self.assertEqual('/export/test',
                          self.driver._get_volume_path(volume))
 
@@ -1947,7 +2074,7 @@ class GPFSNFSDriverTestCase(test.TestCase):
         volume['provider_location'] = self.TEST_GPFS_MNT_POINT_BASE
         self.assertEqual('/mnt/nfs/consisgroup-cg-1234/test',
                          self.driver.local_path(volume))
-        volume['consistencygroup_id'] = None
+        volume['group_id'] = None
         self.assertEqual('/mnt/nfs/test',
                          self.driver.local_path(volume))
 
@@ -2030,27 +2157,3 @@ class GPFSNFSDriverTestCase(test.TestCase):
         mock_find_share.return_value = self.TEST_VOLUME_PATH
         self.assertEqual({'provider_location': self.TEST_VOLUME_PATH},
                          self.driver.create_cloned_volume(volume, src_vref))
-
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.'
-                '_delete_gpfs_file')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.'
-                '_do_backup')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSDriver.'
-                '_create_backup_source')
-    @mock.patch('cinder.volume.drivers.ibm.gpfs.GPFSNFSDriver.'
-                'local_path')
-    def test_backup_volume(self,
-                           mock_local_path,
-                           mock_create_backup_source,
-                           mock_do_backup,
-                           mock_delete_gpfs_file):
-        volume = self._fake_volume()
-        self.driver.db = mock.Mock()
-        self.driver.db.volume_get = mock.Mock()
-        self.driver.db.volume_get.return_value = volume
-        backup = {}
-        backup['volume_id'] = 'test'
-        backup['id'] = '123456'
-        backup_service = mock.Mock()
-        mock_local_path.return_value = self.TEST_VOLUME_PATH
-        self.driver.backup_volume('', backup, backup_service)

@@ -75,12 +75,20 @@ def validate_disk_format(disk_format):
 
 def qemu_img_info(path, run_as_root=True):
     """Return an object containing the parsed output from qemu-img info."""
-    cmd = ('env', 'LC_ALL=C', 'qemu-img', 'info', path)
+    cmd = ['env', 'LC_ALL=C', 'qemu-img', 'info', path]
+
     if os.name == 'nt':
         cmd = cmd[2:]
     out, _err = utils.execute(*cmd, run_as_root=run_as_root,
                               prlimit=QEMU_IMG_LIMITS)
-    return imageutils.QemuImgInfo(out)
+    info = imageutils.QemuImgInfo(out)
+
+    # From Cinder's point of view, any 'luks' formatted images
+    # should be treated as 'raw'.
+    if info.file_format == 'luks':
+        info.file_format = 'raw'
+
+    return info
 
 
 def get_qemu_img_version():
@@ -114,7 +122,8 @@ def check_qemu_img_version(minimum_version):
         raise exception.VolumeBackendAPIException(data=_msg)
 
 
-def _convert_image(prefix, source, dest, out_format, run_as_root=True):
+def _convert_image(prefix, source, dest, out_format,
+                   src_format=None, run_as_root=True):
     """Convert image to other format."""
 
     cmd = prefix + ('qemu-img', 'convert',
@@ -134,8 +143,16 @@ def _convert_image(prefix, source, dest, out_format, run_as_root=True):
                                                    dest,
                                                    'oflag=direct')):
         cmd = prefix + ('qemu-img', 'convert',
-                        '-t', 'none',
-                        '-O', out_format, source, dest)
+                        '-t', 'none')
+
+        # AMI images can be raw or qcow2 but qemu-img doesn't accept "ami" as
+        # an image format, so we use automatic detection.
+        # TODO(geguileo): This fixes unencrypted AMI image case, but we need to
+        # fix the encrypted case.
+        if (src_format or '').lower() not in ('', 'ami'):
+            cmd += ('-f', src_format)  # prevent detection of format
+
+        cmd += ('-O', out_format, source, dest)
 
     start_time = timeutils.utcnow()
     utils.execute(*cmd, run_as_root=run_as_root)
@@ -169,13 +186,16 @@ def _convert_image(prefix, source, dest, out_format, run_as_root=True):
     LOG.info(msg, {"sz": fsz_mb, "mbps": mbps})
 
 
-def convert_image(source, dest, out_format, run_as_root=True, throttle=None):
+def convert_image(source, dest, out_format, src_format=None,
+                  run_as_root=True, throttle=None):
     if not throttle:
         throttle = throttling.Throttle.get_default()
     with throttle.subcommand(source, dest) as throttle_cmd:
         _convert_image(tuple(throttle_cmd['prefix']),
                        source, dest,
-                       out_format, run_as_root=run_as_root)
+                       out_format,
+                       src_format=src_format,
+                       run_as_root=run_as_root)
 
 
 def resize_image(source, size, run_as_root=False):
@@ -221,35 +241,78 @@ def fetch(context, image_service, image_id, path, _user_id, _project_id):
     LOG.info(msg, {"sz": fsz_mb, "mbps": mbps})
 
 
+def get_qemu_data(image_id, has_meta, disk_format_raw, dest, run_as_root):
+    # We may be on a system that doesn't have qemu-img installed.  That
+    # is ok if we are working with a RAW image.  This logic checks to see
+    # if qemu-img is installed.  If not we make sure the image is RAW and
+    # throw an exception if not.  Otherwise we stop before needing
+    # qemu-img.  Systems with qemu-img will always progress through the
+    # whole function.
+    try:
+        # Use the empty tmp file to make sure qemu_img_info works.
+        data = qemu_img_info(dest, run_as_root=run_as_root)
+    # There are a lot of cases that can cause a process execution
+    # error, but until we do more work to separate out the various
+    # cases we'll keep the general catch here
+    except processutils.ProcessExecutionError:
+        data = None
+        if has_meta:
+            if not disk_format_raw:
+                raise exception.ImageUnacceptable(
+                    reason=_("qemu-img is not installed and image is of "
+                             "type %s.  Only RAW images can be used if "
+                             "qemu-img is not installed.") %
+                    disk_format_raw,
+                    image_id=image_id)
+        else:
+            raise exception.ImageUnacceptable(
+                reason=_("qemu-img is not installed and the disk "
+                         "format is not specified.  Only RAW images "
+                         "can be used if qemu-img is not installed."),
+                image_id=image_id)
+    return data
+
+
 def fetch_verify_image(context, image_service, image_id, dest,
                        user_id=None, project_id=None, size=None,
                        run_as_root=True):
     fetch(context, image_service, image_id, dest,
           None, None)
+    image_meta = image_service.show(context, image_id)
 
     with fileutils.remove_path_on_error(dest):
-        data = qemu_img_info(dest, run_as_root=run_as_root)
-        fmt = data.file_format
-        if fmt is None:
-            raise exception.ImageUnacceptable(
-                reason=_("'qemu-img info' parsing failed."),
-                image_id=image_id)
+        has_meta = False if not image_meta else True
+        try:
+            format_raw = True if image_meta['disk_format'] == 'raw' else False
+        except TypeError:
+            format_raw = False
+        data = get_qemu_data(image_id, has_meta, format_raw,
+                             dest, run_as_root)
+        # We can only really do verification of the image if we have
+        # qemu data to use
+        if data is not None:
+            fmt = data.file_format
+            if fmt is None:
+                raise exception.ImageUnacceptable(
+                    reason=_("'qemu-img info' parsing failed."),
+                    image_id=image_id)
 
-        backing_file = data.backing_file
-        if backing_file is not None:
-            raise exception.ImageUnacceptable(
-                image_id=image_id,
-                reason=(_("fmt=%(fmt)s backed by: %(backing_file)s") %
-                        {'fmt': fmt, 'backing_file': backing_file}))
+            backing_file = data.backing_file
+            if backing_file is not None:
+                raise exception.ImageUnacceptable(
+                    image_id=image_id,
+                    reason=(_("fmt=%(fmt)s backed by: %(backing_file)s") %
+                            {'fmt': fmt, 'backing_file': backing_file}))
 
-        # NOTE(xqueralt): If the image virtual size doesn't fit in the
-        # requested volume there is no point on resizing it because it will
-        # generate an unusable image.
-        if size is not None and data.virtual_size > size:
-            params = {'image_size': data.virtual_size, 'volume_size': size}
-            reason = _("Size is %(image_size)dGB and doesn't fit in a "
-                       "volume of size %(volume_size)dGB.") % params
-            raise exception.ImageUnacceptable(image_id=image_id, reason=reason)
+            # NOTE(xqueralt): If the image virtual size doesn't fit in the
+            # requested volume there is no point on resizing it because it will
+            # generate an unusable image.
+            if size is not None and data.virtual_size > size:
+                params = {'image_size': data.virtual_size, 'volume_size': size}
+                reason = _("Size is %(image_size)dGB and doesn't fit in a "
+                           "volume of size %(volume_size)dGB.") % params
+                raise exception.ImageUnacceptable(image_id=image_id,
+                                                  reason=reason)
 
 
 def fetch_to_vhd(context, image_service,
@@ -280,31 +343,15 @@ def fetch_to_volume_format(context, image_service,
     # Unfortunately it seems that you can't pipe to 'qemu-img convert' because
     # it seeks. Maybe we can think of something for a future version.
     with temporary_file() as tmp:
-        # We may be on a system that doesn't have qemu-img installed.  That
-        # is ok if we are working with a RAW image.  This logic checks to see
-        # if qemu-img is installed.  If not we make sure the image is RAW and
-        # throw an exception if not.  Otherwise we stop before needing
-        # qemu-img.  Systems with qemu-img will always progress through the
-        # whole function.
+        has_meta = False if not image_meta else True
         try:
-            # Use the empty tmp file to make sure qemu_img_info works.
-            qemu_img_info(tmp, run_as_root=run_as_root)
-        except processutils.ProcessExecutionError:
+            format_raw = True if image_meta['disk_format'] == 'raw' else False
+        except TypeError:
+            format_raw = False
+        data = get_qemu_data(image_id, has_meta, format_raw,
+                             tmp, run_as_root)
+        if data is None:
             qemu_img = False
-            if image_meta:
-                if image_meta['disk_format'] != 'raw':
-                    raise exception.ImageUnacceptable(
-                        reason=_("qemu-img is not installed and image is of "
-                                 "type %s.  Only RAW images can be used if "
-                                 "qemu-img is not installed.") %
-                        image_meta['disk_format'],
-                        image_id=image_id)
-            else:
-                raise exception.ImageUnacceptable(
-                    reason=_("qemu-img is not installed and the disk "
-                             "format is not specified.  Only RAW images "
-                             "can be used if qemu-img is not installed."),
-                    image_id=image_id)
 
         tmp_images = TemporaryImages.for_image_service(image_service)
         tmp_image = tmp_images.get(context, image_id)
@@ -364,7 +411,13 @@ def fetch_to_volume_format(context, image_service,
         # image and not a different format with a backing file, which may be
         # malicious.
         LOG.debug("%s was %s, converting to %s ", image_id, fmt, volume_format)
+        if image_meta['disk_format'] == 'vhd':
+            # qemu-img still uses the legacy 'vpc' name for vhd format.
+            disk_format = 'vpc'
+        else:
+            disk_format = image_meta['disk_format']
         convert_image(tmp, dest, volume_format,
+                      src_format=disk_format,
                       run_as_root=run_as_root)
 
         data = qemu_img_info(dest, run_as_root=run_as_root)

@@ -421,10 +421,9 @@ class TestZFSSAISCSIDriver(test.TestCase):
             self.test_snap['volume_name'],
             self.test_snap['name'])
 
-    @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_verify_clone_size')
-    def test_create_volume_from_snapshot(self, _verify_clone_size):
-        self.drv._verify_clone_size.return_value = True
+    def test_create_volume_from_snapshot(self):
         lcfg = self.configuration
+        self.drv.zfssa.get_lun.return_value = self.test_vol
         self.drv.create_snapshot(self.test_snap)
         self.drv.zfssa.create_snapshot.assert_called_once_with(
             lcfg.zfssa_pool,
@@ -433,9 +432,6 @@ class TestZFSSAISCSIDriver(test.TestCase):
             self.test_snap['name'])
         self.drv.create_volume_from_snapshot(self.test_vol_snap,
                                              self.test_snap)
-        self.drv._verify_clone_size.assert_called_once_with(
-            self.test_snap,
-            self.test_vol_snap['size'] * units.Gi)
         self.drv.zfssa.clone_snapshot.assert_called_once_with(
             lcfg.zfssa_pool,
             lcfg.zfssa_project,
@@ -443,6 +439,27 @@ class TestZFSSAISCSIDriver(test.TestCase):
             self.test_snap['name'],
             lcfg.zfssa_project,
             self.test_vol_snap['name'])
+
+    def test_create_larger_volume_from_snapshot(self):
+        lcfg = self.configuration
+        self.drv.zfssa.get_lun.return_value = self.test_vol
+        self.drv.create_snapshot(self.test_snap)
+        self.drv.zfssa.create_snapshot.assert_called_once_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_snap['volume_name'],
+            self.test_snap['name'])
+
+        # use the larger test volume
+        self.drv.create_volume_from_snapshot(self.test_vol2,
+                                             self.test_snap)
+        self.drv.zfssa.clone_snapshot.assert_called_once_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_snap['volume_name'],
+            self.test_snap['name'],
+            lcfg.zfssa_project,
+            self.test_vol2['name'])
 
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
     def test_volume_attach_detach(self, _get_provider_info):
@@ -542,15 +559,11 @@ class TestZFSSAISCSIDriver(test.TestCase):
             val = None
         return val
 
-    @mock.patch.object(image_utils, 'qemu_img_info')
-    @mock.patch.object(image_utils.TemporaryImages, 'fetch')
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_verify_cache_volume')
-    def test_clone_image_negative(self, _verify_cache_volume, _fetch, _info):
+    def test_clone_image_negative(self, _verify_cache_volume):
         # Disabling local cache feature:
         self.configuration.zfssa_enable_local_cache = False
 
-        _fetch.return_value = mock.MagicMock(spec=utils.get_file_spec())
-        _info.return_value = ImgInfo(small_img['virtual_size'])
         self.assertEqual((None, False),
                          self.drv.clone_image(fakecontext, self.test_vol,
                                               img_location,
@@ -559,15 +572,22 @@ class TestZFSSAISCSIDriver(test.TestCase):
 
         self.configuration.zfssa_enable_local_cache = True
         # Creating a volume smaller than image:
-        _info.return_value = ImgInfo(large_img['virtual_size'])
         self.assertEqual((None, False),
                          self.drv.clone_image(fakecontext, self.test_vol,
                                               img_location,
                                               large_img,
                                               img_service))
 
+        # Creating a volume equal as image:
+        eq_img = large_img.copy()
+        eq_img['virtual_size'] = self.test_vol['size'] * units.Gi
+        self.assertEqual((None, False),
+                         self.drv.clone_image(fakecontext, self.test_vol,
+                                              img_location,
+                                              eq_img,
+                                              img_service))
+
         # Exception raised in _verify_cache_image
-        _info.return_value = ImgInfo(small_img['virtual_size'])
         self.drv._verify_cache_volume.side_effect = (
             exception.VolumeBackendAPIException('fakeerror'))
         self.assertEqual((None, False),
@@ -576,20 +596,15 @@ class TestZFSSAISCSIDriver(test.TestCase):
                                               small_img,
                                               img_service))
 
-    @mock.patch.object(image_utils, 'qemu_img_info')
-    @mock.patch.object(image_utils.TemporaryImages, 'fetch')
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_voltype_specs')
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_verify_cache_volume')
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, 'extend_volume')
-    def test_clone_image(self, _extend_vol, _verify_cache, _get_specs,
-                         _fetch, _info):
+    def test_clone_image(self, _extend_vol, _verify_cache, _get_specs):
         lcfg = self.configuration
         cache_vol = 'volume-os-cache-vol-%s' % small_img['id']
         cache_snap = 'image-%s' % small_img['id']
         self.drv._get_voltype_specs.return_value = fakespecs.copy()
         self.drv._verify_cache_volume.return_value = cache_vol, cache_snap
-        _fetch.return_value = mock.MagicMock(spec=utils.get_file_spec())
-        _info.return_value = ImgInfo(small_img['virtual_size'])
 
         model, cloned = self.drv.clone_image(fakecontext, self.test_vol2,
                                              img_location,

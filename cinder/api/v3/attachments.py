@@ -61,19 +61,27 @@ class AttachmentsController(wsgi.Controller):
         attachments = self._items(req)
         return attachment_views.ViewBuilder.list(attachments, detail=True)
 
+    @common.process_general_filtering('attachment')
+    def _process_attachment_filtering(self, context=None, filters=None,
+                                      req_version=None):
+        utils.remove_invalid_filter_options(context, filters,
+                                            self.allowed_filters)
+
     def _items(self, req):
         """Return a list of attachments, transformed through view builder."""
         context = req.environ['cinder.context']
+        req_version = req.api_version_request
 
         # Pop out non search_opts and create local variables
         search_opts = req.GET.copy()
         sort_keys, sort_dirs = common.get_sort_params(search_opts)
         marker, limit, offset = common.get_pagination_params(search_opts)
 
+        self._process_attachment_filtering(context=context,
+                                           filters=search_opts,
+                                           req_version=req_version)
         if search_opts.get('instance_id', None):
-            search_opts['instance_uuid'] = search_opts.get('instance_id')
-        utils.remove_invalid_filter_options(context, search_opts,
-                                            self.allowed_filters)
+            search_opts['instance_uuid'] = search_opts.pop('instance_id', None)
         if context.is_admin and 'all_tenants' in search_opts:
             del search_opts['all_tenants']
             return objects.VolumeAttachmentList.get_all(
@@ -169,6 +177,8 @@ class AttachmentsController(wsgi.Controller):
                                                   volume_ref,
                                                   instance_uuid,
                                                   connector=connector))
+        except exception.NotAuthorized:
+            raise
         except exception.CinderException as ex:
             err_msg = _(
                 "Unable to create attachment for volume (%s).") % ex.msg
@@ -222,13 +232,14 @@ class AttachmentsController(wsgi.Controller):
                 self.volume_api.attachment_update(context,
                                                   attachment_ref,
                                                   connector))
-
+        except exception.NotAuthorized:
+            raise
         except exception.CinderException as ex:
             err_msg = (
-                _("Unable to create attachment for volume (%s).") % ex.msg)
+                _("Unable to update attachment.(%s).") % ex.msg)
             LOG.exception(err_msg)
-        except Exception as ex:
-            err_msg = _("Unable to create attachment for volume.")
+        except Exception:
+            err_msg = _("Unable to update the attachment.")
             LOG.exception(err_msg)
         finally:
             if err_msg:

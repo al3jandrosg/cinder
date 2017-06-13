@@ -361,6 +361,18 @@ class BrickLvmTestCase(test.TestCase):
 
         self.assertEqual(pool_name, self.vg.vg_thin_pool)
 
+    def test_volume_create_when_executor_failed(self):
+        def fail(*args, **kwargs):
+            raise processutils.ProcessExecutionError()
+        self.vg._execute = fail
+
+        with mock.patch.object(self.vg, 'get_all_volume_groups') as m_gavg:
+            self.assertRaises(
+                processutils.ProcessExecutionError,
+                self.vg.create_volume, "test", "1G"
+            )
+            m_gavg.assert_called()
+
     def test_lv_has_snapshot(self):
         self.assertTrue(self.vg.lv_has_snapshot('fake-vg'))
         self.assertFalse(self.vg.lv_has_snapshot('test-volumes'))
@@ -417,7 +429,8 @@ class BrickLvmTestCase(test.TestCase):
             self.vg.create_volume('test', '1G')
             self.vg.deactivate_lv('test')
 
-    def test_lv_deactivate_timeout(self):
+    @mock.patch('time.sleep')
+    def test_lv_deactivate_timeout(self, _mock_sleep):
         with mock.patch.object(self.vg, '_execute'):
             is_active_mock = mock.Mock()
             is_active_mock.return_value = True
