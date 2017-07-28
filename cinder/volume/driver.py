@@ -18,6 +18,7 @@
 import abc
 import time
 
+from os_brick import exception as brick_exception
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_config import types
@@ -31,6 +32,7 @@ from cinder.image import image_utils
 from cinder import objects
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver_utils
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import throttling
@@ -49,10 +51,9 @@ volume_opts = [
     cfg.StrOpt('iscsi_target_prefix',
                default='iqn.2010-10.org.openstack:',
                help='Prefix for iSCSI volumes'),
-    cfg.HostAddressOpt('iscsi_ip_address',
-                       default='$my_ip',
-                       help='The IP address that the iSCSI daemon is '
-                            'listening on'),
+    cfg.StrOpt('iscsi_ip_address',
+               default='$my_ip',
+               help='The IP address that the iSCSI daemon is listening on'),
     cfg.ListOpt('iscsi_secondary_ip_addresses',
                 default=[],
                 help='The list of secondary IP addresses of the iSCSI daemon'),
@@ -283,10 +284,9 @@ iser_opts = [
     cfg.StrOpt('iser_target_prefix',
                default='iqn.2010-10.org.openstack:',
                help='Prefix for iSER volumes'),
-    cfg.HostAddressOpt('iser_ip_address',
-                       default='$my_ip',
-                       help='The IP address that the iSER daemon is '
-                            'listening on'),
+    cfg.StrOpt('iser_ip_address',
+               default='$my_ip',
+               help='The IP address that the iSER daemon is listening on'),
     cfg.PortOpt('iser_port',
                 default=3260,
                 help='The port that the iSER daemon is listening on'),
@@ -297,6 +297,8 @@ iser_opts = [
 
 
 CONF = cfg.CONF
+CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
+CONF.register_opts(iser_opts, group=configuration.SHARED_CONF_GROUP)
 CONF.register_opts(volume_opts)
 CONF.register_opts(iser_opts)
 CONF.import_opt('backup_use_same_host', 'cinder.backup.api')
@@ -431,40 +433,59 @@ class BaseVD(object):
                 time.sleep(tries ** 2)
 
     def _detach_volume(self, context, attach_info, volume, properties,
-                       force=False, remote=False):
-        """Disconnect the volume from the host."""
+                       force=False, remote=False, ignore_errors=False):
+        """Disconnect the volume from the host.
+
+        With the force parameter we can indicate if we give more importance to
+        cleaning up as much as possible or if data integrity has higher
+        priority.  This requires the latests OS-Brick code that adds this
+        feature.
+
+        We can also force errors to be ignored using ignore_errors.
+        """
         # Use Brick's code to do attach/detach
+        exc = brick_exception.ExceptionChainer()
         if attach_info:
             connector = attach_info['connector']
-            connector.disconnect_volume(attach_info['conn']['data'],
-                                        attach_info['device'])
+            with exc.context(force, 'Disconnect failed'):
+                connector.disconnect_volume(attach_info['conn']['data'],
+                                            attach_info['device'], force=force,
+                                            ignore_errors=ignore_errors)
+
         if remote:
             # Call remote manager's terminate_connection which includes
             # driver's terminate_connection and remove export
             rpcapi = volume_rpcapi.VolumeAPI()
-            rpcapi.terminate_connection(context, volume, properties,
-                                        force=force)
+            with exc.context(force, 'Remote terminate connection failed'):
+                rpcapi.terminate_connection(context, volume, properties,
+                                            force=force)
         else:
             # Call local driver's terminate_connection and remove export.
             # NOTE(avishay) This is copied from the manager's code - need to
             # clean this up in the future.
-            try:
-                self.terminate_connection(volume, properties, force=force)
-            except Exception as err:
-                err_msg = (_('Unable to terminate volume connection: %(err)s')
-                           % {'err': six.text_type(err)})
-                LOG.error(err_msg)
-                raise exception.VolumeBackendAPIException(data=err_msg)
+            with exc.context(force,
+                             _('Unable to terminate volume connection')):
+                try:
+                    self.terminate_connection(volume, properties, force=force)
+                except Exception as err:
+                    err_msg = (
+                        _('Unable to terminate volume connection: %(err)s')
+                        % {'err': err})
+                    LOG.error(err_msg)
+                    raise exception.VolumeBackendAPIException(data=err_msg)
 
-            try:
-                LOG.debug("volume %s: removing export", volume['id'])
-                self.remove_export(context, volume)
-            except Exception as ex:
-                LOG.exception("Error detaching volume %(volume)s, "
-                              "due to remove export failure.",
-                              {"volume": volume['id']})
-                raise exception.RemoveExportException(volume=volume['id'],
-                                                      reason=ex)
+            with exc.context(force, _('Unable to remove export')):
+                try:
+                    LOG.debug("volume %s: removing export", volume['id'])
+                    self.remove_export(context, volume)
+                except Exception as ex:
+                    LOG.exception("Error detaching volume %(volume)s, "
+                                  "due to remove export failure.",
+                                  {"volume": volume['id']})
+                    raise exception.RemoveExportException(volume=volume['id'],
+                                                          reason=ex)
+        if exc and not ignore_errors:
+            raise exc
 
     def set_initialized(self):
         self._initialized = True
@@ -803,12 +824,20 @@ class BaseVD(object):
                     attach_info['device']['path'],
                     self.configuration.volume_dd_blocksize,
                     size=volume['size'])
+            except exception.ImageTooBig:
+                with excutils.save_and_reraise_exception():
+                    LOG.exception("Copying image %(image_id)s "
+                                  "to volume failed due to "
+                                  "insufficient available space.",
+                                  {'image_id': image_id})
+
             finally:
                 if encrypted:
                     utils.brick_detach_volume_encryptor(attach_info,
                                                         encryption)
         finally:
-            self._detach_volume(context, attach_info, volume, properties)
+            self._detach_volume(context, attach_info, volume, properties,
+                                force=True)
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
@@ -826,7 +855,10 @@ class BaseVD(object):
                                       image_meta,
                                       attach_info['device']['path'])
         finally:
-            self._detach_volume(context, attach_info, volume, properties)
+            # Since attached volume was not used for writing we can force
+            # detach it
+            self._detach_volume(context, attach_info, volume, properties,
+                                force=True, ignore_errors=True)
 
     def before_volume_copy(self, context, src_vol, dest_vol, remote=None):
         """Driver-specific actions before copyvolume data.
@@ -1201,7 +1233,7 @@ class BaseVD(object):
         temp_snap_ref.save()
         return temp_snap_ref
 
-    def _create_temp_volume(self, context, volume):
+    def _create_temp_volume(self, context, volume, volume_options=None):
         kwargs = {
             'size': volume.size,
             'display_name': 'backup-vol-%s' % volume.id,
@@ -1214,6 +1246,7 @@ class BaseVD(object):
             'availability_zone': volume.availability_zone,
             'volume_type_id': volume.volume_type_id,
         }
+        kwargs.update(volume_options or {})
         temp_vol_ref = objects.Volume(context=context, **kwargs)
         temp_vol_ref.create()
         return temp_vol_ref
@@ -1232,8 +1265,10 @@ class BaseVD(object):
         temp_vol_ref.save()
         return temp_vol_ref
 
-    def _create_temp_volume_from_snapshot(self, context, volume, snapshot):
-        temp_vol_ref = self._create_temp_volume(context, volume)
+    def _create_temp_volume_from_snapshot(self, context, volume, snapshot,
+                                          volume_options=None):
+        temp_vol_ref = self._create_temp_volume(context, volume,
+                                                volume_options=volume_options)
         try:
             model_update = self.create_volume_from_snapshot(temp_vol_ref,
                                                             snapshot)
@@ -1367,7 +1402,12 @@ class BaseVD(object):
 
     @abc.abstractmethod
     def terminate_connection(self, volume, connector, **kwargs):
-        """Disallow connection from connector."""
+        """Disallow connection from connector.
+
+        :param volume: The volume to be disconnected.
+        :param connector: A dictionary describing the connection with details
+                          about the initiator. Can be None.
+        """
         return
 
     def terminate_connection_snapshot(self, snapshot, connector, **kwargs):
@@ -1449,7 +1489,7 @@ class BaseVD(object):
         """
         return True
 
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Failover a backend to a secondary replication target.
 
         Instructs a replication capable/configured backend to failover
@@ -1472,8 +1512,9 @@ class BaseVD(object):
         :param volumes: list of volume objects, in case the driver needs
                         to take action on them in some way
         :param secondary_id: Specifies rep target backend to fail over to
-        :returns: ID of the backend that was failed-over to
-                   and model update for volumes
+        :param groups: replication groups
+        :returns: ID of the backend that was failed-over to,
+                  model update for volumes, and model update for groups
         """
 
         # Example volume_updates data structure:
@@ -1481,15 +1522,18 @@ class BaseVD(object):
         #   'updates': {'provider_id': 8,
         #               'replication_status': 'failed-over',
         #               'replication_extended_status': 'whatever',...}},]
+        # Example group_updates data structure:
+        # [{'group_id': <cinder-uuid>,
+        #   'updates': {'replication_status': 'failed-over',...}},]
         raise NotImplementedError()
 
-    def failover(self, context, volumes, secondary_id=None):
+    def failover(self, context, volumes, secondary_id=None, groups=None):
         """Like failover but for a host that is clustered.
 
         Most of the time this will be the exact same behavior as failover_host,
         so if it's not overwritten, it is assumed to be the case.
         """
-        return self.failover_host(context, volumes, secondary_id)
+        return self.failover_host(context, volumes, secondary_id, groups)
 
     def failover_completed(self, context, active_backend_id=None):
         """This method is called after failover for clustered backends."""
@@ -1499,6 +1543,65 @@ class BaseVD(object):
     def _is_base_method(cls, method_name):
         method = getattr(cls, method_name)
         return method.__module__ == getattr(BaseVD, method_name).__module__
+
+    # Replication Group (Tiramisu)
+    def enable_replication(self, context, group, volumes):
+        """Enables replication for a group and volumes in the group.
+
+        :param group: group object
+        :param volumes: list of volume objects in the group
+        :returns: model_update - dict of group updates
+        :returns: volume_model_updates - list of dicts of volume updates
+        """
+        raise NotImplementedError()
+
+    # Replication Group (Tiramisu)
+    def disable_replication(self, context, group, volumes):
+        """Disables replication for a group and volumes in the group.
+
+        :param group: group object
+        :param volumes: list of volume objects in the group
+        :returns: model_update - dict of group updates
+        :returns: volume_model_updates - list of dicts of volume updates
+        """
+        raise NotImplementedError()
+
+    # Replication Group (Tiramisu)
+    def failover_replication(self, context, group, volumes,
+                             secondary_backend_id=None):
+        """Fails over replication for a group and volumes in the group.
+
+        :param group: group object
+        :param volumes: list of volume objects in the group
+        :param secondary_backend_id: backend_id of the secondary site
+        :returns: model_update - dict of group updates
+        :returns: volume_model_updates - list of dicts of volume updates
+        """
+        raise NotImplementedError()
+
+    def get_replication_error_status(self, context, groups):
+        """Returns error info for replicated groups and its volumes.
+
+        :returns: group_model_updates - list of dicts of group updates
+
+        if error happens. For example, a dict of a group can be as follows:
+
+        .. code:: python
+
+          {'group_id': xxxx,
+           'replication_status': fields.ReplicationStatus.ERROR}
+
+        :returns: volume_model_updates - list of dicts of volume updates
+
+        if error happens. For example, a dict of a volume can be as follows:
+
+        .. code:: python
+
+          {'volume_id': xxxx,
+           'replication_status': fields.ReplicationStatus.ERROR}
+
+        """
+        return [], []
 
     @classmethod
     def supports_replication_feature(cls, feature):
@@ -1865,12 +1968,12 @@ class ManageableVD(object):
         Returns a list of dictionaries, each specifying a volume in the host,
         with the following keys:
         - reference (dictionary): The reference for a volume, which can be
-          passed to "manage_existing".
+        passed to "manage_existing".
         - size (int): The size of the volume according to the storage
-          backend, rounded up to the nearest GB.
+        backend, rounded up to the nearest GB.
         - safe_to_manage (boolean): Whether or not this volume is safe to
-          manage according to the storage backend. For example, is the volume
-          in use or invalid for any reason.
+        manage according to the storage backend. For example, is the volume
+        in use or invalid for any reason.
         - reason_not_safe (string): If safe_to_manage is False, the reason why.
         - cinder_id (string): If already managed, provide the Cinder ID.
         - extra_info (string): Any extra information to return to the user
@@ -1957,17 +2060,17 @@ class ManageableSnapshotsVD(object):
         Returns a list of dictionaries, each specifying a snapshot in the host,
         with the following keys:
         - reference (dictionary): The reference for a snapshot, which can be
-          passed to "manage_existing_snapshot".
+        passed to "manage_existing_snapshot".
         - size (int): The size of the snapshot according to the storage
-          backend, rounded up to the nearest GB.
+        backend, rounded up to the nearest GB.
         - safe_to_manage (boolean): Whether or not this snapshot is safe to
-          manage according to the storage backend. For example, is the snapshot
-          in use or invalid for any reason.
+        manage according to the storage backend. For example, is the snapshot
+        in use or invalid for any reason.
         - reason_not_safe (string): If safe_to_manage is False, the reason why.
         - cinder_id (string): If already managed, provide the Cinder ID.
         - extra_info (string): Any extra information to return to the user
         - source_reference (string): Similar to "reference", but for the
-          snapshot's source volume.
+        snapshot's source volume.
 
         :param cinder_snapshots: A list of snapshots in this host that Cinder
                                  currently manages, used to determine if
@@ -2047,6 +2150,17 @@ class VolumeDriver(ManageableVD, CloneableImageVD, ManageableSnapshotsVD,
         msg = _("Manage existing volume not implemented.")
         raise NotImplementedError(msg)
 
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert volume to snapshot.
+
+        Note: the revert process should not change the volume's
+        current size, that means if the driver shrank
+        the volume during the process, it should extend the
+        volume internally.
+        """
+        msg = _("Revert volume to snapshot not implemented.")
+        raise NotImplementedError(msg)
+
     def manage_existing_get_size(self, volume, existing_ref):
         msg = _("Manage existing volume not implemented.")
         raise NotImplementedError(msg)
@@ -2101,7 +2215,12 @@ class VolumeDriver(ManageableVD, CloneableImageVD, ManageableSnapshotsVD,
         """Allow connection from connector for a snapshot."""
 
     def terminate_connection(self, volume, connector, **kwargs):
-        """Disallow connection from connector"""
+        """Disallow connection from connector
+
+        :param volume: The volume to be disconnected.
+        :param connector: A dictionary describing the connection with details
+                          about the initiator. Can be None.
+        """
 
     def terminate_connection_snapshot(self, snapshot, connector, **kwargs):
         """Disallow connection from connector for a snapshot."""
@@ -2642,16 +2761,16 @@ class ISERDriver(ISCSIDriver):
         The format of the driver data is defined in _get_iser_properties.
         Example return value:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
-                'driver_volume_type': 'iser'
+                'driver_volume_type': 'iser',
                 'data': {
                     'target_discovered': True,
                     'target_iqn':
                     'iqn.2010-10.org.iser.openstack:volume-00000001',
                     'target_portal': '127.0.0.0.1:3260',
-                    'volume_id': 1,
+                    'volume_id': 1
                 }
             }
 
@@ -2690,27 +2809,29 @@ class FibreChannelDriver(VolumeDriver):
         correspond to the list of remote wwn(s) that will export the volume.
         Example return values:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
-                'driver_volume_type': 'fibre_channel'
+                'driver_volume_type': 'fibre_channel',
                 'data': {
                     'target_discovered': True,
                     'target_lun': 1,
                     'target_wwn': '1234567890123',
-                    'discard': False,
+                    'discard': False
                 }
             }
 
-            or
+        or
+
+        .. code-block:: default
 
              {
-                'driver_volume_type': 'fibre_channel'
+                'driver_volume_type': 'fibre_channel',
                 'data': {
                     'target_discovered': True,
                     'target_lun': 1,
                     'target_wwn': ['1234567890123', '0987654321321'],
-                    'discard': False,
+                    'discard': False
                 }
             }
 

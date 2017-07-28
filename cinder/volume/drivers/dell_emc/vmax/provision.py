@@ -16,11 +16,18 @@
 import time
 
 from oslo_log import log as logging
+from oslo_service import loopingcall
 
 from cinder import coordination
+from cinder import exception
+from cinder.i18n import _
 from cinder.volume.drivers.dell_emc.vmax import utils
 
 LOG = logging.getLogger(__name__)
+
+WRITE_DISABLED = "Write Disabled"
+UNLINK_INTERVAL = 15
+UNLINK_RETRIES = 30
 
 
 class VMAXProvision(object):
@@ -33,7 +40,8 @@ class VMAXProvision(object):
         self.rest = rest
 
     def create_storage_group(
-            self, array, storagegroup_name, srp, slo, workload, extra_specs):
+            self, array, storagegroup_name, srp, slo, workload,
+            extra_specs, do_disable_compression=False):
         """Create a new storage group.
 
         :param array: the array serial number
@@ -42,6 +50,7 @@ class VMAXProvision(object):
         :param slo: the SLO (String)
         :param workload: the workload (String)
         :param extra_specs: additional info
+        :param do_disable_compression: disable compression flag
         :returns: storagegroup - storage group object
         """
         start_time = time.time()
@@ -49,7 +58,8 @@ class VMAXProvision(object):
         @coordination.synchronized("emc-sg-{storage_group}")
         def do_create_storage_group(storage_group):
             storagegroup = self.rest.create_storage_group(
-                array, storage_group, srp, slo, workload, extra_specs)
+                array, storage_group, srp, slo, workload, extra_specs,
+                do_disable_compression)
 
             LOG.debug("Create storage group took: %(delta)s H:MM:SS.",
                       {'delta': self.utils.get_time_delta(start_time,
@@ -146,7 +156,7 @@ class VMAXProvision(object):
 
     def break_replication_relationship(
             self, array, target_device_id, source_device_id, snap_name,
-            extra_specs, wait_for_sync=True):
+            extra_specs):
         """Unlink a snapshot from its target volume.
 
         :param array: the array serial number
@@ -154,24 +164,55 @@ class VMAXProvision(object):
         :param target_device_id: target volume device id
         :param snap_name: the name for the snap shot
         :param extra_specs: extra specifications
-        :param wait_for_sync: flag for wait for sync
         """
         LOG.debug("Break snap vx link relationship between: %(src)s "
                   "and: %(tgt)s.",
                   {'src': source_device_id, 'tgt': target_device_id})
 
-        if wait_for_sync:
-            self.rest.is_sync_complete(array, source_device_id,
-                                       target_device_id, snap_name,
-                                       extra_specs)
-        try:
-            self.rest.modify_volume_snap(
-                array, source_device_id, target_device_id, snap_name,
-                extra_specs, unlink=True)
-        except Exception as e:
-            LOG.error(
-                "Error modifying volume snap. Exception received: %(e)s.",
-                {'e': e})
+        self._unlink_volume(array, source_device_id, target_device_id,
+                            snap_name, extra_specs)
+
+    def _unlink_volume(
+            self, array, source_device_id, target_device_id, snap_name,
+            extra_specs):
+        """Unlink a target volume from its source volume.
+
+        :param array: the array serial number
+        :param source_device_id: the source device id
+        :param target_device_id: the target device id
+        :param snap_name: the snap name
+        :param extra_specs: extra specifications
+        :return: return code
+        """
+
+        def _unlink_vol():
+            """Called at an interval until the synchronization is finished.
+
+            :raises: loopingcall.LoopingCallDone
+            """
+            retries = kwargs['retries']
+            try:
+                kwargs['retries'] = retries + 1
+                if not kwargs['modify_vol_success']:
+                    self.rest.modify_volume_snap(
+                        array, source_device_id, target_device_id, snap_name,
+                        extra_specs, unlink=True)
+                    kwargs['modify_vol_success'] = True
+            except exception.VolumeBackendAPIException:
+                pass
+
+            if kwargs['retries'] > UNLINK_RETRIES:
+                LOG.error("_unlink_volume failed after %(retries)d "
+                          "tries.", {'retries': retries})
+                raise loopingcall.LoopingCallDone(retvalue=30)
+            if kwargs['modify_vol_success']:
+                raise loopingcall.LoopingCallDone()
+
+        kwargs = {'retries': 0,
+                  'modify_vol_success': False}
+        timer = loopingcall.FixedIntervalLoopingCall(_unlink_vol)
+        rc = timer.start(interval=UNLINK_INTERVAL).wait()
+        return rc
 
     def delete_volume_snap(self, array, snap_name, source_device_id):
         """Delete a snapVx snapshot of a volume.
@@ -233,7 +274,7 @@ class VMAXProvision(object):
         :param device_id: the volume device id
         :param new_size: the new size (GB)
         :param extra_specs: the extra specifications
-        :return: status_code
+        :returns: status_code
         """
         start_time = time.time()
         self.rest.extend_volume(array, device_id, new_size, extra_specs)
@@ -305,7 +346,7 @@ class VMAXProvision(object):
         :param array: the array serial number
         :param srp: the srp name
         :param array_info: array info dict
-        :return: remaining_capacity
+        :returns: remaining_capacity
         """
         remaining_capacity = -1
         if array_info['SLO']:
@@ -331,12 +372,14 @@ class VMAXProvision(object):
         """
         is_valid_slo, is_valid_workload = False, False
 
-        if workload:
-            if workload.lower() == 'none':
-                workload = None
+        if workload and workload.lower() == 'none':
+            workload = None
 
         if not workload:
             is_valid_workload = True
+
+        if slo and slo.lower() == 'none':
+            slo = None
 
         valid_slos = self.rest.get_slo_list(array)
         valid_workloads = self.rest.get_workload_settings(array)
@@ -368,3 +411,196 @@ class VMAXProvision(object):
                 {'workload': workload, 'valid_workloads': valid_workloads})
 
         return is_valid_slo, is_valid_workload
+
+    def get_slo_workload_settings_from_storage_group(
+            self, array, sg_name):
+        """Get slo and workload settings from a storage group.
+
+        :param array: the array serial number
+        :param sg_name: the storage group name
+        :returns: storage group slo settings
+        """
+        slo = 'NONE'
+        workload = 'NONE'
+        storage_group = self.rest.get_storage_group(array, sg_name)
+        if storage_group:
+            try:
+                slo = storage_group['slo']
+                workload = storage_group['workload']
+            except KeyError:
+                pass
+        else:
+            exception_message = (_(
+                "Could not retrieve storage group %(sg_name)%. ") %
+                {'sg_name': sg_name})
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(data=exception_message)
+        return '%(slo)s+%(workload)s' % {'slo': slo, 'workload': workload}
+
+    def break_rdf_relationship(self, array, device_id, target_device,
+                               rdf_group, rep_extra_specs, state):
+        """Break the rdf relationship between a pair of devices.
+
+        :param array: the array serial number
+        :param device_id: the source device id
+        :param target_device: target device id
+        :param rdf_group: the rdf group number
+        :param rep_extra_specs: replication extra specs
+        :param state: the state of the rdf pair
+        """
+        LOG.info("Splitting rdf pair: source device: %(src)s "
+                 "target device: %(tgt)s.",
+                 {'src': device_id, 'tgt': target_device})
+        if state == 'Synchronized':
+            self.rest.modify_rdf_device_pair(
+                array, device_id, rdf_group, rep_extra_specs, split=True)
+        LOG.info("Deleting rdf pair: source device: %(src)s "
+                 "target device: %(tgt)s.",
+                 {'src': device_id, 'tgt': target_device})
+        self.rest.delete_rdf_pair(array, device_id, rdf_group)
+
+    def failover_volume(self, array, device_id, rdf_group,
+                        extra_specs, local_vol_state, failover):
+        """Failover or back a volume pair.
+
+        :param array: the array serial number
+        :param device_id: the source device id
+        :param rdf_group: the rdf group number
+        :param extra_specs: extra specs
+        :param local_vol_state: the local volume state
+        :param failover: flag to indicate failover or failback -- bool
+        """
+        if local_vol_state == WRITE_DISABLED:
+            LOG.info("Volume %(dev)s is already failed over.",
+                     {'dev': device_id})
+            return
+        if failover:
+            action = "Failing over"
+        else:
+            action = "Failing back"
+        LOG.info("%(action)s rdf pair: source device: %(src)s ",
+                 {'action': action, 'src': device_id})
+        self.rest.modify_rdf_device_pair(
+            array, device_id, rdf_group, extra_specs, split=False)
+
+    def create_volume_group(self, array, group_name, extra_specs):
+        """Create a generic volume group.
+
+        :param array: the array serial number
+        :param group_name: the name of the group
+        :param extra_specs: the extra specifications
+        :returns: volume_group
+        """
+        return self.create_storage_group(array, group_name,
+                                         None, None, None, extra_specs)
+
+    def create_group_replica(
+            self, array, source_group, snap_name, extra_specs):
+        """Create a replica (snapVx) of a volume group.
+
+        :param array: the array serial number
+        :param source_group: the source group name
+        :param snap_name: the name for the snap shot
+        :param extra_specs: extra specifications
+        """
+        LOG.debug("Creating Snap Vx snapshot of storage group: %(srcGroup)s.",
+                  {'srcGroup': source_group})
+
+        # Create snapshot
+        self.rest.create_storagegroup_snap(
+            array, source_group, snap_name, extra_specs)
+
+    def delete_group_replica(self, array, snap_name,
+                             source_group_name):
+        """Delete the snapshot.
+
+        :param array: the array serial number
+        :param snap_name: the name for the snap shot
+        :param source_group_name: the source group name
+        """
+        # Delete snapvx snapshot
+        LOG.debug("Deleting Snap Vx snapshot: source group: %(srcGroup)s "
+                  "snapshot: %(snap_name)s.",
+                  {'srcGroup': source_group_name,
+                   'snap_name': snap_name})
+        # The check for existence of snapshot has already happened
+        # So we just need to delete the snapshot
+        self.rest.delete_storagegroup_snap(array, snap_name, source_group_name)
+
+    def link_and_break_replica(self, array, source_group_name,
+                               target_group_name, snap_name, extra_specs,
+                               delete_snapshot=False):
+        """Links a group snap and breaks the relationship.
+
+        :param array: the array serial
+        :param source_group_name: the source group name
+        :param target_group_name: the target group name
+        :param snap_name: the snapshot name
+        :param extra_specs: extra specifications
+        :param delete_snapshot: delete snapshot flag
+        """
+        LOG.debug("Linking Snap Vx snapshot: source group: %(srcGroup)s "
+                  "targetGroup: %(tgtGroup)s.",
+                  {'srcGroup': source_group_name,
+                   'tgtGroup': target_group_name})
+        # Link the snapshot
+        self.rest.modify_storagegroup_snap(
+            array, source_group_name, target_group_name, snap_name,
+            extra_specs, link=True)
+        # Unlink the snapshot
+        LOG.debug("Unlinking Snap Vx snapshot: source group: %(srcGroup)s "
+                  "targetGroup: %(tgtGroup)s.",
+                  {'srcGroup': source_group_name,
+                   'tgtGroup': target_group_name})
+        self._unlink_group(array, source_group_name,
+                           target_group_name, snap_name, extra_specs)
+        # Delete the snapshot if necessary
+        if delete_snapshot:
+            LOG.debug("Deleting Snap Vx snapshot: source group: %(srcGroup)s "
+                      "snapshot: %(snap_name)s.",
+                      {'srcGroup': source_group_name,
+                       'snap_name': snap_name})
+            self.rest.delete_storagegroup_snap(array, snap_name,
+                                               source_group_name)
+
+    def _unlink_group(
+            self, array, source_group_name, target_group_name, snap_name,
+            extra_specs):
+        """Unlink a target group from it's source group.
+
+        :param array: the array serial number
+        :param source_group_name: the source group name
+        :param target_group_name: the target device name
+        :param snap_name: the snap name
+        :param extra_specs: extra specifications
+        :returns: return code
+        """
+
+        def _unlink_grp():
+            """Called at an interval until the synchronization is finished.
+
+            :raises: loopingcall.LoopingCallDone
+            """
+            retries = kwargs['retries']
+            try:
+                kwargs['retries'] = retries + 1
+                if not kwargs['modify_grp_snap_success']:
+                    self.rest.modify_storagegroup_snap(
+                        array, source_group_name, target_group_name,
+                        snap_name, extra_specs, unlink=True)
+                    kwargs['modify_grp_snap_success'] = True
+            except exception.VolumeBackendAPIException:
+                pass
+
+            if kwargs['retries'] > UNLINK_RETRIES:
+                LOG.error("_unlink_grp failed after %(retries)d "
+                          "tries.", {'retries': retries})
+                raise loopingcall.LoopingCallDone(retvalue=30)
+            if kwargs['modify_grp_snap_success']:
+                raise loopingcall.LoopingCallDone()
+
+        kwargs = {'retries': 0,
+                  'modify_grp_snap_success': False}
+        timer = loopingcall.FixedIntervalLoopingCall(_unlink_grp)
+        rc = timer.start(interval=UNLINK_INTERVAL).wait()
+        return rc

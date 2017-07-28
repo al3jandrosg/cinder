@@ -97,8 +97,6 @@ from cinder.volume.drivers.dell_emc import xtremio as \
     cinder_volume_drivers_dell_emc_xtremio
 from cinder.volume.drivers.disco import disco as \
     cinder_volume_drivers_disco_disco
-from cinder.volume.drivers.dothill import dothill_common as \
-    cinder_volume_drivers_dothill_dothillcommon
 from cinder.volume.drivers import drbdmanagedrv as \
     cinder_volume_drivers_drbdmanagedrv
 from cinder.volume.drivers.falconstor import fss_common as \
@@ -279,6 +277,29 @@ def list_opts():
                 [cinder_volume_api.az_cache_time_opt],
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
+                cinder_volume_manager.volume_manager_opts,
+                cinder_wsgi_eventletserver.socket_opts,
+            )),
+        ('FC-ZONE-MANAGER',
+            itertools.chain(
+                cinder_zonemanager_drivers_brocade_brcdfczonedriver.brcd_opts,
+                cinder_zonemanager_drivers_cisco_ciscofczonedriver.cisco_opts,
+                cinder_zonemanager_fczonemanager.zone_manager_opts,
+            )),
+        ('KEY_MANAGER',
+            itertools.chain(
+                cinder_keymgr_confkeymgr.key_mgr_opts,
+            )),
+        ('NOVA_GROUP',
+            itertools.chain(
+                cinder_compute_nova.nova_opts,
+                cinder_compute_nova.nova_session_opts,
+                cinder_compute_nova.nova_auth_opts,
+            )),
+        ('backend_defaults',
+            itertools.chain(
+                cinder_volume_driver.volume_opts,
+                cinder_volume_driver.iser_opts,
                 cinder_volume_drivers_blockdevice.volume_opts,
                 cinder_volume_drivers_blockbridge.blockbridge_opts,
                 cinder_volume_drivers_coho.coho_opts,
@@ -294,8 +315,6 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_disco_disco.disco_opts,
-                cinder_volume_drivers_dothill_dothillcommon.common_opts,
-                cinder_volume_drivers_dothill_dothillcommon.iscsi_opts,
                 cinder_volume_drivers_drbdmanagedrv.drbd_opts,
                 cinder_volume_drivers_falconstor_fsscommon.FSS_OPTS,
                 cinder_volume_drivers_fujitsu_eternusdxcommon.
@@ -384,23 +403,6 @@ def list_opts():
                 cinder_volume_drivers_zfssa_zfssaiscsi.ZFSSA_OPTS,
                 cinder_volume_drivers_zfssa_zfssanfs.ZFSSA_OPTS,
                 cinder_volume_drivers_zte_zteks.zte_opts,
-                cinder_volume_manager.volume_manager_opts,
-                cinder_wsgi_eventletserver.socket_opts,
-            )),
-        ('FC-ZONE-MANAGER',
-            itertools.chain(
-                cinder_zonemanager_drivers_brocade_brcdfczonedriver.brcd_opts,
-                cinder_zonemanager_drivers_cisco_ciscofczonedriver.cisco_opts,
-                cinder_zonemanager_fczonemanager.zone_manager_opts,
-            )),
-        ('KEY_MANAGER',
-            itertools.chain(
-                cinder_keymgr_confkeymgr.key_mgr_opts,
-            )),
-        ('NOVA_GROUP',
-            itertools.chain(
-                cinder_compute_nova.nova_opts,
-                cinder_compute_nova.nova_session_opts,
-                cinder_compute_nova.nova_auth_opts,
+                cinder_volume_manager.volume_backend_opts,
             )),
     ]

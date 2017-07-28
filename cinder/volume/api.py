@@ -354,6 +354,26 @@ class API(base.Base):
             return vref
 
     @wrap_check_policy
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """revert a volume to a snapshot"""
+
+        v_res = volume.update_single_status_where(
+            'reverting', 'available')
+        if not v_res:
+            msg = _("Can't revert volume %s to its latest snapshot. "
+                    "Volume's status must be 'available'.") % volume.id
+            raise exception.InvalidVolume(reason=msg)
+        s_res = snapshot.update_single_status_where(
+            fields.SnapshotStatus.RESTORING,
+            fields.SnapshotStatus.AVAILABLE)
+        if not s_res:
+            msg = _("Can't revert volume %s to its latest snapshot. "
+                    "Snapshot's status must be 'available'.") % snapshot.id
+            raise exception.InvalidSnapshot(reason=msg)
+
+        self.volume_rpcapi.revert_to_snapshot(context, volume, snapshot)
+
+    @wrap_check_policy
     def delete(self, context, volume,
                force=False,
                unmanage_only=False,
@@ -418,6 +438,10 @@ class API(base.Base):
             else:
                 # Allow deletion if all snapshots are in an expected state
                 filters = [~db.volume_has_undeletable_snapshots_filter()]
+                # Check if the volume has snapshots which are existing in
+                # other project now.
+                if not context.is_admin:
+                    filters.append(~db.volume_has_other_project_snp_filter())
         else:
             # Don't allow deletion of volume with snapshots
             filters = [~db.volume_has_snapshots_filter()]
@@ -433,7 +457,8 @@ class API(base.Base):
             status = utils.build_or_str(expected.get('status'),
                                         _('status must be %s and'))
             msg = _('Volume %s must not be migrating, attached, belong to a '
-                    'group or have snapshots.') % status
+                    'group, have snapshots or be disassociated from '
+                    'snapshots after volume transfer.') % status
             LOG.info(msg)
             raise exception.InvalidVolume(reason=msg)
 
@@ -1119,16 +1144,14 @@ class API(base.Base):
     @wrap_check_policy
     def get_snapshot_metadata(self, context, snapshot):
         """Get all metadata associated with a snapshot."""
-        snapshot_obj = self.get_snapshot(context, snapshot.id)
         LOG.info("Get snapshot metadata completed successfully.",
                  resource=snapshot)
-        return snapshot_obj.metadata
+        return snapshot.metadata
 
     @wrap_check_policy
     def delete_snapshot_metadata(self, context, snapshot, key):
         """Delete the given metadata item from a snapshot."""
-        snapshot_obj = self.get_snapshot(context, snapshot.id)
-        snapshot_obj.delete_metadata_key(context, key)
+        snapshot.delete_metadata_key(context, key)
         LOG.info("Delete snapshot metadata completed successfully.",
                  resource=snapshot)
 
@@ -1266,18 +1289,22 @@ class API(base.Base):
                  resource=volume)
         return response
 
-    @wrap_check_policy
-    def extend(self, context, volume, new_size):
+    def _extend(self, context, volume, new_size, attached=False):
         value = {'status': 'extending'}
-        expected = {'status': 'available'}
+        if attached:
+            expected = {'status': 'in-use'}
+        else:
+            expected = {'status': 'available'}
+        orig_status = {'status': volume.status}
 
         def _roll_back_status():
-            msg = _('Could not return volume %s to available.')
+            status = orig_status['status']
+            msg = _('Could not return volume %(id)s to %(status)s.')
             try:
-                if not volume.conditional_update(expected, value):
-                    LOG.error(msg, volume.id)
+                if not volume.conditional_update(orig_status, value):
+                    LOG.error(msg, {'id': volume.id, 'status': status})
             except Exception:
-                LOG.exception(msg, volume.id)
+                LOG.exception(msg, {'id': volume.id, 'status': status})
 
         size_increase = (int(new_size)) - volume.size
         if size_increase <= 0:
@@ -1289,8 +1316,11 @@ class API(base.Base):
 
         result = volume.conditional_update(value, expected)
         if not result:
-            msg = _('Volume %(vol_id)s status must be available '
-                    'to extend.') % {'vol_id': volume.id}
+            msg = (_("Volume %(vol_id)s status must be '%(expected)s' "
+                     "to extend, currently %(status)s.")
+                   % {'vol_id': volume.id,
+                      'status': volume.status,
+                      'expected': six.text_type(expected)})
             raise exception.InvalidVolume(reason=msg)
 
         rollback = True
@@ -1355,6 +1385,17 @@ class API(base.Base):
 
         LOG.info("Extend volume request issued successfully.",
                  resource=volume)
+
+    @wrap_check_policy
+    def extend(self, context, volume, new_size):
+        self._extend(context, volume, new_size, attached=False)
+
+    # NOTE(tommylikehu): New method is added here so that administrator
+    # can enable/disable this ability by editing the policy file if the
+    # cloud environment doesn't allow this operation.
+    @wrap_check_policy
+    def extend_attached_volume(self, context, volume, new_size):
+        self._extend(context, volume, new_size, attached=True)
 
     @wrap_check_policy
     def migrate_volume(self, context, volume, host, cluster_name, force_copy,
@@ -1444,8 +1485,6 @@ class API(base.Base):
 
     @wrap_check_policy
     def migrate_volume_completion(self, context, volume, new_volume, error):
-        # This is a volume swap initiated by Nova, not Cinder. Nova expects
-        # us to return the new_volume_id.
         if not (volume.migration_status or new_volume.migration_status):
             # When we're not migrating and haven't hit any errors, we issue
             # volume attach and detach requests so the volumes don't end in
@@ -1982,7 +2021,12 @@ class API(base.Base):
     def attachment_delete(self, ctxt, attachment):
         volume = objects.Volume.get_by_id(ctxt, attachment.volume_id)
         if attachment.attach_status == 'reserved':
-            attachment.destroy()
+            self.db.volume_detached(ctxt.elevated(), attachment.volume_id,
+                                    attachment.get('id'))
+            self.db.volume_admin_metadata_delete(ctxt.elevated(),
+                                                 attachment.volume_id,
+                                                 'attached_mode')
+            volume_utils.notify_about_volume_usage(ctxt, volume, "detach.end")
         else:
             self.volume_rpcapi.attachment_delete(ctxt,
                                                  attachment.id,

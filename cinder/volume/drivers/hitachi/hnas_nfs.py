@@ -33,6 +33,7 @@ from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
 from cinder import utils as cutils
+from cinder.volume import configuration
 from cinder.volume.drivers.hitachi import hnas_backend
 from cinder.volume.drivers.hitachi import hnas_utils
 from cinder.volume.drivers import nfs
@@ -53,7 +54,7 @@ NFS_OPTS = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(NFS_OPTS)
+CONF.register_opts(NFS_OPTS, group=configuration.SHARED_CONF_GROUP)
 
 HNAS_DEFAULT_CONFIG = {'ssc_cmd': 'ssc', 'ssh_port': '22'}
 
@@ -318,14 +319,18 @@ class HNASNFSDriver(nfs.NfsDriver):
 
         :param refresh: if it is True, update the stats first.
         :returns: dictionary with the stats from HNAS
-        _stats['pools'] = {
-            'total_capacity_gb': total size of the pool,
-            'free_capacity_gb': the available size,
-            'QoS_support': bool to indicate if QoS is supported,
-            'reserved_percentage': percentage of size reserved,
-            'max_over_subscription_ratio': oversubscription rate,
-            'thin_provisioning_support': thin support (True),
-            }
+
+        .. code:: python
+
+          _stats['pools'] = {
+              'total_capacity_gb': total size of the pool,
+              'free_capacity_gb': the available size,
+              'QoS_support': bool to indicate if QoS is supported,
+              'reserved_percentage': percentage of size reserved,
+              'max_over_subscription_ratio': oversubscription rate,
+              'thin_provisioning_support': thin support (True),
+              }
+
         """
         LOG.info("Getting volume stats")
 
@@ -560,7 +565,7 @@ class HNASNFSDriver(nfs.NfsDriver):
 
         :param volume: cinder volume to manage
         :param existing_vol_ref: driver-specific information used to identify a
-        volume
+                                 volume
         :returns: the provider location
         :raises VolumeBackendAPIException:
         """

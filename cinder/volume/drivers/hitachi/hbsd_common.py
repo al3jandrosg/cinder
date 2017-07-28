@@ -26,6 +26,7 @@ import six
 
 from cinder import exception
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers.hitachi import hbsd_basiclib as basic_lib
 from cinder.volume.drivers.hitachi import hbsd_horcm as horcm
 from cinder.volume.drivers.hitachi import hbsd_snm2 as snm2
@@ -89,7 +90,7 @@ volume_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(volume_opts)
+CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 class TryLock(object):
@@ -227,7 +228,7 @@ class HBSDCommon(object):
                 first_type = 'dig'
             else:
                 if (first_type == 'dig'
-                        or not re.match('\w\w:\w\w:\w\w', lists[i])):
+                        or not re.match(r'\w\w:\w\w:\w\w', lists[i])):
                     msg = basic_lib.output_err(601, param=param)
                     raise exception.HBSDError(message=msg)
                 try:
@@ -749,7 +750,7 @@ class HBSDCommon(object):
 
         For HUS 100 Family:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
                 'ldev': <logical device number on storage>,
@@ -758,7 +759,7 @@ class HBSDCommon(object):
 
         For VSP G1000/VSP/HUS VM:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
                 'ldev': <logical device number on storage>,

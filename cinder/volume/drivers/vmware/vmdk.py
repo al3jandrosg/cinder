@@ -39,6 +39,7 @@ from oslo_vmware import vim_util
 from cinder import exception
 from cinder.i18n import _
 from cinder import interface
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.vmware import datastore as hub
 from cinder.volume.drivers.vmware import exceptions as vmdk_exceptions
@@ -130,7 +131,7 @@ vmdk_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(vmdk_opts)
+CONF.register_opts(vmdk_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 def _get_volume_type_extra_spec(type_id, spec_key, possible_values=None,
@@ -604,11 +605,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         The implementation returns the following information:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
-                'driver_volume_type': 'vmdk'
-                'data': {'volume': $VOLUME_MOREF_VALUE
+                'driver_volume_type': 'vmdk',
+                'data': {'volume': $VOLUME_MOREF_VALUE,
                          'volume_id': $VOLUME_ID
                         }
             }
@@ -678,7 +679,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                       resource=snapshot.volume)
         elif not self.volumeops.get_snapshot(backing, snapshot.name):
             LOG.debug("Snapshot does not exist in backend.", resource=snapshot)
-        elif snapshot.volume.status != 'available':
+        elif self._in_use(snapshot.volume):
             msg = _("Delete snapshot of volume not supported in "
                     "state: %s.") % snapshot.volume.status
             LOG.error(msg)

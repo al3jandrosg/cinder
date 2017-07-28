@@ -27,6 +27,7 @@ from xml.etree import ElementTree as ETree
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.volume import configuration
 from cinder.volume import volume_types
 
 LOG = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ drivers_common_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(drivers_common_opts)
+CONF.register_opts(drivers_common_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 def _check_conf_params(config, pool_name, idx):
@@ -174,9 +175,17 @@ def read_xml_config(xml_config_file, svc_params, optional_params):
 
     :param xml_config_file: string filename containing XML configuration
     :param svc_params: parameters to configure the services
-    ['volume_type', 'hdp']
+
+    .. code:: python
+
+      ['volume_type', 'hdp']
+
     :param optional_params: parameters to configure that are not mandatory
-    ['ssc_cmd', 'cluster_admin_ip0', 'chap_enabled']
+
+    .. code:: python
+
+      ['ssc_cmd', 'cluster_admin_ip0', 'chap_enabled']
+
     """
 
     if not os.access(xml_config_file, os.R_OK):
@@ -277,7 +286,7 @@ def read_cinder_conf(config_opts):
     file.
 
     :param config_opts: Configuration object that contains the information
-    needed by HNAS driver
+                        needed by HNAS driver
     :param dv_type: The type of the driver (NFS or iSCSI)
     :returns: Dictionary with the driver configuration
     """

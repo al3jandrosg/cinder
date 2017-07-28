@@ -17,7 +17,7 @@ backup_id:
   description: |
     The UUID for a backup.
   in: path
-  required: false
+  required: true
   type: string
 cascade:
   description: |
@@ -211,6 +211,13 @@ name_volume:
   in: query
   required: false
   type: string
+offset:
+  description: |
+    Used in conjunction with ``limit`` to return a slice of items. ``offset``
+    is where to start in the list.
+  in: query
+  required: false
+  type: integer
 sort:
   description: |
     Comma-separated list of sort keys and optional
@@ -416,7 +423,7 @@ container:
   description: |
     The container name or null.
   in: body
-  required: true
+  required: false
   type: string
 control_location:
   description: |
@@ -496,7 +503,7 @@ description:
   description: |
     The backup description or null.
   in: body
-  required: true
+  required: false
   type: string
 description_1:
   description: |
@@ -973,8 +980,13 @@ metadata_items:
   type: integer
 migration_policy:
   description: |
-    Specify if make migration when retyping volume, the value is 'on-demand'
-    or 'never'.
+    Specify if the volume should be migrated when it is re-typed.
+    Possible values are ``on-demand`` or ``never``. If not specified, the
+    default is ``never``.
+
+    .. note:: If the volume is attached to a server instance and will be
+      migrated, then by default policy only users with the administrative role
+      should attempt the retype operation.
   in: body
   required: false
   type: string
@@ -1565,6 +1577,12 @@ status_6:
     The volume status.
   in: body
   required: false
+  type: string
+status_7:
+  description: |
+    The status for the backup.
+  in: body
+  required: true
   type: string
 storage_protocol:
   description: |

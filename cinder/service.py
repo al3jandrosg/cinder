@@ -67,10 +67,9 @@ service_opts = [
                help='Range, in seconds, to randomly delay when starting the'
                     ' periodic task scheduler to reduce stampeding.'
                     ' (Disable by setting to 0)'),
-    cfg.HostAddressOpt('osapi_volume_listen',
-                       default="0.0.0.0",
-                       help='IP address on which OpenStack Volume API '
-                            'listens'),
+    cfg.StrOpt('osapi_volume_listen',
+               default="0.0.0.0",
+               help='IP address on which OpenStack Volume API listens'),
     cfg.PortOpt('osapi_volume_listen_port',
                 default=8776,
                 help='Port on which OpenStack Volume API listens'),
@@ -472,7 +471,7 @@ class Service(service.Service):
     def periodic_tasks(self, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
         ctxt = context.get_admin_context()
-        self.manager.periodic_tasks(ctxt, raise_on_error=raise_on_error)
+        self.manager.run_periodic_tasks(ctxt, raise_on_error=raise_on_error)
 
     def report_state(self):
         """Update the state of this service in the datastore."""
@@ -628,7 +627,7 @@ class WSGIService(service.ServiceBase):
 
 
 def process_launcher():
-    return service.ProcessLauncher(CONF)
+    return service.ProcessLauncher(CONF, restart_method='mutate')
 
 
 # NOTE(vish): the global launcher is to maintain the existing

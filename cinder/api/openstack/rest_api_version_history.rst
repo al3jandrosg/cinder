@@ -81,16 +81,18 @@ user documentation.
 
   .. code-block:: json
 
-     "cluster": {
-         "created_at": ...,
-         "disabled_reason": null,
-         "last_heartbeat": ...,
-         "name": "cluster_name",
-         "num_down_hosts": 4,
-         "num_hosts": 2,
-         "state": "up",
-         "status": "enabled",
-         "updated_at": ...
+     {
+         "cluster": {
+             "created_at": "",
+             "disabled_reason": null,
+             "last_heartbeat": "",
+             "name": "cluster_name",
+             "num_down_hosts": 4,
+             "num_hosts": 2,
+             "state": "up",
+             "status": "enabled",
+             "updated_at": ""
+         }
      }
 
   Update endpoint allows enabling and disabling a cluster in a similar way to
@@ -100,11 +102,13 @@ user documentation.
 
   .. code-block:: json
 
-     "cluster": {
-         "name": "cluster_name",
-         "state": "up",
-         "status": "enabled"
-         "disabled_reason": null
+     {
+         "cluster": {
+             "name": "cluster_name",
+             "state": "up",
+             "status": "enabled",
+             "disabled_reason": null
+         }
      }
 
   Index and detail accept filtering by `name`, `binary`, `disabled`,
@@ -115,37 +119,35 @@ user documentation.
 
   .. code-block:: json
 
-     "clusters": [
-         {
-             "name": "cluster_name",
-             "state": "up",
-             "status": "enabled"
-         },
-         {
-             ...
-         }
-     ]
+     {
+         "clusters": [
+             {
+                 "name": "cluster_name",
+                 "state": "up",
+                 "status": "enabled"
+             }
+         ]
+      }
 
   Detail endpoint returns:
 
   .. code-block:: json
 
-     "clusters": [
-         {
-             "created_at": ...,
-             "disabled_reason": null,
-             "last_heartbeat": ...,
-             "name": "cluster_name",
-             "num_down_hosts": 4,
-             "num_hosts": 2,
-             "state": "up",
-             "status": "enabled",
-             "updated_at": ...
-         },
-         {
-             ...
-         }
-     ]
+     {
+         "clusters": [
+             {
+                 "created_at": "",
+                 "disabled_reason": null,
+                 "last_heartbeat": "",
+                 "name": "cluster_name",
+                 "num_down_hosts": 4,
+                 "num_hosts": 2,
+                 "state": "up",
+                 "status": "enabled",
+                 "updated_at": ""
+             }
+         ]
+     }
 
 3.8
 ---
@@ -160,10 +162,12 @@ user documentation.
 
   .. code-block:: json
 
-     "backup": {
-         "id": "backup_id",
-         "name": "backup_name",
-         "links": "backup_link",
+     {
+         "backup": {
+             "id": "backup_id",
+             "name": "backup_name",
+             "links": "backup_link"
+         }
      }
 
 3.10
@@ -325,3 +329,39 @@ user documentation.
 3.37
 ----
   Support sort backup by "name".
+
+3.38
+----
+  Added enable_replication/disable_replication/failover_replication/
+  list_replication_targets for replication groups (Tiramisu).
+
+3.39
+----
+  Add ``project_id`` admin filters support to limits.
+
+3.40
+----
+  Add volume revert to its latest snapshot support.
+
+3.41
+----
+  Add ``user_id`` field to snapshot list/detail and snapshot show.
+
+3.42
+----
+  Add ability to extend 'in-use' volume. User should be aware of the
+  whole environment before using this feature because it's dependent
+  on several external factors below:
+
+  1. nova-compute version - needs to be the latest for Pike.
+  2. only the libvirt compute driver supports this currently.
+  3. only iscsi and fibre channel volume types are supported on the
+     nova side currently.
+
+  Administrator can disable this ability by updating the
+  ``volume:extend_attached_volume`` policy rule.  Extend of a resered
+  Volume is NOT allowed.
+
+3.43
+----
+  Support backup CRUD with metadata.

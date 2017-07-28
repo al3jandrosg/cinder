@@ -409,6 +409,10 @@ def volume_qos_allows_retype(new_vol_type):
     return IMPL.volume_qos_allows_retype(new_vol_type)
 
 
+def volume_has_other_project_snp_filter():
+    return IMPL.volume_has_other_project_snp_filter()
+
+
 ####################
 
 
@@ -465,6 +469,11 @@ def snapshot_get_all_for_group_snapshot(context, group_snapshot_id):
 def snapshot_get_all_for_volume(context, volume_id):
     """Get all snapshots for a volume."""
     return IMPL.snapshot_get_all_for_volume(context, volume_id)
+
+
+def snapshot_get_latest_for_volume(context, volume_id):
+    """Get latest snapshot for a volume"""
+    return IMPL.snapshot_get_latest_for_volume(context, volume_id)
 
 
 def snapshot_update(context, snapshot_id, values):
@@ -1174,6 +1183,14 @@ def backup_create(context, values):
     return IMPL.backup_create(context, values)
 
 
+def backup_metadata_get(context, backup_id):
+    return IMPL.backup_metadata_get(context, backup_id)
+
+
+def backup_metadata_update(context, backup_id, metadata, delete):
+    return IMPL.backup_metadata_update(context, backup_id, metadata, delete)
+
+
 def backup_get_all_by_project(context, project_id, filters=None, marker=None,
                               limit=None, offset=None, sort_keys=None,
                               sort_dirs=None):
@@ -1849,7 +1866,7 @@ def conditional_update(context, model, values, expected_values, filters=(),
                             equivalent to read_deleted.
     :param project_only: Should the query be limited to context's project.
     :param order: Specific order of fields in which to update the values
-    :returns number of db rows that were updated.
+    :returns: Number of db rows that were updated.
     """
     return IMPL.conditional_update(context, model, values, expected_values,
                                    filters, include_deleted, project_only,

@@ -23,6 +23,7 @@ from mock import call
 from oslo_config import cfg
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
+import six
 from sqlalchemy.sql import operators
 
 from cinder.api import common
@@ -1546,6 +1547,41 @@ class DBAPISnapshotTestCase(BaseTest):
         actual = db.snapshot_data_get_for_project(self.ctxt, 'project1')
         self.assertEqual((1, 42), actual)
 
+    @ddt.data({'time_collection': [1, 2, 3],
+               'latest': 1},
+              {'time_collection': [4, 2, 6],
+               'latest': 2},
+              {'time_collection': [8, 2, 1],
+               'latest': 1})
+    @ddt.unpack
+    def test_snapshot_get_latest_for_volume(self, time_collection, latest):
+        def hours_ago(hour):
+            return timeutils.utcnow() - datetime.timedelta(
+                hours=hour)
+        db.volume_create(self.ctxt, {'id': 1})
+        for snapshot in time_collection:
+            db.snapshot_create(self.ctxt,
+                               {'id': snapshot, 'volume_id': 1,
+                                'display_name': 'one',
+                                'created_at': hours_ago(snapshot),
+                                'status': fields.SnapshotStatus.AVAILABLE})
+
+        snapshot = db.snapshot_get_latest_for_volume(self.ctxt, 1)
+
+        self.assertEqual(six.text_type(latest), snapshot['id'])
+
+    def test_snapshot_get_latest_for_volume_not_found(self):
+
+        db.volume_create(self.ctxt, {'id': 1})
+        for t_id in [2, 3]:
+            db.snapshot_create(self.ctxt,
+                               {'id': t_id, 'volume_id': t_id,
+                                'display_name': 'one',
+                                'status': fields.SnapshotStatus.AVAILABLE})
+
+        self.assertRaises(exception.VolumeSnapshotNotFound,
+                          db.snapshot_get_latest_for_volume, self.ctxt, 1)
+
     def test_snapshot_get_all_by_filter(self):
         db.volume_create(self.ctxt, {'id': 1})
         db.volume_create(self.ctxt, {'id': 2})
@@ -2480,7 +2516,7 @@ class DBAPIBackupTestCase(BaseTest):
     """Tests for db.api.backup_* methods."""
 
     _ignored_keys = ['id', 'deleted', 'deleted_at', 'created_at',
-                     'updated_at', 'data_timestamp']
+                     'updated_at', 'data_timestamp', 'backup_metadata']
 
     def setUp(self):
         super(DBAPIBackupTestCase, self).setUp()
@@ -2525,7 +2561,7 @@ class DBAPIBackupTestCase(BaseTest):
     def test_backup_create(self):
         values = self._get_values()
         for i, backup in enumerate(self.created):
-            self.assertTrue(backup['id'])
+            self.assertEqual(36, len(backup['id']))  # dynamic UUID
             self._assertEqualObjects(values[i], backup, self._ignored_keys)
 
     def test_backup_get(self):
@@ -3057,3 +3093,58 @@ class DBAPIBackendTestCase(BaseTest):
             cluster += '#poolname'
         self.assertEqual(frozen,
                          db.is_backend_frozen(self.ctxt, host, cluster))
+
+
+class DBAPIGroupTestCase(BaseTest):
+    def test_group_get_all_by_host(self):
+        grp_type = db.group_type_create(self.ctxt, {'name': 'my_group_type'})
+        groups = []
+        backend = 'host1@lvm'
+        for i in range(3):
+            groups.append([db.group_create(
+                self.ctxt,
+                {'host': '%(b)s%(n)d' % {'b': backend, 'n': i},
+                 'group_type_id': grp_type['id']})
+                for j in range(3)])
+
+        for i in range(3):
+            host = '%(b)s%(n)d' % {'b': backend, 'n': i}
+            filters = {'host': host, 'backend_match_level': 'backend'}
+            grps = db.group_get_all(
+                self.ctxt, filters=filters)
+            self._assertEqualListsOfObjects(groups[i], grps)
+            for grp in grps:
+                db.group_destroy(self.ctxt, grp['id'])
+
+        db.group_type_destroy(self.ctxt, grp_type['id'])
+
+    def test_group_get_all_by_host_with_pools(self):
+        grp_type = db.group_type_create(self.ctxt, {'name': 'my_group_type'})
+        groups = []
+        backend = 'host1@lvm'
+        pool = '%s#pool1' % backend
+        grp_on_host_wo_pool = [db.group_create(
+            self.ctxt,
+            {'host': backend,
+             'group_type_id': grp_type['id']})
+            for j in range(3)]
+        grp_on_host_w_pool = [db.group_create(
+            self.ctxt,
+            {'host': pool,
+             'group_type_id': grp_type['id']})]
+        groups.append(grp_on_host_wo_pool + grp_on_host_w_pool)
+        # insert an additional record that doesn't belongs to the same
+        # host as 'foo' and test if it is included in the result
+        grp_foobar = db.group_create(self.ctxt,
+                                     {'host': '%sfoo' % backend,
+                                      'group_type_id': grp_type['id']})
+
+        filters = {'host': backend, 'backend_match_level': 'backend'}
+        grps = db.group_get_all(self.ctxt, filters=filters)
+        self._assertEqualListsOfObjects(groups[0], grps)
+        for grp in grps:
+            db.group_destroy(self.ctxt, grp['id'])
+
+        db.group_destroy(self.ctxt, grp_foobar['id'])
+
+        db.group_type_destroy(self.ctxt, grp_type['id'])

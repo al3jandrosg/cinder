@@ -39,6 +39,7 @@ from cinder.objects import fields
 import cinder.policy
 from cinder import quota
 from cinder import quota_utils
+from cinder import utils
 import cinder.volume
 from cinder.volume import utils as volume_utils
 
@@ -67,10 +68,10 @@ def check_policy(context, action):
 class API(base.Base):
     """API for interacting with the volume backup manager."""
 
-    def __init__(self, db_driver=None):
+    def __init__(self, db=None):
         self.backup_rpcapi = backup_rpcapi.BackupAPI()
         self.volume_api = cinder.volume.API()
-        super(API, self).__init__(db_driver)
+        super(API, self).__init__(db)
 
     def get(self, context, backup_id):
         check_policy(context, 'get')
@@ -201,9 +202,10 @@ class API(base.Base):
 
     def create(self, context, name, description, volume_id,
                container, incremental=False, availability_zone=None,
-               force=False, snapshot_id=None):
+               force=False, snapshot_id=None, metadata=None):
         """Make the RPC call to create a volume backup."""
         check_policy(context, 'create')
+        utils.check_metadata_properties(metadata)
         volume = self.volume_api.get(context, volume_id)
         snapshot = None
         if snapshot_id:
@@ -314,6 +316,7 @@ class API(base.Base):
                 'host': host,
                 'snapshot_id': snapshot_id,
                 'data_timestamp': data_timestamp,
+                'metadata': metadata or {}
             }
             backup = objects.Backup(context=context, **kwargs)
             backup.create()
@@ -495,6 +498,7 @@ class API(base.Base):
             'project_id': context.project_id,
             'volume_id': IMPORT_VOLUME_ID,
             'status': fields.BackupStatus.CREATING,
+            'metadata': {}
         }
 
         try:

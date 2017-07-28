@@ -41,6 +41,7 @@ from cinder.i18n import _
 from cinder import manager
 from cinder.message import api as mess_api
 from cinder import objects
+from cinder.objects import fields
 from cinder import quota
 from cinder import rpc
 from cinder.scheduler.flows import create_volume
@@ -160,14 +161,14 @@ class SchedulerManager(manager.CleanableManager, manager.Manager):
             LOG.error("Could not find a backend for group "
                       "%(group_id)s.",
                       {'group_id': group.id})
-            group.status = 'error'
+            group.status = fields.GroupStatus.ERROR
             group.save()
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.exception("Failed to create generic group "
                               "%(group_id)s.",
                               {'group_id': group.id})
-                group.status = 'error'
+                group.status = fields.GroupStatus.ERROR
                 group.save()
 
     @objects.Volume.set_workers
@@ -347,9 +348,12 @@ class SchedulerManager(manager.CleanableManager, manager.Manager):
 
         filter_properties['new_size'] = new_size
         try:
-            self.driver.backend_passes_filters(context,
-                                               volume.service_topic_queue,
-                                               request_spec, filter_properties)
+            backend_state = self.driver.backend_passes_filters(
+                context,
+                volume.service_topic_queue,
+                request_spec, filter_properties)
+            backend_state.consume_from_volume(
+                {'size': new_size - volume.size})
             volume_rpcapi.VolumeAPI().extend_volume(context, volume, new_size,
                                                     reservations)
         except exception.NoValidBackend as ex:

@@ -121,9 +121,8 @@ def get_backend():
 def is_admin_context(context):
     """Indicates if the request context is an administrator."""
     if not context:
-        LOG.warning('Use of empty request context is deprecated',
-                    DeprecationWarning)
-        raise Exception('die')
+        raise exception.CinderException(
+            'Use of empty request context is deprecated')
     return context.is_admin
 
 
@@ -224,6 +223,21 @@ def require_snapshot_exists(f):
         if not resource_exists(context, models.Snapshot, snapshot_id):
             raise exception.SnapshotNotFound(snapshot_id=snapshot_id)
         return f(context, snapshot_id, *args, **kwargs)
+    return wrapper
+
+
+def require_backup_exists(f):
+    """Decorator to require the specified snapshot to exist.
+
+    Requires the wrapped function to use context and backup_id as
+    their first two arguments.
+    """
+
+    @functools.wraps(f)
+    def wrapper(context, backup_id, *args, **kwargs):
+        if not resource_exists(context, models.Backup, backup_id):
+            raise exception.BackupNotFound(backup_id=backup_id)
+        return f(context, backup_id, *args, **kwargs)
     return wrapper
 
 
@@ -2618,6 +2632,12 @@ def volume_qos_allows_retype(new_vol_type):
                 models.QualityOfServiceSpecs.value != 'back-end'))))
 
 
+def volume_has_other_project_snp_filter():
+    return sql.exists().where(
+        and_(models.Volume.id == models.Snapshot.volume_id,
+             models.Volume.project_id != models.Snapshot.project_id))
+
+
 ####################
 
 
@@ -2711,7 +2731,6 @@ def _volume_image_metadata_get_query(context, volume_id, session=None):
 
 
 @require_context
-@require_volume_exists
 def _volume_user_metadata_get(context, volume_id, session=None):
     return _volume_x_metadata_get(context, volume_id,
                                   models.VolumeMetadata, session=session)
@@ -2783,7 +2802,6 @@ def volume_metadata_delete(context, volume_id, key, meta_type):
 
 
 @require_context
-@require_volume_exists
 @handle_db_data_error
 @_retry_on_deadlock
 def volume_metadata_update(context, volume_id, metadata, delete, meta_type):
@@ -3026,6 +3044,19 @@ def snapshot_get_all_for_volume(context, volume_id):
         filter_by(volume_id=volume_id).\
         options(joinedload('snapshot_metadata')).\
         all()
+
+
+@require_context
+def snapshot_get_latest_for_volume(context, volume_id):
+    result = model_query(context, models.Snapshot, read_deleted='no',
+                         project_only=True).\
+        filter_by(volume_id=volume_id).\
+        options(joinedload('snapshot_metadata')).\
+        order_by(desc(models.Snapshot.created_at)).\
+        first()
+    if not result:
+        raise exception.VolumeSnapshotNotFound(volume_id=volume_id)
+    return result
 
 
 @require_context
@@ -4752,7 +4783,6 @@ def _volume_glance_metadata_get(context, volume_id, session=None):
 
 
 @require_context
-@require_volume_exists
 def volume_glance_metadata_get(context, volume_id):
     """Return the Glance metadata for the specified volume."""
 
@@ -4774,7 +4804,6 @@ def _volume_snapshot_glance_metadata_get(context, snapshot_id, session=None):
 
 
 @require_context
-@require_snapshot_exists
 def volume_snapshot_glance_metadata_get(context, snapshot_id):
     """Return the Glance metadata for the specified snapshot."""
 
@@ -4862,7 +4891,6 @@ def volume_glance_metadata_copy_to_snapshot(context, snapshot_id, volume_id):
 
 
 @require_context
-@require_volume_exists
 def volume_glance_metadata_copy_from_volume_to_volume(context,
                                                       src_volume_id,
                                                       volume_id):
@@ -4941,11 +4969,10 @@ def backup_get(context, backup_id, read_deleted=None, project_only=True):
 
 def _backup_get(context, backup_id, session=None, read_deleted=None,
                 project_only=True):
-    result = model_query(context, models.Backup, session=session,
-                         project_only=project_only,
-                         read_deleted=read_deleted).\
-        filter_by(id=backup_id).\
-        first()
+    result = model_query(
+        context, models.Backup, session=session, project_only=project_only,
+        read_deleted=read_deleted).options(
+        joinedload('backup_metadata')).filter_by(id=backup_id).first()
 
     if not result:
         raise exception.BackupNotFound(backup_id=backup_id)
@@ -4970,8 +4997,9 @@ def _backup_get_all(context, filters=None, marker=None, limit=None,
 
 
 def _backups_get_query(context, session=None, project_only=False):
-    return model_query(context, models.Backup, session=session,
-                       project_only=project_only)
+    return model_query(
+        context, models.Backup, session=session,
+        project_only=project_only).options(joinedload('backup_metadata'))
 
 
 @apply_like_filters(model=models.Backup)
@@ -4980,7 +5008,18 @@ def _process_backups_filters(query, filters):
         # Ensure that filters' keys exist on the model
         if not is_valid_model_filters(models.Backup, filters):
             return
-        query = query.filter_by(**filters)
+        filters_dict = {}
+        for key, value in filters.items():
+            if key == 'metadata':
+                col_attr = getattr(models.Snapshot, 'snapshot_metadata')
+                for k, v in value.items():
+                    query = query.filter(col_attr.any(key=k, value=v))
+            else:
+                filters_dict[key] = value
+
+        # Apply exact matches
+        if filters_dict:
+            query = query.filter_by(**filters_dict)
     return query
 
 
@@ -4993,7 +5032,9 @@ def backup_get_all(context, filters=None, marker=None, limit=None,
 
 @require_admin_context
 def backup_get_all_by_host(context, host):
-    return model_query(context, models.Backup).filter_by(host=host).all()
+    return model_query(
+        context, models.Backup).options(
+        joinedload('backup_metadata')).filter_by(host=host).all()
 
 
 @require_context
@@ -5031,7 +5072,8 @@ def backup_get_all_by_volume(context, volume_id, filters=None):
 def backup_get_all_active_by_window(context, begin, end=None, project_id=None):
     """Return backups that were active during window."""
 
-    query = model_query(context, models.Backup, read_deleted="yes")
+    query = model_query(context, models.Backup, read_deleted="yes").options(
+        joinedload('backup_metadata'))
     query = query.filter(or_(models.Backup.deleted_at == None,  # noqa
                              models.Backup.deleted_at > begin))
     if end:
@@ -5045,15 +5087,18 @@ def backup_get_all_active_by_window(context, begin, end=None, project_id=None):
 @handle_db_data_error
 @require_context
 def backup_create(context, values):
-    backup = models.Backup()
+    values['backup_metadata'] = _metadata_refs(values.get('metadata'),
+                                               models.BackupMetadata)
     if not values.get('id'):
         values['id'] = str(uuid.uuid4())
-    backup.update(values)
 
     session = get_session()
     with session.begin():
-        backup.save(session)
-        return backup
+        backup_ref = models.Backup()
+        backup_ref.update(values)
+        session.add(backup_ref)
+
+    return _backup_get(context, values['id'], session=session)
 
 
 @handle_db_data_error
@@ -5070,16 +5115,98 @@ def backup_update(context, backup_id, values):
 
 @require_admin_context
 def backup_destroy(context, backup_id):
+    utcnow = timeutils.utcnow()
     updated_values = {'status': fields.BackupStatus.DELETED,
                       'deleted': True,
-                      'deleted_at': timeutils.utcnow(),
+                      'deleted_at': utcnow,
                       'updated_at': literal_column('updated_at')}
-    model_query(context, models.Backup).\
-        filter_by(id=backup_id).\
-        update(updated_values)
+    session = get_session()
+    with session.begin():
+        model_query(context, models.Backup, session=session).\
+            filter_by(id=backup_id).\
+            update(updated_values)
+        model_query(context, models.BackupMetadata, session=session).\
+            filter_by(backup_id=backup_id).\
+            update({'deleted': True,
+                    'deleted_at': utcnow,
+                    'updated_at': literal_column('updated_at')})
     del updated_values['updated_at']
     return updated_values
 
+
+@require_context
+@require_backup_exists
+def backup_metadata_get(context, backup_id):
+    return _backup_metadata_get(context, backup_id)
+
+
+@require_context
+def _backup_metadata_get(context, backup_id, session=None):
+    rows = _backup_metadata_get_query(context, backup_id, session).all()
+    result = {}
+    for row in rows:
+        result[row['key']] = row['value']
+
+    return result
+
+
+def _backup_metadata_get_query(context, backup_id, session=None):
+    return model_query(
+        context, models.BackupMetadata,
+        session=session, read_deleted="no").filter_by(backup_id=backup_id)
+
+
+@require_context
+def _backup_metadata_get_item(context, backup_id, key, session=None):
+    result = _backup_metadata_get_query(
+        context, backup_id, session=session).filter_by(key=key).first()
+
+    if not result:
+        raise exception.BackupMetadataNotFound(metadata_key=key,
+                                               backup_id=backup_id)
+    return result
+
+
+@require_context
+@require_backup_exists
+@handle_db_data_error
+@_retry_on_deadlock
+def backup_metadata_update(context, backup_id, metadata, delete):
+    session = get_session()
+    with session.begin():
+        # Set existing metadata to deleted if delete argument is True
+        if delete:
+            original_metadata = _backup_metadata_get(context, backup_id,
+                                                     session)
+            for meta_key, meta_value in original_metadata.items():
+                if meta_key not in metadata:
+                    meta_ref = _backup_metadata_get_item(context,
+                                                         backup_id,
+                                                         meta_key, session)
+                    meta_ref.update({'deleted': True,
+                                     'deleted_at': timeutils.utcnow()})
+                    meta_ref.save(session=session)
+
+        meta_ref = None
+
+        # Now update all existing items with new values, or create new meta
+        # objects
+        for meta_key, meta_value in metadata.items():
+
+            # update the value whether it exists or not
+            item = {"value": meta_value}
+
+            try:
+                meta_ref = _backup_metadata_get_item(context, backup_id,
+                                                     meta_key, session)
+            except exception.BackupMetadataNotFound:
+                meta_ref = models.BackupMetadata()
+                item.update({"key": meta_key, "backup_id": backup_id})
+
+            meta_ref.update(item)
+            meta_ref.save(session=session)
+
+    return backup_metadata_get(context, backup_id)
 
 ###############################
 
@@ -5563,6 +5690,16 @@ def _group_snapshot_get_query(context, session=None, project_only=False):
 @apply_like_filters(model=models.Group)
 def _process_groups_filters(query, filters):
     if filters:
+        # NOTE(xyang): backend_match_level needs to be handled before
+        # is_valid_model_filters is called as it is not a column name
+        # in the db.
+        backend_match_level = filters.pop('backend_match_level', 'backend')
+        # host is a valid filter. Filter the query by host and
+        # backend_match_level first.
+        host = filters.pop('host', None)
+        if host:
+            query = query.filter(_filter_host(models.Group.host, host,
+                                              match_level=backend_match_level))
         # Ensure that filters' keys exist on the model
         if not is_valid_model_filters(models.Group, filters):
             return
@@ -5582,10 +5719,9 @@ def _process_group_snapshot_filters(query, filters):
 
 def _group_get_all(context, filters=None, marker=None, limit=None,
                    offset=None, sort_keys=None, sort_dirs=None):
-    if filters and not is_valid_model_filters(models.Group,
-                                              filters):
-        return []
-
+    # No need to call is_valid_model_filters here. It is called
+    # in _process_group_filters when _generate_paginate_query
+    # is called below.
     session = get_session()
     with session.begin():
         # Generate the paginate query
@@ -5845,6 +5981,11 @@ def is_valid_model_filters(model, filters, exclude_list=None):
     """
     for key in filters.keys():
         if exclude_list and key in exclude_list:
+            continue
+        if key == 'metadata':
+            if not isinstance(filters[key], dict):
+                LOG.debug("Metadata filter value is not valid dictionary")
+                return False
             continue
         try:
             key = key.rstrip('~')
@@ -6185,6 +6326,8 @@ def _translate_message(message):
         'resource_type': message['resource_type'],
         'resource_uuid': message.get('resource_uuid'),
         'event_id': message['event_id'],
+        'detail_id': message['detail_id'],
+        'action_id': message['action_id'],
         'message_level': message['message_level'],
         'created_at': message['created_at'],
         'expires_at': message.get('expires_at'),

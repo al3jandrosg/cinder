@@ -926,3 +926,12 @@ def is_group_a_cg_snapshot_type(group_or_snap):
         )
         return spec == "<is> True"
     return False
+
+
+def is_group_a_type(group, key):
+    if group.group_type_id is not None:
+        spec = group_types.get_group_type_specs(
+            group.group_type_id, key=key
+        )
+        return spec == "<is> True"
+    return False

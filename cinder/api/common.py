@@ -248,13 +248,13 @@ def get_request_url(request):
     forwarded = headers.get('X-Forwarded-Host')
     if forwarded:
         url_parts = list(urllib.parse.urlsplit(url))
-        url_parts[1] = re.split(',\s?', forwarded)[-1]
+        url_parts[1] = re.split(r',\s?', forwarded)[-1]
         url = urllib.parse.urlunsplit(url_parts).rstrip('/')
     return url
 
 
 def remove_version_from_href(href):
-    """Removes the first api version from the href.
+    """Removes the first API version from the href.
 
     Given: 'http://cinder.example.com/v1.1/123'
     Returns: 'http://cinder.example.com/123'
@@ -433,7 +433,7 @@ def get_enabled_resource_filters(resource=None):
     .. code-block:: json
 
             {
-                "resource": ['filter1', 'filter2', 'filter3']
+                "resource": ["filter1", "filter2", "filter3"]
             }
 
     if resource is not specified, all of the configuration will be returned,

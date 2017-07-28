@@ -33,6 +33,7 @@ from cinder.i18n import _
 from cinder import interface
 from cinder import ssh_utils
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers import san
 
 LOG = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ eqlx_opts = [
 
 
 CONF = cfg.CONF
-CONF.register_opts(eqlx_opts)
+CONF.register_opts(eqlx_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 def with_timeout(f):
@@ -656,7 +657,7 @@ class PSSeriesISCSIDriver(san.SanISCSIDriver):
 
         :param volume:       Cinder volume to manage
         :param existing_ref: Driver-specific information used to identify a
-        volume
+                             volume
         """
         existing_volume_name = self._get_existing_volume_ref_name(existing_ref)
         data = self._get_volume_info(existing_volume_name)

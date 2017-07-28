@@ -51,9 +51,13 @@ LOG = logging.getLogger(__name__)
 class ReduxioISCSIDriver(san.SanISCSIDriver):
     """OpenStack driver to support Reduxio storage systems.
 
-    Version history:
-    1.0.0   -  Initial version - volume management, snapshots, BackDating(TM).
-    1.0.1   -  Capacity stats, fixed error handling for volume deletions.
+    .. code-block:: default
+
+      Version history:
+      1.0.0   -  Initial version - volume management, snapshots,
+                 BackDating(TM).
+      1.0.1   -  Capacity stats, fixed error handling for volume deletions.
+
     """
     VERSION = '1.0.1'
     CI_WIKI_NAME = "Reduxio_HX550_CI"
@@ -151,7 +155,7 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         cli_vol = self.rdxApi.find_volume_by_name(target_vol_name)
         managed_info = self._get_managed_info(cli_vol)
 
-        # Check if volume is already managed by Openstack
+        # Check if volume is already managed by OpenStack
         if managed_info[AGENT_TYPE_KEY] == AGENT_TYPE_OPENSTACK:
             raise exception.ManageExistingAlreadyManaged(
                 volume_ref=volume['id'])
@@ -187,7 +191,7 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         managed_info = self._get_managed_info(cli_vol)
 
         if managed_info['agent-type'] != AGENT_TYPE_OPENSTACK:
-            msg = _('Only volumes managed by Openstack can be unmanaged.')
+            msg = _('Only volumes managed by OpenStack can be unmanaged.')
             raise exception.InvalidVolume(reason=msg)
 
         # update the agent-type to None
@@ -237,6 +241,7 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         """Clone volume from existing cinder volume.
 
         :param volume: The clone volume object.
+
         If the volume 'metadata' field contains a 'backdate' key
         (If using Cinder CLI, should be provided by --meta flag),
         then we create a clone from the specified time.
@@ -244,11 +249,12 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         Reduxio CLI date: mm/dd/yyyy-hh:mm:ss.
         for example: '02/17/2015-11:39:00.
         Note: Different timezones might be configured
-        for Reduxio and Openstack.
+        for Reduxio and OpenStack.
         The specified date must be related to Reduxio time settings.
 
         If meta key 'backdate' was not specified,
         then we create a clone from the volume's current state.
+
         :param src_vref: The source volume to clone from
         :return: None
         """
@@ -285,6 +291,7 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         We use Reduxio manual bookmark to represent a snapshot.
 
         :param snapshot: The snapshot object.
+
         If the snapshot 'metadata' field contains a 'backdate' key
         (If using Cinder CLI, should be provided by --meta flag),
         then we create a snapshot from the specified time.
@@ -292,11 +299,12 @@ class ReduxioISCSIDriver(san.SanISCSIDriver):
         Reduxio CLI date: mm/dd/yyyy-hh:mm:ss.
         for example: '02/17/2015-11:39:00'.
         Note: Different timezones might be configured
-        for Reduxio and Openstack.
+        for Reduxio and OpenStack.
         The specified date must be related to Reduxio time settings.
 
         If meta key 'backdate' was not specified, then we create a snapshot
         from the volume's current state.
+
         :return: None
         """
         LOG.info(

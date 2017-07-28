@@ -21,6 +21,7 @@ import os
 import tempfile
 
 import mock
+from mock import call
 from oslo_utils import imageutils
 from oslo_utils import units
 
@@ -106,7 +107,7 @@ def common_mocks(f):
     return _common_inner_inner1
 
 
-CEPH_MON_DUMP = """dumped monmap epoch 1
+CEPH_MON_DUMP = r"""dumped monmap epoch 1
 { "epoch": 1,
   "fsid": "33630410-6d93-4d66-8e42-3b953cf194aa",
   "modified": "2013-05-22 17:44:56.343618",
@@ -155,6 +156,7 @@ class RBDTestCase(test.TestCase):
         self.cfg.rbd_cluster_name = 'nondefault'
         self.cfg.rbd_pool = 'rbd'
         self.cfg.rbd_ceph_conf = '/etc/ceph/my_ceph.conf'
+        self.cfg.rbd_keyring_conf = '/etc/ceph/my_ceph.client.keyring'
         self.cfg.rbd_secret_uuid = None
         self.cfg.rbd_user = 'cinder'
         self.cfg.volume_backend_name = None
@@ -186,6 +188,16 @@ class RBDTestCase(test.TestCase):
 
         self.snapshot = fake_snapshot.fake_snapshot_obj(
             self.context, name='snapshot-0000000a')
+
+        self.snapshot_b = fake_snapshot.fake_snapshot_obj(
+            self.context,
+            **{'name': u'snapshot-0000000n',
+               'expected_attrs': ['volume'],
+               'volume': {'id': fake.VOLUME_ID,
+                          'name': 'cinder-volume',
+                          'size': 128,
+                          'host': 'host@fakebackend#fakepool'}
+               })
 
     @ddt.data({'cluster_name': None, 'pool_name': 'rbd'},
               {'cluster_name': 'volumes', 'pool_name': None})
@@ -316,43 +328,67 @@ class RBDTestCase(test.TestCase):
         self.assertEqual(expect, res)
         mock_enable.assert_not_called()
 
-    @ddt.data(True, False)
+    @ddt.data([True, False], [False, False], [True, True])
+    @ddt.unpack
     @common_mocks
-    def test_enable_replication(self, journaling_enabled):
+    def test_enable_replication(self, exclusive_lock_enabled,
+                                journaling_enabled):
         """Test _enable_replication method.
 
         We want to confirm that if the Ceph backend has globally enabled
-        journaling we don't try to enable it again and we properly indicate
-        with our return value that it was already enabled.
+        'exclusive_lock' and 'journaling'. we don't try to enable them
+        again and we properly indicate with our return value that they were
+        already enabled.
+        'journaling' depends on 'exclusive_lock', so if 'exclusive-lock'
+        is disabled, 'journaling' can't be enabled so the '[False. True]'
+        case is impossible.
+        In this test case, there are three test scenarios:
+        1. 'exclusive_lock' and 'journaling' both enabled,
+        'image.features()' will not be called.
+        2. 'exclusive_lock' enabled, 'journaling' disabled,
+        'image.features()' will be only called for 'journaling'.
+        3. 'exclusice_lock' and 'journaling' are both disabled,
+        'image.features()'will be both called for 'exclusive-lock' and
+        'journaling' in this order.
         """
         journaling_feat = 1
+        exclusive_lock_feat = 2
         self.driver.rbd.RBD_FEATURE_JOURNALING = journaling_feat
+        self.driver.rbd.RBD_FEATURE_EXCLUSIVE_LOCK = exclusive_lock_feat
         image = self.mock_proxy.return_value.__enter__.return_value
+        image.features.return_value = 0
+        if exclusive_lock_enabled:
+            image.features.return_value += exclusive_lock_feat
         if journaling_enabled:
-            image.features.return_value = journaling_feat
-        else:
-            image.features.return_value = 0
-
-        enabled = str(journaling_enabled).lower()
+            image.features.return_value += journaling_feat
+        journaling_status = str(journaling_enabled).lower()
+        exclusive_lock_status = str(exclusive_lock_enabled).lower()
         expected = {
-            'replication_driver_data': '{"had_journaling":%s}' % enabled,
+            'replication_driver_data': ('{"had_exclusive_lock":%s,'
+                                        '"had_journaling":%s}' %
+                                        (exclusive_lock_status,
+                                         journaling_status)),
             'replication_status': 'enabled',
         }
-
         res = self.driver._enable_replication(self.volume_a)
         self.assertEqual(expected, res)
-
-        if journaling_enabled:
+        if exclusive_lock_enabled and journaling_enabled:
             image.update_features.assert_not_called()
-        else:
+        elif exclusive_lock_enabled and not journaling_enabled:
             image.update_features.assert_called_once_with(journaling_feat,
                                                           True)
+        else:
+            calls = [call(exclusive_lock_feat, True),
+                     call(journaling_feat, True)]
+            image.update_features.assert_has_calls(calls, any_order=False)
         image.mirror_image_enable.assert_called_once_with()
 
-    @ddt.data('true', 'false')
+    @ddt.data(['false', 'true'], ['true', 'true'], ['false', 'false'])
+    @ddt.unpack
     @common_mocks
-    def test_disable_replication(self, had_journaling):
-        driver_data = '{"had_journaling": %s}' % had_journaling
+    def test_disable_replication(self, had_journaling, had_exclusive_lock):
+        driver_data = ('{"had_journaling": %s,"had_exclusive_lock": %s}' %
+                       (had_journaling, had_exclusive_lock))
         self.volume_a.replication_driver_data = driver_data
         image = self.mock_proxy.return_value.__enter__.return_value
 
@@ -362,11 +398,16 @@ class RBDTestCase(test.TestCase):
         self.assertEqual(expected, res)
         image.mirror_image_disable.assert_called_once_with(False)
 
-        if had_journaling == 'true':
+        if had_journaling == 'true' and had_exclusive_lock == 'true':
             image.update_features.assert_not_called()
-        else:
+        elif had_journaling == 'false' and had_exclusive_lock == 'true':
             image.update_features.assert_called_once_with(
                 self.driver.rbd.RBD_FEATURE_JOURNALING, False)
+        else:
+            calls = [call(self.driver.rbd.RBD_FEATURE_JOURNALING, False),
+                     call(self.driver.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
+                          False)]
+            image.update_features.assert_has_calls(calls, any_order=False)
 
     @common_mocks
     @mock.patch.object(driver.RBDDriver, '_enable_replication')
@@ -1164,33 +1205,71 @@ class RBDTestCase(test.TestCase):
             self.assertEqual((hosts, ports), self.driver._get_mon_addrs())
 
     @common_mocks
-    def test_initialize_connection(self):
-        hosts = ['::1', '::1', '::1', '127.0.0.1', 'example.com']
-        ports = ['6789', '6790', '6791', '6792', '6791']
+    def _initialize_connection_helper(self, expected, hosts, ports):
 
         with mock.patch.object(self.driver, '_get_mon_addrs') as \
                 mock_get_mon_addrs:
             mock_get_mon_addrs.return_value = (hosts, ports)
-
-            expected = {
-                'driver_volume_type': 'rbd',
-                'data': {
-                    'name': '%s/%s' % (self.cfg.rbd_pool,
-                                       self.volume_a.name),
-                    'hosts': hosts,
-                    'ports': ports,
-                    'cluster_name': self.cfg.rbd_cluster_name,
-                    'auth_enabled': True,
-                    'auth_username': self.cfg.rbd_user,
-                    'secret_type': 'ceph',
-                    'secret_uuid': None,
-                    'volume_id': self.volume_a.id,
-                    'discard': True,
-                }
-            }
             actual = self.driver.initialize_connection(self.volume_a, None)
             self.assertDictEqual(expected, actual)
             self.assertTrue(mock_get_mon_addrs.called)
+
+    @mock.patch.object(cinder.volume.drivers.rbd.RBDDriver,
+                       '_get_keyring_contents')
+    def test_initialize_connection(self, mock_keyring):
+        hosts = ['::1', '::1', '::1', '127.0.0.1', 'example.com']
+        ports = ['6789', '6790', '6791', '6792', '6791']
+
+        keyring_data = "[client.cinder]\n  key = test\n"
+        mock_keyring.return_value = keyring_data
+
+        expected = {
+            'driver_volume_type': 'rbd',
+            'data': {
+                'name': '%s/%s' % (self.cfg.rbd_pool,
+                                   self.volume_a.name),
+                'hosts': hosts,
+                'ports': ports,
+                'cluster_name': self.cfg.rbd_cluster_name,
+                'auth_enabled': True,
+                'auth_username': self.cfg.rbd_user,
+                'secret_type': 'ceph',
+                'secret_uuid': None,
+                'volume_id': self.volume_a.id,
+                'discard': True,
+                'keyring': keyring_data,
+            }
+        }
+        self._initialize_connection_helper(expected, hosts, ports)
+
+        # Check how it will work with empty keyring path
+        mock_keyring.return_value = None
+        expected['data']['keyring'] = None
+        self._initialize_connection_helper(expected, hosts, ports)
+
+    def test__get_keyring_contents_no_config_file(self):
+        self.cfg.rbd_keyring_conf = ''
+        self.assertIsNone(self.driver._get_keyring_contents())
+
+    @mock.patch('os.path.isfile')
+    def test__get_keyring_contents_read_file(self, mock_isfile):
+        mock_isfile.return_value = True
+        keyring_data = "[client.cinder]\n  key = test\n"
+        mockopen = mock.mock_open(read_data=keyring_data)
+        mockopen.return_value.__exit__ = mock.Mock()
+        with mock.patch('cinder.volume.drivers.rbd.open', mockopen,
+                        create=True):
+            self.assertEqual(self.driver._get_keyring_contents(), keyring_data)
+
+    @mock.patch('os.path.isfile')
+    def test__get_keyring_contents_raise_error(self, mock_isfile):
+        mock_isfile.return_value = True
+        mockopen = mock.mock_open()
+        mockopen.return_value.__exit__ = mock.Mock()
+        with mock.patch('cinder.volume.drivers.rbd.open', mockopen,
+                        create=True) as mock_keyring_file:
+            mock_keyring_file.side_effect = IOError
+            self.assertIsNone(self.driver._get_keyring_contents())
 
     @ddt.data({'rbd_chunk_size': 1, 'order': 20},
               {'rbd_chunk_size': 8, 'order': 23},
@@ -1506,7 +1585,7 @@ class RBDTestCase(test.TestCase):
         self.driver._is_replication_enabled = False
         self.assertRaises(exception.UnableToFailOver,
                           self.driver.failover_host,
-                          self.context, [self.volume_a])
+                          self.context, [self.volume_a], [])
 
     @ddt.data(None, 'tertiary-backend')
     @common_mocks
@@ -1523,9 +1602,10 @@ class RBDTestCase(test.TestCase):
         remote = self.driver._replication_targets[1 if secondary_id else 0]
         mock_get_cfg.return_value = (remote['name'], remote)
 
-        res = self.driver.failover_host(self.context, volumes, secondary_id)
+        res = self.driver.failover_host(self.context, volumes, secondary_id,
+                                        [])
 
-        self.assertEqual((remote['name'], volumes), res)
+        self.assertEqual((remote['name'], volumes, []), res)
         self.assertEqual(remote, self.driver._active_config)
         mock_failover_vol.assert_has_calls(
             [mock.call(mock.ANY, v, remote, False,
@@ -1544,9 +1624,9 @@ class RBDTestCase(test.TestCase):
 
         remote = self.driver._get_target_config('default')
         volumes = [self.volume_a, self.volume_b]
-        res = self.driver.failover_host(self.context, volumes, 'default')
+        res = self.driver.failover_host(self.context, volumes, 'default', [])
 
-        self.assertEqual(('default', volumes), res)
+        self.assertEqual(('default', volumes, []), res)
         self.assertEqual(remote, self.driver._active_config)
         mock_failover_vol.assert_has_calls(
             [mock.call(mock.ANY, v, remote, False,
@@ -1564,7 +1644,7 @@ class RBDTestCase(test.TestCase):
         volumes = [self.volume_a, self.volume_b]
         self.assertRaises(exception.InvalidReplicationTarget,
                           self.driver.failover_host,
-                          self.context, volumes, None)
+                          self.context, volumes, None, [])
 
     def test_failover_volume_non_replicated(self):
         self.volume_a.replication_status = fields.ReplicationStatus.DISABLED
@@ -1623,6 +1703,90 @@ class RBDTestCase(test.TestCase):
         self.assertEqual(expected, res)
         mock_exec.assert_called_once_with(self.volume_a.name, remote,
                                           'mirror_image_promote', False)
+
+    @common_mocks
+    def test_manage_existing_snapshot_get_size(self):
+        with mock.patch.object(self.driver.rbd.Image(), 'size') as \
+                mock_rbd_image_size:
+            with mock.patch.object(self.driver.rbd.Image(), 'close') \
+                    as mock_rbd_image_close:
+                mock_rbd_image_size.return_value = 2 * units.Gi
+                existing_ref = {'source-name': self.snapshot_b.name}
+                return_size = self.driver.manage_existing_snapshot_get_size(
+                    self.snapshot_b,
+                    existing_ref)
+                self.assertEqual(2, return_size)
+                mock_rbd_image_size.assert_called_once_with()
+                mock_rbd_image_close.assert_called_once_with()
+
+    @common_mocks
+    def test_manage_existing_snapshot_get_non_integer_size(self):
+        rbd_snapshot = self.driver.rbd.Image.return_value
+        rbd_snapshot.size.return_value = int(1.75 * units.Gi)
+        existing_ref = {'source-name': self.snapshot_b.name}
+        return_size = self.driver.manage_existing_snapshot_get_size(
+            self.snapshot_b, existing_ref)
+        self.assertEqual(2, return_size)
+        rbd_snapshot.size.assert_called_once_with()
+        rbd_snapshot.close.assert_called_once_with()
+
+    @common_mocks
+    def test_manage_existing_snapshot_get_invalid_size(self):
+
+        with mock.patch.object(self.driver.rbd.Image(), 'size') as \
+                mock_rbd_image_size:
+            with mock.patch.object(self.driver.rbd.Image(), 'close') \
+                    as mock_rbd_image_close:
+                mock_rbd_image_size.return_value = 'abcd'
+                existing_ref = {'source-name': self.snapshot_b.name}
+                self.assertRaises(
+                    exception.VolumeBackendAPIException,
+                    self.driver.manage_existing_snapshot_get_size,
+                    self.snapshot_b, existing_ref)
+
+                mock_rbd_image_size.assert_called_once_with()
+                mock_rbd_image_close.assert_called_once_with()
+
+    @common_mocks
+    def test_manage_existing_snapshot_with_invalid_rbd_image(self):
+        self.mock_rbd.Image.side_effect = self.mock_rbd.ImageNotFound
+
+        invalid_snapshot = 'snapshot-invalid'
+        invalid_ref = {'source-name': invalid_snapshot}
+
+        self.assertRaises(exception.ManageExistingInvalidReference,
+                          self.driver.manage_existing_snapshot_get_size,
+                          self.snapshot_b, invalid_ref)
+        # Make sure the exception was raised
+        self.assertEqual([self.mock_rbd.ImageNotFound],
+                         RAISED_EXCEPTIONS)
+
+    @common_mocks
+    def test_manage_existing_snapshot(self):
+        proxy = self.mock_proxy.return_value
+        proxy.__enter__.return_value = proxy
+        exist_snapshot = 'snapshot-exist'
+        existing_ref = {'source-name': exist_snapshot}
+        proxy.rename_snap.return_value = 0
+        self.driver.manage_existing_snapshot(self.snapshot_b, existing_ref)
+        proxy.rename_snap.assert_called_with(exist_snapshot,
+                                             self.snapshot_b.name)
+
+    @common_mocks
+    def test_manage_existing_snapshot_with_exist_rbd_image(self):
+        proxy = self.mock_proxy.return_value
+        proxy.__enter__.return_value = proxy
+        proxy.rename_snap.side_effect = MockImageExistsException
+
+        exist_snapshot = 'snapshot-exist'
+        existing_ref = {'source-name': exist_snapshot}
+        self.assertRaises(self.mock_rbd.ImageExists,
+                          self.driver.manage_existing_snapshot,
+                          self.snapshot_b, existing_ref)
+
+        # Make sure the exception was raised
+        self.assertEqual(RAISED_EXCEPTIONS,
+                         [self.mock_rbd.ImageExists])
 
 
 class ManagedRBDTestCase(test_driver.BaseDriverTestCase):

@@ -170,8 +170,8 @@ class CephBackupDriver(driver.BackupDriver):
     gain.
     """
 
-    def __init__(self, context, db_driver=None, execute=None):
-        super(CephBackupDriver, self).__init__(context, db_driver)
+    def __init__(self, context, db=None, execute=None):
+        super(CephBackupDriver, self).__init__(context, db)
         self.rbd = rbd
         self.rados = rados
         self.chunk_size = CONF.backup_ceph_chunk_size
@@ -266,6 +266,24 @@ class CephBackupDriver(driver.BackupDriver):
                 )
 
         return (old_format, features)
+
+    def check_for_setup_error(self):
+        """Returns an error if prerequisites aren't met."""
+        if rados is None or rbd is None:
+            msg = _('rados and rbd python libraries not found')
+            raise exception.BackupDriverException(message=msg)
+
+        for attr in ['backup_ceph_user', 'backup_ceph_pool',
+                     'backup_ceph_conf']:
+            val = getattr(CONF, attr)
+            if not val:
+                raise exception.InvalidConfigurationValue(option=attr,
+                                                          value=val)
+        # NOTE: Checking connection to ceph
+        # RADOSClient __init__ method invokes _connect_to_rados
+        # so no need to check for self.rados.Error here.
+        with rbd_driver.RADOSClient(self, self._ceph_backup_pool):
+            pass
 
     def _connect_to_rados(self, pool=None):
         """Establish connection to the backup Ceph cluster."""
@@ -616,7 +634,7 @@ class CephBackupDriver(driver.BackupDriver):
             return False
 
         for snap in snaps:
-            if snap.name == snap_name:
+            if snap['name'] == snap_name:
                 return True
 
         return False
@@ -905,7 +923,7 @@ class CephBackupDriver(driver.BackupDriver):
                 self._full_backup(backup, volume_file, volume.name, length)
             except exception.BackupOperationError:
                 with excutils.save_and_reraise_exception():
-                    self.delete(backup)
+                    self.delete_backup(backup)
 
         if backup_metadata:
             try:
@@ -913,7 +931,7 @@ class CephBackupDriver(driver.BackupDriver):
             except exception.BackupOperationError:
                 with excutils.save_and_reraise_exception():
                     # Cleanup.
-                    self.delete(backup)
+                    self.delete_backup(backup)
 
         LOG.debug("Backup '%(backup_id)s' of volume %(volume_id)s finished.",
                   {'backup_id': backup.id, 'volume_id': volume.id})
@@ -1197,7 +1215,7 @@ class CephBackupDriver(driver.BackupDriver):
                       '%(error)s.', {'error': e, 'volume': volume_id})
             raise
 
-    def delete(self, backup):
+    def delete_backup(self, backup):
         """Delete the given backup from Ceph object store."""
         LOG.debug('Delete started for backup=%s', backup.id)
 

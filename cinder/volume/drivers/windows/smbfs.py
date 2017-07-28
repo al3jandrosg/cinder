@@ -29,6 +29,8 @@ from cinder import exception
 from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
+from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers import remotefs as remotefs_drv
 
 VERSION = '1.1.0'
@@ -78,7 +80,7 @@ volume_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(volume_opts)
+CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 @interface.volumedriver
@@ -104,6 +106,8 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
     _SUPPORTED_IMAGE_FORMATS = [_DISK_FORMAT_VHD, _DISK_FORMAT_VHDX]
     _VALID_IMAGE_EXTENSIONS = _SUPPORTED_IMAGE_FORMATS
 
+    _always_use_temp_snap_when_cloning = False
+
     def __init__(self, *args, **kwargs):
         self._remotefsclient = None
         super(WindowsSmbfsDriver, self).__init__(*args, **kwargs)
@@ -111,8 +115,7 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
         self.configuration.append_config_values(volume_opts)
 
         self.base = getattr(self.configuration,
-                            'smbfs_mount_point_base',
-                            CONF.smbfs_mount_point_base)
+                            'smbfs_mount_point_base')
         self._remotefsclient = remotefs_brick.WindowsRemoteFsClient(
             'cifs', root_helper=None, smbfs_mount_point_base=self.base,
             local_path_for_loopback=True)
@@ -120,6 +123,7 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
         self._vhdutils = utilsfactory.get_vhdutils()
         self._pathutils = utilsfactory.get_pathutils()
         self._smbutils = utilsfactory.get_smbutils()
+        self._diskutils = utilsfactory.get_diskutils()
 
     def do_setup(self, context):
         self._check_os_platform()
@@ -342,8 +346,9 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
 
         :param smbfs_share: example //172.18.194.100/var/smbfs
         """
-        total_size, total_available = self._smbutils.get_share_capacity_info(
-            smbfs_share)
+        mount_point = self._get_mount_point_for_share(smbfs_share)
+        total_size, total_available = self._diskutils.get_disk_capacity(
+            mount_point)
         total_allocated = self._get_total_allocated(smbfs_share)
         return_value = [total_size, total_available, total_allocated]
         LOG.info('Smb share %(share)s Total size %(size)s '
@@ -395,15 +400,10 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
         self._vhdutils.create_differencing_vhd(new_snap_path,
                                                backing_file_full_path)
 
-    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
-    def extend_volume(self, volume, size_gb):
-        LOG.info('Extending volume %s.', volume.id)
-
-        self._check_extend_volume_support(volume, size_gb)
-        self._extend_volume(volume, size_gb)
-
     def _extend_volume(self, volume, size_gb):
-        volume_path = self.local_path(volume)
+        self._check_extend_volume_support(volume, size_gb)
+
+        volume_path = self._local_path_active_image(volume)
 
         LOG.info('Resizing file %(volume_path)s to %(size_gb)sGB.',
                  dict(volume_path=volume_path, size_gb=size_gb))
@@ -439,9 +439,9 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
         merged_img_path = os.path.join(
             self._local_volume_dir(snapshot.volume),
             file_to_merge)
-        if snap_info['active'] == file_to_merge:
+        if utils.paths_normcase_equal(snap_info['active'], file_to_merge):
             new_active_file_path = self._vhdutils.get_vhd_parent_path(
-                merged_img_path)
+                merged_img_path).lower()
             snap_info['active'] = os.path.basename(new_active_file_path)
 
         self._delete(merged_img_path)
@@ -451,14 +451,12 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
         self._write_info_file(info_path, snap_info)
 
     def _check_extend_volume_support(self, volume, size_gb):
-        volume_path = self.local_path(volume)
-        active_file = self.get_active_image_from_info(volume)
-        active_file_path = os.path.join(self._local_volume_dir(volume),
-                                        active_file)
+        snapshots_exist = self._snapshots_exist(volume)
+        fmt = self.get_volume_format(volume)
 
-        if active_file_path != volume_path:
-            msg = _('Extend volume is only supported for this '
-                    'driver when no snapshots exist.')
+        if snapshots_exist and fmt == self._DISK_FORMAT_VHD:
+            msg = _('Extending volumes backed by VHD images is not supported '
+                    'when snapshots exist. Please use VHDX images.')
             raise exception.InvalidVolume(msg)
 
     @coordination.synchronized('{self.driver_prefix}-{volume.id}')
@@ -540,6 +538,9 @@ class WindowsSmbfsDriver(remotefs_drv.RemoteFSPoolMixin,
                                    volume_path)
         self._vhdutils.resize_vhd(volume_path, volume_size * units.Gi,
                                   is_file_max_size=False)
+
+    def _copy_volume_image(self, src_path, dest_path):
+        self._pathutils.copy(src_path, dest_path)
 
     def _get_share_name(self, share):
         return share.replace('/', '\\').lstrip('\\').split('\\', 1)[1]

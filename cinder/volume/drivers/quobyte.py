@@ -29,9 +29,10 @@ from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers import remotefs as remotefs_drv
 
-VERSION = '1.1.4'
+VERSION = '1.1.5'
 
 LOG = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ volume_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(volume_opts)
+CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 @interface.volumedriver
@@ -84,6 +85,7 @@ class QuobyteDriver(remotefs_drv.RemoteFSSnapDriverDistributed):
         1.1.2 - Fixes a bug in the creation of cloned volumes
         1.1.3 - Explicitely mounts Quobyte volumes w/o xattrs
         1.1.4 - Fixes capability to configure redundancy in quobyte_volume_url
+        1.1.5 - Enables extension of volumes with snapshots
 
     """
 
@@ -301,14 +303,6 @@ class QuobyteDriver(remotefs_drv.RemoteFSSnapDriverDistributed):
     @utils.synchronized('quobyte', external=False)
     def extend_volume(self, volume, size_gb):
         volume_path = self.local_path(volume)
-        volume_filename = os.path.basename(volume_path)
-
-        # Ensure no snapshots exist for the volume
-        active_image = self.get_active_image_from_info(volume)
-        if volume_filename != active_image:
-            msg = _('Extend volume is only supported for this'
-                    ' driver when no snapshots exist.')
-            raise exception.InvalidVolume(msg)
 
         info = self._qemu_img_info(volume_path, volume.name)
         backing_fmt = info.file_format
@@ -318,7 +312,10 @@ class QuobyteDriver(remotefs_drv.RemoteFSSnapDriverDistributed):
             raise exception.InvalidVolume(msg % backing_fmt)
 
         # qemu-img can resize both raw and qcow2 files
-        image_utils.resize_image(volume_path, size_gb)
+        active_path = os.path.join(
+            self._get_mount_point_for_share(volume.provider_location),
+            self.get_active_image_from_info(volume))
+        image_utils.resize_image(active_path, size_gb)
 
     def _do_create_volume(self, volume):
         """Create a volume on given Quobyte volume.

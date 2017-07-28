@@ -78,6 +78,7 @@ class NovaClientTestCase(test.TestCase):
             p_api_version(nova.NOVA_API_VERSION),
             session=p_session.return_value, region_name=None,
             insecure=False, endpoint_type='public', cacert='my.ca',
+            global_request_id=self.ctx.request_id,
             timeout=None, extensions=nova.nova_extensions)
 
     @mock.patch('novaclient.api_versions.APIVersion')
@@ -97,6 +98,7 @@ class NovaClientTestCase(test.TestCase):
             p_api_version(nova.NOVA_API_VERSION),
             session=p_session.return_value, region_name=None,
             insecure=False, endpoint_type='public', cacert='my.ca',
+            global_request_id=self.ctx.request_id,
             timeout=None, extensions=nova.nova_extensions)
 
     @mock.patch('novaclient.api_versions.APIVersion')
@@ -119,6 +121,7 @@ class NovaClientTestCase(test.TestCase):
             p_api_version(nova.NOVA_API_VERSION),
             session=p_session.return_value, region_name=None,
             insecure=False, endpoint_type='public', cacert='my.ca',
+            global_request_id=self.ctx.request_id,
             timeout=None, extensions=nova.nova_extensions)
 
     @mock.patch('novaclient.api_versions.APIVersion')
@@ -146,6 +149,7 @@ class NovaClientTestCase(test.TestCase):
             p_api_version(nova.NOVA_API_VERSION),
             session=p_session.return_value, region_name=None,
             insecure=False, endpoint_type='public', cacert='my.ca',
+            global_request_id=self.ctx.request_id,
             timeout=None, extensions=nova.nova_extensions)
 
     @mock.patch('novaclient.api_versions.APIVersion')
@@ -169,6 +173,7 @@ class NovaClientTestCase(test.TestCase):
             p_api_version(nova.NOVA_API_VERSION),
             session=p_session.return_value, region_name='farfaraway',
             insecure=False, endpoint_type='public', cacert='my.ca',
+            global_request_id=self.ctx.request_id,
             timeout=None, extensions=nova.nova_extensions)
 
     def test_novaclient_exceptions(self):
@@ -179,11 +184,16 @@ class NovaClientTestCase(test.TestCase):
 
 
 class FakeNovaClient(object):
+    class ServerExternalEvents(object):
+        def __getattr__(self, item):
+            return None
+
     class Volumes(object):
         def __getattr__(self, item):
             return None
 
     def __init__(self):
+        self.server_external_events = self.ServerExternalEvents()
         self.volumes = self.Volumes()
 
     def create_volume_snapshot(self, *args, **kwargs):
@@ -218,3 +228,24 @@ class NovaApiTestCase(test.TestCase):
             'attach_id',
             'new_volume_id'
         )
+
+    def test_extend_volume(self):
+        server_ids = ['server-id-1', 'server-id-2']
+        with mock.patch.object(nova, 'novaclient') as mock_novaclient, \
+                mock.patch.object(self.novaclient.server_external_events,
+                                  'create') as mock_create_event:
+            mock_novaclient.return_value = self.novaclient
+
+            self.api.extend_volume(self.ctx, server_ids, 'volume_id')
+
+        mock_novaclient.assert_called_once_with(self.ctx,
+                                                privileged_user=True,
+                                                api_version='2.51')
+        mock_create_event.assert_called_once_with([
+            {'name': 'volume-extended',
+             'server_uuid': 'server-id-1',
+             'tag': 'volume_id'},
+            {'name': 'volume-extended',
+             'server_uuid': 'server-id-2',
+             'tag': 'volume_id'},
+        ])

@@ -42,6 +42,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import interface
 from cinder import utils
+from cinder.volume import configuration as conf
 
 from cinder.volume.drivers.ibm.storwize_svc import (
     storwize_svc_common as storwize_common)
@@ -56,7 +57,7 @@ storwize_svc_iscsi_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(storwize_svc_iscsi_opts)
+CONF.register_opts(storwize_svc_iscsi_opts, group=conf.SHARED_CONF_GROUP)
 
 
 @interface.volumedriver
@@ -89,9 +90,10 @@ class StorwizeSVCISCSIDriver(storwize_common.StorwizeSVCCommonDriver):
               mode
         2.1.1 - Update replication to version 2.1
         2.2 - Add CG capability to generic volume groups
+        2.2.1 - Add vdisk mirror/stretch cluster support
     """
 
-    VERSION = "2.2"
+    VERSION = "2.2.1"
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "IBM_STORAGE_CI"
@@ -134,10 +136,11 @@ class StorwizeSVCISCSIDriver(storwize_common.StorwizeSVCCommonDriver):
         volume_name = self._get_target_vol(volume)
 
         # Check if a host object is defined for this host name
-        host_name = self._helpers.get_host_from_connector(connector)
+        host_name = self._helpers.get_host_from_connector(connector,
+                                                          iscsi=True)
         if host_name is None:
             # Host does not exist - add a new host to Storwize/SVC
-            host_name = self._helpers.create_host(connector)
+            host_name = self._helpers.create_host(connector, iscsi=True)
 
         chap_secret = self._helpers.get_chap_secret_for_host(host_name)
         chap_enabled = self.configuration.storwize_svc_iscsi_chap_enabled
@@ -241,7 +244,7 @@ class StorwizeSVCISCSIDriver(storwize_common.StorwizeSVCCommonDriver):
                               auth_password=chap_secret,
                               discovery_auth_method='CHAP',
                               discovery_auth_username=connector['initiator'],
-                              discovery_auth_password= chap_secret)
+                              discovery_auth_password=chap_secret)
         LOG.debug('leave: _get_single_iscsi_data:\n volume: %(vol)s\n '
                   'connector: %(conn)s\n lun_id: %(lun_id)s\n '
                   'properties: %(prop)s',
@@ -333,8 +336,8 @@ class StorwizeSVCISCSIDriver(storwize_common.StorwizeSVCCommonDriver):
             # get host according to iSCSI protocol
             info = {'driver_volume_type': 'iscsi',
                     'data': {}}
-
-            host_name = self._helpers.get_host_from_connector(connector)
+            host_name = self._helpers.get_host_from_connector(connector,
+                                                              iscsi=True)
             if host_name is None:
                 msg = (_('terminate_connection: Failed to get host name from'
                          ' connector.'))

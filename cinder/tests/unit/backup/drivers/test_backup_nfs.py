@@ -68,10 +68,9 @@ class BackupNFSShareTestCase(test.TestCase):
         self.mock_object(nfs.NFSBackupDriver, '_init_backup_repo_path',
                          return_value=FAKE_BACKUP_PATH)
 
-        with mock.patch.object(nfs.NFSBackupDriver, '_check_configuration'):
-            driver = nfs.NFSBackupDriver(self.ctxt)
-        self.assertRaises(exception.ConfigNotFound,
-                          driver._check_configuration)
+        driver = nfs.NFSBackupDriver(self.ctxt)
+        self.assertRaises(exception.InvalidConfigurationValue,
+                          driver.check_for_setup_error)
 
     @mock.patch.object(remotefs_brick, 'RemoteFsClient')
     def test_init_backup_repo_path(self, mock_remotefs_client_class):
@@ -81,7 +80,7 @@ class BackupNFSShareTestCase(test.TestCase):
         mock_remotefsclient = mock.Mock()
         mock_remotefsclient.get_mount_point = mock.Mock(
             return_value=FAKE_BACKUP_PATH)
-        self.mock_object(nfs.NFSBackupDriver, '_check_configuration')
+        self.mock_object(nfs.NFSBackupDriver, 'check_for_setup_error')
         mock_remotefs_client_class.return_value = mock_remotefsclient
         self.mock_object(utils, 'get_root_helper')
         with mock.patch.object(nfs.NFSBackupDriver, '_init_backup_repo_path'):
@@ -518,7 +517,7 @@ class BackupNFSSwiftBasedTestCase(test.TestCase):
 
         In backup(), after an exception occurs in
         self._backup_metadata(), we want to check the process when the
-        second exception occurs in self.delete().
+        second exception occurs in self.delete_backup().
         """
         volume_id = fake.VOLUME_ID
 
@@ -539,7 +538,7 @@ class BackupNFSSwiftBasedTestCase(test.TestCase):
             raise exception.BackupOperationError()
 
         # Raise a pseudo exception.BackupOperationError.
-        self.mock_object(nfs.NFSBackupDriver, 'delete', fake_delete)
+        self.mock_object(nfs.NFSBackupDriver, 'delete_backup', fake_delete)
 
         # We expect that the second exception is notified.
         self.assertRaises(exception.BackupOperationError,
@@ -654,7 +653,7 @@ class BackupNFSSwiftBasedTestCase(test.TestCase):
         self._create_backup_db_entry(volume_id=volume_id)
         service = nfs.NFSBackupDriver(self.ctxt)
         backup = objects.Backup.get_by_id(self.ctxt, fake.BACKUP_ID)
-        service.delete(backup)
+        service.delete_backup(backup)
 
     def test_get_compressor(self):
         service = nfs.NFSBackupDriver(self.ctxt)

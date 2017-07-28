@@ -31,7 +31,7 @@ to choose the Cinder Branch you'd like to use and Platform then simply run:
 
 ```make base```
 
-You can also build an image to run LVM:
+You can also build an image to run LVM (**NOTE**: This is dependent on the base cinder image):
 
 ```make lvm```
 
@@ -104,9 +104,11 @@ sudo pip install pytz
 sudo pip install git+https://github.com/openstack/python-cinderclient
 sudo pip install git+https://github.com/openstack/python-brick-cinderclient-ext
 ```
+Before using, you must specify these env variables at least,
+``OS_AUTH_TYPE``, ``CINDER_ENDPOINT``, ``OS_PROJECT_ID``, ``OS_USERNAME``.
+You can utilize our sample file ``cinder.rc``, then you can use client
+to communicate with your containerized cinder deployment with noauth!!
 
-Now, you can source the included cinder.rc file to use the client to
-communicate with your containerized cinder deployment, with noauth!!
 
 Remember, to perform local-attach/local-detach of volumes you'll need to use
 sudo.  To preserve your env variables don't forget to use `sudo -E cinder xxxxx`
@@ -118,6 +120,10 @@ Don't forget to modify the `etc-cinder/cinder.conf` file as needed for your
 specific driver.  We'll be adding support for the LVM driver and LIO Tgts
 shortly, but for now you won't have much luck without using an external
 device (no worries, there are over 80 to choose from).
+
+**Note**: If you use ``cinder-lvm`` image, you must guarantee the required
+volume group which is specified in the ``cinder.conf`` already exists in
+the host environment before starting the service.
 
 ## Adding your own driver
 We don't do multi-backend in this type of environment; instead we just add
@@ -162,28 +168,28 @@ That's ok, you can always just run the commands yourself using docker run:
 # We set passwords and db creation in the docker-entrypoint-initdb.d script
 docker run -d -p 3306:3306 \
   -v ~/block-box/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d \
-  --name dbhost \
-  --hostname dbhost \
+  --name mariadb \
+  --hostname mariadb \
   -e MYSQL_ROOT_PASSWORD=password \
   mariadb
 
-# Make sure the environment vars match the startup script for your dbhost
+# Make sure the environment vars match the startup script for your database host
 docker run -d -p 5000:5000 \
   -p 35357:35357 \
-  --link dbhost \
+  --link mariadb \
   --name keystone \
   --hostname keystone \
   -e OS_PASSWORD=password \
   -e DEMO_PASSWORD=password \
-  -e DB_HOST=dbhost \
+  -e DB_HOST=mariadb \
   -e DB_PASSWORD=password \
   keystone
 
-docker run -d -p 5672:5672 --name rabbit --hostname rabbit rabbitmq
+docker run -d -p 5672:5672 --name rabbitmq --hostname rabbitmq rabbitmq
 
 docker run -d -p 8776:8776 \
-  --link dbhost \
-  --link rabbit \
+  --link mariadb \
+  --link rabbitmq \
   --name cinder-api \
   --hostname cinder-api \
   -v ~/block-box/etc-cinder:/etc/cinder \
@@ -192,15 +198,15 @@ docker run -d -p 8776:8776 \
 
 docker run -d --name cinder-scheduler \
   --hostname cinder-scheduler \
-  --link dbhost \
-  --link rabbit \
+  --link mariadb \
+  --link rabbitmq \
   -v ~/block-box/etc-cinder:/etc/cinder \
   cinder_debian cinder-scheduler
 
 docker run -d --name cinder-volume \
   --hostname cinder-volume \
-  --link dbhost \
-  --link rabbit \
+  --link mariadb \
+  --link rabbitmq \
   -v ~/block-box/etc-cinder:/etc/cinder \
   cinder-debian cinder-volume
 ```

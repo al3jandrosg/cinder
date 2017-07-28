@@ -81,6 +81,12 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
               - Volume replication 2.1 (bp add-vmax-replication)
               - rename and restructure driver (bp vmax-rename-dell-emc)
         3.0.0 - REST based driver
+              - Retype (storage-assisted migration)
+              - QoS support
+              - Support for compression on All Flash
+              - Support for volume replication
+              - Support for live migration
+              - Support for Generic Volume Group
     """
 
     VERSION = "3.0.0"
@@ -91,11 +97,13 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
     def __init__(self, *args, **kwargs):
 
         super(VMAXISCSIDriver, self).__init__(*args, **kwargs)
+        self.active_backend_id = kwargs.get('active_backend_id', None)
         self.common = (
             common.VMAXCommon(
                 'iSCSI',
                 self.VERSION,
-                configuration=self.configuration))
+                configuration=self.configuration,
+                active_backend_id=self.active_backend_id))
 
     def check_for_setup_error(self):
         pass
@@ -104,7 +112,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
         """Creates a VMAX volume.
 
         :param volume: the cinder volume object
-        :return: provider location dict
+        :returns: provider location dict
         """
         return self.common.create_volume(volume)
 
@@ -113,7 +121,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
 
         :param volume: the cinder volume object
         :param snapshot: the cinder snapshot object
-        :return: provider location dict
+        :returns: provider location dict
         """
         return self.common.create_volume_from_snapshot(
             volume, snapshot)
@@ -123,7 +131,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
 
         :param volume: the cinder volume object
         :param src_vref: the source volume reference
-        :return: provider location dict
+        :returns: provider location dict
         """
         return self.common.create_cloned_volume(volume, src_vref)
 
@@ -138,7 +146,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
         """Creates a snapshot.
 
         :param snapshot: the cinder snapshot object
-        :return: provider location dict
+        :returns: provider location dict
         """
         src_volume = snapshot.volume
         return self.common.create_snapshot(snapshot, src_volume)
@@ -193,31 +201,35 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
         the format of the driver data is defined in smis_get_iscsi_properties.
         Example return value:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
-                'driver_volume_type': 'iscsi'
+                'driver_volume_type': 'iscsi',
                 'data': {
                     'target_discovered': True,
                     'target_iqn': 'iqn.2010-10.org.openstack:volume-00000001',
                     'target_portal': '127.0.0.0.1:3260',
-                    'volume_id': '12345678-1234-4321-1234-123456789012',
+                    'volume_id': '12345678-1234-4321-1234-123456789012'
                 }
             }
-        Example return value (multipath is enabled)::
+
+        Example return value (multipath is enabled):
+
+        .. code-block:: default
+
             {
-                'driver_volume_type': 'iscsi'
+                'driver_volume_type': 'iscsi',
                 'data': {
                     'target_discovered': True,
                     'target_iqns': ['iqn.2010-10.org.openstack:volume-00001',
                                     'iqn.2010-10.org.openstack:volume-00002'],
                     'target_portals': ['127.0.0.1:3260', '127.0.1.1:3260'],
-                    'target_luns': [1, 1],
+                    'target_luns': [1, 1]
                 }
             }
         :param volume: the cinder volume object
         :param connector: the connector object
-        :return: dict -- the iscsi dict
+        :returns: dict -- the iscsi dict
         """
         device_info = self.common.initialize_connection(
             volume, connector)
@@ -228,7 +240,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
 
         :param device_info: device info dict
         :param volume: volume object
-        :return: iscsi dict
+        :returns: iscsi dict
         """
         try:
             ip_and_iqn = device_info['ip_and_iqn']
@@ -270,7 +282,7 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
         :param ip_and_iqn: list of ip and iqn dicts
         :param is_multipath: flag for multipath
         :param host_lun_id: the host lun id of the device
-        :return: properties
+        :returns: properties
         """
         properties = {}
         if len(ip_and_iqn) > 1 and is_multipath:
@@ -367,3 +379,96 @@ class VMAXISCSIDriver(driver.ISCSIDriver):
         Leave the volume intact on the backend array.
         """
         return self.common.unmanage(volume)
+
+    def retype(self, ctxt, volume, new_type, diff, host):
+        """Migrate volume to another host using retype.
+
+        :param ctxt: context
+        :param volume: the volume object including the volume_type_id
+        :param new_type: the new volume type.
+        :param diff: difference between old and new volume types.
+            Unused in driver.
+        :param host: the host dict holding the relevant
+            target(destination) information
+        :returns: boolean -- True if retype succeeded, False if error
+        """
+        return self.common.retype(volume, new_type, host)
+
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
+        """Failover volumes to a secondary host/ backend.
+
+        :param context: the context
+        :param volumes: the list of volumes to be failed over
+        :param secondary_id: the backend to be failed over to, is 'default'
+                             if fail back
+        :param groups: replication groups
+        :returns: secondary_id, volume_update_list, group_update_list
+        """
+        return self.common.failover_host(volumes, secondary_id, groups)
+
+    def create_group(self, context, group):
+        """Creates a generic volume group.
+
+        :param context: the context
+        :param group: the group object
+        """
+        self.common.create_group(context, group)
+
+    def delete_group(self, context, group, volumes):
+        """Deletes a generic volume group.
+
+        :param context: the context
+        :param group: the group object
+        :param volumes: the member volumes
+        """
+        return self.common.delete_group(
+            context, group, volumes)
+
+    def create_group_snapshot(self, context, group_snapshot, snapshots):
+        """Creates a group snapshot.
+
+        :param context: the context
+        :param group_snapshot: the group snapshot
+        :param snapshots: snapshots list
+        """
+        return self.common.create_group_snapshot(context,
+                                                 group_snapshot, snapshots)
+
+    def delete_group_snapshot(self, context, group_snapshot, snapshots):
+        """Deletes a group snapshot.
+
+        :param context: the context
+        :param group_snapshot: the grouop snapshot
+        :param snapshots: snapshots list
+        """
+        return self.common.delete_group_snapshot(context,
+                                                 group_snapshot, snapshots)
+
+    def update_group(self, context, group,
+                     add_volumes=None, remove_volumes=None):
+        """Updates LUNs in group.
+
+        :param context: the context
+        :param group: the group object
+        :param add_volumes: flag for adding volumes
+        :param remove_volumes: flag for removing volumes
+        """
+        return self.common.update_group(group, add_volumes,
+                                        remove_volumes)
+
+    def create_group_from_src(
+            self, context, group, volumes, group_snapshot=None,
+            snapshots=None, source_group=None, source_vols=None):
+        """Creates the volume group from source.
+
+        :param context: the context
+        :param group: the consistency group object to be created
+        :param volumes: volumes in the group
+        :param group_snapshot: the source volume group snapshot
+        :param snapshots: snapshots of the source volumes
+        :param source_group: the dictionary of a volume group as source.
+        :param source_vols: a list of volume dictionaries in the source_group.
+        """
+        return self.common.create_group_from_src(
+            context, group, volumes, group_snapshot, snapshots, source_group,
+            source_vols)

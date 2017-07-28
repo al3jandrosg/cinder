@@ -18,6 +18,8 @@ INFINIDAT InfiniBox Volume Driver
 
 from contextlib import contextmanager
 import functools
+import platform
+import socket
 
 import mock
 from oslo_config import cfg
@@ -30,8 +32,11 @@ from cinder.i18n import _
 from cinder import interface
 from cinder.objects import fields
 from cinder import utils
+from cinder import version
+from cinder.volume import configuration
 from cinder.volume.drivers.san import san
 from cinder.volume import utils as vol_utils
+from cinder.volume import volume_types
 from cinder.zonemanager import utils as fczm_utils
 
 try:
@@ -52,6 +57,9 @@ except ImportError:
 LOG = logging.getLogger(__name__)
 
 VENDOR_NAME = 'INFINIDAT'
+BACKEND_QOS_CONSUMERS = frozenset(['back-end', 'both'])
+QOS_MAX_IOPS = 'maxIOPS'
+QOS_MAX_BWS = 'maxBWS'
 
 infinidat_opts = [
     cfg.StrOpt('infinidat_pool_name',
@@ -68,10 +76,14 @@ infinidat_opts = [
                 default=[],
                 help='List of names of network spaces to use for iSCSI '
                      'connectivity'),
+    cfg.BoolOpt('infinidat_use_compression',
+                default=False,
+                help='Specifies whether to turn on compression for newly '
+                     'created volumes.'),
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(infinidat_opts)
+CONF.register_opts(infinidat_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 def infinisdk_to_cinder_exceptions(func):
@@ -89,7 +101,7 @@ def infinisdk_to_cinder_exceptions(func):
 
 @interface.volumedriver
 class InfiniboxVolumeDriver(san.SanISCSIDriver):
-    VERSION = '1.3'
+    VERSION = '1.5'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "INFINIDAT_Cinder_CI"
@@ -120,6 +132,15 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                 raise exception.VolumeDriverException(message=msg)
         else:
             self._protocol = 'FC'
+        if (self.configuration.infinidat_use_compression and
+           not self._system.compat.has_compression()):
+            # InfiniBox systems support compression only from v3.0 and up
+            msg = _('InfiniBox system does not support volume compression.\n'
+                    'Compression is available on InfiniBox 3.0 onward.\n'
+                    'Please disable volume compression by setting '
+                    'infinidat_use_compression to False in the Cinder '
+                    'configuration file.')
+            raise exception.VolumeDriverException(message=msg)
         LOG.debug('setup complete')
 
     def _make_volume_name(self, cinder_volume):
@@ -136,6 +157,20 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
 
     def _make_group_snapshot_name(self, cinder_group_snap):
         return 'openstack-group-snap-%s' % cinder_group_snap.id
+
+    def _set_cinder_object_metadata(self, infinidat_object, cinder_object):
+        data = dict(system="openstack",
+                    openstack_version=version.version_info.release_string(),
+                    cinder_id=cinder_object.id,
+                    cinder_name=cinder_object.name)
+        infinidat_object.set_metadata_from_dict(data)
+
+    def _set_host_metadata(self, infinidat_object):
+        data = dict(system="openstack",
+                    openstack_version=version.version_info.release_string(),
+                    hostname=socket.gethostname(),
+                    platform=platform.platform())
+        infinidat_object.set_metadata_from_dict(data)
 
     def _get_infinidat_volume_by_name(self, name):
         volume = self._system.volumes.safe_get(name=name)
@@ -185,6 +220,7 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         if infinidat_host is None:
             infinidat_host = self._system.hosts.create(name=host_name)
             infinidat_host.add_port(port)
+            self._set_host_metadata(infinidat_host)
         return infinidat_host
 
     def _get_mapping(self, host, volume):
@@ -199,6 +235,48 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
             return mapping
         # volume not mapped. map it
         return host.map_volume(volume)
+
+    def _get_backend_qos_specs(self, cinder_volume):
+        type_id = cinder_volume.volume_type_id
+        if type_id is None:
+            return None
+        qos_specs = volume_types.get_volume_type_qos_specs(type_id)
+        if qos_specs is None:
+            return None
+        qos_specs = qos_specs['qos_specs']
+        if qos_specs is None:
+            return None
+        consumer = qos_specs['consumer']
+        # Front end QoS specs are handled by nova. We ignore them here.
+        if consumer not in BACKEND_QOS_CONSUMERS:
+            return None
+        max_iops = qos_specs['specs'].get(QOS_MAX_IOPS)
+        max_bws = qos_specs['specs'].get(QOS_MAX_BWS)
+        if max_iops is None and max_bws is None:
+            return None
+        return {
+            'id': qos_specs['id'],
+            QOS_MAX_IOPS: max_iops,
+            QOS_MAX_BWS: max_bws,
+        }
+
+    def _get_or_create_qos_policy(self, qos_specs):
+        qos_policy = self._system.qos_policies.safe_get(name=qos_specs['id'])
+        if qos_policy is None:
+            qos_policy = self._system.qos_policies.create(
+                name=qos_specs['id'],
+                type="VOLUME",
+                max_ops=qos_specs[QOS_MAX_IOPS],
+                max_bps=qos_specs[QOS_MAX_BWS])
+        return qos_policy
+
+    def _set_qos(self, cinder_volume, infinidat_volume):
+        if (hasattr(self._system.compat, "has_qos") and
+           self._system.compat.has_qos()):
+            qos_specs = self._get_backend_qos_specs(cinder_volume)
+            if qos_specs:
+                policy = self._get_or_create_qos_policy(qos_specs)
+                policy.assign_entity(infinidat_volume)
 
     def _get_online_fc_ports(self):
         nodes = self._system.components.nodes.get_all()
@@ -346,6 +424,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                                        capacity.byte)
             free_capacity_gb = float(free_capacity_bytes) / units.Gi
             total_capacity_gb = float(physical_capacity_bytes) / units.Gi
+            qos_support = (hasattr(self._system.compat, "has_qos") and
+                           self._system.compat.has_qos())
             self._volume_stats = dict(volume_backend_name=self._backend_name,
                                       vendor_name=VENDOR_NAME,
                                       driver_version=self.VERSION,
@@ -353,7 +433,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                                       consistencygroup_support=False,
                                       total_capacity_gb=total_capacity_gb,
                                       free_capacity_gb=free_capacity_gb,
-                                      consistent_group_snapshot_enabled=True)
+                                      consistent_group_snapshot_enabled=True,
+                                      QoS_support=qos_support)
         return self._volume_stats
 
     def _create_volume(self, volume):
@@ -361,10 +442,17 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         volume_name = self._make_volume_name(volume)
         provtype = "THIN" if self.configuration.san_thin_provision else "THICK"
         size = volume.size * capacity.GiB
-        return self._system.volumes.create(name=volume_name,
-                                           pool=pool,
-                                           provtype=provtype,
-                                           size=size)
+        create_kwargs = dict(name=volume_name,
+                             pool=pool,
+                             provtype=provtype,
+                             size=size)
+        if self._system.compat.has_compression():
+            create_kwargs["compression_enabled"] = (
+                self.configuration.infinidat_use_compression)
+        infinidat_volume = self._system.volumes.create(**create_kwargs)
+        self._set_qos(volume, infinidat_volume)
+        self._set_cinder_object_metadata(infinidat_volume, volume)
+        return infinidat_volume
 
     @infinisdk_to_cinder_exceptions
     def create_volume(self, volume):
@@ -396,7 +484,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         """Creates a snapshot."""
         volume = self._get_infinidat_volume(snapshot.volume)
         name = self._make_snapshot_name(snapshot)
-        volume.create_snapshot(name=name)
+        infinidat_snapshot = volume.create_snapshot(name=name)
+        self._set_cinder_object_metadata(infinidat_snapshot, snapshot)
 
     @contextmanager
     def _connection_context(self, volume):
@@ -562,8 +651,9 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         # let generic volume group support handle non-cgsnapshots
         if not vol_utils.is_group_a_cg_snapshot_type(group):
             raise NotImplementedError()
-        self._system.cons_groups.create(name=self._make_cg_name(group),
-                                        pool=self._get_infinidat_pool())
+        obj = self._system.cons_groups.create(name=self._make_cg_name(group),
+                                              pool=self._get_infinidat_pool())
+        self._set_cinder_object_metadata(obj, group)
         return {'status': fields.GroupStatus.AVAILABLE}
 
     @infinisdk_to_cinder_exceptions

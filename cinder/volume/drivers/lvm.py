@@ -33,6 +33,7 @@ from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume import utils as volutils
 
@@ -51,7 +52,7 @@ volume_opts = [
                help='If >0, create LVs with multiple mirrors. Note that '
                     'this requires lvm_mirrors + 2 PVs with available space'),
     cfg.StrOpt('lvm_type',
-               default='default',
+               default='auto',
                choices=['default', 'thin', 'auto'],
                help='Type of LVM volumes to deploy; (default, thin, or auto). '
                     'Auto defaults to thin if thin is supported.'),
@@ -77,7 +78,7 @@ volume_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(volume_opts)
+CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 @interface.volumedriver
@@ -291,10 +292,16 @@ class LVMVolumeDriver(driver.VolumeDriver):
                 lvm_conf_file = None
 
             try:
+                lvm_type = self.configuration.lvm_type
+                if lvm_type == 'auto':
+                    if volutils.supports_thin_provisioning():
+                        lvm_type = 'thin'
+                    else:
+                        lvm_type = 'default'
                 self.vg = lvm.LVM(
                     self.configuration.volume_group,
                     root_helper,
-                    lvm_type=self.configuration.lvm_type,
+                    lvm_type=lvm_type,
                     executor=self._execute,
                     lvm_conf=lvm_conf_file,
                     suppress_fd_warn=(
@@ -458,6 +465,22 @@ class LVMVolumeDriver(driver.VolumeDriver):
         # TODO(yamahata): zeroing out the whole snapshot triggers COW.
         # it's quite slow.
         self._delete_volume(snapshot, is_snapshot=True)
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert a volume to a snapshot"""
+
+        # NOTE(tommylikehu): We still can revert the volume because Cinder
+        # will try the alternative approach if 'NotImplementedError'
+        # is raised here.
+        if self.configuration.lvm_type == 'thin':
+            msg = _("Revert volume to snapshot not implemented for thin LVM.")
+            raise NotImplementedError(msg)
+        else:
+            self.vg.revert(self._escape_snapshot(snapshot.name))
+            self.vg.deactivate_lv(volume.name)
+            self.vg.activate_lv(volume.name)
+            # Recreate the snapshot that was destroyed by the revert
+            self.create_snapshot(snapshot)
 
     def local_path(self, volume, vg=None):
         if vg is None:
@@ -774,6 +797,8 @@ class LVMVolumeDriver(driver.VolumeDriver):
         volume_path = "/dev/%s/%s" % (self.configuration.volume_group,
                                       volume['name'])
 
+        self.vg.activate_lv(volume['name'])
+
         model_update = \
             self.target_driver.ensure_export(context, volume, volume_path)
         return model_update
@@ -783,6 +808,8 @@ class LVMVolumeDriver(driver.VolumeDriver):
             vg = self.configuration.volume_group
 
         volume_path = "/dev/%s/%s" % (vg, volume['name'])
+
+        self.vg.activate_lv(volume['name'])
 
         export_info = self.target_driver.create_export(
             context,
@@ -801,5 +828,17 @@ class LVMVolumeDriver(driver.VolumeDriver):
         return self.target_driver.validate_connector(connector)
 
     def terminate_connection(self, volume, connector, **kwargs):
-        return self.target_driver.terminate_connection(volume, connector,
-                                                       **kwargs)
+        # NOTE(jdg):  LVM has a single export for each volume, so what
+        # we need to do here is check if there is more than one attachment for
+        # the volume, if there is; let the caller know that they should NOT
+        # remove the export.
+        has_shared_connections = False
+        if len(volume.volume_attachment) > 1:
+            has_shared_connections = True
+
+        # NOTE(jdg): For the TGT driver this is a noop, for LIO this removes
+        # the initiator IQN from the targets access list, so we're good
+
+        self.target_driver.terminate_connection(volume, connector,
+                                                **kwargs)
+        return has_shared_connections

@@ -10,7 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""The volumes attachments api."""
+"""The volumes attachments API."""
 
 from oslo_log import log as logging
 import webob
@@ -114,8 +114,8 @@ class AttachmentsController(wsgi.Controller):
         information (connector data) at the time of the call.
 
         NOTE: In Nova terms server == instance, the server_id parameter
-        referenced below is the uuid of the Instance, for non-nova consumers
-        this can be a server uuid or some other arbitrary unique identifier.
+        referenced below is the UUID of the Instance, for non-nova consumers
+        this can be a server UUID or some other arbitrary unique identifier.
 
         Expected format of the input parameter 'body':
 
@@ -126,7 +126,7 @@ class AttachmentsController(wsgi.Controller):
                 {
                     "volume_uuid": "volume-uuid",
                     "instance_uuid": "nova-server-uuid",
-                    "connector": None|<connector-object>,
+                    "connector": "null|<connector-object>"
                 }
             }
 
@@ -142,9 +142,9 @@ class AttachmentsController(wsgi.Controller):
                     "platform": "x86_64",
                     "host": "tempest-1",
                     "os_type": "linux2",
-                    "multipath": False,
+                    "multipath": false,
                     "mountpoint": "/dev/vdb",
-                    "mode": None|"rw"|"ro",
+                    "mode": "null|rw|ro"
                 }
             }
 
@@ -200,20 +200,22 @@ class AttachmentsController(wsgi.Controller):
 
         Expected format of the input parameter 'body':
 
-        .. code-block:: json
-        {
-            "attachment":
+        .. code:: json
+
             {
-                "connector":
+                "attachment":
                 {
-                    "initiator": "iqn.1993-08.org.debian:01:cad181614cec",
-                    "ip":"192.168.1.20",
-                    "platform": "x86_64",
-                    "host": "tempest-1",
-                    "os_type": "linux2",
-                    "multipath": False,
-                    "mountpoint": "/dev/vdb",
-                    "mode": None|"rw"|"ro",
+                    "connector":
+                    {
+                        "initiator": "iqn.1993-08.org.debian:01:cad181614cec",
+                        "ip":"192.168.1.20",
+                        "platform": "x86_64",
+                        "host": "tempest-1",
+                        "os_type": "linux2",
+                        "multipath": False,
+                        "mountpoint": "/dev/vdb",
+                        "mode": None|"rw"|"ro",
+                    }
                 }
             }
 

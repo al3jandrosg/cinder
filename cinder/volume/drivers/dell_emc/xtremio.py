@@ -49,6 +49,7 @@ from cinder.i18n import _
 from cinder import interface
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.zonemanager import utils as fczm_utils
@@ -72,7 +73,7 @@ XTREMIO_OPTS = [
                default=100,
                help='Number of volumes created from each cached glance image')]
 
-CONF.register_opts(XTREMIO_OPTS)
+CONF.register_opts(XTREMIO_OPTS, group=configuration.SHARED_CONF_GROUP)
 
 RANDOM = random.Random()
 OBJ_NOT_FOUND_ERR = 'obj_not_found'
@@ -220,6 +221,13 @@ class XtremIOClient(object):
 
         return list(ig_indexes)
 
+    def get_fc_up_ports(self):
+        targets = [self.req('targets', name=target['name'])['content']
+                   for target in self.req('targets')['targets']]
+        return [target for target in targets
+                if target['port-type'] == 'fc' and
+                target["port-state"] == 'up']
+
 
 class XtremIOClient3(XtremIOClient):
     def __init__(self, configuration, cluster_id):
@@ -365,6 +373,13 @@ class XtremIOClient4(XtremIOClient):
             return inits[0]
         else:
             pass
+
+    def get_fc_up_ports(self):
+        return self.req('targets',
+                        data={'full': 1,
+                              'filter': ['port-type:eq:fc',
+                                         'port-state:eq:up'],
+                              'prop': 'port-address'})["targets"]
 
 
 class XtremIOClient42(XtremIOClient4):
@@ -669,10 +684,21 @@ class XtremIOVolumeDriver(san.SanDriver):
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector"""
         tg_index = '1'
-        vol = self.client.req('volumes', name=volume['id'],
-                              data={'prop': 'index'})['content']
 
-        for ig_idx in self._get_ig_indexes_from_initiators(connector):
+        if not connector:
+            vol = self.client.req('volumes', name=volume.id)['content']
+            # foce detach, unmap all IGs from volume
+            IG_OID = 0
+            ig_indexes = [lun_map[IG_OID][XTREMIO_OID_INDEX] for
+                          lun_map in vol['lun-mapping-list']]
+            LOG.info('Force detach volume %(vol)s from luns %(luns)s.',
+                     {'vol': vol['name'], 'luns': ig_indexes})
+        else:
+            vol = self.client.req('volumes', name=volume.id,
+                                  data={'prop': 'index'})['content']
+            ig_indexes = self._get_ig_indexes_from_initiators(connector)
+
+        for ig_idx in ig_indexes:
             lm_name = '%s_%s_%s' % (six.text_type(vol['index']),
                                     six.text_type(ig_idx),
                                     tg_index)
@@ -1114,14 +1140,9 @@ class XtremIOFCDriver(XtremIOVolumeDriver,
     def get_targets(self):
         if not self._targets:
             try:
-                target_list = self.client.req('targets')["targets"]
-                targets = [self.client.req('targets',
-                                           name=target['name'])['content']
-                           for target in target_list
-                           if '-fc' in target['name']]
+                targets = self.client.get_fc_up_ports()
                 self._targets = [target['port-address'].replace(':', '')
-                                 for target in targets
-                                 if target['port-state'] == 'up']
+                                 for target in targets]
             except exception.NotFound:
                 raise (exception.VolumeBackendAPIException
                        (data=_("Failed to get targets")))
@@ -1184,9 +1205,11 @@ class XtremIOFCDriver(XtremIOVolumeDriver,
     def terminate_connection(self, volume, connector, **kwargs):
         (super(XtremIOFCDriver, self)
          .terminate_connection(volume, connector, **kwargs))
-        num_vols = (self.client
-                    .num_of_mapped_volumes(self._get_ig_name(connector)))
-        if num_vols > 0:
+        has_volumes = (not connector
+                       or self.client.
+                       num_of_mapped_volumes(self._get_ig_name(connector)) > 0)
+
+        if has_volumes:
             data = {}
         else:
             i_t_map = {}

@@ -38,6 +38,7 @@ from cinder.i18n import _
 from cinder import interface
 from cinder.objects import volume
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume import volume_types
@@ -86,14 +87,14 @@ nimble_opts = [
     cfg.StrOpt('nimble_subnet_label',
                default='*',
                help='Nimble Subnet Label'),
-    cfg.StrOpt('nimble_verify_certificate',
-               default=False,
-               help='Whether to verify Nimble SSL Certificate'),
+    cfg.BoolOpt('nimble_verify_certificate',
+                default=False,
+                help='Whether to verify Nimble SSL Certificate'),
     cfg.StrOpt('nimble_verify_cert_path',
                help='Path to Nimble Array SSL certificate'), ]
 
 CONF = cfg.CONF
-CONF.register_opts(nimble_opts)
+CONF.register_opts(nimble_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 class NimbleDriverException(exception.VolumeDriverException):
@@ -130,9 +131,6 @@ class NimbleBaseVolumeDriver(san.SanDriver):
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Nimble_Storage_CI"
-
-    # TODO(smcginnis) Remove driver in Queens if CI issues are not resolved
-    SUPPORTED = False
 
     def __init__(self, *args, **kwargs):
         super(NimbleBaseVolumeDriver, self).__init__(*args, **kwargs)
@@ -441,7 +439,7 @@ class NimbleBaseVolumeDriver(san.SanDriver):
             if 'access_control_records' in vol_info and (
                vol_info['access_control_records'] is not None):
                 msg = (_('Volume %s has ACL associated with it. Remove ACL '
-                         'for managing using Openstack') % target_vol_name)
+                         'for managing using OpenStack') % target_vol_name)
                 raise exception.InvalidVolume(reason=msg)
             data['data']['agent_type'] = AGENT_TYPE_OPENSTACK_GST
         else:
@@ -604,7 +602,7 @@ class NimbleBaseVolumeDriver(san.SanDriver):
                     wwpn = str(initiator['wwpn']).replace(":", "")
                     wwpns_list.append(wwpn)
                 LOG.debug("initiator_wwpns=%(initiator)s "
-                          "wwpns_list_from_array=%(wwpns)s" %
+                          "wwpns_list_from_array=%(wwpns)s",
                           {'initiator': initiator_wwpns,
                            'wwpns': wwpns_list})
                 if set(initiator_wwpns) == set(wwpns_list):
@@ -736,7 +734,7 @@ class NimbleISCSIDriver(NimbleBaseVolumeDriver, san.SanISCSIDriver):
     def _get_data_ip(self, netconfig):
         """Get data ip."""
         subnet_label = self.configuration.nimble_subnet_label
-        LOG.debug('subnet_label used %(netlabel)s, netconfig %(netconf)s' %
+        LOG.debug('subnet_label used %(netlabel)s, netconfig %(netconf)s',
                   {'netlabel': subnet_label, 'netconf': netconfig})
         ret_data_ip = ''
         for subnet in netconfig['array_list'][0]['nic_list']:
@@ -820,7 +818,7 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
 
     def _build_initiator_target_map(self, target_wwns, connector):
         """Build the target_wwns and the initiator target map."""
-        LOG.debug("_build_initiator_target_map for %(wwns)s" %
+        LOG.debug("_build_initiator_target_map for %(wwns)s",
                   {'wwns': target_wwns})
         init_targ_map = {}
 
@@ -911,7 +909,7 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
             raise NimbleDriverException(
                 _('No initiator group found for initiator %s') %
                 initiator_name)
-        LOG.debug("initiator_target_map %s" % init_targ_map)
+        LOG.debug("initiator_target_map %s", init_targ_map)
         self.APIExecutor.remove_acl(volume, initiator_group_name)
         eventlet.sleep(DEFAULT_SLEEP)
         # FIXME to check for other volumes attached to the host and then
@@ -924,7 +922,7 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
 
     def get_wwpns_from_array(self, array_name):
         """Retrieve the wwpns from the array"""
-        LOG.debug("get_wwpns_from_array %s" % array_name)
+        LOG.debug("get_wwpns_from_array %s", array_name)
         target_wwpns = []
         interface_info = self.APIExecutor.get_fc_interface_list(array_name)
         LOG.info("interface_info %(interface_info)s",
@@ -1028,12 +1026,12 @@ class NimbleRestAPIExecutor(object):
     def get_performance_policy_id(self, perf_policy_name):
         api = 'performance_policies/'
         filter = {'name': perf_policy_name}
-        LOG.debug("Perfomance policy Name %s" % perf_policy_name)
+        LOG.debug("Performance policy Name %s", perf_policy_name)
         r = self.get_query(api, filter)
         if not r.json()['data']:
             raise NimbleAPIException(_("No performance policy found for:"
                                      "%(perf)s") % {'perf': perf_policy_name})
-        LOG.debug("Performance policy ID :%(perf)s" %
+        LOG.debug("Performance policy ID :%(perf)s",
                   {'perf': r.json()['data'][0]['id']})
         return r.json()['data'][0]['id']
 
@@ -1380,7 +1378,7 @@ class NimbleRestAPIExecutor(object):
                                        "snap_id: %(snap)s volume id: %(vol)s")
                                      % {'snap': snap_id,
                                         'vol': vol_id})
-        LOG.debug("SnapInfo :%s" % six.text_type(r.json()['data'][0]))
+        LOG.debug("SnapInfo :%s", r.json()['data'][0])
         return r.json()['data'][0]
 
     def get_snap_info(self, snap_name, vol_name):
@@ -1412,12 +1410,12 @@ class NimbleRestAPIExecutor(object):
         try:
             LOG.debug("data :%s", data)
             self.put(api, data)
-            LOG.debug("Volume %(vol)s is in requested online state :%(flag)s" %
+            LOG.debug("Volume %(vol)s is in requested online state :%(flag)s",
                       {'vol': volume_name,
                        'flag': online_flag})
         except Exception as ex:
             msg = (_("Error  %s") % ex)
-            LOG.debug("online_vol_exception: %s" % msg)
+            LOG.debug("online_vol_exception: %s", msg)
             if msg.__contains__("Object is %s" % SM_STATE_MSG):
                 LOG.warning('Volume %(vol)s : %(state)s',
                             {'vol': volume_name,
@@ -1436,11 +1434,10 @@ class NimbleRestAPIExecutor(object):
         try:
             self.put(api, data)
             LOG.debug("Snapshot %(snap)s is in requested online state "
-                      ":%(flag)s" % {
-                          'snap': snap_name,
-                          'flag': online_flag})
+                      ":%(flag)s",
+                      {'snap': snap_name, 'flag': online_flag})
         except Exception as ex:
-            LOG.debug("online_snap_exception: %s" % ex)
+            LOG.debug("online_snap_exception: %s", ex)
             if six.text_type(ex).__contains__("Object %s" % SM_STATE_MSG):
                 LOG.warning('Snapshot %(snap)s :%(state)s',
                             {'snap': snap_name,

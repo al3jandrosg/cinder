@@ -150,6 +150,7 @@ def create_snapshot(ctxt,
     snap.user_id = ctxt.user_id or fake.USER_ID
     snap.project_id = ctxt.project_id or fake.PROJECT_ID
     snap.status = status
+    snap.metadata = {}
     snap.volume_size = vol['size']
     snap.display_name = display_name
     snap.display_description = display_description
@@ -339,6 +340,11 @@ def create_backup(ctxt,
                   temp_snapshot_id=None,
                   snapshot_id=None,
                   data_timestamp=None,
+                  size=None,
+                  container=None,
+                  availability_zone=None,
+                  host=None,
+                  metadata=None,
                   **kwargs):
     """Create a backup object."""
     values = {
@@ -348,21 +354,25 @@ def create_backup(ctxt,
         'status': status,
         'display_name': display_name,
         'display_description': display_description,
-        'container': 'fake',
-        'availability_zone': 'fake',
+        'container': container or 'fake',
+        'availability_zone': availability_zone or 'fake',
         'service': 'fake',
-        'size': 5 * 1024 * 1024,
+        'size': size or 5 * 1024 * 1024,
         'object_count': 22,
-        'host': socket.gethostname(),
+        'host': host or socket.gethostname(),
         'parent_id': parent_id,
         'temp_volume_id': temp_volume_id,
         'temp_snapshot_id': temp_snapshot_id,
         'snapshot_id': snapshot_id,
-        'data_timestamp': data_timestamp, }
+        'data_timestamp': data_timestamp,
+        'metadata': metadata or {}, }
 
     values.update(kwargs)
     backup = objects.Backup(ctxt, **values)
     backup.create()
+    if not snapshot_id:
+        backup.data_timestamp = backup.created_at
+        backup.save()
     return backup
 
 
@@ -371,7 +381,7 @@ def create_message(ctxt,
                    request_id='test_backup',
                    resource_type='This is a test backup',
                    resource_uuid='3asf434-3s433df43-434adf3-343df443',
-                   event_id=None,
+                   action=None,
                    message_level='Error'):
     """Create a message in the DB."""
     expires_at = (timeutils.utcnow() + datetime.timedelta(
@@ -380,7 +390,8 @@ def create_message(ctxt,
                       'request_id': request_id,
                       'resource_type': resource_type,
                       'resource_uuid': resource_uuid,
-                      'event_id': event_id,
+                      'action_id': action[0] if action else '',
+                      'event_id': "VOLUME_VOLUME_%s_002" % action[0],
                       'message_level': message_level,
                       'expires_at': expires_at}
     return db.message_create(ctxt, message_record)

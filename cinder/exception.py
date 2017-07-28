@@ -98,6 +98,9 @@ class CinderException(Exception):
 
         for k, v in self.kwargs.items():
             if isinstance(v, Exception):
+                # NOTE(tommylikehu): If this is a cinder exception it will
+                # return the msg object, so we won't be preventing
+                # translations.
                 self.kwargs[k] = six.text_type(v)
 
         if self._should_format():
@@ -117,6 +120,9 @@ class CinderException(Exception):
                 # at least get the core message out if something happened
                 message = self.message
         elif isinstance(message, Exception):
+            # NOTE(tommylikehu): If this is a cinder exception it will
+            # return the msg object, so we won't be preventing
+            # translations.
             message = six.text_type(message)
 
         # NOTE(luisg): We put the actual message in 'msg' so that we can access
@@ -128,8 +134,12 @@ class CinderException(Exception):
     def _should_format(self):
         return self.kwargs['message'] is None or '%(message)' in self.message
 
+    # NOTE(tommylikehu): self.msg is already an unicode compatible object
+    # as the __init__ method ensures of it, and we should not be modifying
+    # it in any way with str(), unicode(), or six.text_type() as we would
+    # be preventing translations from happening.
     def __unicode__(self):
-        return six.text_type(self.msg)
+        return self.msg
 
 
 class VolumeBackendAPIException(CinderException):
@@ -247,6 +257,11 @@ class ImageUnacceptable(Invalid):
     message = _("Image %(image_id)s is unacceptable: %(reason)s")
 
 
+class ImageTooBig(Invalid):
+    message = _("Image %(image_id)s size exceeded available "
+                "disk space: %(reason)s")
+
+
 class DeviceUnavailable(Invalid):
     message = _("The device in the path %(path)s is unavailable: %(reason)s")
 
@@ -256,7 +271,7 @@ class SnapshotUnavailable(VolumeBackendAPIException):
 
 
 class InvalidUUID(Invalid):
-    message = _("Expected a uuid but received %(uuid)s.")
+    message = _("Expected a UUID but received %(uuid)s.")
 
 
 class InvalidAPIVersionString(Invalid):
@@ -400,6 +415,10 @@ class SnapshotNotFound(NotFound):
 
 class ServerNotFound(NotFound):
     message = _("Instance %(uuid)s could not be found.")
+
+
+class VolumeSnapshotNotFound(NotFound):
+    message = _("No snapshots found for volume %(volume_id)s.")
 
 
 class VolumeIsBusy(CinderException):
@@ -734,6 +753,11 @@ class BackupMetadataUnsupportedVersion(BackupDriverException):
     message = _("Unsupported backup metadata version requested")
 
 
+class BackupMetadataNotFound(NotFound):
+    message = _("Backup %(backup_id)s has no metadata with "
+                "key %(metadata_key)s.")
+
+
 class BackupVerifyUnsupportedDriver(BackupDriverException):
     message = _("Unsupported backup verify driver")
 
@@ -844,6 +868,11 @@ class UnableToFailOver(CinderException):
 class ReplicationError(CinderException):
     message = _("Volume %(volume_id)s replication "
                 "error: %(reason)s")
+
+
+class ReplicationGroupError(CinderException):
+    message = _("Group %(group_id)s replication "
+                "error: %(reason)s.")
 
 
 class ReplicationNotFound(NotFound):
@@ -1194,6 +1223,10 @@ class BadHTTPResponseStatus(VolumeDriverException):
     message = _("Bad HTTP response status %(status)s")
 
 
+class BadResetResourceStatus(CinderException):
+    message = _("Bad reset resource status : %(message)s")
+
+
 # ZADARA STORAGE VPSA driver exception
 class ZadaraServerCreateFailure(VolumeDriverException):
     message = _("Unable to create server object for initiator %(name)s")
@@ -1268,6 +1301,10 @@ class DotHillRequestError(VolumeDriverException):
 
 class DotHillNotTargetPortal(VolumeDriverException):
     message = _("No active iSCSI portals with supplied iSCSI IPs")
+
+
+class DotHillDriverNotSupported(VolumeDriverException):
+    message = _("The Dot Hill driver is no longer supported.")
 
 
 # Sheepdog

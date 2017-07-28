@@ -33,6 +33,7 @@ from cinder.image import image_utils
 from cinder import interface
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver
 
 try:
@@ -58,6 +59,9 @@ RBD_OPTS = [
     cfg.StrOpt('rbd_ceph_conf',
                default='',  # default determined by librados
                help='Path to the ceph configuration file'),
+    cfg.StrOpt('rbd_keyring_conf',
+               default='',
+               help='Path to the ceph keyring file'),
     cfg.BoolOpt('rbd_flatten_volume_from_snapshot',
                 default=False,
                 help='Flatten volumes created from snapshots to remove '
@@ -91,7 +95,7 @@ RBD_OPTS = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(RBD_OPTS)
+CONF.register_opts(RBD_OPTS, group=configuration.SHARED_CONF_GROUP)
 
 EXTRA_SPECS_REPL_ENABLED = "replication_enabled"
 
@@ -356,6 +360,10 @@ class RBDDriver(driver.CloneableImageVD,
             ports.append(port)
         return hosts, ports
 
+    def _iterate_cb(self, offset, length, exists):
+        if exists:
+            self._total_usage += length
+
     def _get_usage_info(self):
         with RADOSClient(self) as client:
             for t in self.RBDProxy().list(client.ioctx):
@@ -364,7 +372,7 @@ class RBDDriver(driver.CloneableImageVD,
                     # non-default volume_name_template settings.  Template
                     # must start with "volume".
                     with RBDVolumeProxy(self, t, read_only=True) as v:
-                        self._total_usage += v.size()
+                        v.diff_iterate(0, v.size(), None, self._iterate_cb)
 
     def _update_volume_stats(self):
         stats = {
@@ -556,12 +564,20 @@ class RBDDriver(driver.CloneableImageVD,
         """
         vol_name = utils.convert_str(volume.name)
         with RBDVolumeProxy(self, vol_name) as image:
+            had_exclusive_lock = (image.features() &
+                                  self.rbd.RBD_FEATURE_EXCLUSIVE_LOCK)
             had_journaling = image.features() & self.rbd.RBD_FEATURE_JOURNALING
+            if not had_exclusive_lock:
+                image.update_features(self.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
+                                      True)
             if not had_journaling:
                 image.update_features(self.rbd.RBD_FEATURE_JOURNALING, True)
             image.mirror_image_enable()
 
-        driver_data = self._dumps({'had_journaling': bool(had_journaling)})
+        driver_data = self._dumps({
+            'had_journaling': bool(had_journaling),
+            'had_exclusive_lock': bool(had_exclusive_lock)
+        })
         return {'replication_status': fields.ReplicationStatus.ENABLED,
                 'replication_driver_data': driver_data}
 
@@ -867,11 +883,15 @@ class RBDDriver(driver.CloneableImageVD,
         with RBDVolumeProxy(self, vol_name) as image:
             image.mirror_image_disable(False)
             driver_data = json.loads(volume.replication_driver_data)
-            # If we didn't have journaling enabled when we enabled replication
-            # we must remove journaling since it we added it for the
-            # replication
+            # If 'journaling' and/or 'exclusive-lock' have
+            # been enabled in '_enable_replication',
+            # they will be disabled here. If not, it will keep
+            # what it was before.
             if not driver_data['had_journaling']:
                 image.update_features(self.rbd.RBD_FEATURE_JOURNALING, False)
+            if not driver_data['had_exclusive_lock']:
+                image.update_features(self.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
+                                      False)
         return {'replication_status': fields.ReplicationStatus.DISABLED,
                 'replication_driver_data': None}
 
@@ -902,7 +922,7 @@ class RBDDriver(driver.CloneableImageVD,
         return True, update
 
     def _dumps(self, obj):
-        return json.dumps(obj, separators=(',', ':'))
+        return json.dumps(obj, separators=(',', ':'), sort_keys=True)
 
     def _exec_on_volume(self, volume_name, remote, operation, *args, **kwargs):
         @utils.retry(rbd.ImageBusy,
@@ -993,7 +1013,7 @@ class RBDDriver(driver.CloneableImageVD,
             secondary_id = candidates.pop()
         return secondary_id, self._get_target_config(secondary_id)
 
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Failover to replication target."""
         LOG.info('RBD driver failover started.')
         if not self._is_replication_enabled:
@@ -1016,7 +1036,7 @@ class RBDDriver(driver.CloneableImageVD,
         self._active_backend_id = secondary_id
         self._active_config = remote
         LOG.info('RBD driver failover completed.')
-        return secondary_id, updates
+        return secondary_id, updates, []
 
     def ensure_export(self, context, volume):
         """Synchronously recreates an export for a logical volume."""
@@ -1029,6 +1049,20 @@ class RBDDriver(driver.CloneableImageVD,
     def remove_export(self, context, volume):
         """Removes an export for a logical volume."""
         pass
+
+    def _get_keyring_contents(self):
+        # NOTE(danpawlik) If keyring is not provided in Cinder configuration,
+        # os-brick library will take keyring from default path.
+        keyring_file = self.configuration.rbd_keyring_conf
+        keyring_data = None
+        try:
+            if os.path.isfile(keyring_file):
+                with open(keyring_file, 'r') as k_file:
+                    keyring_data = k_file.read()
+        except IOError:
+            LOG.debug('Cannot read RBD keyring file: %s.', keyring_file)
+
+        return keyring_data
 
     def initialize_connection(self, volume, connector):
         hosts, ports = self._get_mon_addrs()
@@ -1046,6 +1080,7 @@ class RBDDriver(driver.CloneableImageVD,
                 'secret_uuid': self.configuration.rbd_secret_uuid,
                 'volume_id': volume.id,
                 "discard": True,
+                'keyring': self._get_keyring_contents(),
             }
         }
         LOG.debug('connection data: %s', data)
@@ -1305,3 +1340,71 @@ class RBDDriver(driver.CloneableImageVD,
 
     def migrate_volume(self, context, volume, host):
         return (False, None)
+
+    def manage_existing_snapshot_get_size(self, snapshot, existing_ref):
+        """Return size of an existing image for manage_existing.
+
+        :param snapshot:
+            snapshot ref info to be set
+        :param existing_ref:
+            existing_ref is a dictionary of the form:
+            {'source-name': <name of snapshot>}
+        """
+        # Check that the reference is valid
+        if not isinstance(existing_ref, dict):
+            existing_ref = {"source-name": existing_ref}
+        if 'source-name' not in existing_ref:
+            reason = _('Reference must contain source-name element.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=reason)
+
+        volume_name = utils.convert_str(snapshot.volume_name)
+        snapshot_name = utils.convert_str(existing_ref['source-name'])
+
+        with RADOSClient(self) as client:
+            # Raise an exception if we didn't find a suitable rbd image.
+            try:
+                rbd_snapshot = self.rbd.Image(client.ioctx, volume_name,
+                                              snapshot=snapshot_name)
+            except self.rbd.ImageNotFound:
+                kwargs = {'existing_ref': snapshot_name,
+                          'reason': 'Specified snapshot does not exist.'}
+                raise exception.ManageExistingInvalidReference(**kwargs)
+
+            snapshot_size = rbd_snapshot.size()
+            rbd_snapshot.close()
+
+            # RBD image size is returned in bytes.  Attempt to parse
+            # size as a float and round up to the next integer.
+            try:
+                convert_size = int(math.ceil(float(snapshot_size) / units.Gi))
+                return convert_size
+            except ValueError:
+                exception_message = (_("Failed to manage existing snapshot "
+                                       "%(name)s, because reported size "
+                                       "%(size)s was not a floating-point"
+                                       " number.")
+                                     % {'name': snapshot_name,
+                                        'size': snapshot_size})
+                raise exception.VolumeBackendAPIException(
+                    data=exception_message)
+
+    def manage_existing_snapshot(self, snapshot, existing_ref):
+        """Manages an existing snapshot.
+
+        Renames the snapshot name to match the expected name for the snapshot.
+        Error checking done by manage_existing_get_size is not repeated.
+
+        :param snapshot:
+            snapshot ref info to be set
+        :param existing_ref:
+            existing_ref is a dictionary of the form:
+            {'source-name': <name of rbd snapshot>}
+        """
+        if not isinstance(existing_ref, dict):
+            existing_ref = {"source-name": existing_ref}
+        volume_name = utils.convert_str(snapshot.volume_name)
+        with RBDVolumeProxy(self, volume_name) as volume:
+            snapshot_name = existing_ref['source-name']
+            volume.rename_snap(utils.convert_str(snapshot_name),
+                               utils.convert_str(snapshot.name))

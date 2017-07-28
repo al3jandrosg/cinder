@@ -29,6 +29,7 @@ from oslo_utils import units
 from cinder import context
 from cinder import exception
 from cinder.i18n import _
+from cinder.volume import configuration
 from cinder.volume.drivers.nec import cli
 from cinder.volume.drivers.san import san
 from cinder.volume import qos_specs
@@ -101,7 +102,7 @@ mstorage_opts = [
                help='Number of iSCSI portals.'),
 ]
 
-FLAGS.register_opts(mstorage_opts)
+FLAGS.register_opts(mstorage_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 def convert_to_name(uuid):
@@ -150,7 +151,7 @@ def convert_to_id(value62):
 class MStorageVolumeCommon(object):
     """M-Series Storage volume common class."""
 
-    VERSION = '1.8.2'
+    VERSION = '1.9.1'
     WIKI_NAME = 'NEC_Cinder_CI'
 
     def do_setup(self, context):
@@ -268,12 +269,10 @@ class MStorageVolumeCommon(object):
             'thread_timeout': conf.nec_unpairthread_timeout,
             'ismview_dir': conf.nec_ismview_dir,
             'ismview_alloptimize': conf.nec_ismview_alloptimize,
-            'ssh_conn_timeout': conf.ssh_conn_timeout,
             'ssh_pool_port_number': conf.nec_ssh_pool_port_number,
             'diskarray_name': conf.nec_diskarray_name,
             'queryconfig_view': conf.nec_queryconfig_view,
-            'portal_number': conf.nec_iscsi_portals_per_cont,
-            'reserved_percentage': conf.reserved_percentage
+            'portal_number': conf.nec_iscsi_portals_per_cont
         }
 
     def _set_properties(self):
@@ -288,7 +287,11 @@ class MStorageVolumeCommon(object):
         vendor_name, _product_dict = self.get_oem_parameter()
 
         backend_name = self._configuration.safe_get('volume_backend_name')
+        ssh_timeout = self._configuration.safe_get('ssh_conn_timeout')
+        reserved_per = self._configuration.safe_get('reserved_percentage')
 
+        conf_properties['ssh_conn_timeout'] = ssh_timeout
+        conf_properties['reserved_percentage'] = reserved_per
         conf_properties['ismview_path'] = ismview_path
         conf_properties['driver_name'] = self._driver_name
         conf_properties['config_group'] = self._config_group
@@ -876,7 +879,7 @@ class MStorageVolumeCommon(object):
             specs['upperreport'] = None
             LOG.debug('qos parameter not found.')
         else:
-            if ('upperlimit' in specs) and (specs['upperlimit'] is not None):
+            if 'upperlimit' in specs and specs['upperlimit'] is not None:
                 if self.validates_number(specs['upperlimit']) is True:
                     upper_limit = int(specs['upperlimit'], 10)
                     if ((upper_limit != 0) and
@@ -889,7 +892,7 @@ class MStorageVolumeCommon(object):
             else:
                 specs['upperlimit'] = None
 
-            if ('lowerlimit' in specs) and (specs['lowerlimit'] is not None):
+            if 'lowerlimit' in specs and specs['lowerlimit'] is not None:
                 if self.validates_number(specs['lowerlimit']) is True:
                     lower_limit = int(specs['lowerlimit'], 10)
                     if (lower_limit != 0 and (lower_limit < 10 or
@@ -906,7 +909,7 @@ class MStorageVolumeCommon(object):
                 if specs['upperreport'] not in ['on', 'off']:
                     LOG.debug('Illegal arguments. '
                               'upperreport is not on or off.'
-                              'upperreport=%s' % specs['upperreport'])
+                              'upperreport=%s', specs['upperreport'])
                     specs['upperreport'] = None
             else:
                 specs['upperreport'] = None

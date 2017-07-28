@@ -34,16 +34,42 @@ be found on the `OpenStack wiki`_. Cloud administrators, refer to `docs.openstac
 .. _`docs.openstack.org`: http://docs.openstack.org
 
 
-Developer Docs
-==============
+Installing Cinder
+=================
+
+.. toctree::
+   :maxdepth: 2
+
+   install/index
+
+Admin Docs
+==========
+.. toctree::
+   :maxdepth: 2
+
+   admin/blockstorage
+
+Contributor/Developer Docs
+==========================
 
 .. toctree::
    :maxdepth: 1
 
-   devref/index
+   contributor/index
    scheduler-filters
    scheduler-weights
    upgrade
+
+Command Line Interface Documentation
+====================================
+
+.. toctree::
+   :maxdepth: 2
+
+   cli/cli-manage-volumes
+   cli/cli-set-quotas
+   cli/cli-cinder-quotas
+   cli/cli-cinder-scheduling
 
 Drivers
 =======
@@ -62,12 +88,13 @@ API Extensions
 
 Go to http://api.openstack.org for information about Cinder API extensions.
 
-Sample Configuration File
-=========================
+Configuration Reference
+=======================
 
 .. toctree::
     :maxdepth: 1
 
+    configuration/block-storage
     sample_config
 
 Indices and tables
@@ -76,3 +103,11 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Glossary
+========
+
+.. toctree::
+   :maxdepth: 1
+
+   common/glossary.rst

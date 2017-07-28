@@ -803,6 +803,42 @@ class HPE3PARBaseDriver(object):
                 expected +
                 self.standard_logout)
 
+    def test_create_volume_in_generic_group(self):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        mock_client = self.setup_driver()
+        volume = {'name': self.VOLUME_NAME,
+                  'id': self.VOLUME_ID,
+                  'display_name': 'Foo Volume',
+                  'size': 2,
+                  'group_id': '87101633-13e0-41ee-813b-deabc372267b',
+                  'host': self.FAKE_CINDER_HOST,
+                  'volume_type': None,
+                  'volume_type_id': None}
+        with mock.patch.object(hpecommon.HPE3PARCommon,
+                               '_create_client') as mock_create_client:
+            mock_create_client.return_value = mock_client
+            self.driver.create_volume(volume)
+            comment = Comment({
+                "display_name": "Foo Volume",
+                "type": "OpenStack",
+                "name": "volume-d03338a9-9115-48a3-8dfc-35cdfcdc15a7",
+                "volume_id": "d03338a9-9115-48a3-8dfc-35cdfcdc15a7"})
+            expected = [
+                mock.call.createVolume(
+                    self.VOLUME_3PAR_NAME,
+                    HPE3PAR_CPG,
+                    2048, {
+                        'comment': comment,
+                        'tpvv': True,
+                        'tdvv': False,
+                        'snapCPG': HPE3PAR_CPG_SNAP})]
+
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+
     def test_create_volume_in_pool(self):
 
         # setup_mock_client drive with default configuration
@@ -2880,6 +2916,23 @@ class HPE3PARBaseDriver(object):
             expected_update = {'_name_id': None,
                                'provider_location': None}
             self.assertEqual(expected_update, actual_update)
+
+            expected = [
+                mock.call.modifyVolume(
+                    'osv-0DM4qZEVSKON-DXN-NwVpw',
+                    {'newName': u'tsv-0DM4qZEVSKON-DXN-NwVpw'}),
+                mock.call.modifyVolume(
+                    'osv-0DM4qZEVSKON-AAAAAAAAA',
+                    {'newName': u'osv-0DM4qZEVSKON-DXN-NwVpw'}),
+                mock.call.modifyVolume(
+                    'tsv-0DM4qZEVSKON-DXN-NwVpw',
+                    {'newName': u'osv-0DM4qZEVSKON-AAAAAAAAA'})
+            ]
+
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
 
     def test_update_migrated_volume_attached(self):
         mock_client = self.setup_driver()
@@ -5050,7 +5103,7 @@ class HPE3PARBaseDriver(object):
                     optional=group_snap_optional)]
 
             # delete the snapshot of the consistency group
-            group_snapshot.status = 'deleting'
+            group_snapshot.status = fields.GroupSnapshotStatus.DELETING
             self.driver.delete_group_snapshot(context.get_admin_context(),
                                               group_snapshot, [])
 
@@ -5116,7 +5169,8 @@ class HPE3PARBaseDriver(object):
             expected_model = (self.REPLICATION_BACKEND_ID,
                               [{'updates': {'replication_status':
                                             'failed-over'},
-                                'volume_id': self.VOLUME_ID}])
+                                'volume_id': self.VOLUME_ID}],
+                              [])
             return_model = self.driver.failover_host(
                 context.get_admin_context(),
                 volumes,
@@ -5173,7 +5227,8 @@ class HPE3PARBaseDriver(object):
             expected_model = (None,
                               [{'updates': {'replication_status':
                                             'available'},
-                                'volume_id': self.VOLUME_ID}])
+                                'volume_id': self.VOLUME_ID}],
+                              [])
             self.assertEqual(expected_model, return_model)
 
     @mock.patch.object(volume_types, 'get_volume_type')
@@ -7941,6 +7996,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
 
         volume = {'host': 'test-host@3pariscsi',
                   'id': 'd03338a9-9115-48a3-8dfc-35cdfcdc15a7'}
+        connector = {'host': 'test-host'}
         mock_utils.return_value = 'random-pass'
         mock_client.getHostVLUNs.return_value = [
             {'active': True,
@@ -7963,7 +8019,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            model = self.driver._do_export(common, volume)
+            model = self.driver._do_export(common, volume, connector)
 
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
@@ -8009,7 +8065,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            model = self.driver._do_export(common, volume)
+            model = self.driver._do_export(common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
@@ -8023,6 +8079,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
 
         volume = {'host': 'test-host@3pariscsi',
                   'id': 'd03338a9-9115-48a3-8dfc-35cdfcdc15a7'}
+        connector = {'host': 'test-host'}
         mock_utils.return_value = "random-pass"
         mock_client.getHostVLUNs.side_effect = hpeexceptions.HTTPNotFound(
             'fake')
@@ -8044,7 +8101,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            model = self.driver._do_export(common, volume)
+            model = self.driver._do_export(common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
@@ -8058,6 +8115,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
 
         volume = {'host': 'test-host@3pariscsi',
                   'id': 'd03338a9-9115-48a3-8dfc-35cdfcdc15a7'}
+        connector = {'host': 'test-host'}
         mock_utils.return_value = 'random-pass'
         mock_client.getHostVLUNs.return_value = [
             {'active': True,
@@ -8089,7 +8147,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            model = self.driver._do_export(common, volume)
+            model = self.driver._do_export(common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
@@ -8103,6 +8161,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
 
         volume = {'host': 'test-host@3pariscsi',
                   'id': 'd03338a9-9115-48a3-8dfc-35cdfcdc15a7'}
+        connector = {'host': 'test-host'}
         mock_utils.return_value = "random-pass"
         mock_client.getHostVLUNs.return_value = [
             {'active': False,
@@ -8132,7 +8191,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            model = self.driver._do_export(common, volume)
+            model = self.driver._do_export(common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
@@ -8146,6 +8205,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
 
         volume = {'host': 'test-host@3pariscsi',
                   'id': self.VOLUME_ID}
+        connector = {'host': 'test-host'}
         mock_utils.return_value = 'random-pass'
 
         mock_client.getHost.return_value = {
@@ -8177,7 +8237,8 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                  'lun': 1, 'type': 3,
                  'remoteName': 'iqn.1993-08.org.debian:01:222'}]
 
-            model_with_remote_name = self.driver._do_export(common, volume)
+            model_with_remote_name = self.driver._do_export(
+                common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertDictEqual(expected_model, model_with_remote_name)
 
@@ -8186,7 +8247,8 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                 {'active': False, 'volumeName': self.VOLUME_3PAR_NAME,
                  'lun': None, 'type': 1}]
 
-            model_without_remote_name = self.driver._do_export(common, volume)
+            model_without_remote_name = self.driver._do_export(
+                common, volume, connector)
             mock_client.assert_has_calls(expected)
             self.assertDictEqual(expected_model, model_without_remote_name)
 
@@ -8198,6 +8260,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
         mock_utils.return_value = 'random-pass'
         volume = {'host': 'test-host@3pariscsi',
                   'id': self.VOLUME_ID}
+        connector = {'host': 'test-host'}
         mock_client.getHostVLUNs.return_value = [
             {'active': True,
              'volumeName': self.VOLUME_3PAR_NAME,
@@ -8223,7 +8286,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver, test.TestCase):
                                               '_create_client',
                                               return_value=mock_client)
         mock_create_client.return_value = mock_client
-        model = self.driver.create_export(None, volume, None)
+        model = self.driver.create_export(None, volume, connector)
         mock_client.assert_has_calls(expected)
         self.assertDictEqual(expected_model, model)
 

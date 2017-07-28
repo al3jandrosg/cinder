@@ -53,6 +53,7 @@ class BaseBackupTest(test.TestCase):
         super(BaseBackupTest, self).setUp()
         self.backup_mgr = importutils.import_object(CONF.backup_manager)
         self.backup_mgr.host = 'testhost'
+        self.backup_mgr.is_initialized = True
         self.ctxt = context.get_admin_context()
 
         paths = ['cinder.volume.rpcapi.VolumeAPI.delete_snapshot',
@@ -80,7 +81,8 @@ class BaseBackupTest(test.TestCase):
                                 service=None,
                                 temp_volume_id=None,
                                 temp_snapshot_id=None,
-                                snapshot_id=None):
+                                snapshot_id=None,
+                                metadata=None):
         """Create a backup entry in the DB.
 
         Return the entry ID
@@ -104,6 +106,7 @@ class BaseBackupTest(test.TestCase):
         kwargs['object_count'] = object_count
         kwargs['temp_volume_id'] = temp_volume_id
         kwargs['temp_snapshot_id'] = temp_snapshot_id
+        kwargs['metadata'] = metadata or {}
         backup = objects.Backup(context=self.ctxt, **kwargs)
         backup.create()
         return backup
@@ -222,6 +225,7 @@ class BackupTestCase(BaseBackupTest):
             return self.ctxt
 
         self.override_config('backup_service_inithost_offload', False)
+        self.override_config('periodic_interval', 0)
 
         vol1_id = self._create_volume_db_entry()
         self._create_volume_attach(vol1_id)
@@ -258,8 +262,6 @@ class BackupTestCase(BaseBackupTest):
         mock_get_admin_context.side_effect = get_admin_context
         self.volume = importutils.import_object(CONF.volume_manager)
         self.backup_mgr.init_host()
-
-        self.assertEqual({}, self.backup_mgr.volume_managers)
 
         vol1 = db.volume_get(self.ctxt, vol1_id)
         self.assertEqual('available', vol1['status'])
@@ -341,8 +343,10 @@ class BackupTestCase(BaseBackupTest):
                          volume_rpcapi.client.serializer._base.version_cap)
         self.assertIsNone(volume_rpcapi.client.serializer._base.manifest)
 
-    def test_is_working(self):
-        self.assertTrue(self.backup_mgr.is_working())
+    @ddt.data(True, False)
+    def test_is_working(self, initialized):
+        self.backup_mgr.is_initialized = initialized
+        self.assertEqual(initialized, self.backup_mgr.is_working())
 
     def test_cleanup_incomplete_backup_operations_with_exceptions(self):
         """Test cleanup resilience in the face of exceptions."""
@@ -427,7 +431,6 @@ class BackupTestCase(BaseBackupTest):
 
     def test_cleanup_one_deleting_backup(self):
         """Test cleanup_one_backup for volume status 'deleting'."""
-
         self.override_config('backup_service_inithost_offload', False)
 
         backup = self._create_backup_db_entry(
@@ -623,7 +626,9 @@ class BackupTestCase(BaseBackupTest):
         mock_get_backup_device.assert_called_once_with(self.ctxt, backup, vol)
         mock_get_conn.assert_called_once_with()
         mock_detach_device.assert_called_once_with(self.ctxt, attach_info,
-                                                   vol, properties, False)
+                                                   vol, properties, False,
+                                                   force=True,
+                                                   ignore_errors=True)
 
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
         self.assertEqual('available', vol['status'])
@@ -738,7 +743,7 @@ class BackupTestCase(BaseBackupTest):
         mock_get_backup_device.assert_called_once_with(self.ctxt, backup, vol)
         mock_get_conn.assert_called_once_with()
         mock_terminate_connection_snapshot.assert_called_once_with(
-            self.ctxt, snap, properties, force=False)
+            self.ctxt, snap, properties, force=True)
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
         self.assertEqual('in-use', vol['status'])
         self.assertEqual('backing-up', vol['previous_status'])
@@ -927,7 +932,7 @@ class BackupTestCase(BaseBackupTest):
         mock_attach_device.assert_called_once_with(self.ctxt, vol,
                                                    properties)
         mock_detach_device.assert_called_once_with(self.ctxt, attach_info,
-                                                   vol, properties)
+                                                   vol, properties, force=True)
 
         vol = objects.Volume.get_by_id(self.ctxt, vol_id)
         self.assertEqual('available', vol['status'])
@@ -1257,7 +1262,7 @@ class BackupTestCase(BaseBackupTest):
     @mock.patch('cinder.backup.drivers.nfs.NFSBackupDriver.'
                 '_init_backup_repo_path', return_value=None)
     @mock.patch('cinder.backup.drivers.nfs.NFSBackupDriver.'
-                '_check_configuration', return_value=None)
+                'check_for_setup_error', return_value=None)
     def test_check_support_to_force_delete(self, mock_check_configuration,
                                            mock_init_backup_repo_path):
         """Test force delete check method for supported drivers."""

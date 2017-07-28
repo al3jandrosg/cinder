@@ -1519,7 +1519,7 @@ class NestedDbQuotaDriverTestCase(NestedDbQuotaDriverBaseTestCase):
 class NestedQuotaValidation(NestedDbQuotaDriverBaseTestCase):
     def setUp(self):
         super(NestedQuotaValidation, self).setUp()
-        """
+        r"""
         Quota hierarchy setup like so
         +-----------+
         |           |
@@ -1827,7 +1827,7 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
     def _mock_allocated_get_all_by_project(self, allocated_quota=False):
         def fake_qagabp(context, project_id, session=None):
             self.assertEqual('test_project', project_id)
-            self.assertNotEqual(session, None)
+            self.assertIsNotNone(session)
             if allocated_quota:
                 return dict(project_id=project_id, volumes=3,
                             gigabytes = 2 * 1024)

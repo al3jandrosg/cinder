@@ -15,15 +15,35 @@ Extend a volume size
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
-Extends the size of a volume to a requested size, in gibibytes (GiB). Specify the ``os-extend`` action in the request body.
+Extends the size of a volume to a requested size, in gibibytes (GiB).
+Specify the ``os-extend`` action in the request body.
 
 Preconditions
 
-- Volume status must be ``available``.
+- Prior to microversion ``3.42`` the volume status must be ``available``.
+  Starting with microversion ``3.42``, attached volumes with status ``in-use``
+  may be able to be extended depending on policy and backend volume and
+  compute driver constraints in the cloud. Note that ``reserved`` is not a
+  valid state for extend.
 
 - Sufficient amount of storage must exist to extend the volume.
 
 - The user quota must have sufficient volume storage.
+
+Postconditions
+
+- If the request is processed successfully, the volume status will change to
+  ``extending`` while the volume size is being extended.
+
+- Upon successful completion of the extend operation, the volume status will
+  go back to its original value.
+
+- Starting with microversion ``3.42``, when extending the size of an attached
+  volume, the Block Storage service will notify the Compute service that an
+  attached volume has been extended. The Compute service will asynchronously
+  process the volume size change for the related server instance. This can be
+  monitored using the ``GET /servers/{server_id}/os-instance-actions`` API in
+  the Compute service.
 
 Troubleshooting
 
@@ -62,7 +82,8 @@ Reset a volume's statuses
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
-Administrator only. Resets the status, attach status, and migration status for a volume. Specify the ``os-reset_status`` action in the request body.
+Administrator only. Resets the status, attach status, revert to snapshot,
+and migration status for a volume. Specify the ``os-reset_status`` action in the request body.
 
 Normal response codes: 202
 
@@ -86,9 +107,31 @@ Request Example
    :language: javascript
 
 
+Revert volume to snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
+Revert a volume to its latest snapshot, this API only support reverting a detached volume.
 
+Normal response codes: 202
+Error response codes: 400, 404
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id
+   - revert: revert
+   - snapshot_id: snapshot_id_4
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-revert-to-snapshot-request.json
+   :language: javascript
 
 
 Set image metadata for a volume
@@ -312,6 +355,10 @@ Change type of existing volume. Specify the ``os-retype`` action in the request 
 Change the volume type of existing volume, Cinder may migrate the volume to
 proper volume host according to the new volume type.
 
+Policy defaults enable only users with the administrative role or the owner of
+the volume to perform this operation. Cloud providers can change these
+permissions through the policy.json file.
+
 Normal response codes: 202
 
 
@@ -397,3 +444,64 @@ Request Example
 .. literalinclude:: ./samples/volume-bootable-status-update-request.json
    :language: javascript
 
+
+
+
+
+
+Upload volume to image
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Uploads the specified volume to image service.
+
+Normal response codes: 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-volume_upload_image: os-volume_upload_image
+   - image_name: image_name
+   - force: force_4
+   - disk_format: disk_format
+   - container_format: container_format
+   - visibility: visibility_1
+   - protected: protected
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-upload-to-image-request.json
+   :language: javascript
+
+Response Parameters
+-------------------
+
+.. rest_parameters:: parameters.yaml
+
+   - os-volume_upload_image: os-volume_upload_image
+   - status: status_3
+   - image_name: image_name
+   - disk_format: disk_format
+   - container_format: container_format
+   - visibility: visibility_1
+   - protected: protected
+   - updated_at: updated_at
+   - image_id: image_id
+   - display_description: description_9
+   - id: id_5
+   - size: size
+   - volume_type: volume_type_6
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-upload-to-image-response.json
+   :language: javascript

@@ -59,16 +59,18 @@ xms_init = {'xms': {1: {'version': '4.2.0',
                                "index": 1,
                                },
                               },
-            'targets': {'X1-SC2-fc1': {'index': 1, "name": "X1-SC2-fc1",
-                                       "port-address":
-                                       "21:00:00:24:ff:57:b2:36",
-                                       'port-state': 'up',
-                                       },
-                        'X1-SC2-fc2': {'index': 2, "name": "X1-SC2-fc2",
-                                       "port-address":
-                                       "21:00:00:24:ff:57:b2:55",
-                                       'port-state': 'up',
-                                       }
+            'targets': {'X1-SC2-target1': {'index': 1, "name": "X1-SC2-fc1",
+                                           "port-address":
+                                           "21:00:00:24:ff:57:b2:36",
+                                           'port-type': 'fc',
+                                           'port-state': 'up',
+                                           },
+                        'X1-SC2-target2': {'index': 2, "name": "X1-SC2-fc2",
+                                           "port-address":
+                                           "21:00:00:24:ff:57:b2:55",
+                                           'port-type': 'fc',
+                                           'port-state': 'up',
+                                           }
                         },
             'volumes': {},
             'initiator-groups': {},
@@ -1297,6 +1299,20 @@ class XtremIODriverFCTestCase(BaseXtremIODriverTestCase):
             i1['ig-id'] = ['', i1['ig-id'], 1]
         self.driver.terminate_connection(self.data.test_volume,
                                          self.data.connector)
+
+    def test_force_terminate_connection(self, req):
+        req.side_effect = xms_request
+        self.driver.create_volume(self.data.test_volume)
+        self.driver.initialize_connection(self.data.test_volume,
+                                          self.data.connector)
+        vol1 = xms_data['volumes'][1]
+        # lun mapping list is a list of triplets (IG OID, TG OID, lun number)
+        vol1['lun-mapping-list'] = [[['a91e8c81c2d14ae4865187ce4f866f8a',
+                                      'iqn.1993-08.org.debian:01:222',
+                                      1],
+                                     ['', 'Default', 1],
+                                    1]]
+        self.driver.terminate_connection(self.data.test_volume, None)
 
     def test_initialize_existing_ig_connection(self, req):
         req.side_effect = xms_request

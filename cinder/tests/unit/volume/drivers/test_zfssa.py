@@ -192,6 +192,33 @@ class TestZFSSAISCSIDriver(test.TestCase):
         self.drv.zfssa.create_replication_action.return_value = 'action-123'
         self.drv.zfssa.send_repl_update.return_value = True
 
+    @mock.patch.object(iscsi.LOG, 'warning')
+    @mock.patch.object(iscsi.LOG, 'error')
+    @mock.patch.object(iscsi, 'factory_zfssa')
+    def test_parse_initiator_config(self, _factory_zfssa, elog, wlog):
+        """Test the parsing of the old style initator config variables. """
+        lcfg = self.configuration
+
+        with mock.patch.object(lcfg, 'zfssa_initiator_config', ''):
+            # Test empty zfssa_initiator_group
+            with mock.patch.object(lcfg, 'zfssa_initiator_group', ''):
+                self.assertRaises(exception.InvalidConfigurationValue,
+                                  self.drv.do_setup, {})
+
+            # Test empty zfssa_initiator with zfssa_initiator_group set to
+            # a value other than "default"
+            with mock.patch.object(lcfg, 'zfssa_initiator', ''):
+                self.assertRaises(exception.InvalidConfigurationValue,
+                                  self.drv.do_setup, {})
+
+            # Test zfssa_initiator_group set to 'default' with non-empty
+            # zfssa_initiator.
+            with mock.patch.object(lcfg, 'zfssa_initiator_group', 'default'):
+                self.drv.do_setup({})
+                wlog.assert_called_with(mock.ANY,
+                                        {'inigrp': lcfg.zfssa_initiator_group,
+                                         'ini': lcfg.zfssa_initiator})
+
     def test_migrate_volume(self):
         self._util_migrate_volume_exceptions()
 
@@ -363,6 +390,19 @@ class TestZFSSAISCSIDriver(test.TestCase):
             project=lcfg.zfssa_project,
             lun=self.test_vol['name'])
 
+    def test_delete_volume_with_missing_lun(self):
+        self.drv.zfssa.get_lun.side_effect = exception.VolumeNotFound(
+            volume_id=self.test_vol['name'])
+        self.drv.delete_volume(self.test_vol)
+        self.drv.zfssa.delete_lun.assert_not_called()
+
+    def test_delete_volume_backend_fail(self):
+        self.drv.zfssa.get_lun.side_effect = \
+            exception.VolumeBackendAPIException(data='fakemsg')
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.drv.delete_volume,
+                          self.test_vol)
+
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_check_origin')
     def test_delete_cache_volume(self, _check_origin):
         lcfg = self.configuration
@@ -432,13 +472,16 @@ class TestZFSSAISCSIDriver(test.TestCase):
             self.test_snap['name'])
         self.drv.create_volume_from_snapshot(self.test_vol_snap,
                                              self.test_snap)
+        specs = self.drv._get_voltype_specs(self.test_vol)
+        specs.update({'custom:cinder_managed': True})
         self.drv.zfssa.clone_snapshot.assert_called_once_with(
             lcfg.zfssa_pool,
             lcfg.zfssa_project,
             self.test_snap['volume_name'],
             self.test_snap['name'],
             lcfg.zfssa_project,
-            self.test_vol_snap['name'])
+            self.test_vol_snap['name'],
+            specs)
 
     def test_create_larger_volume_from_snapshot(self):
         lcfg = self.configuration
@@ -453,39 +496,132 @@ class TestZFSSAISCSIDriver(test.TestCase):
         # use the larger test volume
         self.drv.create_volume_from_snapshot(self.test_vol2,
                                              self.test_snap)
+        specs = self.drv._get_voltype_specs(self.test_vol)
+        specs.update({'custom:cinder_managed': True})
         self.drv.zfssa.clone_snapshot.assert_called_once_with(
             lcfg.zfssa_pool,
             lcfg.zfssa_project,
             self.test_snap['volume_name'],
             self.test_snap['name'],
             lcfg.zfssa_project,
-            self.test_vol2['name'])
+            self.test_vol2['name'],
+            specs)
 
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
     def test_volume_attach_detach(self, _get_provider_info):
         lcfg = self.configuration
         test_target_iqn = 'iqn.1986-03.com.sun:02:00000-aaaa-bbbb-cccc-ddddd'
-        stub_val = {'provider_location':
-                    '%s %s 0' % (lcfg.zfssa_target_portal, test_target_iqn)}
-        self.drv._get_provider_info.return_value = stub_val
+        self.drv._get_provider_info.return_value = {
+            'provider_location': '%s %s' % (lcfg.zfssa_target_portal,
+                                            test_target_iqn)
+        }
 
-        connector = dict(initiator='iqn.1-0.org.deb:01:d7')
+        def side_effect_get_initiator_initiatorgroup(arg):
+            return [{
+                'iqn.1-0.org.deb:01:d7': 'test-init-grp1',
+                'iqn.1-0.org.deb:01:d9': 'test-init-grp2',
+            }[arg]]
+
+        self.drv.zfssa.get_initiator_initiatorgroup.side_effect = (
+            side_effect_get_initiator_initiatorgroup)
+
+        initiator = 'iqn.1-0.org.deb:01:d7'
+        initiator_group = 'test-init-grp1'
+        lu_number = '246'
+
+        self.drv.zfssa.get_lun.side_effect = iter([
+            {'initiatorgroup': [], 'number': []},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+        ])
+
+        connector = dict(initiator=initiator)
         props = self.drv.initialize_connection(self.test_vol, connector)
-        self.drv._get_provider_info.assert_called_once_with(self.test_vol)
+        self.drv._get_provider_info.assert_called_once_with()
         self.assertEqual('iscsi', props['driver_volume_type'])
         self.assertEqual(self.test_vol['id'], props['data']['volume_id'])
         self.assertEqual(lcfg.zfssa_target_portal,
                          props['data']['target_portal'])
         self.assertEqual(test_target_iqn, props['data']['target_iqn'])
-        self.assertEqual(0, props['data']['target_lun'])
+        self.assertEqual(int(lu_number), props['data']['target_lun'])
         self.assertFalse(props['data']['target_discovered'])
-
-        self.drv.terminate_connection(self.test_vol, '')
-        self.drv.zfssa.set_lun_initiatorgroup.assert_called_once_with(
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
             lcfg.zfssa_pool,
             lcfg.zfssa_project,
             self.test_vol['name'],
-            '')
+            [initiator_group])
+
+        self.drv.terminate_connection(self.test_vol, connector)
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [])
+
+    @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
+    def test_volume_attach_detach_live_migration(self, _get_provider_info):
+        lcfg = self.configuration
+        test_target_iqn = 'iqn.1986-03.com.sun:02:00000-aaaa-bbbb-cccc-ddddd'
+        self.drv._get_provider_info.return_value = {
+            'provider_location': '%s %s' % (lcfg.zfssa_target_portal,
+                                            test_target_iqn)
+        }
+
+        def side_effect_get_initiator_initiatorgroup(arg):
+            return [{
+                'iqn.1-0.org.deb:01:d7': 'test-init-grp1',
+                'iqn.1-0.org.deb:01:d9': 'test-init-grp2',
+            }[arg]]
+
+        self.drv.zfssa.get_initiator_initiatorgroup.side_effect = (
+            side_effect_get_initiator_initiatorgroup)
+
+        src_initiator = 'iqn.1-0.org.deb:01:d7'
+        src_initiator_group = 'test-init-grp1'
+        src_connector = dict(initiator=src_initiator)
+        src_lu_number = '123'
+
+        dst_initiator = 'iqn.1-0.org.deb:01:d9'
+        dst_initiator_group = 'test-init-grp2'
+        dst_connector = dict(initiator=dst_initiator)
+        dst_lu_number = '456'
+
+        # In the beginning, the LUN is already presented to the source
+        # node. During initialize_connection(), and at the beginning of
+        # terminate_connection(), it's presented to both nodes.
+        self.drv.zfssa.get_lun.side_effect = iter([
+            {'initiatorgroup': [src_initiator_group],
+             'number': [src_lu_number]},
+            {'initiatorgroup': [dst_initiator_group, src_initiator_group],
+             'number': [dst_lu_number, src_lu_number]},
+            {'initiatorgroup': [dst_initiator_group, src_initiator_group],
+             'number': [dst_lu_number, src_lu_number]},
+        ])
+
+        # Before migration, the volume gets connected to the destination
+        # node (whilst still connected to the source node), so it should
+        # be presented to the initiator groups for both
+        props = self.drv.initialize_connection(self.test_vol, dst_connector)
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [src_initiator_group, dst_initiator_group])
+
+        # LU number must be an int -
+        # https://bugs.launchpad.net/cinder/+bug/1538582
+        # and must be the LU number for the destination node's
+        # initiatorgroup (where the connection was just initialized)
+        self.assertEqual(int(dst_lu_number), props['data']['target_lun'])
+
+        # After migration, the volume gets detached from the source node
+        # so it should be present to only the destination node
+        self.drv.terminate_connection(self.test_vol, src_connector)
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [dst_initiator_group])
 
     def test_volume_attach_detach_negative(self):
         self.drv.zfssa.get_initiator_initiatorgroup.return_value = []
@@ -610,6 +746,8 @@ class TestZFSSAISCSIDriver(test.TestCase):
                                              img_location,
                                              small_img,
                                              img_service)
+        specs = fakespecs
+        specs.update({'custom:cinder_managed': True})
         self.drv._verify_cache_volume.assert_called_once_with(fakecontext,
                                                               small_img,
                                                               img_service,
@@ -621,7 +759,8 @@ class TestZFSSAISCSIDriver(test.TestCase):
             cache_vol,
             cache_snap,
             lcfg.zfssa_project,
-            self.test_vol2['name'])
+            self.test_vol2['name'],
+            specs)
 
         self.drv.extend_volume.assert_called_once_with(self.test_vol2,
                                                        self.test_vol2['size'])
@@ -924,6 +1063,8 @@ class TestZFSSANFSDriver(test.TestCase):
         self.configuration.zfssa_enable_local_cache = True
         self.configuration.zfssa_cache_directory = zfssa_cache_dir
         self.configuration.nfs_sparsed_volumes = 'true'
+        self.configuration.nfs_mount_point_base = '$state_path/mnt'
+        self.configuration.nfs_mount_options = None
         self.configuration.zfssa_manage_policy = 'strict'
 
     def test_setup_nfs_client(self):
@@ -1527,7 +1668,8 @@ class TestZFSSAApi(test.TestCase):
                                   self.vol,
                                   self.snap,
                                   self.project,
-                                  self.clone)
+                                  self.clone,
+                                  None)
         expected_svc = '/api/storage/v1/pools/' + self.pool + '/projects/' + \
             self.project + '/luns/' + self.vol + '/snapshots/' + self.snap + \
             '/clone'

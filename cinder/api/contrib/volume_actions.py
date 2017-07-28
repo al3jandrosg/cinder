@@ -61,7 +61,7 @@ class VolumeActionsController(wsgi.Controller):
         # Not found exception will be handled at the wsgi level
         volume = self.volume_api.get(context, id)
 
-        # instance uuid is an option now
+        # instance UUID is an option now
         instance_uuid = None
         if 'instance_uuid' in body['os-attach']:
             instance_uuid = body['os-attach']['instance_uuid']
@@ -188,7 +188,7 @@ class VolumeActionsController(wsgi.Controller):
                                                          connector)
         except exception.InvalidInput as err:
             raise webob.exc.HTTPBadRequest(
-                explanation=err)
+                explanation=err.msg)
         except exception.VolumeBackendAPIException:
             msg = _("Unable to fetch connection information from backend.")
             raise webob.exc.HTTPInternalServerError(explanation=msg)
@@ -303,10 +303,12 @@ class VolumeActionsController(wsgi.Controller):
             raise webob.exc.HTTPBadRequest(explanation=six.text_type(error))
         return {'os-volume_upload_image': response}
 
+    @wsgi.response(http_client.ACCEPTED)
     @wsgi.action('os-extend')
     def _extend(self, req, id, body):
         """Extend size of volume."""
         context = req.environ['cinder.context']
+        req_version = req.api_version_request
         # Not found exception will be handled at the wsgi level
         volume = self.volume_api.get(context, id)
 
@@ -317,11 +319,12 @@ class VolumeActionsController(wsgi.Controller):
             raise webob.exc.HTTPBadRequest(explanation=msg)
 
         try:
-            self.volume_api.extend(context, volume, size)
+            if req_version.matches("3.42") and volume.status in ['in-use']:
+                self.volume_api.extend_attached_volume(context, volume, size)
+            else:
+                self.volume_api.extend(context, volume, size)
         except exception.InvalidVolume as error:
             raise webob.exc.HTTPBadRequest(explanation=error.msg)
-
-        return webob.Response(status_int=http_client.ACCEPTED)
 
     @wsgi.action('os-update_readonly_flag')
     def _volume_readonly_update(self, req, id, body):

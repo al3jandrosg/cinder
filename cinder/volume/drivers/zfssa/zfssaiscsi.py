@@ -28,6 +28,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import interface
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume.drivers.zfssa import zfssarest
@@ -91,7 +92,7 @@ ZFSSA_OPTS = [
                help='Driver policy for volume manage.')
 ]
 
-CONF.register_opts(ZFSSA_OPTS)
+CONF.register_opts(ZFSSA_OPTS, group=configuration.SHARED_CONF_GROUP)
 
 ZFSSA_LUN_SPECS = {
     'zfssa:volblocksize',
@@ -118,8 +119,10 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             Local cache feature.
         1.0.2:
             Volume manage/unmanage support.
+        1.0.3:
+            Fix multi-connect to enable live-migration (LP#1565051).
     """
-    VERSION = '1.0.2'
+    VERSION = '1.0.3'
     protocol = 'iSCSI'
 
     # ThirdPartySystems wiki page
@@ -194,36 +197,39 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         else:
             LOG.warning('zfssa_initiator_config not found. '
                         'Using deprecated configuration options.')
+
+            if not lcfg.zfssa_initiator_group:
+                LOG.error('zfssa_initiator_group cannot be empty. '
+                          'Explicitly set the value "default" to use '
+                          'the default initiator group.')
+                raise exception.InvalidConfigurationValue(
+                    value='', option='zfssa_initiator_group')
+
             if (not lcfg.zfssa_initiator and
-                (not lcfg.zfssa_initiator_group and
-                 lcfg.zfssa_initiator_group != 'default')):
+               lcfg.zfssa_initiator_group != 'default'):
                 LOG.error('zfssa_initiator cannot be empty when '
                           'creating a zfssa_initiator_group.')
                 raise exception.InvalidConfigurationValue(
-                    value='',
-                    option='zfssa_initiator')
+                    value='', option='zfssa_initiator')
 
-            if (lcfg.zfssa_initiator != '' and
-                (lcfg.zfssa_initiator_group == '' or
-                 lcfg.zfssa_initiator_group == 'default')):
-                LOG.warning('zfssa_initiator: %(ini)s  wont be used on '
-                            'zfssa_initiator_group= %(inigrp)s.',
-                            {'ini': lcfg.zfssa_initiator,
-                             'inigrp': lcfg.zfssa_initiator_group})
+            if lcfg.zfssa_initiator != '':
+                if lcfg.zfssa_initiator_group == 'default':
+                    LOG.warning('zfssa_initiator: %(ini)s wont be used on '
+                                'zfssa_initiator_group= %(inigrp)s.',
+                                {'ini': lcfg.zfssa_initiator,
+                                 'inigrp': lcfg.zfssa_initiator_group})
 
-            # Setup initiator and initiator group
-            if (lcfg.zfssa_initiator != '' and
-               lcfg.zfssa_initiator_group != '' and
-               lcfg.zfssa_initiator_group != 'default'):
-                for initiator in lcfg.zfssa_initiator.split(','):
-                    initiator = initiator.strip()
-                    self.zfssa.create_initiator(
-                        initiator,
-                        lcfg.zfssa_initiator_group + '-' + initiator,
-                        chapuser=lcfg.zfssa_initiator_user,
-                        chapsecret=lcfg.zfssa_initiator_password)
-                    self.zfssa.add_to_initiatorgroup(
-                        initiator, lcfg.zfssa_initiator_group)
+                # Setup initiator and initiator group
+                else:
+                    for initiator in lcfg.zfssa_initiator.split(','):
+                        initiator = initiator.strip()
+                        self.zfssa.create_initiator(
+                            initiator,
+                            lcfg.zfssa_initiator_group + '-' + initiator,
+                            chapuser=lcfg.zfssa_initiator_user,
+                            chapsecret=lcfg.zfssa_initiator_password)
+                        self.zfssa.add_to_initiatorgroup(
+                            initiator, lcfg.zfssa_initiator_group)
 
         # Parse interfaces
         interfaces = []
@@ -279,27 +285,14 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
 
             self.zfssa.verify_target(self._get_target_alias())
 
-    def _get_provider_info(self, volume, lun=None):
+    def _get_provider_info(self):
         """Return provider information."""
         lcfg = self.configuration
-        project = lcfg.zfssa_project
-        if ((lcfg.zfssa_enable_local_cache is True) and
-                (volume['name'].startswith('os-cache-vol-'))):
-            project = lcfg.zfssa_cache_project
-
-        if lun is None:
-            lun = self.zfssa.get_lun(lcfg.zfssa_pool,
-                                     project,
-                                     volume['name'])
-
-        if isinstance(lun['number'], list):
-            lun['number'] = lun['number'][0]
 
         if self.tgtiqn is None:
             self.tgtiqn = self.zfssa.get_target(self._get_target_alias())
 
-        loc = "%s %s %s" % (self.zfssa_target_portal, self.tgtiqn,
-                            lun['number'])
+        loc = "%s %s" % (self.zfssa_target_portal, self.tgtiqn)
         LOG.debug('_get_provider_info: provider_location: %s', loc)
         provider = {'provider_location': loc}
         if lcfg.zfssa_target_user != '' and lcfg.zfssa_target_password != '':
@@ -323,24 +316,23 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                               lcfg.zfssa_target_group,
                               specs)
 
+    @utils.trace
     def delete_volume(self, volume):
         """Deletes a volume with the given volume['name']."""
-        LOG.debug('zfssa.delete_volume: name=%s', volume['name'])
         lcfg = self.configuration
 
         try:
             lun2del = self.zfssa.get_lun(lcfg.zfssa_pool,
                                          lcfg.zfssa_project,
                                          volume['name'])
-        except exception.VolumeBackendAPIException as ex:
-            # NOTE(jdg): This will log an error and continue
-            # if for some reason the volume no longer exists
-            # on the backend
-            if 'Error Getting Volume' in ex.message:
-                LOG.error("Volume ID %s was not found on "
-                          "the zfssa device while attempting "
-                          "delete_volume operation.", volume['id'])
-                return
+        except exception.VolumeNotFound:
+            # Sometimes a volume exists in cinder for which there is no
+            # corresponding LUN (e.g. LUN create failed). In this case,
+            # allow deletion to complete (without doing anything on the
+            # ZFSSA). Any other exception should be passed up.
+            LOG.warning('No LUN found on ZFSSA corresponding to volume '
+                        'ID %s.', volume['id'])
+            return
 
         # Delete clone temp snapshot. see create_cloned_volume()
         if 'origin' in lun2del and 'id' in volume:
@@ -425,17 +417,22 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             LOG.error(exception_msg)
             raise exception.InvalidInput(reason=exception_msg)
 
+        specs = self._get_voltype_specs(volume)
+        specs.update({'custom:cinder_managed': True})
+
         self.zfssa.clone_snapshot(lcfg.zfssa_pool,
                                   lcfg.zfssa_project,
                                   snapshot['volume_name'],
                                   snapshot['name'],
                                   lcfg.zfssa_project,
-                                  volume['name'])
+                                  volume['name'],
+                                  specs)
 
         if child_size > parent_size:
             LOG.debug('zfssa.create_volume_from_snapshot:  '
-                      'Parent size [%d], Child size [%d] - '
-                      'resizing' % (parent_size, child_size))
+                      'Parent size [%(parent_size)d], '
+                      'Child size [%(child_size)d] - resizing',
+                      {'parent_size': parent_size, 'child_size': child_size})
             self.zfssa.set_lun_props(lcfg.zfssa_pool,
                                      lcfg.zfssa_project,
                                      volume['name'],
@@ -578,6 +575,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             return None, False
 
         specs = self._get_voltype_specs(volume)
+        specs.update({'custom:cinder_managed': True})
         cachevol_props = {'size': cachevol_size_gb}
 
         try:
@@ -593,7 +591,8 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                                       cache_vol,
                                       cache_snap,
                                       lcfg.zfssa_project,
-                                      volume['name'])
+                                      volume['name'],
+                                      specs)
             if cachevol_size_gb < volume['size']:
                 self.extend_volume(volume, volume['size'])
         except exception.VolumeBackendAPIException as exc:
@@ -746,7 +745,9 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         """Not implemented."""
         pass
 
+    @utils.trace
     def initialize_connection(self, volume, connector):
+        """Driver entry point to setup a connection for a volume."""
         lcfg = self.configuration
         init_groups = self.zfssa.get_initiator_initiatorgroup(
             connector['initiator'])
@@ -765,19 +766,37 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         else:
             project = lcfg.zfssa_project
 
-        for initiator_group in init_groups:
-            self.zfssa.set_lun_initiatorgroup(lcfg.zfssa_pool,
-                                              project,
-                                              volume['name'],
-                                              initiator_group)
-        iscsi_properties = {}
-        provider = self._get_provider_info(volume)
+        lun = self.zfssa.get_lun(lcfg.zfssa_pool, project, volume['name'])
 
-        (target_portal, iqn, lun) = provider['provider_location'].split()
+        # Construct a set (to avoid duplicates) of initiator groups by
+        # combining the list to which the LUN is already presented with
+        # the list for the new connector.
+        new_init_groups = set(lun['initiatorgroup'] + init_groups)
+        self.zfssa.set_lun_initiatorgroup(lcfg.zfssa_pool,
+                                          project,
+                                          volume['name'],
+                                          sorted(list(new_init_groups)))
+
+        iscsi_properties = {}
+        provider = self._get_provider_info()
+
+        (target_portal, target_iqn) = provider['provider_location'].split()
         iscsi_properties['target_discovered'] = False
         iscsi_properties['target_portal'] = target_portal
-        iscsi_properties['target_iqn'] = iqn
-        iscsi_properties['target_lun'] = int(lun)
+        iscsi_properties['target_iqn'] = target_iqn
+
+        # Get LUN again to discover new initiator group mapping
+        lun = self.zfssa.get_lun(lcfg.zfssa_pool, project, volume['name'])
+
+        # Construct a mapping of LU number to initiator group.
+        lu_map = dict(zip(lun['initiatorgroup'], lun['number']))
+
+        # When an initiator is a member of multiple groups, and a LUN is
+        # presented to all of them, the same LU number is assigned to all of
+        # them, so we can use the first initator group containing the
+        # initiator to lookup the right LU number in our mapping
+        iscsi_properties['target_lun'] = int(lu_map[init_groups[0]])
+
         iscsi_properties['volume_id'] = volume['id']
 
         if 'provider_auth' in provider:
@@ -792,18 +811,34 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             'data': iscsi_properties
         }
 
+    @utils.trace
     def terminate_connection(self, volume, connector, **kwargs):
         """Driver entry point to terminate a connection for a volume."""
-        LOG.debug('terminate_connection: volume name: %s.', volume['name'])
         lcfg = self.configuration
         project = lcfg.zfssa_project
-        if ((lcfg.zfssa_enable_local_cache is True) and
-                (volume['name'].startswith('os-cache-vol-'))):
-            project = lcfg.zfssa_cache_project
-        self.zfssa.set_lun_initiatorgroup(lcfg.zfssa_pool,
+        pool = lcfg.zfssa_pool
+
+        # If connector is None, assume that we're expected to disconnect
+        # the volume from all initiators
+        if connector is None:
+            new_init_groups = []
+        else:
+            connector_init_groups = self.zfssa.get_initiator_initiatorgroup(
+                connector['initiator'])
+            if ((lcfg.zfssa_enable_local_cache is True) and
+                    (volume['name'].startswith('os-cache-vol-'))):
+                project = lcfg.zfssa_cache_project
+            lun = self.zfssa.get_lun(pool, project, volume['name'])
+            # Construct the new set of initiator groups, starting with the list
+            # that the volume is currently connected to, then removing those
+            # associated with the connector that we're detaching from
+            new_init_groups = set(lun['initiatorgroup'])
+            new_init_groups -= set(connector_init_groups)
+
+        self.zfssa.set_lun_initiatorgroup(pool,
                                           project,
                                           volume['name'],
-                                          '')
+                                          sorted(list(new_init_groups)))
 
     def _get_voltype_specs(self, volume):
         """Get specs suitable for volume creation."""

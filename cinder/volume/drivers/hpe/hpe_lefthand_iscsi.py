@@ -47,6 +47,7 @@ from cinder.i18n import _
 from cinder import interface
 from cinder.objects import fields
 from cinder import utils as cinder_utils
+from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume import utils
@@ -98,7 +99,7 @@ hpelefthand_opts = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(hpelefthand_opts)
+CONF.register_opts(hpelefthand_opts, group=configuration.SHARED_CONF_GROUP)
 
 MIN_API_VERSION = "1.1"
 MIN_CLIENT_VERSION = '2.1.0'
@@ -1491,7 +1492,7 @@ class HPELeftHandISCSIDriver(driver.ISCSIDriver):
 
     # v2 replication methods
     @cinder_utils.trace
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Force failover to a secondary replication target."""
         if secondary_id and secondary_id == self.FAILBACK_VALUE:
             volume_update_list = self._replication_failback(volumes)
@@ -1574,7 +1575,7 @@ class HPELeftHandISCSIDriver(driver.ISCSIDriver):
 
             self._active_backend_id = target_id
 
-        return target_id, volume_update_list
+        return target_id, volume_update_list, []
 
     def _do_replication_setup(self):
         default_san_ssh_port = self.configuration.hpelefthand_ssh_port
@@ -1730,7 +1731,7 @@ class HPELeftHandISCSIDriver(driver.ISCSIDriver):
                     schedule = ''.join(schedule)
                     # We need to check the status of the schedule to make sure
                     # it is not paused.
-                    result = re.search(".*paused\s+(\w+)", schedule)
+                    result = re.search(r".*paused\s+(\w+)", schedule)
                     is_schedule_active = result.group(1) == 'false'
 
                     volume_info = cl.getVolumeByName(volume['name'])

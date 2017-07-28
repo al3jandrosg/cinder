@@ -87,6 +87,7 @@ Response Parameters
    - is_incremental: is_incremental
    - data_timestamp: data_timestamp
    - snapshot_id: snapshot_id_2
+   - os-backup-project-attr:project_id: os-backup-project-attr:project_id
 
 Response Example
 ----------------
@@ -139,6 +140,7 @@ Response Parameters
    - is_incremental: is_incremental
    - data_timestamp: data_timestamp
    - snapshot_id: snapshot_id_2
+   - os-backup-project-attr:project_id: os-backup-project-attr:project_id
 
 Response Example
 ----------------
@@ -247,6 +249,52 @@ Response Parameters
    - id: id
    - links: links
    - name: name
+
+
+Update a backup
+~~~~~~~~~~~~~~~
+
+.. rest_method::  PUT /v3/{project_id}/backups/{backup_id}
+
+Update a Block Storage backup. This API is available since v3.9.
+
+Normal response codes: 202,
+Error response codes: Bad Request(400)
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - backup_id: backup_id
+   - backup: backup
+   - description: description
+   - name: name_optional
+
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/backup-update-request.json
+   :language: javascript
+
+Response Parameters
+-------------------
+
+.. rest_parameters:: parameters.yaml
+
+   - backup: backup
+   - id: id
+   - links: links
+   - name: name
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/backup-update-response.json
+   :language: javascript
+
 
 List backups for project
 ~~~~~~~~~~~~~~~~~~~~~~~~

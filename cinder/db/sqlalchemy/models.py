@@ -193,6 +193,8 @@ class Group(BASE, CinderBase):
     group_snapshot_id = Column(String(36))
     source_group_id = Column(String(36))
 
+    replication_status = Column(String(255))
+
 
 class Cgsnapshot(BASE, CinderBase):
     """Represents a cgsnapshot."""
@@ -753,6 +755,20 @@ class Backup(BASE, CinderBase):
         return fail_reason and fail_reason[:255] or ''
 
 
+class BackupMetadata(BASE, CinderBase):
+    """Represents a metadata key/value pair for a backup."""
+    __tablename__ = 'backup_metadata'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(255))
+    value = Column(String(255))
+    backup_id = Column(String(36), ForeignKey('backups.id'), nullable=False)
+    backup = relationship(Backup, backref="backup_metadata",
+                          foreign_keys=backup_id,
+                          primaryjoin='and_('
+                          'BackupMetadata.backup_id == Backup.id,'
+                          'BackupMetadata.deleted == False)')
+
+
 class Encryption(BASE, CinderBase):
     """Represents encryption requirement for a volume type.
 
@@ -811,15 +827,19 @@ class Message(BASE, CinderBase):
     """Represents a message"""
     __tablename__ = 'messages'
     id = Column(String(36), primary_key=True, nullable=False)
-    project_id = Column(String(36), nullable=False)
+    project_id = Column(String(255), nullable=False)
     # Info/Error/Warning.
     message_level = Column(String(255), nullable=False)
     request_id = Column(String(255), nullable=True)
     resource_type = Column(String(255))
-    # The uuid of the related resource.
+    # The UUID of the related resource.
     resource_uuid = Column(String(36), nullable=True)
     # Operation specific event ID.
     event_id = Column(String(255), nullable=False)
+    # Message detail ID.
+    detail_id = Column(String(10), nullable=True)
+    # Operation specific action.
+    action_id = Column(String(10), nullable=True)
     # After this time the message may no longer exist
     expires_at = Column(DateTime, nullable=True)
 

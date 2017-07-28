@@ -1,14 +1,264 @@
 CHANGES
 =======
 
+11.0.0.0b3
+----------
+
+* Update backend state when extending volume
+* Handle concurrent volume creation request
+* [DOC BLD FIX] Correct json code block in attachments
+* [DOC BLD FIX] Fix docstring error in fakes.rst
+* Revert MySQL Cluster Support until an approach is worked out
+* [DOC BLD FIX] Add code:: blocks to manager.py
+* [DOC BLD FIX] Fix docstring problems in vzstorage driver
+* [DOC BLD FIX] Fix dosctring errors in veritas driver
+* Fix no feature to enable 'exclusive-lock' of image in ceph
+* [DOC BLD FIX] Fix docstring issues in hpmsa driver
+* Mark Tegile driver as unsupported
+* [DOC BLD FIX] Fix docstring errors in reduxio
+* Updated from global requirements
+* Support metadata for backup resource
+* Use OVO for test\_backup
+* Fix release notes link
+* [DOC BLD FIX] Fix docstring errors in nexenta driver
+* Remove references to dothill driver options
+* [DOC BLD FIX] Fix netapp docstring issues
+* [DOC BLD FIX] Fix docstring errors in VNX driver
+* Add cinder backup service initialize check
+* [DOC BLD FIX] Fix docstring issues in ibm\_storage
+* NetApp cDOT: Support generic groups for file
+* [DOC BLD FIX] Fix docstring issues for Hitachi HNAS driver
+* Updated from global requirements
+* [DOC BLD FIX] Correct docstring errors in falconstor driver
+* [DOC BLD FIX] Fix docstring issues in dothill driver
+* [DOC BLD FIX] Correct dosctring errors in disco driver
+* Fix test\_scheduler\_stats error module calls
+* Add VNX replication group support
+* [DOC BLD FIX] Fix docstring errors for VMAX driver
+* Updated from global requirements
+* Update group status
+* [DOC BLD FIX] Fix formatting error in driver.py
+* LVM: Activate LV before creating exports
+* Disable merge snapshot to volume for thin LVM
+* Do not delete group if group snapshot exists
+* ProphetStor: Support generic group
+* Updated from global requirements
+* VMAX driver - bootable volume errors
+* [DOC BLD FIX] Fix formatting errors in Dell/EMC PS
+* VMAX driver - Implement Generic Volume Group feature
+* [DOC BLD FIX] Fix docstring errors in Dell/EMC Unity
+* [DOC BLD FIX] correct formatting errors in datera driver
+* 3PAR: Get host from os-brick
+* Change Huawei driver's private data storing place
+* 3PAR: Modify update\_migrated\_volume code to driver
+* ZFSSA iSCSI delete volume with non-existent LUN
+* Make doc/source directory compliant with design in spec
+* Remove key\_manager.api\_class hack
+* Don't verify format with autodetect after image conversion
+* Add support for OS-Brick force disconnect
+* [api-ref] Backups: change parameter 'backup\_id' to be mandatory
+* Fix 'connector' parameter in update attachments API
+* Enables MySQL Cluster Support for Cinder
+* Added CG capability to volume group in CoprHD
+* coordination: use tooz builtin heartbeat feature
+* [DOC BLD FIX] Add missing glossaries
+* Updated from global requirements
+* ScaleIO Driver: Updating config reference
+* ZFSSA iSCSI volume driver multi-connect
+* Move config-reference to configuration
+* XIV\A9000: Added replication group support
+* [DOC BLD FIX] Fix code block issues
+* VNX: ignore cg creation if group is not cg enabled
+* Updated from global requirements
+* Add missing api-ref documents for group type specs
+* [DOC BLD FIX] Remove todo:: directive from volume\_driver
+* [DOC BLD FIX] Fix docstring formatting in message\_field
+* ZFSSA: apply LUN specs when cloning snapshots
+* [DOC BLD FIX] Fix formatting in cinder.compute.nova
+* Migrate configuration-reference to Cinder repo
+* enabling nimble driver again
+* coordination: remove custom Lock object
+* [api-ref]Fix API Doc error in creating backup
+* ScaleIO Driver: Fix transposing of PD and SP in list of pools
+* Updated from global requirements
+* [DOC BLD FIX] Fix indentation in attachments.py
+* [DOC BLD FIX] Correct :returns: in db/api.py
+* Pop "consistencygroup" from volume object
+* NEC driver: Optimal path for non-disruptive backup
+* Ignore all .egg-info directories in doc8 check
+* INFINIDAT: support for volume compression
+* Update Documentation link
+* 3PAR: Add volume to consistency/generic group
+* DS8K driver: specify pool and lss in extra-specs
+* Update contents of attach\_detach\_conventions\_v2.rst
+* VMAX - Live Migration, replacing SMI-S with REST
+* VMAX driver - Replication, replacing SMI-S with REST
+* Dell EMC SC: Terminate\_connection chokes on None
+* Revert "Correct RBD Provision stats&fix a perf problem"
+* zfssaiscsi driver initiator group option processing
+* Make VolumeTypeExtraSpecsController policy more granular
+* Add ability to extend 'in-use' volume
+* ScaleIo Driver: refactor config options
+* Remove dothill driver options
+* Add insufficient space async error in create vol
+* Globalize regex objects
+* Fix python 3.6 escape char warnings in strings
+* Add support for shared "backend\_defaults" config
+* Tintri: Fix config option access
+* INFINIDAT: Add QoS support
+* Fix SSHPool current\_size not work correctly
+* Tiramisu: Add groups param to failover\_host
+* Keep consistent of naming convention
+* Migrate Cinder Scheduling CLI documentation
+* Migrate Cinder CLI Quota docs
+* Migrate volume management CLI documentation
+* Migrate the blockstorage admin-guide to Cinder
+* Restore ability to disable API versions
+* Fix errors preventing doc builds
+* VMAX driver - Compression, replacing SMI-S with REST
+* VMAX driver - QoS, replacing SMI-S with REST
+* Fix some reST field lists in docstrings
+* VNX: wrong size of volume from image cache
+* Update attachment\_delete for multiple attachments
+* Fix v1 API api-ref link
+* Fix Log parameter
+* Add snapshot clean worker decorator
+* Remove periodic\_tasks method from base manager
+* Add params for API v3 snapshot-create
+* Modify the length of project\_id for Messages
+* Fix volume migration error with NEC driver
+* Fix the inappropriate parameter name
+* Switch to openstackdocstheme
+* Enable H904 check
+* LVM: Don't initialize VG with lvm\_type='auto'
+* Fix attachment\_delete for reserved case
+* Fix wrong usage of rbd.list\_snaps return value
+* XtremIO: fix fetching FC targets from X2 array
+* Revert "Don't use ignoreskipactivation for thin LVM"
+* Api-ref: Update doc for show backups
+* api-ref: Add parameter "offset" to list apis
+* Use GroupSnapshotStatus enum field
+* Add 'reserved' status to api-ref
+* Rename method 'delete' to 'delete\_backup' in backup drivers
+* Optimize: Replace 'fields.Enum' with 'object'
+* Unify host naming in readme file
+* Move driver options to "backend\_defaults" section
+* Use SnapshotStatus enum field
+* Improve Capacity filter logging
+* IBM Storage: fix create volume with --group-id
+* Add 'LUNType' configuration verification for Dorado array
+* Unity: temp snapshot for backup deleted twice
+* Use GroupStatus enum field
+* XtremIO: Detach all IGs for null connector
+* Remove dothill driver
+* Datera 2.4.0 driver update
+* Fix image cache db query when limits are enabled
+* Don't use ignoreskipactivation for thin LVM
+* Fix exception in dothill iSCSI driver's terminate\_connection
+* Updated from global requirements
+* Allow extension of volumes with snapshots for SMBfs driver
+* Windows iSCSI: use configured iSCSI portals
+* Add gmcv support in SVC driver
+* VMware: Fix volume cascade delete
+* Fix wording in warning message
+* Remove extra space in release note
+* Fix rally "volume\_type" parameter
+* Add custom keyring when initializing RBD connection
+* Use 'min\_version' to mark newly added parameters in DOC
+* Update log translation hacking rule
+* VNX: Add QoS support
+* remove extra characters "/"
+* [Api-ref] Update quota-set APIs ref
+* Api-ref: Add upload-to-image api-ref
+* Fix driver exception when cascade deleting volume after transferring
+* Rename DB Driver param for backup drivers to 'db'
+* IBM Storage: Fix for misidentification of QoS type
+* Unity: Use thin clone when cloning volume
+* Show user\_id when cinder snapshot-show
+* Tempest for revert-to-snapshot
+* SMBFS: enhance volume cloning
+* import installation guide pages from openstack-manuals
+* ScaleIO Driver: Fix for using scheduler specified pool
+* IBM Storage - Fix vol create from snapshot in CG
+* Replace OS\_AUTH\_TYPE with OS\_AUTH\_SYSTEM in rc
+* Windows: case insensitive path comparisons
+* Api-ref: add documentation for v2/v3 backup 'os-reset\_status' action
+* Add note about stop supporting of log translation
+* VNX: failed to create from image cache
+* Add policy granularity to the qos-specs API
+* Fix i18n issues
+* Allow extension of volumes with snapshots for Quobyte driver
+* Add params for v3 API volume-type-create
+* Use exception.CinderException instead of Exception
+* Performance: Remove useless snapshot object get
+* Remove redundant notification
+* Provide user friendly messages for db sync
+* [XIV] Fix exception message format issue
+* Enable some off-by-default checks
+* ScaleIO: Logging cleanup
+* Fix assertTrue in functional tests
+* Cinder volume revert to snapshot
+* Fix connection\_info field in VolumeAttachment object
+* Fix bugs while integrated with Huawei Dorado array
+* Remove the redundant volume/snapshot check
+* Updated from global requirements
+* VNX: cg and generic group cleanup
+* Add IBM-Storage replication group support
+* VMAX driver - Retype, replacing SMI-S with REST
+* Storwize Support iSCSI host when FC volume is there
+* Add enable\_lazy in api/openstack/wsgi.py
+* [api-ref] Add snapshot metadata key api
+* [api-ref] Update volume metadata key api
+* Add project\_id admin filter to limits API
+* Add thin-provisioning-tools to bindep
+* Set default lvm\_type to auto
+* Fix migration completion for New Attach API's
+* Explicit user messages
+* api-ref: clarify retype docs around default policy permissions
+* Updated from global requirements
+* Tests: Disallow use of assertTrue(str)
+* Add the missing brace in api/v3/attachment
+* Remove duplicated line from \_do\_attachment\_delete
+* ScaleIO - Make compatible with next SIO version
+* Add backup to cinder architecture page
+* Fix response code for update and delete API in volume attachments
+* IBM-Storage: group-create-from-src fail with error
+* Add rel note for create volume from enc. image
+* ignore error when remove non-exist vol from cg
+* Mock time.sleep for VMAXRestTest.test\_remove\_vol\_from\_sg\_failed
+* Remove deprecated oslo\_messaging.get\_transport
+* ScaleIO Driver: get manageable volumes
+* Mark ZTE driver as unsupported
+* Add CG capability to generic groups in GPFS driver
+* FusionStorage: use versioned objects
+* Clarify some details related blockbox deployment
+* IBM Storage- revert vol size capacity optimization
+* Send global\_request\_id to nova/glance when calls are made
+* Remove usage of CONF from DISCO driver
+* Add Metadata format check
+* Fix boolean opts defined as strings
+
 11.0.0.0b2
 ----------
 
+* Allow Pure drivers to handle detach with no host
+* RemoteFS: enable image volume cache
+* Ibm storage: added new option for qos type
+* Fix api-ref for v3 volume and snapshot manage
+* Fix NoneType has no attribute get error
+* Api-ref: fix parameter 'volume\_id' info
+* Refactor update attachment's testcases
+* Api-ref: Add doc for update backup
+* Replace deprecated BaseException.message with six.text\_type
+* Use requests lib for Huawei array connection
 * Add libssl to bindep
 * Revert "Using assertFalse(A) instead of assertEqual(False, A)"
 * VMAX driver - Base functionality, replacing SMI-S with REST
+* Clarify create\_volume size debug message
+* INFINIDAT: add metadata to InfiniBox objects
 * Using assertFalse(A) instead of assertEqual(False, A)
 * Correct cinder dev doc typo
+* Mark Virtuozzo driver as unsupported
 * Dell EMC SC: Updated Created by Message
 * Add warning header to opts.py file
 * API/DB: Fix hash randomization test issues
@@ -24,11 +274,13 @@ CHANGES
 * Remove some unnecessary spaces
 * Minor fixes to microversion devref
 * VNX: fix issue when backing-up in-use volume
+* Introduce managing existing snapshot to rbd driver
 * Fix example code about api\_version in api\_m\_dev.rst
 * Add description about tox in dev\_env.rst
 * Return metadata in volume summary
 * Ceph: Fix delete backup with non-existent pool
 * Allow logging in tempest tests
+* Storwize:  add mirrored volume support
 * Trivial fix typos
 * Refactor NEC volume driver
 * Remove unused \_detach\_snapshot method
@@ -39,6 +291,7 @@ CHANGES
 * Update OVO devref
 * Add is\_replicated() to Volume and VolumeType OVOs
 * Make failover DB changes consistent
+* Revert "Use HostAddressOpt for opts that accept IP and hostnames"
 * Fix api-ref for POST backup for optional name
 * Fix typos in README.md
 * change consistencygroup\_id to group\_id
@@ -141,6 +394,7 @@ CHANGES
 * SMBFS: avoid unnecessary conversion when uploading volumes
 * Fix forceful deletion of Consistency Group for GPFS Driver
 * Refactor internal context testcases with ddt
+* Enable mutable config in Cinder
 * VMAX driver - Close ecom connections
 * Read XtremIO options from self.configuration
 * Read rbd options from self.configuration, not CONF
@@ -148,7 +402,10 @@ CHANGES
 * Add support for generalized filtering on list APIs
 * Modernize the nova client in cinder
 * ScaleIO 1.32 deprecation notice
+* SMBFS: Use share mountpoint when fetching capacity info
 * Fix permission error in VNX driver
+* VMware: Stop setting dynamicType
+* VMware: Apply policy at vmdk level during retype
 * genopts: Fix python 3 compat, sort options
 * Remove snapshot['size'] references
 * Remove backup-restore methods in driver code
@@ -164,6 +421,7 @@ CHANGES
 * Move the releasenote to the right folder
 * Add missing testcases for migration scripts
 * 3PAR: Added Replication Feature In Retype Flow
+* Functional tests for group replication
 * Update attachment's status when attaching a readonly volume
 * ds8k: should verify REST version separately
 * Remove dependecy testrepository
@@ -171,6 +429,7 @@ CHANGES
 * Remove non-scheduler volume extend support
 * Eternus driver: Move soft dependency check out of \_\_init\_\_
 * Use cryptography instead of pycrypto
+* Tiramisu: replication group support
 * xiv: enable get fc targets by host
 * NFS: run qemu-img info as root
 * Give more time for LVM deactivation
@@ -235,6 +494,8 @@ CHANGES
 * ProphstStor driver 'SSL' communication fails to check certificates
 * RemoteFS: fix volume cascade delete
 * Tests: Remove the redundant methods
+* Storwize: correct unreplicated vol status
+* recover image-volume size if extend volume failed
 * Fix config option volume\_backend\_name's invalid overridden value
 * VNX: add missing group snapshot pool stats
 * Optimize the link address
@@ -250,6 +511,7 @@ CHANGES
 * ds8k: check lun exist or not when clone volume
 * DS8K driver should use DLM
 * DS8K driver: remove code for fake connector
+* [api-ref] Add backing-up to snapshot statuses
 * Use HostAddressOpt for opts that accept IP and hostnames
 * DS8K driver: change the design of CG
 * Add sem-ver flag so pbr generates correct version
@@ -300,8 +562,10 @@ CHANGES
 * NetApp E-Series CI name update
 * Don't use tempest special\_fields
 * Add \_\_init\_\_ for cinder.config module
+* Clean up index links to removed content
 * Make cinder-manage online migrations more verbose
 * SMBFS: enable Nova assisted volume snapshots
+* Remove deprecated 'host' option for cinder-volume
 * Sheepdog: fix conflict of temporary snapshot name
 * api-ref: Fix volume\_id parameter for the path
 * Fix 500 error when 'mountpoint' is not provided to os-attach
@@ -429,6 +693,7 @@ CHANGES
 * Remove an outdated comment
 * Enforce \_usage\_from\_snapshot to fetch info from deleted volume
 * VMAX driver - replace pickle with jsonutils
+* Switch NFS driver to use DLM locks
 * Zadara driver - move from httplib to requests
 * Remove Linux SMBFS driver
 * Unity driver: fail to disconnect volume

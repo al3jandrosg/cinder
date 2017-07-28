@@ -120,6 +120,9 @@ class MigrationsMixin(test_migrations.WalkVersionsMixin):
             # NOTE(ameade): 87 sets messages.request_id to nullable. This
             # should be safe for the same reason as migration 66.
             87,
+            # NOTE : 104 modifies size of messages.project_id to 255.
+            # This should be safe for the same reason as migration 87.
+            104,
         ]
 
         # NOTE(dulek): We only started requiring things be additive in
@@ -1237,6 +1240,50 @@ class MigrationsMixin(test_migrations.WalkVersionsMixin):
         for volume in volumes:
             self.assertEqual(data[volume.id], volume.replication_status,
                              'id %s' % volume.id)
+
+    def _check_102(self, engine, data):
+        """Test adding replication_status to groups table."""
+        groups = db_utils.get_table(engine, 'groups')
+        self.assertIsInstance(groups.c.replication_status.type,
+                              self.VARCHAR_TYPE)
+
+    def _check_103(self, engine, data):
+        self.assertTrue(engine.dialect.has_table(engine.connect(),
+                                                 "messages"))
+        attachment = db_utils.get_table(engine, 'messages')
+
+        self.assertIsInstance(attachment.c.detail_id.type,
+                              self.VARCHAR_TYPE)
+        self.assertIsInstance(attachment.c.action_id.type,
+                              self.VARCHAR_TYPE)
+
+    def _check_104(self, engine, data):
+        messages = db_utils.get_table(engine, 'messages')
+        self.assertEqual(255, messages.c.project_id.type.length)
+
+    def _check_105(self, engine, data):
+        self.assertTrue(engine.dialect.has_table(engine.connect(),
+                                                 "backup_metadata"))
+        backup_metadata = db_utils.get_table(engine, 'backup_metadata')
+
+        self.assertIsInstance(backup_metadata.c.created_at.type,
+                              self.TIME_TYPE)
+        self.assertIsInstance(backup_metadata.c.updated_at.type,
+                              self.TIME_TYPE)
+        self.assertIsInstance(backup_metadata.c.deleted_at.type,
+                              self.TIME_TYPE)
+        self.assertIsInstance(backup_metadata.c.deleted.type,
+                              self.BOOL_TYPE)
+        self.assertIsInstance(backup_metadata.c.id.type,
+                              self.INTEGER_TYPE)
+        self.assertIsInstance(backup_metadata.c.key.type,
+                              self.VARCHAR_TYPE)
+        self.assertIsInstance(backup_metadata.c.value.type,
+                              self.VARCHAR_TYPE)
+        self.assertIsInstance(backup_metadata.c.backup_id.type,
+                              self.VARCHAR_TYPE)
+        f_keys = self.get_foreign_key_columns(engine, 'backup_metadata')
+        self.assertEqual({'backup_id'}, f_keys)
 
     def test_walk_versions(self):
         self.walk_versions(False, False)

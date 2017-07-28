@@ -123,10 +123,11 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
                 by another host, while creating 3PAR iSCSI Host. bug #1642945
         3.0.14 - Handle manage and unmanage hosts present. bug #1648067
         3.0.15 - Adds consistency group capability in generic volume groups.
+        3.0.16 - Get host from os-brick connector. bug #1690244
 
     """
 
-    VERSION = "3.0.15"
+    VERSION = "3.0.16"
 
     # The name of the CI wiki page.
     CI_WIKI_NAME = "HPE_Storage_CI"
@@ -331,10 +332,10 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
         The format of the driver data is defined in _get_iscsi_properties.
         Example return value:
 
-        .. code-block:: json
+        .. code-block:: default
 
             {
-                'driver_volume_type': 'iscsi'
+                'driver_volume_type': 'iscsi',
                 'data': {
                     'encrypted': False,
                     'target_discovered': True,
@@ -636,7 +637,7 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
 
         return host, username, password
 
-    def _do_export(self, common, volume):
+    def _do_export(self, common, volume, connector):
         """Gets the associated account, generates CHAP info and updates."""
         model_update = {}
 
@@ -645,7 +646,7 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
             return model_update
 
         # CHAP username will be the hostname
-        chap_username = volume['host'].split('@')[0]
+        chap_username = connector['host']
 
         chap_password = None
         try:
@@ -712,7 +713,7 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
     def create_export(self, context, volume, connector):
         common = self._login()
         try:
-            return self._do_export(common, volume)
+            return self._do_export(common, volume, connector)
         finally:
             self._logout(common)
 
@@ -984,7 +985,7 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
             self._logout(common)
 
     @utils.trace
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Force failover to a secondary replication target."""
         common = self._login(timeout=30)
         try:
@@ -992,6 +993,6 @@ class HPE3PARISCSIDriver(driver.ManageableVD,
             active_backend_id, volume_updates = common.failover_host(
                 context, volumes, secondary_id)
             self._active_backend_id = active_backend_id
-            return active_backend_id, volume_updates
+            return active_backend_id, volume_updates, []
         finally:
             self._logout(common)

@@ -34,6 +34,7 @@ from cinder.i18n import _
 from cinder import objects
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers.san import san
 from cinder.volume import utils as vol_utils
 
@@ -52,7 +53,7 @@ kaminario_opts = [
                      "on setting this option as True.")]
 
 CONF = cfg.CONF
-CONF.register_opts(kaminario_opts)
+CONF.register_opts(kaminario_opts, group=configuration.SHARED_CONF_GROUP)
 
 K2HTTPError = requests.exceptions.HTTPError
 K2_RETRY_ERRORS = ("MC_ERR_BUSY", "MC_ERR_BUSY_SPECIFIC",
@@ -356,7 +357,7 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
                       "changed to failed_over ", rsession_name)
 
     @kaminario_logger
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Failover to replication target."""
         volume_updates = []
         back_end_ip = None
@@ -507,7 +508,7 @@ class KaminarioCinderDriver(cinder.volume.driver.ISCSIDriver):
                     volume_updates.append({'volume_id': v['id'],
                                            'updates': {'status': 'error', }})
             back_end_ip = self.replica.backend_id
-        return back_end_ip, volume_updates
+        return back_end_ip, volume_updates, []
 
     @kaminario_logger
     def _create_volume_replica_user_snap(self, k2, sess):

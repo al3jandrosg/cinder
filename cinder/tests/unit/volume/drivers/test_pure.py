@@ -967,6 +967,27 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
             'Host cannot be deleted due to existing connections.'
         )
 
+    def test_terminate_connection_no_connector_with_host(self):
+        # Show the volume having a connection
+        self.array.list_volume_private_connections.return_value = \
+            [VOLUME_CONNECTIONS[0]]
+
+        self.driver.terminate_connection(VOLUME, None)
+        self.array.disconnect_host.assert_called_with(
+            VOLUME_CONNECTIONS[0]["host"],
+            VOLUME_CONNECTIONS[0]["name"]
+        )
+
+    def test_terminate_connection_no_connector_no_host(self):
+        vol = fake_volume.fake_volume_obj(None, name=VOLUME["name"])
+
+        # Show the volume having a connection
+        self.array.list_volume_private_connections.return_value = []
+
+        # Make sure
+        self.driver.terminate_connection(vol, None)
+        self.array.disconnect_host.assert_not_called()
+
     def test_extend_volume(self):
         vol_name = VOLUME["name"] + "-cinder"
         self.driver.extend_volume(VOLUME, 3)
@@ -2090,10 +2111,11 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         array2_v1_3.get_volume.return_value = REPLICATED_VOLUME_SNAPS
 
         context = mock.MagicMock()
-        new_active_id, volume_updates = self.driver.failover_host(
+        new_active_id, volume_updates, __ = self.driver.failover_host(
             context,
             REPLICATED_VOLUME_OBJS,
-            None
+            None,
+            []
         )
 
         self.assertEqual(secondary_device_id, new_active_id)

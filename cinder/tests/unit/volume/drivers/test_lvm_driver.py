@@ -98,11 +98,13 @@ class LVMVolumeDriverTestCase(test_driver.BaseDriverTestCase):
 
     @mock.patch.object(volutils, 'get_all_volume_groups',
                        return_value=[{'name': 'cinder-volumes'}])
-    def test_check_for_setup_error(self, vgs):
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.get_lvm_version',
+                return_value=(2, 2, 100))
+    def test_check_for_setup_error(self, _mock_get_version, vgs):
         vg_obj = fake_lvm.FakeBrickLVM('cinder-volumes',
                                        False,
                                        None,
-                                       'default')
+                                       'auto')
 
         configuration = conf.Configuration(fake_opt, 'fake_group')
         lvm_driver = lvm.LVMVolumeDriver(configuration=configuration,
@@ -282,6 +284,10 @@ class LVMVolumeDriverTestCase(test_driver.BaseDriverTestCase):
 
     @mock.patch.object(cinder.volume.utils, 'get_all_volume_groups',
                        return_value=[{'name': 'cinder-volumes'}])
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.get_lv_info')
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.activate_lv')
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.'
+                'supports_lvchange_ignoreskipactivation')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.update_volume_group_info')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.get_all_physical_volumes')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.supports_thin_provisioning',
@@ -298,6 +304,10 @@ class LVMVolumeDriverTestCase(test_driver.BaseDriverTestCase):
 
     @mock.patch.object(cinder.volume.utils, 'get_all_volume_groups',
                        return_value=[{'name': 'cinder-volumes'}])
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.get_lv_info')
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.activate_lv')
+    @mock.patch('cinder.brick.local_dev.lvm.LVM.'
+                'supports_lvchange_ignoreskipactivation')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.update_volume_group_info')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.get_all_physical_volumes')
     @mock.patch('cinder.brick.local_dev.lvm.LVM.get_volume')
@@ -684,6 +694,49 @@ class LVMVolumeDriverTestCase(test_driver.BaseDriverTestCase):
                 exception.ManageExistingInvalidReference,
                 self.volume.driver.manage_existing_snapshot_get_size,
                 snp, ref)
+
+    def test_revert_snapshot(self):
+        self._setup_stubs_for_manage_existing()
+        self.configuration.lvm_type = 'auto'
+        fake_volume = tests_utils.create_volume(self.context,
+                                                display_name='fake_volume')
+        fake_snapshot = tests_utils.create_snapshot(
+            self.context, fake_volume.id)
+
+        with mock.patch.object(self.volume.driver.vg,
+                               'revert') as mock_revert,\
+                mock.patch.object(self.volume.driver.vg,
+                                  'create_lv_snapshot') as mock_create,\
+                mock.patch.object(self.volume.driver.vg,
+                                  'deactivate_lv') as mock_deactive,\
+                mock.patch.object(self.volume.driver.vg,
+                                  'activate_lv') as mock_active:
+            self.volume.driver.revert_to_snapshot(self.context,
+                                                  fake_volume,
+                                                  fake_snapshot)
+            mock_revert.assert_called_once_with(
+                self.volume.driver._escape_snapshot(fake_snapshot.name))
+            mock_deactive.assert_called_once_with(fake_volume.name)
+            mock_active.assert_called_once_with(fake_volume.name)
+            mock_create.assert_called_once_with(
+                self.volume.driver._escape_snapshot(fake_snapshot.name),
+                fake_volume.name, self.configuration.lvm_type)
+
+    def test_revert_thin_snapshot(self):
+
+        configuration = conf.Configuration(fake_opt, 'fake_group')
+        configuration.lvm_type = 'thin'
+        lvm_driver = lvm.LVMVolumeDriver(configuration=configuration,
+                                         db=db)
+        fake_volume = tests_utils.create_volume(self.context,
+                                                display_name='fake_volume')
+        fake_snapshot = tests_utils.create_snapshot(
+            self.context, fake_volume.id)
+
+        self.assertRaises(NotImplementedError,
+                          lvm_driver.revert_to_snapshot,
+                          self.context, fake_volume,
+                          fake_snapshot)
 
     def test_lvm_manage_existing_snapshot_bad_size(self):
         """Make sure correct exception on bad size returned from LVM.

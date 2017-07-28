@@ -28,6 +28,7 @@ import six
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.volume import configuration
 from cinder.volume.drivers.falconstor import rest_proxy
 from cinder.volume.drivers.san import san
 
@@ -63,7 +64,7 @@ FSS_OPTS = [
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(FSS_OPTS)
+CONF.register_opts(FSS_OPTS, group=configuration.SHARED_CONF_GROUP)
 
 
 class FalconstorBaseDriver(san.SanDriver):
@@ -177,19 +178,31 @@ class FalconstorBaseDriver(san.SanDriver):
         We  use the metadata of the volume to create variety volume.
 
         Create a thin provisioned volume :
-        [Usage] create --volume-type FSS-THIN
-            --metadata thinsize=<thin-volume-size> volume-size
+
+        .. code:: console
+
+          create --volume-type FSS-THIN
+              --metadata thinsize=<thin-volume-size> volume-size
 
         Create a LUN that is a Timeview of another LUN at a specified CDP tag:
-        [Usage] create --volume-type FSS --metadata timeview=<vid>
-            cdptag=<tag> volume-size
+
+        .. code:: console
+
+          create --volume-type FSS --metadata timeview=<vid>
+              cdptag=<tag> volume-size
 
         Create a LUN that is a Timeview of another LUN at a specified Timemark:
-        [Usage] create --volume-type FSS --metadata timeview=<vid>
-            rawtimestamp=<rawtimestamp> volume-size
+
+        .. code:: console
+
+          create --volume-type FSS --metadata timeview=<vid>
+              rawtimestamp=<rawtimestamp> volume-size
 
         Create a mirrored volume :
-        [Usage] create --volume-type FSS --metadata mirrored=true
+
+        .. code:: console
+
+          create --volume-type FSS --metadata mirrored=true
 
         """
 

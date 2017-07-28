@@ -39,6 +39,7 @@ from cinder.image import image_utils
 from cinder import interface
 from cinder.objects import fields
 from cinder import utils
+from cinder.volume import configuration
 from cinder.volume.drivers.san import san
 from cinder.volume import qos_specs
 from cinder.volume.targets import iscsi as iscsi_driver
@@ -101,7 +102,7 @@ sf_opts = [
                 help='Utilize volume access groups on a per-tenant basis.')]
 
 CONF = cfg.CONF
-CONF.register_opts(sf_opts)
+CONF.register_opts(sf_opts, group=configuration.SHARED_CONF_GROUP)
 
 # SolidFire API Error Constants
 xExceededLimit = 'xExceededLimit'
@@ -2035,7 +2036,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         self._issue_api_request('ModifyVolume', params,
                                 endpoint=remote['endpoint'])
 
-    def failover_host(self, context, volumes, secondary_id=None):
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
         """Failover to replication target."""
         volume_updates = []
         remote = None
@@ -2099,7 +2100,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         # but for now that's going to be the trade off of using replciation
         self.active_cluster_info = remote
         self.failed_over = True
-        return remote['mvip'], volume_updates
+        return remote['mvip'], volume_updates, []
 
     def freeze_backend(self, context):
         """Freeze backend notification."""

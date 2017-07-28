@@ -35,6 +35,8 @@ import os
 from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging as messaging
+from oslo_service import loopingcall
+from oslo_service import periodic_task
 from oslo_utils import excutils
 from oslo_utils import importutils
 import six
@@ -89,10 +91,10 @@ class BackupManager(manager.ThreadPoolManager):
     def __init__(self, *args, **kwargs):
         self.service = importutils.import_module(self.driver_name)
         self.az = CONF.storage_availability_zone
-        self.volume_managers = {}
         self.backup_rpcapi = backup_rpcapi.BackupAPI()
         self.volume_rpcapi = volume_rpcapi.VolumeAPI()
         super(BackupManager, self).__init__(*args, **kwargs)
+        self.is_initialized = False
 
     @property
     def driver_name(self):
@@ -107,20 +109,40 @@ class BackupManager(manager.ThreadPoolManager):
             return mapper[service]
         return service
 
-    def _update_backup_error(self, backup, err):
-        backup.status = fields.BackupStatus.ERROR
+    def _update_backup_error(self, backup, err,
+                             status=fields.BackupStatus.ERROR):
+        backup.status = status
         backup.fail_reason = err
         backup.save()
 
     def init_host(self, **kwargs):
         """Run initialization needed for a standalone service."""
         ctxt = context.get_admin_context()
+        self.setup_backup_backend(ctxt)
 
         try:
             self._cleanup_incomplete_backup_operations(ctxt)
         except Exception:
             # Don't block startup of the backup service.
             LOG.exception("Problem cleaning incomplete backup operations.")
+
+    def _setup_backup_driver(self, ctxt):
+        backup_service = self.service.get_backup_driver(ctxt)
+        backup_service.check_for_setup_error()
+        self.is_initialized = True
+        raise loopingcall.LoopingCallDone()
+
+    def setup_backup_backend(self, ctxt):
+        try:
+            init_loop = loopingcall.FixedIntervalLoopingCall(
+                self._setup_backup_driver, ctxt)
+            init_loop.start(interval=CONF.periodic_interval)
+        except loopingcall.LoopingCallDone:
+            LOG.info("Backup driver was successfully initialized.")
+        except Exception:
+            LOG.exception("Failed to initialize driver.",
+                          resource={'type': 'driver',
+                                    'id': self.__class__.__name__})
 
     def reset(self):
         super(BackupManager, self).reset()
@@ -317,6 +339,10 @@ class BackupManager(manager.ThreadPoolManager):
             raise exception.InvalidBackup(reason=err)
 
         try:
+            if not self.is_working():
+                err = _('Create backup aborted due to backup service is down')
+                self._update_backup_error(backup, err)
+                raise exception.InvalidBackup(reason=err)
             self._run_backup(context, backup, volume)
         except Exception as err:
             with excutils.save_and_reraise_exception():
@@ -382,7 +408,8 @@ class BackupManager(manager.ThreadPoolManager):
             finally:
                 self._detach_device(context, attach_info,
                                     backup_device.device_obj, properties,
-                                    backup_device.is_snapshot)
+                                    backup_device.is_snapshot, force=True,
+                                    ignore_errors=True)
         finally:
             backup = objects.Backup.get_by_id(context, backup.id)
             self._cleanup_temp_volumes_snapshots_when_backup_created(
@@ -487,7 +514,8 @@ class BackupManager(manager.ThreadPoolManager):
             else:
                 backup_service.restore(backup, volume.id, device_path)
         finally:
-            self._detach_device(context, attach_info, volume, properties)
+            self._detach_device(context, attach_info, volume, properties,
+                                force=True)
 
     def delete_backup(self, context, backup):
         """Delete volume backup from configured backup service."""
@@ -507,6 +535,12 @@ class BackupManager(manager.ThreadPoolManager):
             self._update_backup_error(backup, err)
             raise exception.InvalidBackup(reason=err)
 
+        if not self.is_working():
+            err = _('Delete backup is aborted due to backup service is down')
+            status = fields.BackupStatus.ERROR_DELETING
+            self._update_backup_error(backup, err, status)
+            raise exception.InvalidBackup(reason=err)
+
         backup_service = self._map_service_to_driver(backup['service'])
         if backup_service is not None:
             configured_service = self.driver_name
@@ -522,7 +556,7 @@ class BackupManager(manager.ThreadPoolManager):
 
             try:
                 backup_service = self.service.get_backup_driver(context)
-                backup_service.delete(backup)
+                backup_service.delete_backup(backup)
             except Exception as err:
                 with excutils.save_and_reraise_exception():
                     self._update_backup_error(backup, six.text_type(err))
@@ -894,11 +928,13 @@ class BackupManager(manager.ThreadPoolManager):
         return {'conn': conn, 'device': vol_handle, 'connector': connector}
 
     def _detach_device(self, ctxt, attach_info, device,
-                       properties, is_snapshot=False, force=False):
+                       properties, is_snapshot=False, force=False,
+                       ignore_errors=False):
         """Disconnect the volume or snapshot from the host. """
         connector = attach_info['connector']
         connector.disconnect_volume(attach_info['conn']['data'],
-                                    attach_info['device'])
+                                    attach_info['device'],
+                                    force=force, ignore_errors=ignore_errors)
         rpcapi = self.volume_rpcapi
         if not is_snapshot:
             rpcapi.terminate_connection(ctxt, device, properties,
@@ -908,3 +944,11 @@ class BackupManager(manager.ThreadPoolManager):
             rpcapi.terminate_connection_snapshot(ctxt, device,
                                                  properties, force=force)
             rpcapi.remove_export_snapshot(ctxt, device)
+
+    def is_working(self):
+        return self.is_initialized
+
+    @periodic_task.periodic_task(spacing=CONF.periodic_interval)
+    def _report_driver_status(self, context):
+        if not self.is_working():
+            self.setup_backup_backend(context)
