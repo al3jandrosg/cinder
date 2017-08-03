@@ -1,3 +1,9 @@
+cinder (2:11.0.0~b3-0ubuntu2) artful; urgency=medium
+
+  * d/control: Set min python-requests to 2.14.2.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 03 Aug 2017 16:18:23 -0400
+
 cinder (2:11.0.0~b3-0ubuntu1) artful; urgency=medium
 
   * New upstream milestone for OpenStack Pike.
