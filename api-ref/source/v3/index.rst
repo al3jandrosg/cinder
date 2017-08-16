@@ -22,7 +22,6 @@ Block Storage API V3 (CURRENT)
 .. include:: volumes-v3-volumes-actions.inc
 
 .. List the other random volume APIs in just alphabetical order.
-.. include:: os-vol-image-meta-v3.inc
 .. include:: volume-manage.inc
 .. include:: volumes-v3-snapshots.inc
 .. include:: snapshot-manage.inc
@@ -47,4 +46,5 @@ Block Storage API V3 (CURRENT)
 .. include:: qos-specs-v3-qos-specs.inc
 .. quota-sets should arguably live closer to limits, but that would mess up
    our nice alphabetical ordering
+.. include:: quota-classes.inc
 .. include:: quota-sets.inc

@@ -38,6 +38,7 @@ from oslo_vmware import vim_util
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.image import image_utils
 from cinder import interface
 from cinder.volume import configuration
 from cinder.volume import driver
@@ -128,6 +129,14 @@ vmdk_opts = [
     cfg.IntOpt('vmware_connection_pool_size',
                default=10,
                help='Maximum number of connections in http connection pool.'),
+    cfg.StrOpt('vmware_adapter_type',
+               choices=[volumeops.VirtualDiskAdapterType.LSI_LOGIC,
+                        volumeops.VirtualDiskAdapterType.BUS_LOGIC,
+                        volumeops.VirtualDiskAdapterType.LSI_LOGIC_SAS,
+                        volumeops.VirtualDiskAdapterType.PARA_VIRTUAL,
+                        volumeops.VirtualDiskAdapterType.IDE],
+               default=volumeops.VirtualDiskAdapterType.LSI_LOGIC,
+               help='Default adapter type to be used for attaching volumes.'),
 ]
 
 CONF = cfg.CONF
@@ -221,7 +230,10 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     # 1.6.0 - support for manage existing
     # 1.7.0 - new config option 'vmware_connection_pool_size'
     # 1.7.1 - enforce vCenter server version 5.5
-    VERSION = '1.7.1'
+    # 2.0.0 - performance enhancements
+    #       - new config option 'vmware_adapter_type'
+    #       - new extra-spec option 'vmware:adapter_type'
+    VERSION = '2.0.0'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "VMware_CI"
@@ -311,8 +323,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         if profile_name:
             self.ds_sel.get_profile_id(profile_name)
 
-        LOG.debug("Verified disk type and storage profile of volume: %s.",
-                  volume.name)
+        # validate adapter type
+        self._get_adapter_type(volume)
+
+        LOG.debug("Verified disk type, adapter type and storage profile "
+                  "of volume: %s.", volume.name)
 
     def create_volume(self, volume):
         """Creates a volume.
@@ -342,6 +357,17 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param volume: Volume object
         """
         self._delete_volume(volume)
+
+    def _get_extra_spec_adapter_type(self, type_id):
+        adapter_type = _get_volume_type_extra_spec(
+            type_id,
+            'adapter_type',
+            default_value=self.configuration.vmware_adapter_type)
+        volumeops.VirtualDiskAdapterType.validate(adapter_type)
+        return adapter_type
+
+    def _get_adapter_type(self, volume):
+        return self._get_extra_spec_adapter_type(volume['volume_type_id'])
 
     def _get_extra_spec_storage_profile(self, type_id):
         """Get storage profile name in the given volume type's extra spec.
@@ -439,7 +465,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         disk_type = VMwareVcVmdkDriver._get_disk_type(volume)
         size_kb = volume['size'] * units.Mi
         adapter_type = create_params.get(CREATE_PARAM_ADAPTER_TYPE,
-                                         'lsiLogic')
+                                         self._get_adapter_type(volume))
         backing = self.volumeops.create_backing(backing_name,
                                                 size_kb,
                                                 disk_type,
@@ -739,18 +765,37 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         # case. If ca_file is unset and insecure is True, there is no
         # certificate verification, and we should pass cacerts=False.
         cacerts = ca_file if ca_file else not insecure
-        image_transfer.download_flat_image(context,
-                                           timeout,
-                                           image_service,
-                                           image_id,
-                                           image_size=image_size_in_bytes,
-                                           host=host_ip,
-                                           port=port,
-                                           data_center_name=dc_name,
-                                           datastore_name=ds_name,
-                                           cookies=cookies,
-                                           file_path=upload_file_path,
-                                           cacerts=cacerts)
+
+        tmp_images = image_utils.TemporaryImages.for_image_service(
+            image_service)
+        tmp_image = tmp_images.get(context, image_id)
+        if tmp_image:
+            LOG.debug("Using temporary image.")
+            with open(tmp_image) as read_handle:
+                image_transfer.download_file(read_handle,
+                                             host_ip,
+                                             port,
+                                             dc_name,
+                                             ds_name,
+                                             cookies,
+                                             upload_file_path,
+                                             image_size_in_bytes,
+                                             cacerts,
+                                             timeout)
+        else:
+            image_transfer.download_flat_image(context,
+                                               timeout,
+                                               image_service,
+                                               image_id,
+                                               image_size=image_size_in_bytes,
+                                               host=host_ip,
+                                               port=port,
+                                               data_center_name=dc_name,
+                                               datastore_name=ds_name,
+                                               cookies=cookies,
+                                               file_path=upload_file_path,
+                                               cacerts=cacerts)
+
         LOG.debug("Image: %(image_id)s copied to %(path)s.",
                   {'image_id': image_id,
                    'path': upload_file_path})
@@ -1151,7 +1196,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         # Get the disk type, adapter type and size of vmdk image
         image_disk_type = ImageDiskType.PREALLOCATED
-        image_adapter_type = volumeops.VirtualDiskAdapterType.LSI_LOGIC
+        image_adapter_type = self._get_adapter_type(volume)
         image_size_in_bytes = metadata['size']
         properties = metadata['properties']
         if properties:
@@ -1560,7 +1605,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             backing,
             disk.capacityInKB,
             VMwareVcVmdkDriver._get_disk_type(volume),
-            'lsiLogic',
+            self._get_adapter_type(volume),
             profile_id,
             dest_path.get_descriptor_ds_file_path())
         self.volumeops.update_backing_disk_uuid(backing, volume['id'])
@@ -1825,7 +1870,6 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param volume: New Volume object
         :param snapshot: Reference to snapshot entity
         """
-        self._verify_volume_creation(volume)
         backing = self.volumeops.get_backing(snapshot['volume_name'])
         if not backing:
             LOG.info("There is no backing for the snapshotted volume: "
@@ -1862,7 +1906,6 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param volume: New Volume object
         :param src_vref: Source Volume object
         """
-        self._verify_volume_creation(volume)
         backing = self.volumeops.get_backing(src_vref['name'])
         if not backing:
             LOG.info("There is no backing for the source volume: %(src)s. "

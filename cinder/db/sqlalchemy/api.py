@@ -1859,8 +1859,8 @@ def _attachment_get(context, attachment_id, session=None, read_deleted=False,
               .first())
 
     if not result:
-        msg = _("Unable to find attachment with id: %s"), attachment_id
-        raise exception.VolumeAttachmentNotFound(msg)
+        raise exception.VolumeAttachmentNotFound(filter='attachment_id = %s' %
+                                                 attachment_id)
     return result
 
 
@@ -3130,7 +3130,8 @@ def snapshot_get_all_by_project(context, project_id, filters=None, marker=None,
                       paired with corresponding item in sort_keys
     :returns: list of matching snapshots
     """
-    if filters and not is_valid_model_filters(models.Snapshot, filters):
+    if filters and not is_valid_model_filters(
+            models.Snapshot, filters, exclude_list=('host', 'cluster_name')):
         return []
 
     authorize_project_context(context, project_id)
@@ -3473,7 +3474,7 @@ def _process_group_types_filters(query, filters):
         if filters['is_public'] and context.project_id is not None:
             projects_attr = getattr(models.GroupTypes, 'projects')
             the_filter.extend([
-                projects_attr.any(project_id=context.project_id, deleted=0)
+                projects_attr.any(project_id=context.project_id, deleted=False)
             ])
         if len(the_filter) > 1:
             query = query.filter(or_(*the_filter))
@@ -5641,6 +5642,12 @@ def consistencygroup_include_in_cluster(context, cluster,
     return _include_in_cluster(context, cluster, models.ConsistencyGroup,
                                partial_rename, filters)
 
+
+@require_admin_context
+def group_include_in_cluster(context, cluster, partial_rename=True, **filters):
+    """Include all generic groups matching the filters into a cluster."""
+    return _include_in_cluster(context, cluster, models.Group, partial_rename,
+                               filters)
 
 ###############################
 

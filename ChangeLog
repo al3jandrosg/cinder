@@ -1,30 +1,100 @@
 CHANGES
 =======
 
+11.0.0.0rc1
+-----------
+
+* [DOC FIX] Create missing index pages
+* Revert "Mark ETERNUS drivers as unsupported"
+* Fix bug of detaching failed while concurrently attach/detach
+* NetApp: block drivers fail when volume missing
+* Eliminate randomness in encode\_name&encode\_host\_name methods
+* NetApp: Fix override of scheduler decision
+* INFINIDAT: add documentation for volume compression
+* INFINIDAT: add driver changelog
+* [api-ref] Add api-ref for os-quota-class-sets APIs
+* Pike release note cleanup
+* Load resource filter config file in testcase
+* [DOC BLD FIX] Fix user messages documentation
+* [DOC BLD FIX] Fix missing references in documentation
+* Make Cinder's Landing Page look like Keystone's
+* Fix message format for VolumeAttachmentNotFound exception
+* [Api-ref] Add force parameter to volume delete
+* Updated from global requirements
+* [DOC BLD FIX] Name files for inclusion properly
+* Revert "NetApp: Deprecate E-Series drivers"
+* VMAX driver - Error attaching failed over volumes
+* VMAX driver - None connector object in a terminate\_connection in Pike
+* VMAX driver - performance improvements in retype
+* VMAX driver - volume delete can fail
+* Remove duplicate variables
+* Fujitsu Driver: Fix exception in terminate\_connection with no connector
+* Infortrend mask password logging
+* VMAX driver - seamless upgrade from SMI-S to REST
+* VMAX driver - performance improvements
+* Fix host and cluster\_name filter for snapshot list
+* Refresh az cache if target az is not found in cache
+* Remove redundant mock rpc statement
+* VMware: Bump driver version
+* Updated from global requirements
+* [DOC] VMware: Add doc for vmware:adapter\_type
+* [DOC] VMware: Update config table
+* Update resource\_filter to keep backward compatibility
+* Switch to using bool for filtering non-deleted volume attributes
+* Correct 'os-show\_image\_metadata' API document
+* Sort cinder-manage commands
+* VMAX driver - Pike documentation
+* Catch Castellan errors in create volume
+* Removed unnecessary setUp() call in unit test
+* Add API document for quota usage
+* Cloning a volume from a snapshot in thin lv
+* [DOC BLD FIX] Fix the numerous docstring probs in coprhd
+* NetApp: Fix SVM scoped user startup exception
+* Missing snapshot statuses
+* [DOC BLD FIX] Correct docstring errors in dell\_emc VMAX
+* Fix image download to volume for iso images
+* [DOC BLD FIX] Add missing files under configuration
+* VMAX driver - align VMAX QOS settings with front end
+* Fix layout of api-ref for group type specs
+* Fix failure for failing back the primary
+* Updated from global requirements
+* Revert "Handle concurrent volume creation request"
+* NetApp cDOT: Support generic groups for block
+
 11.0.0.0b3
 ----------
 
+* Fix typo in message for volume creation failure
+* Add the backup metadata support releasenote
 * Update backend state when extending volume
 * Handle concurrent volume creation request
 * [DOC BLD FIX] Correct json code block in attachments
 * [DOC BLD FIX] Fix docstring error in fakes.rst
+* cinder backup sets incorrect parent\_id
+* Update URL home-page in documents according to document migration
+* Mock execute in unit test
 * Revert MySQL Cluster Support until an approach is worked out
 * [DOC BLD FIX] Add code:: blocks to manager.py
 * [DOC BLD FIX] Fix docstring problems in vzstorage driver
 * [DOC BLD FIX] Fix dosctring errors in veritas driver
+* [DOC BLD FIX] Correct docstring issues in Soldfire driver
 * Fix no feature to enable 'exclusive-lock' of image in ceph
 * [DOC BLD FIX] Fix docstring issues in hpmsa driver
 * Mark Tegile driver as unsupported
 * [DOC BLD FIX] Fix docstring errors in reduxio
 * Updated from global requirements
+* Add choices to backup\_swift\_auth
 * Support metadata for backup resource
 * Use OVO for test\_backup
 * Fix release notes link
+* VMware: Add volume adapter type extra-spec option
 * [DOC BLD FIX] Fix docstring errors in nexenta driver
 * Remove references to dothill driver options
 * [DOC BLD FIX] Fix netapp docstring issues
+* [DOC BLD FIX] Fix docstring issues in Lenovo driver
 * [DOC BLD FIX] Fix docstring errors in VNX driver
 * Add cinder backup service initialize check
+* Volume type with encryption comparison
 * [DOC BLD FIX] Fix docstring issues in ibm\_storage
 * NetApp cDOT: Support generic groups for file
 * [DOC BLD FIX] Fix docstring issues for Hitachi HNAS driver
@@ -33,13 +103,16 @@ CHANGES
 * [DOC BLD FIX] Fix docstring issues in dothill driver
 * [DOC BLD FIX] Correct dosctring errors in disco driver
 * Fix test\_scheduler\_stats error module calls
+* Add a check warning for quota update
 * Add VNX replication group support
 * [DOC BLD FIX] Fix docstring errors for VMAX driver
+* ibm\_storage - fix disable/delete replication
 * Updated from global requirements
 * Update group status
 * [DOC BLD FIX] Fix formatting error in driver.py
 * LVM: Activate LV before creating exports
 * Disable merge snapshot to volume for thin LVM
+* Replace six.itervalues with dict.values() in cinder
 * Do not delete group if group snapshot exists
 * ProphetStor: Support generic group
 * Updated from global requirements
@@ -56,18 +129,24 @@ CHANGES
 * Remove key\_manager.api\_class hack
 * Don't verify format with autodetect after image conversion
 * Add support for OS-Brick force disconnect
+* [api-ref] Update volume metadata for a specific key (v2)
 * [api-ref] Backups: change parameter 'backup\_id' to be mandatory
 * Fix 'connector' parameter in update attachments API
 * Enables MySQL Cluster Support for Cinder
 * Added CG capability to volume group in CoprHD
 * coordination: use tooz builtin heartbeat feature
+* HPE Lefthand: Fixed cloning operation
 * [DOC BLD FIX] Add missing glossaries
 * Updated from global requirements
+* VMware: Use temporary image
 * ScaleIO Driver: Updating config reference
+* Mark Falconstor drivers as unsupported
+* Mark Coho driver as unsupported
 * ZFSSA iSCSI volume driver multi-connect
 * Move config-reference to configuration
 * XIV\A9000: Added replication group support
 * [DOC BLD FIX] Fix code block issues
+* Kamiario: Fix over subscription reporting
 * VNX: ignore cg creation if group is not cg enabled
 * Updated from global requirements
 * Add missing api-ref documents for group type specs
@@ -78,6 +157,7 @@ CHANGES
 * Migrate configuration-reference to Cinder repo
 * enabling nimble driver again
 * coordination: remove custom Lock object
+* SMBFS: deprecate provisioning ratio config options
 * [api-ref]Fix API Doc error in creating backup
 * ScaleIO Driver: Fix transposing of PD and SP in list of pools
 * Updated from global requirements
@@ -89,6 +169,7 @@ CHANGES
 * INFINIDAT: support for volume compression
 * Update Documentation link
 * 3PAR: Add volume to consistency/generic group
+* DS8K: add replication consistency group support
 * DS8K driver: specify pool and lss in extra-specs
 * Update contents of attach\_detach\_conventions\_v2.rst
 * VMAX - Live Migration, replacing SMI-S with REST
@@ -102,6 +183,7 @@ CHANGES
 * Remove dothill driver options
 * Add insufficient space async error in create vol
 * Globalize regex objects
+* Add group to cluster when init host
 * Fix python 3.6 escape char warnings in strings
 * Add support for shared "backend\_defaults" config
 * Tintri: Fix config option access
@@ -129,6 +211,7 @@ CHANGES
 * Fix volume migration error with NEC driver
 * Fix the inappropriate parameter name
 * Switch to openstackdocstheme
+* VMware: Config option for default adapter type
 * Enable H904 check
 * LVM: Don't initialize VG with lvm\_type='auto'
 * Fix attachment\_delete for reserved case
@@ -164,10 +247,12 @@ CHANGES
 * Remove extra space in release note
 * Fix rally "volume\_type" parameter
 * Add custom keyring when initializing RBD connection
+* Avoid register extensions on the versions router
 * Use 'min\_version' to mark newly added parameters in DOC
 * Update log translation hacking rule
 * VNX: Add QoS support
 * remove extra characters "/"
+* Fix some doc issue
 * [Api-ref] Update quota-set APIs ref
 * Api-ref: Add upload-to-image api-ref
 * Fix driver exception when cascade deleting volume after transferring
@@ -199,6 +284,7 @@ CHANGES
 * Fix assertTrue in functional tests
 * Cinder volume revert to snapshot
 * Fix connection\_info field in VolumeAttachment object
+* Add v2 v3 response example in API doc
 * Fix bugs while integrated with Huawei Dorado array
 * Remove the redundant volume/snapshot check
 * Updated from global requirements
@@ -209,6 +295,7 @@ CHANGES
 * Add enable\_lazy in api/openstack/wsgi.py
 * [api-ref] Add snapshot metadata key api
 * [api-ref] Update volume metadata key api
+* Move vol\_db\_empty to NFS driver
 * Add project\_id admin filter to limits API
 * Add thin-provisioning-tools to bindep
 * Set default lvm\_type to auto
@@ -219,6 +306,7 @@ CHANGES
 * Tests: Disallow use of assertTrue(str)
 * Add the missing brace in api/v3/attachment
 * Remove duplicated line from \_do\_attachment\_delete
+* [api-ref]Fix the wrong description in volume API
 * ScaleIO - Make compatible with next SIO version
 * Add backup to cinder architecture page
 * Fix response code for update and delete API in volume attachments
@@ -263,6 +351,7 @@ CHANGES
 * Add warning header to opts.py file
 * API/DB: Fix hash randomization test issues
 * cleanup: remove DEVSTACK\_CINDER\_SECURE\_DELETE
+* Mapping parallel and ploop
 * Replace assertTrue(isinstance()) with assertIsInstance()
 * Using wrong connector parameter in V3 attach
 * Support sort backup with name
@@ -349,6 +438,7 @@ CHANGES
 * Fix typo errors
 * ZFSSA: Allow clones to differ in size from parent
 * Convert marker format for listing manageable resources
+* vzstorage: use remotefs.VZStorageRemoteFSClient
 * OVO: Add reminder to add backporting code
 * Fix bugs of GPFSNFS & GPFSRemote Driver initialization failure
 * Support 'LIKE' operator to filter resource
@@ -672,6 +762,7 @@ CHANGES
 * Add per-backend availability zones
 * cinder-backup - coordination not initialized
 * Reuse API v2 for v1 calls
+* VMware: Remove redundant sanity check
 * api-ref: v2 update volume metadata description is wrong
 * Fix action on services raises TypeError
 * api-ref: v2 API does not mention DELETE for volume metadata
