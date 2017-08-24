@@ -1,6 +1,25 @@
 CHANGES
 =======
 
+11.0.0.0rc2
+-----------
+
+* [Doc Bld Fix] Add links to man page contents
+* Allow v3.0 volume metadata API calls
+* IBM Storage: add QoS documentation
+* Ibm\_storage - fix failover\_replication
+* Revert "Mark Virtuozzo driver as unsupported"
+* SMBFS: enable thin provisioning support flag
+* 3PAR: Fixed image cache enabled capability
+* IBM storage: check pyxcli version on initialize
+* Ibm\_storage - fix delete group with replication
+* [Docs] Storwize:Update document for Pike release
+* [Docs] Add documentation contribution docs
+* Make VolumeTypeExtraSpecsController policy more granular
+* Change pure drivers default replication interval
+* Update UPPER\_CONSTRAINTS\_FILE for stable/pike
+* Update .gitreview for stable/pike
+
 11.0.0.0rc1
 -----------
 

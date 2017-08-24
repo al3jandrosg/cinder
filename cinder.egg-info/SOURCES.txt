@@ -1810,6 +1810,7 @@ doc/source/contributor/auth.rst
 doc/source/contributor/cinder.rst
 doc/source/contributor/database.rst
 doc/source/contributor/development.environment.rst
+doc/source/contributor/documentation.rst
 doc/source/contributor/drivers.rst
 doc/source/contributor/fakes.rst
 doc/source/contributor/gerrit.rst
@@ -1839,6 +1840,7 @@ doc/source/images/rpc/flow2.svg
 doc/source/images/rpc/rabt.png
 doc/source/images/rpc/rabt.svg
 doc/source/images/rpc/state.png
+doc/source/install/README.rst
 doc/source/install/cinder-backup-install-obs.rst
 doc/source/install/cinder-backup-install-rdo.rst
 doc/source/install/cinder-backup-install-ubuntu.rst
@@ -2077,7 +2079,6 @@ releasenotes/notes/mark-scality-unsupported-530370e034a6f488.yaml
 releasenotes/notes/mark-synology-deprecated-134ba9764e14af67.yaml
 releasenotes/notes/mark-tegile-deprecated-1effb23010ea997c.yaml
 releasenotes/notes/mark-violin-unsupported-fdf6b34cf9847359.yaml
-releasenotes/notes/mark-vzstorage-deprecated-598e5c4f2dc65f29.yaml
 releasenotes/notes/mark-xio-deprecated-18c914e15695d793.yaml
 releasenotes/notes/mark-zte-unsupported-3c048e419264eca2.yaml
 releasenotes/notes/metadata-for-volume-summary-729ba648db4e4e54.yaml
@@ -2117,6 +2118,7 @@ releasenotes/notes/period-task-clean-reservation-0e0617a7905df923.yaml
 releasenotes/notes/permit_volume_type_operations-b2e130fd7088f335.yaml
 releasenotes/notes/prophetstor-generic-groups-c7136c32b2f75c0a.yaml
 releasenotes/notes/pure-custom-user-agent-dcca4cb44b69e763.yaml
+releasenotes/notes/pure-default-replica-interval-07de0a56f61c7c1e.yaml
 releasenotes/notes/pure-enhanced-stats-42a684fe4546d1b1.yaml
 releasenotes/notes/pure-eradicate-on-delete-1e15e1440d5cd4d6.yaml
 releasenotes/notes/pure-fc-wwpn-case-c1d97f3fa7663acf.yaml
@@ -2210,6 +2212,7 @@ releasenotes/notes/synology-volume-driver-c5e0f655b04390ce.yaml
 releasenotes/notes/tintri_image_direct_clone-f73e561985aad867.yaml
 releasenotes/notes/tooz-coordination-heartbeat-cfac1064fd7878be.yaml
 releasenotes/notes/tooz-locks-0f9f2cc15f8dad5a.yaml
+releasenotes/notes/type-extra-spec-policies-b7742b0ac2732864.yaml
 releasenotes/notes/unity-backup-via-snapshot-81a2d5a118c97042.yaml
 releasenotes/notes/unity-fast-clone-02ae88ba8fdef145.yaml
 releasenotes/notes/updated-at-list-0f899098f7258331.yaml
