@@ -5,6 +5,15 @@
 set -e
 DAEMONS=('apache2' 'cinder-scheduler')
 
+if grep -qE "^(sql_)?connection.*sqlite.*" /etc/cinder/cinder.conf
+then
+    su -s /bin/sh -c 'cinder-manage db sync' cinder
+fi
+
+for daemon in "${DAEMONS[@]}"; do
+    systemctl restart $daemon
+done
+
 for daemon in "${DAEMONS[@]}"; do
     if pidof -x $daemon > /dev/null; then
         echo "OK"

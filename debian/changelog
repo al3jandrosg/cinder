@@ -1,3 +1,11 @@
+cinder (2:11.0.0~rc2-0ubuntu3) artful; urgency=medium
+
+  * d/cinder.conf, d/tests/cinder-daemons, d/tests/cinder-volume: Update
+    default config with enabled_backends and database connection, and run
+    db sync commands in autopkgtests prior to testing services are running.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 29 Aug 2017 17:14:11 -0400
+
 cinder (2:11.0.0~rc2-0ubuntu2) artful; urgency=medium
 
   * d/cinder-common.postinst: Drop db sync (LP: #1713059).
