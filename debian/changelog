@@ -1,3 +1,11 @@
+cinder (2:11.0.0-0ubuntu1) artful; urgency=medium
+
+  * d/tests/cinder-daemons, d/tests/cinder-volume: Add some resiliency
+    to allow time for services to start after restart.
+  * New upstream release for OpenStack Pike.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 30 Aug 2017 09:11:08 -0400
+
 cinder (2:11.0.0~rc2-0ubuntu3) artful; urgency=medium
 
   * d/cinder.conf, d/tests/cinder-daemons, d/tests/cinder-volume: Update

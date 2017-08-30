@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-11.0.0.0rc2
------------
+11.0.0
+------
 
 * [Doc Bld Fix] Add links to man page contents
 * Allow v3.0 volume metadata API calls
