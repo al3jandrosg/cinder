@@ -1,3 +1,10 @@
+cinder (2:11.0.0-0ubuntu2) artful; urgency=medium
+
+  * d/cinder-wsgi.conf: Ensure apache processes run under cinder group,
+    allowing access to /etc/cinder/* (LP: #1715024).
+
+ -- James Page <james.page@ubuntu.com>  Mon, 18 Sep 2017 09:24:40 +0100
+
 cinder (2:11.0.0-0ubuntu1) artful; urgency=medium
 
   * d/tests/cinder-daemons, d/tests/cinder-volume: Add some resiliency
