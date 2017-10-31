@@ -1,3 +1,10 @@
+cinder (2:11.0.0-0ubuntu3) bionic; urgency=medium
+
+  * d/control: Move apache dependencies to cinder-api binary package
+    (LP: #1728754).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 31 Oct 2017 09:33:45 -0400
+
 cinder (2:11.0.0-0ubuntu2) artful; urgency=medium
 
   * d/cinder-wsgi.conf: Ensure apache processes run under cinder group,
