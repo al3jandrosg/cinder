@@ -225,8 +225,7 @@ volume_opts = [
                      'create a cloned volume and register its location to '
                      'the image service, instead of uploading the volume '
                      'content. The cinder backend and locations support '
-                     'must be enabled in the image service, and '
-                     'glance_api_version must be set to 2.'),
+                     'must be enabled in the image service.'),
     cfg.BoolOpt('image_upload_use_internal_tenant',
                 default=False,
                 help='If set to True, the image volume created by '
@@ -258,9 +257,10 @@ volume_opts = [
                     'storage back-end.'),
     cfg.BoolOpt('backup_use_temp_snapshot',
                 default=False,
-                help='If this is set to True, the backup_use_temp_snapshot '
-                     'path will be used during the backup. Otherwise, it '
-                     'will use backup_use_temp_volume path.'),
+                help='If this is set to True, a temporary snapshot will '
+                     'be created for performing non-disruptive backups. '
+                     'Otherwise a temporary volume will be cloned '
+                     'in order to perform a backup.'),
     cfg.BoolOpt('enable_unsupported_driver',
                 default=False,
                 help="Set this to True when you want to allow an unsupported "
@@ -1093,7 +1093,14 @@ class BaseVD(object):
         return None, False
 
     def backup_use_temp_snapshot(self):
-        return False
+        """Get the configured setting for backup from snapshot.
+
+        If an inheriting driver does not support this operation,
+        the driver should override this method to return false
+        and log a warning letting the administrator know they
+        have configured something that cannot be done.
+        """
+        return self.configuration.safe_get("backup_use_temp_snapshot")
 
     def snapshot_remote_attachable(self):
         # TODO(lixiaoy1): the method will be deleted later when remote
@@ -1838,21 +1845,6 @@ class BaseVD(object):
         pass
 
 
-class LocalVD(object):
-    """This class has been deprecated and should not be inherited."""
-    pass
-
-
-class SnapshotVD(object):
-    """This class has been deprecated and should not be inherited."""
-    pass
-
-
-class ConsistencyGroupVD(object):
-    """This class has been deprecated and should not be inherited."""
-    pass
-
-
 @six.add_metaclass(abc.ABCMeta)
 class CloneableImageVD(object):
     @abc.abstractmethod
@@ -1899,16 +1891,6 @@ class MigrateVD(object):
                      dictionary of its reported capabilities.
         """
         return (False, None)
-
-
-class ExtendVD(object):
-    """This class has been deprecated and should not be inherited."""
-    pass
-
-
-class TransferVD(object):
-    """This class has been deprecated and should not be inherited."""
-    pass
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -2120,9 +2102,6 @@ class VolumeDriver(ManageableVD, CloneableImageVD, ManageableSnapshotsVD,
         the secondary volume.
         """
 
-        raise NotImplementedError()
-
-    def create_replica_test_volume(self, volume, src_vref):
         raise NotImplementedError()
 
     def delete_volume(self, volume):

@@ -21,7 +21,9 @@ Implements operations on volumes residing on VMware datastores.
 from oslo_log import log as logging
 from oslo_utils import units
 from oslo_vmware import exceptions
+from oslo_vmware.objects import datastore as ds_obj
 from oslo_vmware import vim_util
+import six
 from six.moves import urllib
 
 from cinder.i18n import _
@@ -278,9 +280,11 @@ class ControllerType(object):
 class VMwareVolumeOps(object):
     """Manages volume operations."""
 
-    def __init__(self, session, max_objects):
+    def __init__(self, session, max_objects, extension_key, extension_type):
         self._session = session
         self._max_objects = max_objects
+        self._extension_key = extension_key
+        self._extension_type = extension_type
         self._folder_cache = {}
 
     def get_backing(self, name):
@@ -305,6 +309,17 @@ class VMwareVolumeOps(object):
             retrieve_result = self.continue_retrieval(retrieve_result)
 
         LOG.debug("Did not find any backing with name: %s", name)
+
+    def get_backing_by_uuid(self, uuid):
+        result = self._session.invoke_api(
+            self._session.vim,
+            'FindAllByUuid',
+            self._session.vim.service_content.searchIndex,
+            uuid=uuid,
+            vmSearch=True,
+            instanceUuid=True)
+        if result:
+            return result[0]
 
     def delete_backing(self, backing):
         """Delete the backing.
@@ -672,6 +687,13 @@ class VMwareVolumeOps(object):
 
         return option_values
 
+    def _create_managed_by_info(self):
+        managed_by = self._session.vim.client.factory.create(
+            'ns0:ManagedByInfo')
+        managed_by.extensionKey = self._extension_key
+        managed_by.type = self._extension_type
+        return managed_by
+
     def _get_create_spec_disk_less(self, name, ds_name, profileId=None,
                                    extra_config=None):
         """Return spec for creating disk-less backing.
@@ -710,6 +732,7 @@ class VMwareVolumeOps(object):
             create_spec.extraConfig = self._get_extra_config_option_values(
                 extra_config)
 
+        create_spec.managedBy = self._create_managed_by_info()
         return create_spec
 
     def get_create_spec(self, name, size_kb, disk_type, ds_name,
@@ -1035,7 +1058,7 @@ class VMwareVolumeOps(object):
 
     def _get_clone_spec(self, datastore, disk_move_type, snapshot, backing,
                         disk_type, host=None, resource_pool=None,
-                        extra_config=None):
+                        extra_config=None, disks_to_clone=None):
         """Get the clone spec.
 
         :param datastore: Reference to datastore
@@ -1047,6 +1070,7 @@ class VMwareVolumeOps(object):
         :param resource_pool: Target resource pool
         :param extra_config: Key-value pairs to be written to backing's
                              extra-config
+        :param disks_to_clone: UUIDs of disks to clone
         :return: Clone spec
         """
         if disk_type is not None:
@@ -1064,20 +1088,37 @@ class VMwareVolumeOps(object):
         clone_spec.template = False
         clone_spec.snapshot = snapshot
 
+        config_spec = cf.create('ns0:VirtualMachineConfigSpec')
+        config_spec.managedBy = self._create_managed_by_info()
+        clone_spec.config = config_spec
+
         if extra_config:
-            config_spec = cf.create('ns0:VirtualMachineConfigSpec')
             if BACKING_UUID_KEY in extra_config:
                 config_spec.instanceUuid = extra_config.pop(BACKING_UUID_KEY)
             config_spec.extraConfig = self._get_extra_config_option_values(
                 extra_config)
-            clone_spec.config = config_spec
+
+        if disks_to_clone:
+            config_spec.deviceChange = (
+                self._create_device_change_for_disk_removal(
+                    backing, disks_to_clone))
 
         LOG.debug("Spec for cloning the backing: %s.", clone_spec)
         return clone_spec
 
+    def _create_device_change_for_disk_removal(self, backing, disks_to_clone):
+        disk_devices = self._get_disk_devices(backing)
+
+        device_change = []
+        for device in disk_devices:
+            if device.backing.uuid not in disks_to_clone:
+                device_change.append(self._create_spec_for_disk_remove(device))
+
+        return device_change
+
     def clone_backing(self, name, backing, snapshot, clone_type, datastore,
                       disk_type=None, host=None, resource_pool=None,
-                      extra_config=None, folder=None):
+                      extra_config=None, folder=None, disks_to_clone=None):
         """Clone backing.
 
         If the clone_type is 'full', then a full clone of the source volume
@@ -1095,6 +1136,7 @@ class VMwareVolumeOps(object):
         :param extra_config: Key-value pairs to be written to backing's
                              extra-config
         :param folder: The location of the clone
+        :param disks_to_clone: UUIDs of disks to clone
         """
         LOG.debug("Creating a clone of backing: %(back)s, named: %(name)s, "
                   "clone type: %(type)s from snapshot: %(snap)s on "
@@ -1114,7 +1156,9 @@ class VMwareVolumeOps(object):
             disk_move_type = 'moveAllDiskBackingsAndDisallowSharing'
         clone_spec = self._get_clone_spec(
             datastore, disk_move_type, snapshot, backing, disk_type, host=host,
-            resource_pool=resource_pool, extra_config=extra_config)
+            resource_pool=resource_pool, extra_config=extra_config,
+            disks_to_clone=disks_to_clone)
+
         task = self._session.invoke_api(self._session.vim, 'CloneVM_Task',
                                         backing, folder=folder, name=name,
                                         spec=clone_spec)
@@ -1506,7 +1550,32 @@ class VMwareVolumeOps(object):
                                         destName=dest_vmdk_file_path,
                                         destDatacenter=dest_dc_ref,
                                         force=True)
+        self._session.wait_for_task(task)
 
+    def copy_datastore_file(self, vsphere_url, dest_dc_ref, dest_ds_file_path):
+        """Copy file to datastore location.
+
+        :param vsphere_url: vsphere URL of the file
+        :param dest_dc_ref: Reference to destination datacenter
+        :param dest_file_path: Destination datastore file path
+        """
+        LOG.debug("Copying file: %(vsphere_url)s to %(path)s.",
+                  {'vsphere_url': vsphere_url,
+                   'path': dest_ds_file_path})
+        location_url = ds_obj.DatastoreURL.urlparse(vsphere_url)
+        src_path = ds_obj.DatastorePath(location_url.datastore_name,
+                                        location_url.path)
+        src_dc_ref = self.get_entity_by_inventory_path(
+            location_url.datacenter_path)
+
+        task = self._session.invoke_api(
+            self._session.vim,
+            'CopyDatastoreFile_Task',
+            self._session.vim.service_content.fileManager,
+            sourceName=six.text_type(src_path),
+            sourceDatacenter=src_dc_ref,
+            destinationName=dest_ds_file_path,
+            destinationDatacenter=dest_dc_ref)
         self._session.wait_for_task(task)
 
     def delete_vmdk_file(self, vmdk_file_path, dc_ref):
@@ -1586,6 +1655,10 @@ class VMwareVolumeOps(object):
             self._session.vim.service_content.searchIndex,
             inventoryPath=path)
 
+    def get_inventory_path(self, entity):
+        return self._session.invoke_api(
+            vim_util, 'get_inventory_path', self._session.vim, entity)
+
     def _get_disk_devices(self, vm):
         disk_devices = []
         hardware_devices = self._session.invoke_api(vim_util,
@@ -1617,3 +1690,7 @@ class VMwareVolumeOps(object):
             if (backing.__class__.__name__ == "VirtualDiskFlatVer2BackingInfo"
                     and backing.fileName == vmdk_path):
                 return disk_device
+
+    def mark_backing_as_template(self, backing):
+        LOG.debug("Marking backing: %s as template.", backing)
+        self._session.invoke_api(self._session.vim, 'MarkAsTemplate', backing)

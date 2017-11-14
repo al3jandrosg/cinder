@@ -412,7 +412,6 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
             'multiattach': False,
             'total_capacity_gb': 10.0,
             'free_capacity_gb': 2.0,
-            'provisioned_capacity_gb': 8.0,
             'netapp_dedupe_used_percent': 55.0,
             'netapp_aggregate_used_percent': 45,
             'utilization': 30.0,
@@ -727,8 +726,8 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
 
     def test_add_looping_tasks(self):
         mock_update_ssc = self.mock_object(self.library, '_update_ssc')
-        mock_remove_unused_qos_policy_groups = self.mock_object(
-            self.zapi_client, 'remove_unused_qos_policy_groups')
+        mock_handle_housekeeping = self.mock_object(
+            self.library, '_handle_housekeeping_tasks')
         mock_add_task = self.mock_object(self.library.loopingcalls, 'add_task')
         mock_super_add_looping_tasks = self.mock_object(
             block_base.NetAppBlockStorageLibrary, '_add_looping_tasks')
@@ -740,9 +739,9 @@ class NetAppBlockStorageCmodeLibraryTestCase(test.TestCase):
             mock.call(mock_update_ssc,
                       loopingcalls.ONE_HOUR,
                       loopingcalls.ONE_HOUR),
-            mock.call(mock_remove_unused_qos_policy_groups,
-                      loopingcalls.ONE_MINUTE,
-                      loopingcalls.ONE_MINUTE)])
+            mock.call(mock_handle_housekeeping,
+                      loopingcalls.TEN_MINUTES,
+                      0)])
         mock_super_add_looping_tasks.assert_called_once_with()
 
     def test_get_backing_flexvol_names(self):

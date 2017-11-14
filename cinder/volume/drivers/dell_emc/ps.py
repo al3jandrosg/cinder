@@ -136,10 +136,14 @@ class PSSeriesISCSIDriver(san.SanISCSIDriver):
                 eqlx_chap_login, and eqlx_chap_password.
         1.4.1 - Rebranded driver to Dell EMC.
         1.4.2 - Enable report discard support.
+        1.4.3 - Report total_volumes in volume stats
+        1.4.4 - Fixed over-subscription ratio calculation
+        1.4.5 - Optimize volume stats information parsing
+        1.4.6 - Extend volume with no-snap option
 
     """
 
-    VERSION = "1.4.2"
+    VERSION = "1.4.6"
 
     # ThirdPartySytems wiki page
     CI_WIKI_NAME = "Dell_Storage_CI"
@@ -299,12 +303,12 @@ class PSSeriesISCSIDriver(san.SanISCSIDriver):
         data['reserved_percentage'] = 0
         data['QoS_support'] = False
 
-        data['total_capacity_gb'] = 0
-        data['free_capacity_gb'] = 0
+        data['total_capacity_gb'] = None
+        data['free_capacity_gb'] = None
         data['multiattach'] = False
+        data['total_volumes'] = None
 
-        provisioned_capacity = 0
-
+        provisioned_capacity = None
         for line in self._eql_execute('pool', 'select',
                                       self.configuration.eqlx_pool, 'show'):
             if line.startswith('TotalCapacity:'):
@@ -313,9 +317,16 @@ class PSSeriesISCSIDriver(san.SanISCSIDriver):
             if line.startswith('FreeSpace:'):
                 out_tup = line.rstrip().partition(' ')
                 data['free_capacity_gb'] = self._get_space_in_gb(out_tup[-1])
-            if line.startswith('VolumeReserve:'):
+            if line.startswith('VolumeReportedSpace:'):
                 out_tup = line.rstrip().partition(' ')
                 provisioned_capacity = self._get_space_in_gb(out_tup[-1])
+            if line.startswith('TotalVolumes:'):
+                out_tup = line.rstrip().partition(' ')
+                data['total_volumes'] = int(out_tup[-1])
+            # Terminate parsing once this data is found to improve performance
+            if (data['total_capacity_gb'] and data['free_capacity_gb'] and
+               provisioned_capacity and data['total_volumes']):
+                break
 
         global_capacity = data['total_capacity_gb']
         global_free = data['free_capacity_gb']
@@ -603,7 +614,7 @@ class PSSeriesISCSIDriver(san.SanISCSIDriver):
         """Extend the size of the volume."""
         try:
             self._eql_execute('volume', 'select', volume['name'],
-                              'size', "%sG" % new_size)
+                              'size', "%sG" % new_size, 'no-snap')
             LOG.info('Volume %(name)s resized from '
                      '%(current_size)sGB to %(new_size)sGB.',
                      {'name': volume['name'],

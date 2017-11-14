@@ -6,8 +6,8 @@ microversion change. The description for each version should be a
 verbose one which has enough information to be suitable for use in
 user documentation.
 
-3.0
----
+3.0 (Maximum in Mitaka)
+-----------------------
   The 3.0 Cinder API includes all v2 core APIs existing prior to
   the introduction of microversions.  The /v3 URL is used to call
   3.0 APIs.
@@ -287,7 +287,9 @@ user documentation.
 
 3.27 (Maximum in Ocata)
 -----------------------
-  Added new attachment APIs
+  Added new attachment APIs. See the
+  `API reference <https://developer.openstack.org/api-ref/block-storage/v3/index.html#attachments>`__
+  for details.
 
 3.28
 ----
@@ -362,6 +364,12 @@ user documentation.
   ``volume:extend_attached_volume`` policy rule.  Extend of a resered
   Volume is NOT allowed.
 
-3.43
-----
+3.43 (Maximum in Pike)
+----------------------
   Support backup CRUD with metadata.
+
+3.44
+----
+  Support attachment completion. See the
+  `API reference <https://developer.openstack.org/api-ref/block-storage/v3/index.html#complete-attachment>`__
+  for details.

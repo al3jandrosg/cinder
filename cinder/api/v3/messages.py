@@ -17,26 +17,13 @@ from six.moves import http_client
 import webob
 
 from cinder.api import common
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder.api.v3.views import messages as messages_view
 from cinder.message import api as message_api
 from cinder.message import defined_messages
 from cinder.message import message_field
-import cinder.policy
-
-
-MESSAGES_BASE_MICRO_VERSION = '3.3'
-
-
-def check_policy(context, action, target_obj=None):
-    target = {
-        'project_id': context.project_id,
-        'user_id': context.user_id,
-    }
-    target.update(target_obj or {})
-
-    _action = 'message:%s' % action
-    cinder.policy.enforce(context, _action, target)
+from cinder.policies import messages as policy
 
 
 class MessagesController(wsgi.Controller):
@@ -62,7 +49,7 @@ class MessagesController(wsgi.Controller):
                 message_field.translate_action(message['action_id']),
                 message_field.translate_detail(message['detail_id']))
 
-    @wsgi.Controller.api_version(MESSAGES_BASE_MICRO_VERSION)
+    @wsgi.Controller.api_version(mv.MESSAGES)
     def show(self, req, id):
         """Return the given message."""
         context = req.environ['cinder.context']
@@ -70,29 +57,29 @@ class MessagesController(wsgi.Controller):
         # Not found exception will be handled at the wsgi level
         message = self.message_api.get(context, id)
 
-        check_policy(context, 'get', message)
+        context.authorize(policy.GET_POLICY)
 
         self._build_user_message(message)
         return self._view_builder.detail(req, message)
 
-    @wsgi.Controller.api_version(MESSAGES_BASE_MICRO_VERSION)
+    @wsgi.Controller.api_version(mv.MESSAGES)
     def delete(self, req, id):
         """Delete a message."""
         context = req.environ['cinder.context']
 
         # Not found exception will be handled at the wsgi level
         message = self.message_api.get(context, id)
-        check_policy(context, 'delete', message)
+        context.authorize(policy.DELETE_POLICY, target_obj=message)
         self.message_api.delete(context, message)
 
         return webob.Response(status_int=http_client.NO_CONTENT)
 
-    @wsgi.Controller.api_version(MESSAGES_BASE_MICRO_VERSION)
+    @wsgi.Controller.api_version(mv.MESSAGES)
     def index(self, req):
         """Returns a list of messages, transformed through view builder."""
         context = req.environ['cinder.context']
         api_version = req.api_version_request
-        check_policy(context, 'get_all')
+        context.authorize(policy.GET_ALL_POLICY)
         filters = None
         marker = None
         limit = None
@@ -100,14 +87,14 @@ class MessagesController(wsgi.Controller):
         sort_keys = None
         sort_dirs = None
 
-        if api_version.matches("3.5"):
+        if api_version.matches(mv.MESSAGES_PAGINATION):
             filters = req.params.copy()
             marker, limit, offset = common.get_pagination_params(filters)
             sort_keys, sort_dirs = common.get_sort_params(filters)
 
-        if api_version.matches(common.FILTERING_VERSION):
+        if api_version.matches(mv.RESOURCE_FILTER):
             support_like = (True if api_version.matches(
-                common.LIKE_FILTER_VERSION) else False)
+                mv.LIKE_FILTER) else False)
             common.reject_invalid_filters(context, filters, 'message',
                                           support_like)
 

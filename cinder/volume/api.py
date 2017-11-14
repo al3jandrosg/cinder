@@ -43,6 +43,10 @@ from cinder import keymgr as key_manager
 from cinder import objects
 from cinder.objects import base as objects_base
 from cinder.objects import fields
+from cinder.policies import attachments as attachment_policy
+from cinder.policies import services as svr_policy
+from cinder.policies import snapshot_metadata as s_meta_policy
+from cinder.policies import snapshots as snapshot_policy
 import cinder.policy
 from cinder import quota
 from cinder import quota_utils
@@ -225,6 +229,13 @@ class API(base.Base):
 
         check_policy(context, 'create_from_image' if image_id else 'create')
 
+        # Check up front for legacy replication parameters to quick fail
+        if source_replica:
+            msg = _("Creating a volume from a replica source was part of the "
+                    "replication v1 implementation which is no longer "
+                    "available.")
+            raise exception.InvalidInput(reason=msg)
+
         # NOTE(jdg): we can have a create without size if we're
         # doing a create from snap or volume.  Currently
         # the taskflow api will handle this and pull in the
@@ -276,12 +287,6 @@ class API(base.Base):
                             "or omit type argument).") % volume_type.id
                     raise exception.InvalidInput(reason=msg)
 
-        # When cloning replica (for testing), volume type must be omitted
-        if source_replica and volume_type:
-            msg = _("No volume_type should be provided when creating test "
-                    "replica.")
-            raise exception.InvalidInput(reason=msg)
-
         if snapshot and volume_type:
             if volume_type.id != snapshot.volume_type_id:
                 if not self._retype_is_possible(context,
@@ -315,7 +320,6 @@ class API(base.Base):
             'source_volume': source_volume,
             'scheduler_hints': scheduler_hints,
             'key_manager': self.key_manager,
-            'source_replica': source_replica,
             'optional_args': {'is_quota_committed': False},
             'consistencygroup': consistencygroup,
             'cgsnapshot': cgsnapshot,
@@ -623,7 +627,7 @@ class API(base.Base):
         return volumes
 
     def get_snapshot(self, context, snapshot_id):
-        check_policy(context, 'get_snapshot')
+        context.authorize(snapshot_policy.GET_POLICY)
         snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
 
         # FIXME(jdg): The objects don't have the db name entries
@@ -642,7 +646,7 @@ class API(base.Base):
     def get_all_snapshots(self, context, search_opts=None, marker=None,
                           limit=None, sort_keys=None, sort_dirs=None,
                           offset=None):
-        check_policy(context, 'get_all_snapshots')
+        context.authorize(snapshot_policy.GET_ALL_POLICY)
 
         search_opts = search_opts or {}
 
@@ -826,7 +830,7 @@ class API(base.Base):
                               cgsnapshot_id,
                               commit_quota=True,
                               group_snapshot_id=None):
-        check_policy(context, 'create_snapshot', volume)
+        context.authorize(snapshot_policy.CREATE_POLICY)
 
         if not volume.host:
             msg = _("The snapshot cannot be created because volume has "
@@ -1030,9 +1034,10 @@ class API(base.Base):
                  resource=result)
         return result
 
-    @wrap_check_policy
     def delete_snapshot(self, context, snapshot, force=False,
                         unmanage_only=False):
+        context.authorize(snapshot_policy.DELETE_POLICY,
+                          target_obj=snapshot)
         if not unmanage_only:
             snapshot.assert_not_frozen()
 
@@ -1060,8 +1065,9 @@ class API(base.Base):
         LOG.info("Snapshot delete request issued successfully.",
                  resource=snapshot)
 
-    @wrap_check_policy
     def update_snapshot(self, context, snapshot, fields):
+        context.authorize(snapshot_policy.UPDATE_POLICY,
+                          target_obj=snapshot)
         snapshot.update(fields)
         snapshot.save()
 
@@ -1152,21 +1158,22 @@ class API(base.Base):
                  resource=volume)
         return db_meta
 
-    @wrap_check_policy
     def get_snapshot_metadata(self, context, snapshot):
         """Get all metadata associated with a snapshot."""
+        context.authorize(s_meta_policy.GET_POLICY,
+                          target_obj=snapshot)
         LOG.info("Get snapshot metadata completed successfully.",
                  resource=snapshot)
         return snapshot.metadata
 
-    @wrap_check_policy
     def delete_snapshot_metadata(self, context, snapshot, key):
         """Delete the given metadata item from a snapshot."""
+        context.authorize(s_meta_policy.DELETE_POLICY,
+                          target_obj=snapshot)
         snapshot.delete_metadata_key(context, key)
         LOG.info("Delete snapshot metadata completed successfully.",
                  resource=snapshot)
 
-    @wrap_check_policy
     def update_snapshot_metadata(self, context,
                                  snapshot, metadata,
                                  delete=False):
@@ -1176,6 +1183,8 @@ class API(base.Base):
         `metadata` argument will be deleted.
 
         """
+        context.authorize(s_meta_policy.UPDATE_POLICY,
+                          target_obj=snapshot)
         if delete:
             _metadata = metadata
         else:
@@ -1301,7 +1310,8 @@ class API(base.Base):
         return response
 
     def _extend(self, context, volume, new_size, attached=False):
-        value = {'status': 'extending'}
+        value = {'status': 'extending',
+                 'previous_status': volume.status}
         if attached:
             expected = {'status': 'in-use'}
         else:
@@ -1834,7 +1844,7 @@ class API(base.Base):
         return cluster, services
 
     def failover(self, ctxt, host, cluster_name, secondary_id=None):
-        check_policy(ctxt, 'failover_host')
+        ctxt.authorize(svr_policy.FAILOVER_POLICY)
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
 
         # TODO(geguileo): In P - Remove this version check
@@ -1855,7 +1865,7 @@ class API(base.Base):
         self.volume_rpcapi.failover(ctxt, services[0], secondary_id)
 
     def freeze_host(self, ctxt, host, cluster_name):
-        check_policy(ctxt, 'freeze_host')
+        ctxt.authorize(svr_policy.FREEZE_POLICY)
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
 
         expected = False
@@ -1870,7 +1880,7 @@ class API(base.Base):
         self.volume_rpcapi.freeze_host(ctxt, services[0])
 
     def thaw_host(self, ctxt, host, cluster_name):
-        check_policy(ctxt, 'thaw_host')
+        ctxt.authorize(svr_policy.THAW_POLICY)
         ctxt = ctxt if ctxt.is_admin else ctxt.elevated()
 
         expected = True
@@ -1909,20 +1919,20 @@ class API(base.Base):
     def _check_boolean_filter_value(self, key, val, strict=False):
         """Boolean filter values in Volume GET.
 
-        Before V3.2, all values other than 'False', 'false', 'FALSE' were
-        trated as True for specific boolean filter parameters in Volume
-        GET request.
+        Before VOLUME_LIST_BOOTABLE, all values other than 'False', 'false',
+        'FALSE' were trated as True for specific boolean filter parameters in
+        Volume GET request.
 
-        But V3.2 onwards, only true/True/0/1/False/false parameters are
-        supported.
+        But VOLUME_LIST_BOOTABLE onwards, only true/True/0/1/False/false
+        parameters are supported.
         All other input values to specific boolean filter parameter will
         lead to raising exception.
 
-        This changes API behavior. So, micro version introduced for V3.2
-        onwards.
+        This changes API behavior. So, micro version introduced for
+        VOLUME_LIST_BOOTABLE onwards.
         """
         if strict:
-            # for updated behavior, from V3.2 onwards.
+            # for updated behavior, from VOLUME_LIST_BOOTABLE onwards.
             # To translate any true/false/t/f/0/1 to True/False
             # which is only acceptable format in database queries.
             try:
@@ -1932,7 +1942,7 @@ class API(base.Base):
                                                       'value': val}
                 raise exception.InvalidInput(reason=msg)
         else:
-            # For existing behavior(before version 3.2)
+            # For existing behavior(before version VOLUME_LIST_BOOTABLE)
             accepted_true = ['True', 'true', 'TRUE']
             accepted_false = ['False', 'false', 'FALSE']
 
@@ -1951,7 +1961,7 @@ class API(base.Base):
         # FIXME(JDG):  We want to be able to do things here like reserve a
         # volume for Nova to do BFV WHILE the volume may be in the process of
         # downloading image, we add downloading here; that's easy enough but
-        # we've got a race inbetween with the attaching/detaching that we do
+        # we've got a race between with the attaching/detaching that we do
         # locally on the Cinder node.  Just come up with an easy way to
         # determine if we're attaching to the Cinder host for some work or if
         # we're being used by the outside world.
@@ -1985,13 +1995,13 @@ class API(base.Base):
         db_ref = self.db.volume_attach(ctxt.elevated(), values)
         return objects.VolumeAttachment.get_by_id(ctxt, db_ref['id'])
 
-    @wrap_check_policy
     def attachment_create(self,
                           ctxt,
                           volume_ref,
                           instance_uuid,
                           connector=None):
         """Create an attachment record for the specified volume."""
+        ctxt.authorize(attachment_policy.CREATE_POLICY, target_obj=volume_ref)
         connection_info = {}
         attachment_ref = self._attachment_reserve(ctxt,
                                                   volume_ref,
@@ -2006,7 +2016,6 @@ class API(base.Base):
         attachment_ref.save()
         return attachment_ref
 
-    @wrap_check_policy
     def attachment_update(self, ctxt, attachment_ref, connector):
         """Update an existing attachment record."""
         # Valid items to update (connector includes mode and mountpoint):
@@ -2018,6 +2027,8 @@ class API(base.Base):
         # We fetch the volume object and pass it to the rpc call because we
         # need to direct this to the correct host/backend
 
+        ctxt.authorize(attachment_policy.UPDATE_POLICY,
+                       target_obj=attachment_ref)
         volume_ref = objects.Volume.get_by_id(ctxt, attachment_ref.volume_id)
         connection_info = (
             self.volume_rpcapi.attachment_update(ctxt,
@@ -2028,8 +2039,9 @@ class API(base.Base):
         attachment_ref.save()
         return attachment_ref
 
-    @wrap_check_policy
     def attachment_delete(self, ctxt, attachment):
+        ctxt.authorize(attachment_policy.DELETE_POLICY,
+                       target_obj=attachment)
         volume = objects.Volume.get_by_id(ctxt, attachment.volume_id)
         if attachment.attach_status == 'reserved':
             self.db.volume_detached(ctxt.elevated(), attachment.volume_id,
@@ -2042,19 +2054,37 @@ class API(base.Base):
             self.volume_rpcapi.attachment_delete(ctxt,
                                                  attachment.id,
                                                  volume)
+        status_updates = {'status': 'available',
+                          'attach_status': 'detached'}
         remaining_attachments = AO_LIST.get_all_by_volume_id(ctxt, volume.id)
 
-        # TODO(jdg): Make this check attachments_by_volume_id when we
-        # implement multi-attach for real
-        if len(remaining_attachments) < 1:
-            volume.status = 'available'
-            volume.attach_status = 'detached'
-            volume.save()
+        # NOTE(jdg) Try and figure out the > state we have left and set that
+        # attached > attaching > > detaching > reserved
+        pending_status_list = []
+        for attachment in remaining_attachments:
+            pending_status_list.append(attachment.attach_status)
+        if 'attached' in pending_status_list:
+            status_updates['status'] = 'in-use'
+            status_updates['attach_status'] = 'attached'
+        elif 'attaching' in pending_status_list:
+            status_updates['status'] = 'attaching'
+            status_updates['attach_status'] = 'attaching'
+        elif 'detaching' in pending_status_list:
+            status_updates['status'] = 'detaching'
+            status_updates['attach_status'] = 'detaching'
+        elif 'reserved' in pending_status_list:
+            status_updates['status'] = 'reserved'
+            status_updates['attach_status'] = 'reserved'
+
+        volume.status = status_updates['status']
+        volume.attach_status = status_updates['attach_status']
+        volume.save()
         return remaining_attachments
 
 
 class HostAPI(base.Base):
     """Sub-set of the Volume Manager API for managing host operations."""
+
     def set_host_enabled(self, context, host, enabled):
         """Sets the specified host's ability to accept new volumes."""
         raise NotImplementedError()

@@ -148,12 +148,6 @@ CONF.register_opts(volume_manager_opts)
 CONF.register_opts(volume_backend_opts, group=config.SHARED_CONF_GROUP)
 
 MAPPING = {
-    'cinder.volume.drivers.hds.nfs.HDSNFSDriver':
-    'cinder.volume.drivers.hitachi.hnas_nfs.HNASNFSDriver',
-    'cinder.volume.drivers.hitachi.hnas_nfs.HDSNFSDriver':
-    'cinder.volume.drivers.hitachi.hnas_nfs.HNASNFSDriver',
-    'cinder.volume.drivers.ibm.xiv_ds8k':
-    'cinder.volume.drivers.ibm.ibm_storage',
     'cinder.volume.drivers.emc.scaleio':
     'cinder.volume.drivers.dell_emc.scaleio.driver',
     'cinder.volume.drivers.emc.vnx.driver.EMCVNXDriver':
@@ -363,13 +357,8 @@ class VolumeManager(manager.CleanableManager,
                         update['id'],
                         {'provider_id': update['provider_id']})
 
-        # NOTE(jdg): snapshots are slighty harder, because
-        # we do not have a host column and of course no get
-        # all by host, so we use a get_all and bounce our
-        # response off of it
         if snapshot_updates:
-            cinder_snaps = self.db.snapshot_get_all(ctxt)
-            for snap in cinder_snaps:
+            for snap in snapshots:
                 # NOTE(jdg): For now we only update those that have no entry
                 if not snap.get('provider_id', None):
                     update = (
@@ -620,7 +609,6 @@ class VolumeManager(manager.CleanableManager,
 
         snapshot_id = request_spec.get('snapshot_id')
         source_volid = request_spec.get('source_volid')
-        source_replicaid = request_spec.get('source_replicaid')
 
         if snapshot_id is not None:
             # Make sure the snapshot is not deleted until we are done with it.
@@ -628,9 +616,6 @@ class VolumeManager(manager.CleanableManager,
         elif source_volid is not None:
             # Make sure the volume is not deleted until we are done with it.
             locked_action = "%s-%s" % (source_volid, 'delete_volume')
-        elif source_replicaid is not None:
-            # Make sure the volume is not deleted until we are done with it.
-            locked_action = "%s-%s" % (source_replicaid, 'delete_volume')
         else:
             locked_action = None
 
@@ -1390,7 +1375,7 @@ class VolumeManager(manager.CleanableManager,
 
         try:
             self.create_volume(ctx, image_volume, allow_reschedule=False)
-            image_volume = objects.Volume.get_by_id(ctx, image_volume.id)
+            image_volume.refresh()
             if image_volume.status != 'available':
                 raise exception.InvalidVolume(_('Volume is not available.'))
 
@@ -2038,8 +2023,8 @@ class VolumeManager(manager.CleanableManager,
         # Wait for new_volume to become ready
         starttime = time.time()
         deadline = starttime + CONF.migration_create_volume_timeout_secs
-        # TODO(thangp): Replace get_by_id with refresh when it is available
-        new_volume = objects.Volume.get_by_id(ctxt, new_volume.id)
+
+        new_volume.refresh()
         tries = 0
         while new_volume.status != 'available':
             tries += 1
@@ -2058,9 +2043,7 @@ class VolumeManager(manager.CleanableManager,
                 raise exception.VolumeMigrationFailed(reason=msg)
             else:
                 time.sleep(tries ** 2)
-            # TODO(thangp): Replace get_by_id with refresh when it is
-            # available
-            new_volume = objects.Volume.get_by_id(ctxt, new_volume.id)
+            new_volume.refresh()
 
         # Set skipped value to avoid calling
         # function except for _create_raw_volume
@@ -2153,7 +2136,7 @@ class VolumeManager(manager.CleanableManager,
         # NOTE(jdg):  Things get a little hairy in here and we do a lot of
         # things based on volume previous-status and current-status.  At some
         # point this should all be reworked but for now we need to maintain
-        # backward compatability and NOT change the API so we're going to try
+        # backward compatibility and NOT change the API so we're going to try
         # and make this work best we can
 
         LOG.debug("migrate_volume_completion: completing migration for "
@@ -2270,7 +2253,7 @@ class VolumeManager(manager.CleanableManager,
                       'vol %(vol)s: %(err)s',
                       {'vol': volume.id, 'err': ex})
 
-        # For the new flow this is realy the key part.  We just use the
+        # For the new flow this is really the key part.  We just use the
         # attachments to the worker/destination volumes that we created and
         # used for the libvirt migration and we'll just swap their volume_id
         # entries to coorespond with the volume.id swap we did
@@ -2417,16 +2400,31 @@ class VolumeManager(manager.CleanableManager,
 
     def _append_volume_stats(self, vol_stats):
         pools = vol_stats.get('pools', None)
-        if pools and isinstance(pools, list):
-            for pool in pools:
-                pool_name = pool['pool_name']
-                try:
-                    pool_stats = self.stats['pools'][pool_name]
-                except KeyError:
-                    # Pool not found in volume manager
-                    pool_stats = dict(allocated_capacity_gb=0)
+        if pools:
+            if isinstance(pools, list):
+                for pool in pools:
+                    pool_name = pool['pool_name']
+                    try:
+                        pool_stats = self.stats['pools'][pool_name]
+                    except KeyError:
+                        # Pool not found in volume manager
+                        pool_stats = dict(allocated_capacity_gb=0)
 
-                pool.update(pool_stats)
+                    pool.update(pool_stats)
+            else:
+                raise exception.ProgrammingError(
+                    reason='Pools stats reported by the driver are not '
+                           'reported in a list')
+        # For drivers that are not reporting their stats by pool we will use
+        # the data from the special fixed pool created by
+        # _count_allocated_capacity.
+        elif self.stats.get('pools'):
+            vol_stats.update(next(iter(self.stats['pools'].values())))
+        # This is a special subcase of the above no pool case that happens when
+        # we don't have any volumes yet.
+        else:
+            vol_stats.update(self.stats)
+            vol_stats.pop('pools', None)
 
     def _append_filter_goodness_functions(self, volume_stats):
         """Returns volume_stats updated as needed."""
@@ -2608,32 +2606,6 @@ class VolumeManager(manager.CleanableManager,
                 # for now.
                 volume.update(status_update)
                 volume.save()
-
-        # If old_reservations has been passed in from the API, we should
-        # skip quotas.
-        # TODO(ntpttr): These reservation checks are left in to be backwards
-        #               compatible with Liberty and can be removed in N.
-        if not old_reservations:
-            # Get old reservations
-            try:
-                reserve_opts = {'volumes': -1, 'gigabytes': -volume.size}
-                QUOTAS.add_volume_type_opts(context,
-                                            reserve_opts,
-                                            volume.volume_type_id)
-                # NOTE(wanghao): We don't need to reserve volumes and gigabytes
-                # quota for retyping operation since they didn't changed, just
-                # reserve volume_type and type gigabytes is fine.
-                reserve_opts.pop('volumes')
-                reserve_opts.pop('gigabytes')
-                old_reservations = QUOTAS.reserve(context,
-                                                  project_id=project_id,
-                                                  **reserve_opts)
-            except Exception:
-                volume.update(status_update)
-                volume.save()
-                msg = _("Failed to update quota usage while retyping volume.")
-                LOG.exception(msg, resource=volume)
-                raise exception.CinderException(msg)
 
         # We already got the new reservations
         new_reservations = reservations
@@ -2922,8 +2894,7 @@ class VolumeManager(manager.CleanableManager,
             if group_snapshot:
                 try:
                     # Check if group_snapshot still exists
-                    group_snapshot = objects.GroupSnapshot.get_by_id(
-                        context, group_snapshot.id)
+                    group_snapshot.refresh()
                 except exception.GroupSnapshotNotFound:
                     LOG.error("Create group from snapshot-%(snap)s failed: "
                               "SnapshotNotFound.",
@@ -2949,8 +2920,7 @@ class VolumeManager(manager.CleanableManager,
 
             if source_group:
                 try:
-                    source_group = objects.Group.get_by_id(
-                        context, source_group.id)
+                    source_group.refresh()
                 except exception.GroupNotFound:
                     LOG.error("Create group "
                               "from source group-%(group)s failed: "
@@ -4373,13 +4343,13 @@ class VolumeManager(manager.CleanableManager,
                                 attachment_ref.instance_uuid,
                                 connector.get('host', ''),
                                 connector.get('mountpoint', 'na'),
-                                mode)
+                                mode,
+                                False)
         vref.refresh()
+        attachment_ref.refresh()
         self._notify_about_volume_usage(context, vref, "attach.end")
-        LOG.info("Attach volume completed successfully.",
+        LOG.info("attachment_update completed successfully.",
                  resource=vref)
-        attachment_ref = objects.VolumeAttachment.get_by_id(context,
-                                                            attachment_id)
         return connection_info
 
     def _connection_terminate(self, context, volume,
@@ -4775,7 +4745,7 @@ class VolumeManager(manager.CleanableManager,
 
         replication_targets = []
         try:
-            group = objects.Group.get_by_id(ctxt, group.id)
+            group.refresh()
             if self.configuration.replication_device:
                 if ctxt.is_admin:
                     for rep_dev in self.configuration.replication_device:

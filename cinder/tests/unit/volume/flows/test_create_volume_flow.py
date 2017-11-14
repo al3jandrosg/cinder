@@ -75,7 +75,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                 'source_volid': None,
                 'snapshot_id': None,
                 'image_id': None,
-                'source_replicaid': None,
                 'consistencygroup_id': None,
                 'cgsnapshot_id': None,
                 'group_id': None, }
@@ -93,7 +92,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                 'source_volid': 2,
                 'snapshot_id': 3,
                 'image_id': 4,
-                'source_replicaid': 5,
                 'consistencygroup_id': 5,
                 'cgsnapshot_id': None,
                 'group_id': None, }
@@ -137,7 +135,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                                            'size': 1},
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -183,7 +180,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                      volume_type=None,
                      metadata=None,
                      key_manager=fake_key_manager,
-                     source_replica=None,
                      consistencygroup=None,
                      cgsnapshot=None,
                      group=None)
@@ -228,7 +224,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=volume_type,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -240,7 +235,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': None,
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -286,7 +280,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                           volume_type=volume_type,
                           metadata=None,
                           key_manager=fake_key_manager,
-                          source_replica=None,
                           consistencygroup=None,
                           cgsnapshot=None,
                           group=None)
@@ -330,7 +323,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=volume_type,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -342,7 +334,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': None,
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -395,7 +386,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                                   volume_type=volume_type,
                                   metadata=None,
                                   key_manager=fake_key_manager,
-                                  source_replica=None,
                                   consistencygroup=None,
                                   cgsnapshot=None,
                                   group=None)
@@ -439,7 +429,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=volume_type,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -452,7 +441,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'encryption_key_id': None,
                            'qos_specs': None,
                            'replication_status': 'disabled',
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'refresh_az': False,
@@ -497,7 +485,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=volume_type,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -509,7 +496,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': {'fake_key': 'fake'},
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -562,7 +548,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=None,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -574,7 +559,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': None,
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -628,7 +612,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=None,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -640,7 +623,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': None,
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -693,7 +675,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               volume_type=None,
                               metadata=None,
                               key_manager=fake_key_manager,
-                              source_replica=None,
                               consistencygroup=None,
                               cgsnapshot=None,
                               group=None)
@@ -705,7 +686,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'volume_type_id': 1,
                            'encryption_key_id': None,
                            'qos_specs': None,
-                           'source_replicaid': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
@@ -756,7 +736,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
                           volume_type=None,
                           metadata=None,
                           key_manager=fake_key_manager,
-                          source_replica=None,
                           consistencygroup=None,
                           cgsnapshot=None,
                           group=None)
@@ -1189,13 +1168,17 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         self.assertIsNone(model)
         self.assertFalse(result)
 
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.db.volume_update')
     def test_create_from_image_extend_failure(
             self, mock_volume_update, mock_qemu_info, mock_check_size,
             mock_get_internal_context, mock_create_from_img_dl,
-            mock_create_from_src, mock_handle_bootable, mock_fetch_img):
+            mock_create_from_src, mock_handle_bootable, mock_fetch_img,
+            mock_cleanup_cg):
         self.mock_driver.clone_image.return_value = (None, False)
         self.mock_cache.get_entry.return_value = None
         self.mock_driver.extend_volume.side_effect = (
@@ -1230,6 +1213,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
                           image_meta,
                           self.mock_image_service)
 
+        self.assertTrue(mock_cleanup_cg.called)
         mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 1})
         self.assertEqual(volume_size, volume.size)
 
@@ -1511,12 +1495,15 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             image_meta=image_meta
         )
 
+    @mock.patch('cinder.volume.flows.manager.create_volume.'
+                'CreateVolumeFromSpecTask.'
+                '_cleanup_cg_in_volume')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     def test_create_from_image_cache_miss_error_size_invalid(
             self, mock_qemu_info, mock_check_space, mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
-            mock_handle_bootable, mock_fetch_img):
+            mock_handle_bootable, mock_fetch_img, mock_cleanup_cg):
         mock_fetch_img.return_value = mock.MagicMock()
         image_info = imageutils.QemuImgInfo()
         image_info.virtual_size = '2147483648'
@@ -1551,6 +1538,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             self.mock_image_service
         )
 
+        self.assertTrue(mock_cleanup_cg.called)
         # The volume size should NOT be changed when in this case
         self.assertFalse(self.mock_db.volume_update.called)
 

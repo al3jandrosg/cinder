@@ -627,6 +627,16 @@ class StorwizeSSH(object):
                    '-filtervalue', 'node_id=%s' % node_id]
         return self.run_ssh_info(ssh_cmd, with_header=True)
 
+    def lstargetportfc(self, own_node_id=None, host_io_permitted=None):
+        ssh_cmd = ['svcinfo', 'lstargetportfc', '-delim', '!']
+        if own_node_id and host_io_permitted:
+            ssh_cmd += ['-filtervalue', '%s:%s' % (
+                'owning_node_id=%s' % own_node_id,
+                'host_io_permitted=%s' % host_io_permitted)]
+        elif own_node_id:
+            ssh_cmd += ['-filtervalue', 'owning_node_id=%s' % own_node_id]
+        return self.run_ssh_info(ssh_cmd, with_header=True)
+
     def migratevdisk(self, vdisk, dest_pool, copy_id='0'):
         ssh_cmd = ['svctask', 'migratevdisk', '-mdiskgrp', dest_pool, '-copy',
                    copy_id, '-vdisk', vdisk]
@@ -813,19 +823,35 @@ class StorwizeHelpers(object):
             except KeyError:
                 self.handle_keyerror('lsportip', ip_data)
 
-    def add_fc_wwpns(self, storage_nodes):
+    def add_fc_wwpns(self, storage_nodes, code_level):
         """Add FC WWPNs to system node information."""
         for key in storage_nodes:
             node = storage_nodes[key]
             wwpns = set(node['WWPN'])
-            resp = self.ssh.lsportfc(node_id=node['id'])
-            for port_info in resp:
-                if (port_info['type'] == 'fc' and
-                        port_info['status'] == 'active'):
-                    wwpns.add(port_info['WWPN'])
+            # The Storwize/svc release 7.7.0.0 introduced NPIV feature.
+            # The virtual wwpns will be included in cli lstargetportfc
+            if code_level < (7, 7, 0, 0):
+                resp = self.ssh.lsportfc(node_id=node['id'])
+                for port_info in resp:
+                    if (port_info['type'] == 'fc' and
+                            port_info['status'] == 'active'):
+                        wwpns.add(port_info['WWPN'])
+            else:
+                npiv_wwpns = self.get_npiv_wwpns(node_id=node['id'])
+                wwpns.update(npiv_wwpns)
             node['WWPN'] = list(wwpns)
             LOG.info('WWPN on node %(node)s: %(wwpn)s.',
                      {'node': node['id'], 'wwpn': node['WWPN']})
+
+    def get_npiv_wwpns(self, node_id=None, host_io=None):
+        wwpns = set()
+        # In the response of lstargetportfc, the host_io_permitted
+        # indicates whether the port can be used for host I/O
+        resp = self.ssh.lstargetportfc(own_node_id=node_id,
+                                       host_io_permitted=host_io)
+        for port_info in resp:
+            wwpns.add(port_info['WWPN'])
+        return list(wwpns)
 
     def add_chap_secret_to_host(self, host_name):
         """Generate and store a randomly-generated CHAP secret for the host."""
@@ -2253,7 +2279,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
         # Add the iSCSI IP addresses and WWPNs to the storage node info
         self._helpers.add_iscsi_ip_addrs(self._state['storage_nodes'])
-        self._helpers.add_fc_wwpns(self._state['storage_nodes'])
+        self._helpers.add_fc_wwpns(self._state['storage_nodes'],
+                                   self._state['code_level'])
 
         # For each node, check what connection modes it supports.  Delete any
         # nodes that do not support any types (may be partially configured).
@@ -2566,17 +2593,6 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         self._helpers.delete_vdisk(snapshot['name'], False)
 
     def create_volume_from_snapshot(self, volume, snapshot):
-        if snapshot['volume_size'] > volume['size']:
-            msg = (_("create_volume_from_snapshot: snapshot %(snapshot_name)s "
-                     "size is %(snapshot_size)dGB and doesn't fit in target "
-                     "volume %(volume_name)s of size %(volume_size)dGB.") %
-                   {'snapshot_name': snapshot['name'],
-                    'snapshot_size': snapshot['volume_size'],
-                    'volume_name': volume['name'],
-                    'volume_size': volume['size']})
-            LOG.error(msg)
-            raise exception.InvalidInput(message=msg)
-
         opts = self._get_vdisk_params(volume['volume_type_id'],
                                       volume_metadata=
                                       volume.get('volume_metadata'))
@@ -2609,17 +2625,6 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
     def create_cloned_volume(self, tgt_volume, src_volume):
         """Creates a clone of the specified volume."""
-
-        if src_volume['size'] > tgt_volume['size']:
-            msg = (_("create_cloned_volume: source volume %(src_vol)s "
-                     "size is %(src_size)dGB and doesn't fit in target "
-                     "volume %(tgt_vol)s of size %(tgt_size)dGB.") %
-                   {'src_vol': src_volume['name'],
-                    'src_size': src_volume['size'],
-                    'tgt_vol': tgt_volume['name'],
-                    'tgt_size': tgt_volume['size']})
-            LOG.error(msg)
-            raise exception.InvalidInput(message=msg)
 
         opts = self._get_vdisk_params(tgt_volume['volume_type_id'],
                                       volume_metadata=

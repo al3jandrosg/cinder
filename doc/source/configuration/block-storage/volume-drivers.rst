@@ -13,9 +13,7 @@ Volume drivers
    drivers/nfs-volume-driver.rst
    drivers/sheepdog-driver.rst
    drivers/smbfs-volume-driver.rst
-   drivers/blockbridge-eps-driver.rst
    drivers/cloudbyte-driver.rst
-   drivers/coho-data-driver.rst
    drivers/coprhd-driver.rst
    drivers/datera-volume-driver.rst
    drivers/dell-emc-scaleio-driver.rst
@@ -26,10 +24,7 @@ Volume drivers
    drivers/emc-vmax-driver.rst
    drivers/emc-vnx-driver.rst
    drivers/emc-xtremio-driver.rst
-   drivers/falconstor-fss-driver.rst
    drivers/fujitsu-eternus-dx-driver.rst
-   drivers/hds-hnas-driver.rst
-   drivers/hitachi-storage-volume-driver.rst
    drivers/hpe-3par-driver.rst
    drivers/hpe-lefthand-driver.rst
    drivers/hp-msa-driver.rst
@@ -39,7 +34,6 @@ Volume drivers
    drivers/ibm-storage-volume-driver.rst
    drivers/ibm-flashsystem-volume-driver.rst
    drivers/infinidat-volume-driver.rst
-   drivers/infortrend-volume-driver.rst
    drivers/itri-disco-driver.rst
    drivers/kaminario-driver.rst
    drivers/lenovo-driver.rst
@@ -56,15 +50,12 @@ Volume drivers
    drivers/solidfire-volume-driver.rst
    drivers/synology-dsm-driver.rst
    drivers/tintri-volume-driver.rst
-   drivers/violin-v7000-driver.rst
    drivers/vzstorage-driver.rst
    drivers/vmware-vmdk-driver.rst
    drivers/windows-iscsi-volume-driver.rst
-   drivers/xio-volume-driver.rst
    drivers/zadara-volume-driver.rst
    drivers/zfssa-iscsi-driver.rst
    drivers/zfssa-nfs-driver.rst
-   drivers/zte-storage-driver.rst
 
 To use different volume drivers for the cinder-volume service, use the
 parameters described in these sections.

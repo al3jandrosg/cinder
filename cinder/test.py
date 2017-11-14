@@ -313,8 +313,9 @@ class TestCase(testtools.TestCase):
 
     def flags(self, **kw):
         """Override CONF variables for a test."""
+        group = kw.pop('group', None)
         for k, v in kw.items():
-            self.override_config(k, v)
+            CONF.set_override(k, v, group)
 
     def start_service(self, name, host=None, **kwargs):
         host = host if host else uuid.uuid4().hex
@@ -356,11 +357,28 @@ class TestCase(testtools.TestCase):
             self.assertEqual(call[1], posargs[2])
 
     def assertTrue(self, x, *args, **kwargs):
-        if isinstance(x, six.string_types):
-            raise AssertionError("%s (%s) is a string. Use a more "
-                                 "specific assertion such as assertEqual." %
-                                 (x, type(x)))
-        super(TestCase, self).assertTrue(x, *args, **kwargs)
+        """Assert that value is True.
+
+        If original behavior is required we will need to do:
+            assertTrue(bool(result))
+        """
+        # assertTrue uses msg but assertIs uses message keyword argument
+        args = list(args)
+        msg = kwargs.pop('msg', args.pop(0) if args else '')
+        kwargs.setdefault('message', msg)
+        self.assertIs(True, x, *args, **kwargs)
+
+    def assertFalse(self, x, *args, **kwargs):
+        """Assert that value is False.
+
+        If original behavior is required we will need to do:
+            assertFalse(bool(result))
+        """
+        # assertTrue uses msg but assertIs uses message keyword argument
+        args = list(args)
+        msg = kwargs.pop('msg', args.pop(0) if args else '')
+        kwargs.setdefault('message', msg)
+        self.assertIs(False, x, *args, **kwargs)
 
 
 class ModelsObjectComparatorMixin(object):

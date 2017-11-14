@@ -27,7 +27,7 @@ from oslo_utils import importutils
 from oslo_utils import units
 import six
 
-from cinder.brick.local_dev import lvm as lvm
+from cinder.brick.local_dev import lvm
 from cinder import exception
 from cinder.i18n import _
 from cinder.image import image_utils
@@ -65,12 +65,15 @@ volume_opts = [
     cfg.FloatOpt('lvm_max_over_subscription_ratio',
                  # This option exists to provide a default value for the
                  # LVM driver which is different than the global default.
-                 default=1.0,
+                 deprecated_for_removal=True,
+                 deprecated_since="12.0.0",
+                 deprecated_reason='Oversubscription ratio should now be '
+                                   'set using the common max_over_subscription'
+                                   '_ratio config option instead.',
+                 default=None,
                  help='max_over_subscription_ratio setting for the LVM '
-                      'driver. This takes precedence over the general '
-                      'max_over_subscription_ratio by default. If set '
-                      'to None, the general max_over_subscription_ratio '
-                      'is used.'),
+                      'driver. If set to None (the default), the general max_'
+                      'over_subscription_ratio is used.'),
     cfg.BoolOpt('lvm_suppress_fd_warnings',
                 default=False,
                 help='Suppress leaked file descriptor warnings in LVM '
@@ -416,6 +419,9 @@ class LVMVolumeDriver(driver.VolumeDriver):
             if volume['size'] > snapshot['volume_size']:
                 LOG.debug("Resize the new volume to %s.", volume['size'])
                 self.extend_volume(volume, volume['size'])
+            # Some configurations of LVM do not automatically activate
+            # ThinLVM snapshot LVs.
+            self.vg.activate_lv(snapshot['name'], is_snapshot=True)
             self.vg.activate_lv(volume['name'], is_snapshot=True,
                                 permanent=True)
             return

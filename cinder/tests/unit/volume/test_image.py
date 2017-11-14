@@ -269,7 +269,6 @@ class CopyVolumeToImageTestCase(base.BaseVolumeTestCase):
     def _test_copy_volume_to_image_with_image_volume(
             self, mock_copy, mock_create, mock_quota_commit,
             mock_quota_reserve):
-        self.flags(glance_api_version=2)
         self.volume.driver.configuration.image_upload_use_cinder_backend = True
         self.addCleanup(fake_image.FakeImageService_reset)
         image_service = fake_image.FakeImageService()
@@ -434,7 +433,7 @@ class ImageVolumeTestCases(base.BaseVolumeTestCase):
                                                  mock_commit, mock_rollback):
         vol = tests_utils.create_volume(self.context, **self.volume_params)
         with mock.patch.object(objects, 'Volume', side_effect=ValueError):
-            self.assertFalse(self.volume._clone_image_volume(
+            self.assertIsNone(self.volume._clone_image_volume(
                 self.context, vol, {'id': fake.VOLUME_ID}))
 
         mock_reserve.assert_called_once_with(self.context, volumes=1,

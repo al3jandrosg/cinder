@@ -42,7 +42,7 @@ import six
 import sqlalchemy
 from sqlalchemy import MetaData
 from sqlalchemy import or_, and_, case
-from sqlalchemy.orm import joinedload, joinedload_all, undefer_group
+from sqlalchemy.orm import joinedload, joinedload_all, undefer_group, load_only
 from sqlalchemy.orm import RelationshipProperty
 from sqlalchemy import sql
 from sqlalchemy.sql.expression import bindparam
@@ -557,6 +557,9 @@ def service_get_all(context, backend_match_level=None, **filters):
 
 @require_admin_context
 def service_create(context, values):
+    if not values.get('uuid'):
+        values['uuid'] = str(uuid.uuid4())
+
     service_ref = models.Service()
     service_ref.update(values)
     if not CONF.enable_new_services:
@@ -1106,15 +1109,16 @@ def _reservation_create(context, uuid, usage, project_id, resource, delta,
 # code always acquires the lock on quota_usages before acquiring the lock
 # on reservations.
 
-def _get_quota_usages(context, session, project_id):
+def _get_quota_usages(context, session, project_id, resources=None):
     # Broken out for testability
-    rows = model_query(context, models.QuotaUsage,
-                       read_deleted="no",
-                       session=session).\
-        filter_by(project_id=project_id).\
-        order_by(models.QuotaUsage.id.asc()).\
-        with_lockmode('update').\
-        all()
+    query = model_query(context, models.QuotaUsage,
+                        read_deleted="no",
+                        session=session).filter_by(project_id=project_id)
+    if resources:
+        query = query.filter(models.QuotaUsage.resource.in_(list(resources)))
+    rows = query.order_by(models.QuotaUsage.id.asc()).\
+        with_for_update().all()
+
     return {row.resource: row for row in rows}
 
 
@@ -1124,7 +1128,7 @@ def _get_quota_usages_by_resource(context, session, resource):
                        session=session).\
         filter_by(resource=resource).\
         order_by(models.QuotaUsage.id.asc()).\
-        with_lockmode('update').\
+        with_for_update().\
         all()
     return rows
 
@@ -1152,7 +1156,8 @@ def quota_reserve(context, resources, quotas, deltas, expire,
             project_id = context.project_id
 
         # Get the current usages
-        usages = _get_quota_usages(context, session, project_id)
+        usages = _get_quota_usages(context, session, project_id,
+                                   resources=deltas.keys())
         allocated = quota_allocated_get_all_by_project(context, project_id,
                                                        session=session)
         allocated.pop('project_id')
@@ -1317,6 +1322,18 @@ def _quota_reservations(session, context, reservations):
         all()
 
 
+def _get_reservation_resources(session, context, reservation_ids):
+    """Return the relevant resources by reservations."""
+
+    reservations = model_query(context, models.Reservation,
+                               read_deleted="no",
+                               session=session).\
+        options(load_only('resource')).\
+        filter(models.Reservation.uuid.in_(reservation_ids)).\
+        all()
+    return {r.resource for r in reservations}
+
+
 def _dict_with_usage_id(usages):
     return {row.id: row for row in usages.values()}
 
@@ -1326,7 +1343,10 @@ def _dict_with_usage_id(usages):
 def reservation_commit(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
-        usages = _get_quota_usages(context, session, project_id)
+        usages = _get_quota_usages(
+            context, session, project_id,
+            resources=_get_reservation_resources(session, context,
+                                                 reservations))
         usages = _dict_with_usage_id(usages)
 
         for reservation in _quota_reservations(session, context, reservations):
@@ -1345,7 +1365,10 @@ def reservation_commit(context, reservations, project_id=None):
 def reservation_rollback(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
-        usages = _get_quota_usages(context, session, project_id)
+        usages = _get_quota_usages(
+            context, session, project_id,
+            resources=_get_reservation_resources(session, context,
+                                                 reservations))
         usages = _dict_with_usage_id(usages)
         for reservation in _quota_reservations(session, context, reservations):
             if reservation.allocated_id:
@@ -1451,14 +1474,25 @@ def volume_attach(context, values):
 
 @require_admin_context
 def volume_attached(context, attachment_id, instance_uuid, host_name,
-                    mountpoint, attach_mode='rw'):
+                    mountpoint, attach_mode, mark_attached):
     """This method updates a volume attachment entry.
 
     This function saves the information related to a particular
     attachment for a volume.  It also updates the volume record
-    to mark the volume as attached.
+    to mark the volume as attached or attaching.
+
+    The mark_attached argument is a boolean, when set to True,
+    we mark the volume as 'in-use' and the 'attachment' as
+    'attached', if False, we use 'attaching' for both of these
+    status settings.
 
     """
+    attach_status = fields.VolumeAttachStatus.ATTACHED
+    volume_status = 'in-use'
+    if not mark_attached:
+        attach_status = fields.VolumeAttachStatus.ATTACHING
+        volume_status = 'attaching'
+
     if instance_uuid and not uuidutils.is_uuid_like(instance_uuid):
         raise exception.InvalidUUID(uuid=instance_uuid)
 
@@ -1468,7 +1502,7 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
                                                 session=session)
 
         updated_values = {'mountpoint': mountpoint,
-                          'attach_status': fields.VolumeAttachStatus.ATTACHED,
+                          'attach_status': attach_status,
                           'instance_uuid': instance_uuid,
                           'attached_host': host_name,
                           'attach_time': timeutils.utcnow(),
@@ -1480,8 +1514,8 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
 
         volume_ref = _volume_get(context, volume_attachment_ref['volume_id'],
                                  session=session)
-        volume_ref['status'] = 'in-use'
-        volume_ref['attach_status'] = fields.VolumeAttachStatus.ATTACHED
+        volume_ref['status'] = volume_status
+        volume_ref['attach_status'] = attach_status
         volume_ref.save(session=session)
         return (volume_ref, updated_values)
 
@@ -2952,9 +2986,9 @@ def snapshot_get_all(context, filters=None, marker=None, limit=None,
                       paired with corresponding item in sort_keys
     :returns: list of matching snapshots
     """
-    if filters and not is_valid_model_filters(models.Snapshot, filters,
-                                              exclude_list=('host',
-                                                            'cluster_name')):
+    if filters and not is_valid_model_filters(
+            models.Snapshot, filters,
+            exclude_list=('host', 'cluster_name', 'availability_zone')):
         return []
 
     session = get_session()
@@ -2980,7 +3014,7 @@ def _process_snaps_filters(query, filters):
     if filters:
         filters = filters.copy()
 
-        exclude_list = ('host', 'cluster_name')
+        exclude_list = ('host', 'cluster_name', 'availability_zone')
 
         # Ensure that filters' keys exist on the model or is metadata
         for key in filters.keys():
@@ -3012,13 +3046,16 @@ def _process_snaps_filters(query, filters):
         # filter handling for host and cluster name
         host = filters.pop('host', None)
         cluster = filters.pop('cluster_name', None)
-        if host or cluster:
+        az = filters.pop('availability_zone', None)
+        if host or cluster or az:
             query = query.join(models.Snapshot.volume)
         vol_field = models.Volume
         if host:
             query = query.filter(_filter_host(vol_field.host, host))
         if cluster:
             query = query.filter(_filter_host(vol_field.cluster_name, cluster))
+        if az:
+            query = query.filter_by(availability_zone=az)
 
         filters_dict = {}
         LOG.debug("Building query based on filter")
@@ -3131,7 +3168,8 @@ def snapshot_get_all_by_project(context, project_id, filters=None, marker=None,
     :returns: list of matching snapshots
     """
     if filters and not is_valid_model_filters(
-            models.Snapshot, filters, exclude_list=('host', 'cluster_name')):
+            models.Snapshot, filters,
+            exclude_list=('host', 'cluster_name', 'availability_zone')):
         return []
 
     authorize_project_context(context, project_id)
@@ -4326,13 +4364,21 @@ def qos_specs_create(context, values):
     """Create a new QoS specs.
 
     :param values dictionary that contains specifications for QoS
-          e.g. {'name': 'Name',
-                'consumer': 'front-end',
-                'specs': {
-                    'total_iops_sec': 1000,
-                    'total_bytes_sec': 1024000
-                    }
-                }
+
+    Expected format of the input parameter:
+
+    .. code-block:: json
+
+        {
+            'name': 'Name',
+            'consumer': 'front-end',
+            'specs':
+            {
+                'total_iops_sec': 1000,
+                'total_bytes_sec': 1024000
+            }
+        }
+
     """
     specs_id = str(uuid.uuid4())
     session = get_session()

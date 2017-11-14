@@ -24,6 +24,7 @@ Block Storage API V3 (CURRENT)
 .. List the other random volume APIs in just alphabetical order.
 .. include:: volume-manage.inc
 .. include:: volumes-v3-snapshots.inc
+.. include:: volumes-v3-snapshots-actions.inc
 .. include:: snapshot-manage.inc
 .. include:: os-vol-transfer-v3.inc
 
@@ -35,7 +36,9 @@ Block Storage API V3 (CURRENT)
 .. include:: capabilities-v3.inc
 .. include:: consistencygroups-v3.inc
 .. include:: os-cgsnapshots-v3.inc
+.. include:: os-services.inc
 .. include:: groups.inc
+.. include:: group-replication.inc
 .. include:: group-snapshots.inc
 .. include:: group-types.inc
 .. include:: group-type-specs.inc
@@ -48,3 +51,4 @@ Block Storage API V3 (CURRENT)
    our nice alphabetical ordering
 .. include:: quota-classes.inc
 .. include:: quota-sets.inc
+.. include:: worker-cleanup.inc

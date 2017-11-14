@@ -16,6 +16,7 @@
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
 
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder.api.v3.views import workers as workers_view
 from cinder import db
@@ -23,6 +24,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import objects
 from cinder.objects import cleanable
+from cinder.policies import workers as policy
 from cinder.scheduler import rpcapi as sch_rpc
 from cinder import utils
 
@@ -31,8 +33,6 @@ class WorkerController(wsgi.Controller):
     allowed_clean_keys = {'service_id', 'cluster_name', 'host', 'binary',
                           'is_up', 'disabled', 'resource_id', 'resource_type',
                           'until'}
-
-    policy_checker = wsgi.Controller.get_policy_checker('workers')
 
     def __init__(self, *args, **kwargs):
         self.sch_api = sch_rpc.SchedulerAPI()
@@ -98,12 +98,13 @@ class WorkerController(wsgi.Controller):
 
         return params
 
-    @wsgi.Controller.api_version('3.24')
+    @wsgi.Controller.api_version(mv.WORKERS_CLEANUP)
     @wsgi.response(202)
     def cleanup(self, req, body=None):
         """Do the cleanup on resources from a specific service/host/node."""
         # Let the wsgi middleware convert NotAuthorized exceptions
-        ctxt = self.policy_checker(req, 'cleanup')
+        ctxt = req.environ['cinder.context']
+        ctxt.authorize(policy.CLEAN_POLICY)
         body = body or {}
 
         params = self._prepare_params(ctxt, body, self.allowed_clean_keys)

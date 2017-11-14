@@ -2462,7 +2462,7 @@ class HuaweiTestBase(test.TestCase):
         },
         {
             'volume': fake_volume.fake_volume_obj(
-                admin_contex, id='fake_id'),
+                admin_contex, id='001e7071-413c-4c60-b087-863067ecdd72'),
             'expect': (None, None),
         }
     )
@@ -2491,7 +2491,7 @@ class HuaweiTestBase(test.TestCase):
         },
         {
             'snapshot': fake_snapshot.fake_snapshot_obj(
-                admin_contex, id='fake_id'),
+                admin_contex, id='e9c9ca0f-01e8-4780-9585-369c15026001'),
             'expect': None
         }
     )
@@ -4948,11 +4948,11 @@ class HuaweiFCDriverTestCase(HuaweiTestBase):
 
     @mock.patch.object(rest_client.RestClient, 'rename_lun')
     def test_update_migrated_volume_success(self, mock_rename_lun):
-        model_update = self.driver.update_migrated_volume(None,
-                                                          self.original_volume,
-                                                          self.current_volume,
-                                                          'available')
-        self.assertEqual({'_name_id': None}, model_update)
+        model_update = self.driver.update_migrated_volume(
+            None, self.original_volume, self.current_volume, 'available')
+        self.assertIsNone(model_update['_name_id'])
+        self.assertDictEqual(json.loads(PROVIDER_LOCATION),
+                             json.loads(model_update['provider_location']))
 
     @mock.patch.object(rest_client.RestClient, 'rename_lun')
     def test_update_migrated_volume_fail(self, mock_rename_lun):
@@ -4964,13 +4964,15 @@ class HuaweiFCDriverTestCase(HuaweiTestBase):
                                                           'available')
         self.assertEqual(self.current_volume.name_id,
                          model_update['_name_id'])
+        self.assertDictEqual(json.loads(PROVIDER_LOCATION),
+                             json.loads(model_update['provider_location']))
 
     @mock.patch.object(rest_client.RestClient, 'add_lun_to_partition')
     def test_retype_volume_success(self, mock_add_lun_to_partition):
         self.driver.support_func = FAKE_POOLS_SUPPORT_REPORT
         retype = self.driver.retype(None, self.volume,
                                     test_new_type, None, test_host)
-        self.assertTrue(retype)
+        self.assertTrue(retype[0])
 
     @ddt.data(FAKE_POOLS_UNSUPPORT_REPORT, FAKE_POOLS_SUPPORT_REPORT)
     @mock.patch.object(rest_client, 'RestClient')
@@ -4984,7 +4986,7 @@ class HuaweiFCDriverTestCase(HuaweiTestBase):
         self.driver.support_func = pool_data
         retype = self.driver.retype(None, self.volume,
                                     test_new_replication_type, None, test_host)
-        self.assertTrue(retype)
+        self.assertTrue(retype[0])
 
     @ddt.data(
         [

@@ -157,9 +157,6 @@ class VMAXCommonData(object):
                         'DeviceID': device_id2,
                         'SystemCreationClassName': u'Symm_StorageSystem'}}
 
-    snap_location = {'snap_name': '12345',
-                     'source_id': device_id}
-
     test_volume_type = fake_volume.fake_volume_type_obj(
         context=ctx
     )
@@ -187,18 +184,29 @@ class VMAXCommonData(object):
         provider_location=six.text_type(provider_location2),
         host=fake_host)
 
+    snapshot_id = '390eeb4d-0f56-4a02-ba14-167167967014'
+    test_snapshot_snap_name = 'OS-' + snapshot_id[:6] + snapshot_id[-9:]
+
+    snap_location = {'snap_name': test_snapshot_snap_name,
+                     'source_id': device_id}
+
     test_snapshot = fake_snapshot.fake_snapshot_obj(
-        context=ctx, id='12345', name='my_snap', size=2,
+        context=ctx, id=snapshot_id,
+        name='my_snap', size=2,
         provider_location=six.text_type(snap_location),
         host=fake_host, volume=test_volume)
 
     test_legacy_snapshot = fake_snapshot.fake_snapshot_obj(
-        context=ctx, id='12345', name='my_snap', size=2,
+        context=ctx, id='8d38ccfc-3d29-454c-858b-8348a8f9cc95',
+        name='my_snap', size=2,
         provider_location=six.text_type(legacy_provider_location),
         host=fake_host, volume=test_volume)
 
     test_failed_snap = fake_snapshot.fake_snapshot_obj(
-        context=ctx, id='12345', name=failed_resource, size=2,
+        context=ctx,
+        id='4732de9b-98a4-4b6d-ae4b-3cafb3d34220',
+        name=failed_resource,
+        size=2,
         provider_location=six.text_type(snap_location),
         host=fake_host, volume=test_volume)
 
@@ -236,15 +244,20 @@ class VMAXCommonData(object):
     rep_extra_specs['srp'] = srp2
 
     test_volume_type_1 = volume_type.VolumeType(
-        id='abc', name='abc',
+        id='2b06255d-f5f0-4520-a953-b029196add6a', name='abc',
         extra_specs=extra_specs
     )
     test_volume_type_list = volume_type.VolumeTypeList(
         objects=[test_volume_type_1])
+
+    test_vol_grp_name_id_only = 'ec870a2f-6bf7-4152-aa41-75aad8e2ea96'
+    test_vol_grp_name = 'Grp_source_sg_%s' % test_vol_grp_name_id_only
+
     test_group_1 = group.Group(
         context=None, name=storagegroup_name_source,
         group_id='abc', size=1,
-        id='12345', status='available',
+        id=test_vol_grp_name_id_only,
+        status='available',
         provider_auth=None, volume_type_ids=['abc'],
         group_type_id='grptypeid',
         volume_types=test_volume_type_list,
@@ -252,8 +265,10 @@ class VMAXCommonData(object):
 
     test_group_failed = group.Group(
         context=None, name=failed_resource,
-        group_id='abc', size=1,
-        id='12345', status='available',
+        group_id='14b8894e-54ec-450a-b168-c172a16ed166',
+        size=1,
+        id='318c721c-51ad-4160-bfe1-ebde2273836f',
+        status='available',
         provider_auth=None, volume_type_ids=['abc'],
         group_type_id='grptypeid',
         volume_types=test_volume_type_list,
@@ -261,25 +276,28 @@ class VMAXCommonData(object):
 
     test_group = fake_group.fake_group_obj(
         context=ctx, name=storagegroup_name_source,
-        id='12345', host=fake_host)
+        id='7634bda4-6950-436f-998c-37c3e01bad30', host=fake_host)
 
     test_group_without_name = fake_group.fake_group_obj(
-        context=ctx, name=None,
-        id='12345', host=fake_host)
-
-    test_vol_grp_name = 'Grp_source_sg_12345'
-    test_vol_grp_name_id_only = '12345'
+        context=ctx,
+        name=None,
+        id=test_vol_grp_name_id_only,
+        host=fake_host)
 
     test_group_snapshot_1 = group_snapshot.GroupSnapshot(
-        context=None, id='123456',
-        group_id='12345', name=group_snapshot_name,
-        group_type_id='grptypeid', status='available',
+        context=None, id='6560405d-b89a-4f79-9e81-ad1752f5a139',
+        group_id='876d9fbb-de48-4948-9f82-15c913ed05e7',
+        name=group_snapshot_name,
+        group_type_id='c6934c26-dde8-4bf8-a765-82b3d0130e9f',
+        status='available',
         group=test_group_1)
 
     test_group_snapshot_failed = group_snapshot.GroupSnapshot(
-        context=None, id='123456',
-        group_id='12345', name=failed_resource,
-        group_type_id='grptypeid', status='available',
+        context=None, id='0819dd5e-9aa1-4ec7-9dda-c78e51b2ad76',
+        group_id='1fc735cb-d36c-4352-8aa6-dc1e16b5a0a7',
+        name=failed_resource,
+        group_type_id='6b70de13-98c5-46b2-8f24-e4e96a8988fa',
+        status='available',
         group=test_group_failed)
 
     # masking view dict
@@ -492,7 +510,7 @@ class VMAXCommonData(object):
                                 "copy": True,
                                 "defined": True,
                                 "linked": True}],
-                           "snapshotName": '12345',
+                           "snapshotName": test_snapshot_snap_name,
                            "state": "Established"}]}
     capabilities = {"symmetrixCapability": [{"rdfCapable": True,
                                              "snapVxCapable": True,
@@ -1480,20 +1498,7 @@ class VMAXRestTest(test.TestCase):
     def test_get_workload_settings_failed(self):
         wl_settings = self.rest.get_workload_settings(
             self.data.failed_resource)
-        self.assertFalse(wl_settings)
-
-    def test_get_headroom_capacity(self):
-        ref_headroom = self.data.headroom['headroom'][0]['headroomCapacity']
-        headroom_cap = self.rest.get_headroom_capacity(
-            self.data.array, self.data.srp,
-            self.data.slo, self.data.workload)
-        self.assertEqual(ref_headroom, headroom_cap)
-
-    def test_get_headroom_capacity_failed(self):
-        headroom_cap = self.rest.get_headroom_capacity(
-            self.data.failed_resource, self.data.srp,
-            self.data.slo, self.data.workload)
-        self.assertIsNone(headroom_cap)
+        self.assertEqual([], wl_settings)
 
     def test_is_compression_capable_true(self):
         compr_capable = self.rest.is_compression_capable('000197800128')
@@ -1522,7 +1527,7 @@ class VMAXRestTest(test.TestCase):
         with mock.patch.object(self.rest, 'get_resource', return_value=None):
             sg_list = self.rest.get_storage_group_list(
                 self.data.array, {})
-            self.assertFalse(sg_list)
+            self.assertEqual([], sg_list)
 
     def test_create_storage_group(self):
         with mock.patch.object(self.rest, 'create_resource'):
@@ -1916,7 +1921,7 @@ class VMAXRestTest(test.TestCase):
         with mock.patch.object(self.rest, 'get_portgroup',
                                return_value=None):
             port_ids = self.rest.get_port_ids(array, pg_name)
-            self.assertFalse(port_ids)
+            self.assertEqual([], port_ids)
 
     def test_get_port(self):
         array = self.data.array
@@ -1957,7 +1962,7 @@ class VMAXRestTest(test.TestCase):
         with mock.patch.object(self.rest, 'get_port',
                                return_value=None):
             target_wwns = self.rest.get_target_wwns(array, pg_name)
-            self.assertFalse(target_wwns)
+            self.assertEqual([], target_wwns)
 
     def test_get_initiator_group(self):
         array = self.data.array
@@ -1984,7 +1989,7 @@ class VMAXRestTest(test.TestCase):
         array = self.data.array
         with mock.patch.object(self.rest, 'get_resource', return_value={}):
             init_list = self.rest.get_initiator_list(array)
-            self.assertFalse(init_list)
+            self.assertEqual([], init_list)
 
     def test_get_in_use_initiator_list_from_array(self):
         ref_list = self.data.initiator_list[2]['initiatorId']
@@ -1997,7 +2002,7 @@ class VMAXRestTest(test.TestCase):
         with mock.patch.object(self.rest, 'get_initiator_list',
                                return_value=[]):
             init_list = self.rest.get_in_use_initiator_list_from_array(array)
-            self.assertFalse(init_list)
+            self.assertEqual([], init_list)
 
     def test_get_initiator_group_from_initiator(self):
         initiator = self.data.wwpn1
@@ -2070,12 +2075,12 @@ class VMAXRestTest(test.TestCase):
                                return_value=None):
             masking_view = self.rest.get_masking_views_by_initiator_group(
                 array, initiatorgroup_name)
-            self.assertFalse(masking_view)
+            self.assertEqual([], masking_view)
         with mock.patch.object(self.rest, 'get_initiator_group',
                                return_value={'name': 'no_mv'}):
             masking_view = self.rest.get_masking_views_by_initiator_group(
                 array, initiatorgroup_name)
-            self.assertFalse(masking_view)
+            self.assertEqual([], masking_view)
 
     def test_get_element_from_masking_view(self):
         array = self.data.array
@@ -2127,7 +2132,7 @@ class VMAXRestTest(test.TestCase):
                                return_value=[]):
             maskingview_list = self.rest.get_common_masking_views(
                 array, portgroup, initiatorgroup)
-            self.assertFalse(maskingview_list)
+            self.assertEqual([], maskingview_list)
 
     def test_create_masking_view(self):
         maskingview_name = self.data.masking_view_name_f
@@ -2663,31 +2668,14 @@ class VMAXProvisionTest(test.TestCase):
             self.provision.rest.extend_volume.assert_called_once_with(
                 array, device_id, new_size, extra_specs)
 
-    def test_get_srp_pool_stats_no_wlp(self):
+    def test_get_srp_pool_stats(self):
         array = self.data.array
         array_info = self.common.pool_info['arrays_info'][0]
         ref_stats = (self.data.srp_details['total_usable_cap_gb'],
                      float(self.data.srp_details['total_usable_cap_gb']
                            - self.data.srp_details['total_allocated_cap_gb']),
                      self.data.srp_details['total_subscribed_cap_gb'],
-                     self.data.srp_details['reserved_cap_percent'], False)
-        with mock.patch.object(self.provision,
-                               '_get_remaining_slo_capacity_wlp',
-                               return_value=-1):
-            stats = self.provision.get_srp_pool_stats(array, array_info)
-            self.assertEqual(ref_stats, stats)
-
-    def test_get_srp_pool_stats_wlp_enabled(self):
-        array = self.data.array
-        array_info = self.common.pool_info['arrays_info'][0]
-        srp = self.data.srp
-        headroom_capacity = self.provision.rest.get_headroom_capacity(
-            array, srp, array_info['SLO'], array_info['Workload'])
-        ref_stats = (self.data.srp_details['total_usable_cap_gb'],
-                     float(headroom_capacity
-                           - self.data.srp_details['total_allocated_cap_gb']),
-                     self.data.srp_details['total_subscribed_cap_gb'],
-                     self.data.srp_details['reserved_cap_percent'], True)
+                     self.data.srp_details['reserved_cap_percent'])
         stats = self.provision.get_srp_pool_stats(array, array_info)
         self.assertEqual(ref_stats, stats)
 
@@ -2701,40 +2689,9 @@ class VMAXProvisionTest(test.TestCase):
         # cannot report on all stats
         with mock.patch.object(self.provision.rest, 'get_srp_by_name',
                                return_value={'total_usable_cap_gb': 33}):
-            with mock.patch.object(self.provision,
-                                   '_get_remaining_slo_capacity_wlp',
-                                   return_value=(-1)):
-                ref_stats = (33, 0, 0, 0, False)
-                stats = self.provision.get_srp_pool_stats(array, array_info)
-                self.assertEqual(ref_stats, stats)
-
-    def test_get_remaining_slo_capacity_wlp(self):
-        array = self.data.array
-        array_info = self.common.pool_info['arrays_info'][0]
-        srp = self.data.srp
-        ref_capacity = self.provision.rest.get_headroom_capacity(
-            array, srp, array_info['SLO'], array_info['Workload'])
-        remaining_capacity = (
-            self.provision._get_remaining_slo_capacity_wlp(
-                array, srp, array_info))
-        self.assertEqual(ref_capacity, remaining_capacity)
-
-    def test_get_remaining_slo_capacity_no_slo_or_wlp(self):
-        array = self.data.array
-        array_info = self.common.pool_info['arrays_info'][0]
-        srp = self.data.srp
-        ref_capacity = -1
-        with mock.patch.object(self.provision.rest, 'get_headroom_capacity',
-                               return_value=None):
-            remaining_capacity = (
-                self.provision._get_remaining_slo_capacity_wlp(
-                    array, srp, {'SLO': None}))
-            self.assertEqual(ref_capacity, remaining_capacity)
-            self.provision.rest.get_headroom_capacity.assert_not_called()
-            remaining_capacity = (
-                self.provision._get_remaining_slo_capacity_wlp(
-                    array, srp, array_info))
-            self.assertEqual(ref_capacity, remaining_capacity)
+            ref_stats = (33, 0, 0, 0)
+            stats = self.provision.get_srp_pool_stats(array, array_info)
+            self.assertEqual(ref_stats, stats)
 
     def test_verify_slo_workload_true(self):
         # with slo and workload
@@ -3183,7 +3140,7 @@ class VMAXCommonTest(test.TestCase):
     def test_update_volume_stats_no_wlp(self):
         with mock.patch.object(self.common, '_update_srp_stats',
                                return_value=('123s#SRP_1#None#None',
-                                             100, 90, 90, 10, False)):
+                                             100, 90, 90, 10)):
             data = self.common.update_volume_stats()
             self.assertEqual('CommonTests', data['volume_backend_name'])
 
@@ -3275,7 +3232,7 @@ class VMAXCommonTest(test.TestCase):
         host = 'DifferentHost'
         maskingview_list = self.common.get_masking_views_from_volume(
             array, device_id, host)
-        self.assertFalse(maskingview_list)
+        self.assertEqual([], maskingview_list)
 
     def test_find_host_lun_id_no_host_check(self):
         volume = self.data.test_volume
@@ -3424,7 +3381,8 @@ class VMAXCommonTest(test.TestCase):
         snapshot = self.data.test_snapshot
         source_device_id = self.data.device_id
         extra_specs = self.data.extra_specs
-        ref_dict = {'snap_name': '12345', 'source_id': self.data.device_id}
+        ref_dict = {'snap_name': self.data.test_snapshot_snap_name,
+                    'source_id': self.data.device_id}
         snap_dict = self.common._create_snapshot(
             array, snapshot, source_device_id, extra_specs)
         self.assertEqual(ref_dict, snap_dict)
@@ -3626,7 +3584,7 @@ class VMAXCommonTest(test.TestCase):
                                return_value=None):
             target_wwns = self.common.get_target_wwns_from_masking_view(
                 self.data.test_volume, self.data.connector)
-            self.assertFalse(target_wwns)
+            self.assertEqual([], target_wwns)
 
     def test_get_port_group_from_masking_view(self):
         array = self.data.array
@@ -4003,7 +3961,7 @@ class VMAXCommonTest(test.TestCase):
                 migrate_status = self.common._slo_workload_migration(
                     device_id, volume, host, volume_name, new_type,
                     extra_specs)
-                self.assertTrue(migrate_status)
+                self.assertTrue(bool(migrate_status))
                 self.common._migrate_volume.assert_called_once_with(
                     extra_specs[utils.ARRAY], device_id,
                     extra_specs[utils.SRP], self.data.slo,
@@ -4492,7 +4450,7 @@ class VMAXFCTest(test.TestCase):
                                return_value=None):
             zoning_mappings = self.driver._get_zoning_mappings(
                 self.data.test_volume, self.data.connector)
-            self.assertFalse(zoning_mappings)
+            self.assertEqual({}, zoning_mappings)
 
     def test_cleanup_zones_other_vols_mapped(self):
         ref_data = {'driver_volume_type': 'fibre_channel',
@@ -5809,7 +5767,9 @@ class VMAXCommonReplicationTest(test.TestCase):
                 self.data.test_clone_volume, self.data.test_snapshot)
             volume_dict = self.data.provider_location
             mock_rep.assert_called_once_with(
-                self.data.test_clone_volume, "snapshot-12345", volume_dict,
+                self.data.test_clone_volume,
+                "snapshot-%s" % self.data.snapshot_id,
+                volume_dict,
                 extra_specs)
 
     def test_replicate_volume(self):

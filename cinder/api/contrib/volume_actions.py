@@ -22,7 +22,7 @@ from six.moves import http_client
 import webob
 
 from cinder.api import extensions
-from cinder.api.openstack import api_version_request
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder import exception
 from cinder.i18n import _
@@ -271,19 +271,14 @@ class VolumeActionsController(wsgi.Controller):
 
             image_metadata['cinder_encryption_key_id'] = encryption_key_id
 
-        if req_version >= api_version_request.APIVersionRequest('3.1'):
+        if req_version >= mv.get_api_version(
+                mv.UPLOAD_IMAGE_PARAMS):
 
             image_metadata['visibility'] = params.get('visibility', 'private')
             image_metadata['protected'] = params.get('protected', 'False')
 
             if image_metadata['visibility'] == 'public':
                 authorize(context, 'upload_public')
-
-            if CONF.glance_api_version != 2:
-                # Replace visibility with is_public for Glance V1
-                image_metadata['is_public'] = (
-                    image_metadata['visibility'] == 'public')
-                image_metadata.pop('visibility', None)
 
             image_metadata['protected'] = (
                 utils.get_bool_param('protected', image_metadata))
@@ -321,7 +316,8 @@ class VolumeActionsController(wsgi.Controller):
             raise webob.exc.HTTPBadRequest(explanation=msg)
 
         try:
-            if req_version.matches("3.42") and volume.status in ['in-use']:
+            if (req_version.matches(mv.VOLUME_EXTEND_INUSE) and
+                    volume.status in ['in-use']):
                 self.volume_api.extend_attached_volume(context, volume, size)
             else:
                 self.volume_api.extend(context, volume, size)

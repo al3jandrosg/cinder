@@ -26,7 +26,6 @@ guide/blockstorage_multi_backend.html>`_.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -34,9 +33,13 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type: volume_type
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - volume_type: volume_type_1
+   - name: name_7
+   - description: description_15
+   - is_public: is_public
+   - extra_specs: extra_specs
 
 Request Example
 ---------------
@@ -51,11 +54,11 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
+   - volume_type: volume_type_1
    - is_public: is_public
    - extra_specs: extra_specs
-   - description: description
-   - volume_type: volume_type
-   - name: name
+   - description: description_15
+   - name: name_7
 
 Response Example
 ----------------
@@ -64,16 +67,16 @@ Response Example
    :language: javascript
 
 
-Update extra specs for volume type
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Create or update extra specs for volume type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  PUT /v3/{project_id}/types/{volume_type_id}
+.. rest_method::  POST /v3/{project_id}/types/{volume_type_id}/extra_specs
 
-Updates the extra specifications that are assigned to a volume type.
+Adds new extra specifications to a volume type, or updates the extra
+specifications that are assigned to a volume type.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -81,15 +84,14 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - extra_specs: extra_specs
-   - volume_type: volume_type
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - extra_specs: extra_specs
 
 Request Example
 ---------------
 
-.. literalinclude:: ./samples/volume-type-update-request.json
+.. literalinclude:: ./samples/volume-type-extra-specs-create-update-request.json
    :language: javascript
 
 
@@ -99,18 +101,130 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - is_public: is_public
    - extra_specs: extra_specs
-   - description: description
-   - volume_type: volume_type
-   - name: name
 
 
 Response Example
 ----------------
 
-.. literalinclude:: ./samples/volume-type-show-response.json
+.. literalinclude:: ./samples/volume-type-extra-specs-create-update-response.json
    :language: javascript
+
+
+Show all extra specifications for volume type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/extra_specs
+
+Shows all extra specifications assigned to a volume type.
+
+
+Normal response codes: 200
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_type_id: volume_type_id
+
+
+Response Parameters
+-------------------
+
+.. rest_parameters:: parameters.yaml
+
+   - extra_specs: extra_specs
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-type-all-extra-specs-show-response.json
+   :language: javascript
+
+
+Show extra specification for volume type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/extra_specs/{key}
+
+Shows the specific extra specification assigned to a volume type.
+
+
+Normal response codes: 200
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - key: key_4
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-type-specific-extra-specs-show-response.json
+   :language: javascript
+
+
+Update extra specification for volume type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  PUT /v3/{project_id}/types/{volume_type_id}/extra_specs/{key}
+
+Update the specific extra specification assigned to a volume type.
+
+
+Normal response codes: 200
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - key: key_4
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-type-specific-extra-specs-update-request.json
+   :language: javascript
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-type-specific-extra-specs-update-response.json
+   :language: javascript
+
+
+Delete extra specification for volume type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  DELETE /v3/{project_id}/types/{volume_type_id}/extra_specs/{key}
+
+Deletes the specific extra specification assigned to a volume type.
+
+
+Normal response codes: 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - key: key_4
 
 
 Show volume type detail
@@ -122,7 +236,6 @@ Shows details for a volume type.
 
 
 Normal response codes: 200
-Error response codes:
 
 Request
 -------
@@ -138,11 +251,11 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
+   - volume_type: volume_type_1
    - is_public: is_public
    - extra_specs: extra_specs
-   - description: description
-   - volume_type: volume_type
-   - name: name
+   - description: description_15
+   - name: name_7
 
 
 Response Example
@@ -180,7 +293,6 @@ Lists volume types.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -189,8 +301,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
-   - sort_key: sort_key
-   - sort_dir: sort_dir
+   - sort: sort
    - limit: limit
    - offset: offset
    - marker: marker
@@ -203,8 +314,7 @@ Response Parameters
 
    - volume_types: volume_types
    - extra_specs: extra_specs
-   - name: name
-   - volume_type: volume_type
+   - name: name_7
 
 Response Example
 ----------------
@@ -235,7 +345,6 @@ guide/blockstorage_multi_backend.html>`_.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -243,7 +352,7 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type: volume_type
+   - volume_type: volume_type_1
    - project_id: project_id_path
    - name: name_7
    - is_public: is_public
@@ -261,12 +370,12 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
+   - volume_type: volume_type_1
    - is_public: is_public
    - extra_specs: extra_specs
-   - description: description
-   - volume_type: volume_type
-   - name: name
-   - id: id
+   - description: description_15
+   - name: name_7
+   - id: volume_type_id_body
    - os-volume-type-access:is_public: os-volume-type-access:is_public
 
 Response Example
@@ -285,7 +394,6 @@ Show an encryption type.
 To show an encryption type for an existing volume type.
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -302,9 +410,9 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id_body
-   - encryption_id: encryption_id
    - encryption: encryption
+   - volume_type_id: volume_type_id_body
+   - encryption_id: encryption_id_body
    - key_size: key_size
    - provider: provider
    - control_location: control_location
@@ -331,7 +439,6 @@ Delete an encryption type.
 To delete an encryption type for an existing volume type.
 
 Normal response codes: 202
-Error response codes:
 
 
 Request
@@ -354,7 +461,6 @@ Creates an encryption type.
 To create an encryption type for an existing volume type.
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -382,9 +488,9 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id_body
-   - encryption_id: encryption_id
    - encryption: encryption
+   - volume_type_id: volume_type_id_body
+   - encryption_id: encryption_id_body
    - key_size: key_size
    - provider: provider
    - control_location: control_location
@@ -407,7 +513,6 @@ Update an encryption type.
 To update an encryption type for an existing volume type.
 
 Normal response codes: 200
-Error response codes:
 
 
 Request

@@ -34,8 +34,6 @@ from cinder import utils
 from cinder.volume import configuration
 from cinder.volume.drivers import remotefs as remotefs_drv
 
-VERSION = '1.0'
-
 LOG = logging.getLogger(__name__)
 
 vzstorage_opts = [
@@ -73,30 +71,6 @@ PLOOP_BASE_DELTA_NAME = 'root.hds'
 DISK_FORMAT_RAW = 'raw'
 DISK_FORMAT_QCOW2 = 'qcow2'
 DISK_FORMAT_PLOOP = 'ploop'
-
-# Due to the inconsistency in qemu-img format convention
-# it calls ploop disk format "parallels".
-# Convert it here to properly name it in Cinder
-# and, hence, in Nova and Libvirt
-FROM_QEMU_FORMAT_MAP = {k: k for k in image_utils.VALID_DISK_FORMATS}
-FROM_QEMU_FORMAT_MAP['parallels'] = DISK_FORMAT_PLOOP
-TO_QEMU_FORMAT_MAP = {v: k for k, v in FROM_QEMU_FORMAT_MAP.items()}
-
-
-def _to_qemu_format(fmt):
-    """Convert from Qemu format name
-
-    param fmt: Qemu format name
-    """
-    return TO_QEMU_FORMAT_MAP[fmt]
-
-
-def _from_qemu_format(fmt):
-    """Convert to Qemu format name
-
-    param fmt: conventional format name
-    """
-    return FROM_QEMU_FORMAT_MAP[fmt]
 
 
 class PloopDevice(object):
@@ -154,17 +128,17 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
 
     Version history:
         1.0     - Initial driver.
+        1.1     - Supports vz:volume_format in vendor properties.
     """
-    driver_volume_type = 'vzstorage'
-    driver_prefix = 'vzstorage'
-    volume_backend_name = 'Virtuozzo_Storage'
-    VERSION = VERSION
-    # ThirdPartySystems wiki page
+    VERSION = '1.1'
     CI_WIKI_NAME = "Virtuozzo_Storage_CI"
 
     SHARE_FORMAT_REGEX = r'(?:(\S+):\/)?([a-zA-Z0-9_-]+)(?::(\S+))?'
 
     def __init__(self, execute=putils.execute, *args, **kwargs):
+        self.driver_volume_type = 'vzstorage'
+        self.driver_prefix = 'vzstorage'
+        self.volume_backend_name = 'Virtuozzo_Storage'
         self._remotefsclient = None
         super(VZStorageDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(vzstorage_opts)
@@ -178,6 +152,25 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
             'vzstorage', root_helper, execute=execute,
             vzstorage_mount_point_base=self.base,
             vzstorage_mount_options=opts)
+
+    def _update_volume_stats(self):
+        super(VZStorageDriver, self)._update_volume_stats()
+        self._stats['vendor_name'] = 'Virtuozzo'
+
+    def _init_vendor_properties(self):
+        namespace = 'vz'
+        properties = {}
+
+        self._set_property(
+            properties,
+            "%s:volume_format" % namespace,
+            "Volume format",
+            _("Specifies volume format."),
+            "string",
+            enum=["qcow2", "ploop", "raw"],
+            default=self.configuration.vzstorage_default_volume_format)
+
+        return properties, namespace
 
     def _qemu_img_info(self, path, volume_name):
         qemu_img_cache = path + ".qemu_img_info"
@@ -197,7 +190,6 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
             ret = super(VZStorageDriver, self)._qemu_img_info_base(
                 path, volume_name,
                 self.configuration.vzstorage_mount_point_base)
-            ret.file_format = _from_qemu_format(ret.file_format)
             # We need only backing_file and file_format
             d = {'file_format': ret.file_format,
                  'backing_file': ret.backing_file}
@@ -283,13 +275,19 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
             raise exception.VzStorageException(msg)
         cluster_name = m.group(2)
 
-        # set up logging to non-default path, so that it will
-        # be possible to mount the same cluster to another mount
-        # point by hand with default options.
-        mnt_flags = ['-l', '/var/log/pstorage/%s-cinder.log.gz' % cluster_name]
-        if self.shares.get(share) is not None:
-            extra_flags = json.loads(self.shares[share])
-            mnt_flags.extend(extra_flags)
+        if share in self.shares:
+            mnt_flags = json.loads(self.shares[share])
+        else:
+            mnt_flags = []
+
+        if '-l' not in mnt_flags:
+            # If logging path is not specified in shares config
+            # set up logging to non-default path, so that it will
+            # be possible to mount the same cluster to another mount
+            # point by hand with default options.
+            mnt_flags.extend([
+                '-l', '/var/log/vstorage/%s/cinder.log.gz' % cluster_name])
+
         self._remotefsclient.mount(share, mnt_flags)
 
     def _find_share(self, volume):
@@ -335,15 +333,23 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
         return True
 
     def choose_volume_format(self, volume):
-        vol_type = volume.volume_type
-        if vol_type:
-            extra_specs = vol_type.extra_specs or {}
-        else:
-            extra_specs = {}
+        volume_format = None
+        volume_type = volume.volume_type
 
-        extra_specs.update(volume.metadata or {})
+        # Retrieve volume format from volume metadata
+        if 'volume_format' in volume.metadata:
+            volume_format = volume.metadata['volume_format']
 
-        return (extra_specs.get('volume_format') or
+        # If volume format wasn't found in metadata, use
+        # volume type extra specs
+        if not volume_format and volume_type:
+            extra_specs = volume_type.extra_specs or {}
+            if 'vz:volume_format' in extra_specs:
+                volume_format = extra_specs['vz:volume_format']
+
+        # If volume format is still undefined, return default
+        # volume format from backend configuration
+        return (volume_format or
                 self.configuration.vzstorage_default_volume_format)
 
     def get_volume_format(self, volume):
@@ -351,7 +357,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
         active_file_path = os.path.join(self._local_volume_dir(volume),
                                         active_file)
         img_info = self._qemu_img_info(active_file_path, volume.name)
-        return img_info.file_format
+        return image_utils.from_qemu_img_disk_format(img_info.file_format)
 
     def _create_ploop(self, volume_path, volume_size):
         os.mkdir(volume_path)
@@ -456,13 +462,14 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Fetch the image from image_service and write it to the volume."""
         volume_format = self.get_volume_format(volume)
+        qemu_volume_format = image_utils.fixup_disk_format(volume_format)
         image_path = self.local_path(volume)
         if volume_format == DISK_FORMAT_PLOOP:
             image_path = os.path.join(image_path, PLOOP_BASE_DELTA_NAME)
 
         image_utils.fetch_to_volume_format(
             context, image_service, image_id,
-            image_path, _to_qemu_format(volume_format),
+            image_path, qemu_volume_format,
             self.configuration.volume_dd_blocksize)
 
         if volume_format == DISK_FORMAT_PLOOP:
@@ -485,6 +492,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
         snap_info = self._read_info_file(info_path)
         vol_dir = self._local_volume_dir(snapshot.volume)
         out_format = self.choose_volume_format(volume)
+        qemu_out_format = image_utils.fixup_disk_format(out_format)
         volume_format = self.get_volume_format(snapshot.volume)
         volume_path = self.local_path(volume)
 
@@ -503,7 +511,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
 
             image_utils.convert_image(path_to_snap_img,
                                       volume_path,
-                                      _to_qemu_format(out_format))
+                                      qemu_out_format)
         elif volume_format == DISK_FORMAT_PLOOP:
             with PloopDevice(self.local_path(snapshot.volume),
                              snapshot.id,
@@ -511,7 +519,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
                 base_file = os.path.join(volume_path, 'root.hds')
                 image_utils.convert_image(dev,
                                           base_file,
-                                          _to_qemu_format(out_format))
+                                          qemu_out_format)
         else:
             msg = _("Unsupported volume format %s") % volume_format
             raise exception.InvalidVolume(msg)
@@ -697,7 +705,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
                                  volume_size=src_vref.size,
                                  name='clone-snap-%s' % src_vref.id,
                                  volume_id=src_vref.id,
-                                 volume=volume)
+                                 volume=src_vref)
 
         self._create_snapshot_ploop(temp_snapshot)
         try:
@@ -719,7 +727,7 @@ class VZStorageDriver(remotefs_drv.RemoteFSSnapDriver):
         """Creates a clone of the specified volume."""
         volume_format = self.get_volume_format(src_vref)
         if volume_format == DISK_FORMAT_PLOOP:
-            self._create_cloned_volume(volume, src_vref)
+            return self._create_cloned_volume(volume, src_vref)
         else:
-            super(VZStorageDriver, self)._create_cloned_volume(volume,
-                                                               src_vref)
+            return super(VZStorageDriver, self)._create_cloned_volume(volume,
+                                                                      src_vref)

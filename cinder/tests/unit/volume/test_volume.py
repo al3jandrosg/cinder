@@ -146,6 +146,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.assertEqual(opts['backend_availability_zone'],
                          manager.availability_zone)
 
+    @mock.patch('cinder.volume.manager.VolumeManager._append_volume_stats',
+                mock.Mock())
     @mock.patch.object(vol_manager.VolumeManager,
                        'update_service_capabilities')
     def test_report_filter_goodness_function(self, mock_update):
@@ -1366,32 +1368,6 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         snapshot_obj.destroy()
         db.volume_destroy(self.context, src_vol_id)
 
-    @mock.patch(
-        'cinder.volume.driver.VolumeDriver.create_replica_test_volume')
-    @mock.patch('cinder.utils.execute')
-    def test_create_volume_from_srcreplica_raise_metadata_copy_failure(
-            self, mock_execute, _create_replica_test):
-        mock_execute.return_value = None
-        _create_replica_test.return_value = None
-        # create source volume
-        src_vol = tests_utils.create_volume(self.context, **self.volume_params)
-        src_vol_id = src_vol['id']
-
-        self.volume.create_volume(self.context, src_vol)
-        # set bootable flag of volume to True
-        db.volume_update(self.context, src_vol['id'], {'bootable': True})
-
-        # create volume from source volume
-        dst_vol = tests_utils.create_volume(self.context,
-                                            source_volid=src_vol_id,
-                                            **self.volume_params)
-        self._raise_metadata_copy_failure(
-            'volume_glance_metadata_copy_from_volume_to_volume',
-            dst_vol)
-
-        # cleanup resource
-        db.volume_destroy(self.context, src_vol_id)
-
     @mock.patch('cinder.utils.execute')
     def test_create_volume_from_snapshot_with_glance_volume_metadata_none(
             self, mock_execute):
@@ -1432,38 +1408,6 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         snapshot_obj.destroy()
         db.volume_destroy(self.context, src_vol_id)
         db.volume_destroy(self.context, dst_vol['id'])
-
-    @mock.patch(
-        'cinder.volume.driver.VolumeDriver.create_replica_test_volume')
-    def test_create_volume_from_srcreplica_with_glance_volume_metadata_none(
-            self, _create_replica_test):
-        """Test volume can be created from a volume replica."""
-        _create_replica_test.return_value = None
-
-        volume_src = tests_utils.create_volume(self.context,
-                                               **self.volume_params)
-        self.volume.create_volume(self.context, volume_src)
-        db.volume_update(self.context, volume_src['id'], {'bootable': True})
-
-        volume = db.volume_get(self.context, volume_src['id'])
-        volume_dst = tests_utils.create_volume(
-            self.context,
-            **self.volume_params)
-        self.volume.create_volume(self.context, volume_dst,
-                                  {'source_replicaid': volume.id})
-
-        self.assertRaises(exception.GlanceMetadataNotFound,
-                          db.volume_glance_metadata_copy_from_volume_to_volume,
-                          self.context, volume_src['id'], volume_dst['id'])
-
-        self.assertEqual('available',
-                         db.volume_get(self.context,
-                                       volume_dst['id']).status)
-        self.assertTrue(_create_replica_test.called)
-
-        # cleanup resource
-        db.volume_destroy(self.context, volume_dst['id'])
-        db.volume_destroy(self.context, volume_src['id'])
 
     @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
     def test_create_volume_from_snapshot_with_encryption(self):
@@ -2107,10 +2051,12 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           volume, 3, attached=True)
 
         db.volume_update(self.context, volume.id, {'status': 'in-use'})
+        volume.refresh()
         reserve.return_value = ["RESERVATION"]
         volume_api._extend(self.context, volume, 3, attached=True)
         volume.refresh()
         self.assertEqual('extending', volume.status)
+        self.assertEqual('in-use', volume.previous_status)
         reserve.assert_called_once_with(self.context, gigabytes=1,
                                         project_id=volume.project_id)
         limit_check.side_effect = None
@@ -2147,6 +2093,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           3)
 
         db.volume_update(self.context, volume.id, {'status': 'available'})
+        volume.refresh()
         # Extend fails when new_size < orig_size
         self.assertRaises(exception.InvalidInput,
                           volume_api._extend,
@@ -2166,6 +2113,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         volume_api._extend(self.context, volume, 3)
         volume.refresh()
         self.assertEqual('extending', volume.status)
+        self.assertEqual('available', volume.previous_status)
         reserve.assert_called_once_with(self.context, gigabytes=1,
                                         project_id=volume.project_id)
 
@@ -2349,27 +2297,6 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             volumes_reserved = 0
 
         self.assertEqual(100, volumes_reserved)
-
-    @mock.patch(
-        'cinder.volume.driver.VolumeDriver.create_replica_test_volume')
-    def test_create_volume_from_sourcereplica(self, _create_replica_test):
-        """Test volume can be created from a volume replica."""
-        _create_replica_test.return_value = None
-
-        volume_src = tests_utils.create_volume(self.context,
-                                               **self.volume_params)
-        self.volume.create_volume(self.context, volume_src)
-        volume_dst = tests_utils.create_volume(
-            self.context,
-            **self.volume_params)
-        self.volume.create_volume(self.context, volume_dst,
-                                  {'source_replicaid': volume_src.id})
-        self.assertEqual('available',
-                         db.volume_get(context.get_admin_context(),
-                                       volume_dst['id']).status)
-        self.assertTrue(_create_replica_test.called)
-        self.volume.delete_volume(self.context, volume_dst)
-        self.volume.delete_volume(self.context, volume_src)
 
     def test_create_volume_from_sourcevol(self):
         """Test volume can be created from a source volume."""
@@ -2792,6 +2719,63 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         with mock.patch.object(volume, 'save') as save_mock:
             manager._set_resource_host(volume)
             save_mock.assert_not_called()
+
+    def test_volume_attach_attaching(self):
+        """Test volume_attach ."""
+
+        instance_uuid = '12345678-1234-5678-1234-567812345678'
+        volume = tests_utils.create_volume(self.context, **self.volume_params)
+        attachment = db.volume_attach(self.context,
+                                      {'volume_id': volume['id'],
+                                       'attached_host': 'fake-host'})
+        db.volume_attached(self.context, attachment['id'], instance_uuid,
+                           'fake-host', 'vdb', mark_attached=False)
+        volume_api = cinder.volume.api.API()
+        volume = volume_api.get(self.context, volume['id'])
+        self.assertEqual("attaching", volume['status'])
+        self.assertEqual("attaching", volume['attach_status'])
+
+    def test__append_volume_stats_with_pools(self):
+        manager = vol_manager.VolumeManager()
+        manager.stats = {'pools': {'pool1': {'allocated_capacity_gb': 20},
+                                   'pool2': {'allocated_capacity_gb': 10}}}
+        vol_stats = {'vendor_name': 'Open Source', 'pools': [
+            {'pool_name': 'pool1', 'provisioned_capacity_gb': 31},
+            {'pool_name': 'pool2', 'provisioned_capacity_gb': 21}]}
+        manager._append_volume_stats(vol_stats)
+
+        expected = {'provisioned_capacity_gb': 30, 'allocated_capacity_gb': 20}
+        expected = {'vendor_name': 'Open Source', 'pools': [
+            {'pool_name': 'pool1', 'provisioned_capacity_gb': 31,
+             'allocated_capacity_gb': 20},
+            {'pool_name': 'pool2', 'provisioned_capacity_gb': 21,
+             'allocated_capacity_gb': 10}]}
+        self.assertDictEqual(expected, vol_stats)
+
+    def test__append_volume_stats_no_pools(self):
+        manager = vol_manager.VolumeManager()
+        manager.stats = {'pools': {'backend': {'allocated_capacity_gb': 20}}}
+        vol_stats = {'provisioned_capacity_gb': 30}
+        manager._append_volume_stats(vol_stats)
+
+        expected = {'provisioned_capacity_gb': 30, 'allocated_capacity_gb': 20}
+        self.assertDictEqual(expected, vol_stats)
+
+    def test__append_volume_stats_no_pools_no_volumes(self):
+        manager = vol_manager.VolumeManager()
+        # This is what gets set on c-vol manager's init_host method
+        manager.stats = {'pools': {}, 'allocated_capacity_gb': 0}
+        vol_stats = {'provisioned_capacity_gb': 30}
+
+        manager._append_volume_stats(vol_stats)
+
+        expected = {'provisioned_capacity_gb': 30, 'allocated_capacity_gb': 0}
+        self.assertDictEqual(expected, vol_stats)
+
+    def test__append_volume_stats_driver_error(self):
+        manager = vol_manager.VolumeManager()
+        self.assertRaises(exception.ProgrammingError,
+                          manager._append_volume_stats, {'pools': 'bad_data'})
 
 
 class VolumeTestCaseLocks(base.BaseVolumeTestCase):

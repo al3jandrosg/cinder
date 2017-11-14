@@ -179,13 +179,11 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             fake.TOTAL_BYTES // units.Gi, '0.01')
         free_capacity_gb = na_utils.round_down(
             fake.AVAILABLE_BYTES // units.Gi, '0.01')
-        provisioned_capacity_gb = total_capacity_gb - free_capacity_gb
         capacity = {
             'reserved_percentage': fake.RESERVED_PERCENTAGE,
             'max_over_subscription_ratio': fake.MAX_OVER_SUBSCRIPTION_RATIO,
             'total_capacity_gb': total_capacity_gb,
             'free_capacity_gb': free_capacity_gb,
-            'provisioned_capacity_gb': provisioned_capacity_gb,
         }
         self.mock_object(self.driver,
                          '_get_share_capacity_info',
@@ -219,7 +217,6 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             'multiattach': False,
             'total_capacity_gb': total_capacity_gb,
             'free_capacity_gb': free_capacity_gb,
-            'provisioned_capacity_gb': provisioned_capacity_gb,
             'netapp_dedupe_used_percent': 55.0,
             'netapp_aggregate_used_percent': 45,
             'utilization': 30.0,
@@ -968,8 +965,8 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
 
     def test_add_looping_tasks(self):
         mock_update_ssc = self.mock_object(self.driver, '_update_ssc')
-        mock_remove_unused_qos_policy_groups = self.mock_object(
-            self.driver.zapi_client, 'remove_unused_qos_policy_groups')
+        mock_handle_housekeeping = self.mock_object(
+            self.driver, '_handle_housekeeping_tasks')
         mock_add_task = self.mock_object(self.driver.loopingcalls, 'add_task')
         mock_super_add_looping_tasks = self.mock_object(
             nfs_base.NetAppNfsDriver, '_add_looping_tasks')
@@ -981,9 +978,9 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             mock.call(mock_update_ssc,
                       loopingcalls.ONE_HOUR,
                       loopingcalls.ONE_HOUR),
-            mock.call(mock_remove_unused_qos_policy_groups,
-                      loopingcalls.ONE_MINUTE,
-                      loopingcalls.ONE_MINUTE)])
+            mock.call(mock_handle_housekeeping,
+                      loopingcalls.TEN_MINUTES,
+                      0)])
         mock_super_add_looping_tasks.assert_called_once_with()
 
     @ddt.data({'has_space': True, 'type_match': True, 'expected': True},

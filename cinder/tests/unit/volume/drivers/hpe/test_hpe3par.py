@@ -1726,7 +1726,7 @@ class HPE3PARBaseDriver(object):
 
             retyped = self.driver.retype(
                 self.ctxt, volume, type_ref, None, self.RETYPE_HOST)
-            self.assertTrue(retyped)
+            self.assertTrue(retyped[0])
 
             expected = [
                 mock.call.modifyVolume('osv-0DM4qZEVSKON-AAAAAAAAA',
@@ -1796,7 +1796,7 @@ class HPE3PARBaseDriver(object):
                 self.volume_type_replicated,
                 None,
                 self.RETYPE_HOST)
-            self.assertTrue(retyped)
+            self.assertTrue(retyped[0])
             backend_id = self.replication_targets[0]['backend_id']
             expected = [
                 mock.call.createRemoteCopyGroup(
@@ -1899,7 +1899,7 @@ class HPE3PARBaseDriver(object):
 
             retyped = self.driver.retype(
                 self.ctxt, volume_1, volume_type, None, self.RETYPE_HOST)
-            self.assertTrue(retyped)
+            self.assertTrue(retyped[0])
 
             expected = [
                 mock.call.stopRemoteCopy(self.RCG_3PAR_NAME),
@@ -2000,7 +2000,7 @@ class HPE3PARBaseDriver(object):
             backend_id = self.replication_targets[0]['backend_id']
             retyped = self.driver.retype(
                 self.ctxt, volume_1, volume_type, None, self.RETYPE_HOST)
-            self.assertTrue(retyped)
+            self.assertTrue(retyped[0])
 
             expected = [
                 mock.call.stopRemoteCopy(self.RCG_3PAR_NAME),
@@ -2146,7 +2146,10 @@ class HPE3PARBaseDriver(object):
         # and return the mock HTTP 3PAR client
         mock_client = self.setup_driver()
         mock_client.getStorageSystemInfo.return_value = {'id': self.CLIENT_ID}
-
+        ex = hpeexceptions.HTTPConflict("In use")
+        ex._error_code = 34
+        mock_client.deleteVolume = mock.Mock(side_effect=[ex, 200])
+        mock_client.findVolumeSet.return_value = self.VVS_NAME
         _mock_volume_types.return_value = {
             'name': 'replicated',
             'extra_specs': {
@@ -2170,6 +2173,10 @@ class HPE3PARBaseDriver(object):
                     self.VOLUME_3PAR_NAME,
                     removeFromTarget=True),
                 mock.call.removeRemoteCopyGroup(self.RCG_3PAR_NAME),
+                mock.call.deleteVolume(self.VOLUME_3PAR_NAME),
+                mock.call.findVolumeSet(self.VOLUME_3PAR_NAME),
+                mock.call.removeVolumeFromVolumeSet(self.VVS_NAME,
+                                                    self.VOLUME_3PAR_NAME),
                 mock.call.deleteVolume(self.VOLUME_3PAR_NAME)]
 
             mock_client.assert_has_calls(
@@ -3027,6 +3034,70 @@ class HPE3PARBaseDriver(object):
                 expected +
                 self.standard_logout)
 
+    def test_revert_to_snapshot(self):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        volume = {'name': self.VOLUME_NAME,
+                  'id': self.VOLUME_ID_SNAP,
+                  'display_name': 'Foo Volume',
+                  'size': 2,
+                  'host': self.FAKE_CINDER_HOST,
+                  'volume_type': None,
+                  'volume_type_id': None}
+
+        mock_client = self.setup_driver()
+        mock_client.isOnlinePhysicalCopy.return_value = False
+        with mock.patch.object(hpecommon.HPE3PARCommon,
+                               '_create_client') as mock_create_client:
+            mock_create_client.return_value = mock_client
+            self.driver.revert_to_snapshot(self.ctxt, volume, self.snapshot)
+
+            expected = [
+                mock.call.isOnlinePhysicalCopy('osv-dh-F5VGRTseuujPjbeRBVg'),
+                mock.call.promoteVirtualCopy('oss-L4I73ONuTci9Fd4ceij-MQ',
+                                             optional={})
+            ]
+
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_revert_to_snapshot_replicated_volume(self, _mock_volume_types):
+
+        _mock_volume_types.return_value = {
+            'name': 'replicated',
+            'extra_specs': {
+                'replication_enabled': '<is> True',
+                'volume_type': self.volume_type_replicated}}
+
+        mock_client = self.setup_driver()
+        mock_client.isOnlinePhysicalCopy.return_value = True
+        mock_client.getStorageSystemInfo.return_value = mock.ANY
+
+        with mock.patch.object(hpecommon.HPE3PARCommon,
+                               '_create_client') as mock_create_client:
+            mock_create_client.return_value = mock_client
+            self.driver.revert_to_snapshot(
+                self.ctxt,
+                self.volume_replicated,
+                self.snapshot)
+            expected = [
+                mock.call.stopRemoteCopy('rcg-0DM4qZEVSKON-DXN-N'),
+                mock.call.isOnlinePhysicalCopy('osv-0DM4qZEVSKON-DXN-NwVpw'),
+                mock.call.promoteVirtualCopy(
+                    'oss-L4I73ONuTci9Fd4ceij-MQ',
+                    optional={'online': True, 'allowRemoteCopyParent': True}),
+                mock.call.startRemoteCopy('rcg-0DM4qZEVSKON-DXN-N')
+            ]
+            mock_client.assert_has_calls(
+                self.get_id_login +
+                self.standard_logout +
+                self.standard_login +
+                expected +
+                self.standard_logout)
+
     def test_delete_snapshot(self):
         # setup_mock_client drive with default configuration
         # and return the mock HTTP 3PAR client
@@ -3166,12 +3237,6 @@ class HPE3PARBaseDriver(object):
                 self.standard_login +
                 expected +
                 self.standard_logout)
-
-            volume = self.volume.copy()
-            volume['size'] = 1
-            self.assertRaises(exception.InvalidInput,
-                              self.driver.create_volume_from_snapshot,
-                              volume, self.snapshot)
 
     def test_create_volume_from_snapshot_and_extend(self):
         # setup_mock_client drive with default configuration
@@ -3372,12 +3437,6 @@ class HPE3PARBaseDriver(object):
                 self.standard_login +
                 expected +
                 self.standard_logout)
-
-            volume = self.volume.copy()
-            volume['size'] = 1
-            self.assertRaises(exception.InvalidInput,
-                              self.driver.create_volume_from_snapshot,
-                              volume, self.snapshot)
 
     def test_terminate_connection(self):
         # setup_mock_client drive with default configuration

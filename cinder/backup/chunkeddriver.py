@@ -347,7 +347,10 @@ class ChunkedBackupDriver(driver.BackupDriver):
         if self.compressor is None:
             return 'none', data
         data_size_bytes = len(data)
-        compressed_data = self.compressor.compress(data)
+        # Execute compression in native thread so it doesn't prevent
+        # cooperative greenthread switching.
+        compressed_data = eventlet.tpool.execute(self.compressor.compress,
+                                                 data)
         comp_size_bytes = len(compressed_data)
         algorithm = CONF.backup_compression_algorithm.lower()
         if comp_size_bytes >= data_size_bytes:
@@ -484,7 +487,7 @@ class ChunkedBackupDriver(driver.BackupDriver):
             # First of all, we check the status of this backup. If it
             # has been changed to delete or has been deleted, we cancel the
             # backup process to do forcing delete.
-            backup = objects.Backup.get_by_id(self.context, backup.id)
+            backup.refresh()
             if backup.status in (fields.BackupStatus.DELETING,
                                  fields.BackupStatus.DELETED):
                 is_backup_canceled = True

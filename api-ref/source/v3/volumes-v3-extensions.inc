@@ -15,7 +15,8 @@ Lists Block Storage API extensions.
 
 
 Normal response codes: 200
-Error response codes:300,
+
+Error response codes: 300
 
 
 Request

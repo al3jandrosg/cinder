@@ -5,17 +5,18 @@ Quota class set extension (os-quota-class-sets)
 
 Administrators only, depending on policy settings.
 
-Shows and updates quota classes for a tenant.
+Shows and updates quota classes for a project.
 
 Show quota classes
 ~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  GET /v2/{admin_tenant_id}/os-quota-class-sets/{quota_class_name}
+.. rest_method::  GET /v2/{admin_project_id}/os-quota-class-sets/{quota_class_name}
 
-Shows quota class set for a tenant. If no specific value for the quota class
+Shows quota class set for a project. If no specific value for the quota class
 resource exists, then the default value will be reported.
 
 Normal response codes: 200
+
 Error response codes: 403, 404
 
 
@@ -25,7 +26,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - quota_class_name: quota_class_name
-   - admin_tenant_id: admin_tenant_id
+   - admin_project_id: admin_project_id
 
 
 Response Parameters
@@ -52,12 +53,13 @@ Response Example
 Update quota classes
 ~~~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  PUT /v2/{admin_tenant_id}/os-quota-class-sets/{quota_class_name}
+.. rest_method::  PUT /v2/{admin_project_id}/os-quota-class-sets/{quota_class_name}
 
-Updates quota class set for a tenant. If the ``quota_class_name`` key does not
+Updates quota class set for a project. If the ``quota_class_name`` key does not
 exist, then the API will create one.
 
 Normal response codes: 200
+
 Error response codes: 400, 403, 404
 
 
@@ -66,7 +68,7 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - admin_tenant_id: admin_tenant_id
+   - admin_project_id: admin_project_id
    - quota_class_name: quota_class_name
    - gigabytes: maxTotalVolumeGigabytesOptional
    - snapshots: maxTotalSnapshotsOptional

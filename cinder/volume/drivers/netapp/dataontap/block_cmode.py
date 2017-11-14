@@ -121,12 +121,6 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
                                    loopingcalls.ONE_HOUR,
                                    loopingcalls.ONE_HOUR)
 
-        # Add the task that harvests soft-deleted QoS policy groups.
-        self.loopingcalls.add_task(
-            self.zapi_client.remove_unused_qos_policy_groups,
-            loopingcalls.ONE_MINUTE,
-            loopingcalls.ONE_MINUTE)
-
         self.loopingcalls.add_task(
             self._handle_housekeeping_tasks,
             loopingcalls.TEN_MINUTES,
@@ -316,9 +310,6 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
 
             size_available_gb = capacity['size-available'] / units.Gi
             pool['free_capacity_gb'] = na_utils.round_down(size_available_gb)
-
-            pool['provisioned_capacity_gb'] = round(
-                pool['total_capacity_gb'] - pool['free_capacity_gb'], 2)
 
             if self.using_cluster_credentials:
                 dedupe_used = self.zapi_client.get_flexvol_dedupe_used_percent(

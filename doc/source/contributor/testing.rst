@@ -81,7 +81,7 @@ execution. To ensure the Cinder tests are picked up when running tempest, run::
     tox -e all-plugin
 
 More information about tempest can be found in the `Tempest Documentation
-<http://docs.openstack.org/developer/tempest/overview.html>`_.
+<https://docs.openstack.org/tempest/latest/>`_.
 
 Database Setup
 ~~~~~~~~~~~~~~~
@@ -103,10 +103,13 @@ Or all tests in the test_volume.py file::
 
 You may also use regular expressions to run any matching tests::
 
-    tox -epy27 -- -r test_volume
+    tox -epy27 -- test_volume
 
-For more information on these options and how to run tests, please see the
-`ostestr documentation <http://docs.openstack.org/developer/os-testr/>`_.
+Additionally, when running a single test, or test-file, the `-n` argument is no
+longer required, however it may perform faster if included.
+
+For more information on these options and details about stestr, please see the
+`stestr documentation <http://stestr.readthedocs.io/en/latest/MANUAL.html>`_.
 
 Gotchas
 -------
@@ -159,6 +162,54 @@ To Fix:
 - On Fedora 22 and higher::
 
     sudo dnf install python3-devel
+
+
+**Assertion types in unit tests**
+
+In general, it is best to use the most specific assertion possible in a unit
+test, to have the strongest validation of code behavior.
+
+For example:
+
+.. code-block:: python
+
+    self.assertEqual("in-use", volume.status)
+
+is preferred over
+
+.. code-block:: python
+
+    self.assertIsNotNone(volume.status)
+
+or
+
+Test methods that implement comparison checks are also generally preferred
+over writing code into assertEqual() or assertTrue().
+
+.. code-block:: python
+
+   self.assertGreater(2, volume.size)
+
+is preferred over
+
+.. code-block:: python
+
+   self.assertTrue(2 > volume.size)
+
+However, assertFalse() behavior is not obvious in this regard.  Since
+``None`` evaluates to ``False`` in Python, the following check will pass when
+x is ``False`` or ``None``.
+
+.. code-block:: python
+
+   self.assertFalse(x)
+
+Therefore, it is preferable to use:
+
+.. code-block:: python
+
+   self.assertEqual(x, False)
+
 
 .. rubric:: Footnotes
 

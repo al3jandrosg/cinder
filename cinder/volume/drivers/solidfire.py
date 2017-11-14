@@ -75,10 +75,14 @@ sf_opts = [
                     'template/cache volumes (created if does not exist).'),
 
     cfg.BoolOpt('sf_allow_template_caching',
-                default=True,
-                help='Create an internal cache of copy of images when '
-                     'a bootable volume is created to eliminate fetch from '
-                     'glance and qemu-conversion on subsequent calls.'),
+                deprecated_for_removal=True,
+                deprecated_reason='The Cinder caching feature should be '
+                                  'used rather than this driver specific '
+                                  'implementation.',
+                default=False,
+                help='This option is deprecated and will be removed in '
+                     'the next OpenStack release.  Please use the general '
+                     'cinder image-caching feature instead.'),
 
     cfg.StrOpt('sf_svip',
                help='Overrides default cluster SVIP with the one specified. '
@@ -1261,7 +1265,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         attributes = {'uuid': volume['id'],
                       'is_clone': 'False',
                       'created_at': create_time}
-
+        attributes['cinder-name'] = volume.get('display_name', "")
         vname = '%s%s' % (self.configuration.sf_volume_prefix, volume['id'])
         params = {'name': vname,
                   'accountID': sf_account['accountID'],

@@ -1128,45 +1128,6 @@ class InvalidGroupSnapshotStatus(Invalid):
     message = _("Invalid GroupSnapshot Status: %(reason)s")
 
 
-# Hitachi Block Storage Driver
-class HBSDError(VolumeDriverException):
-    message = _("HBSD error occurs.")
-
-
-class HBSDCmdError(HBSDError):
-
-    def __init__(self, message=None, ret=None, err=None):
-        self.ret = ret
-        self.stderr = err
-
-        super(HBSDCmdError, self).__init__(message=message)
-
-
-class HBSDBusy(HBSDError):
-    message = "Device or resource is busy."
-
-
-class HBSDNotFound(NotFound):
-    message = _("Storage resource could not be found.")
-
-
-class HBSDVolumeIsBusy(VolumeIsBusy):
-    message = _("Volume %(volume_name)s is busy.")
-
-
-# Hitachi VSP Driver
-class VSPError(VolumeDriverException):
-    message = _("VSP error occurred. %(message)s")
-
-
-class VSPBusy(VSPError):
-    message = _("Device or resource is busy.")
-
-
-class VSPNotSupported(VSPError):
-    message = _("The function on the storage is not supported.")
-
-
 # Datera driver
 class DateraAPIException(VolumeBackendAPIException):
     message = _("Bad response from Datera API")
@@ -1191,36 +1152,6 @@ class ISCSITargetDetachFailed(CinderException):
 
 class ISCSITargetHelperCommandFailed(CinderException):
     message = "%(error_message)s"
-
-
-# X-IO driver exception.
-class XIODriverException(VolumeDriverException):
-    message = _("X-IO Volume Driver exception!")
-
-
-# Violin Memory drivers
-class ViolinInvalidBackendConfig(VolumeDriverException):
-    message = _("Volume backend config is invalid: %(reason)s")
-
-
-class ViolinRequestRetryTimeout(VolumeDriverException):
-    message = _("Backend service retry timeout hit: %(timeout)s sec")
-
-
-class ViolinBackendErr(VolumeBackendAPIException):
-    message = _("Backend reports: %(message)s")
-
-
-class ViolinBackendErrExists(VolumeBackendAPIException):
-    message = _("Backend reports: item already exists")
-
-
-class ViolinBackendErrNotFound(NotFound):
-    message = _("Backend reports: item not found")
-
-
-class ViolinResourceNotFound(NotFound):
-    message = _("Backend reports: %(message)s")
 
 
 class BadHTTPResponseStatus(VolumeDriverException):
@@ -1276,12 +1207,6 @@ class XtremIOSnapshotsLimitExceeded(VolumeDriverException):
     message = _("Exceeded the limit of snapshots per volume")
 
 
-# Infortrend EonStor DS Driver
-class InfortrendCliException(VolumeDriverException):
-    message = _("Infortrend CLI exception: %(err)s Param: %(param)s "
-                "(Return Code: %(rc)s) (Output: %(out)s)")
-
-
 # DOTHILL drivers
 class DotHillInvalidBackend(VolumeDriverException):
     message = _("Backend doesn't exist (%(backend)s)")
@@ -1333,21 +1258,6 @@ class NotSupportedOperation(Invalid):
     code = 405
 
 
-# Hitachi HNAS drivers
-class HNASConnError(VolumeDriverException):
-    message = "%(message)s"
-
-
-# Coho drivers
-class CohoException(VolumeDriverException):
-    message = _("Coho Data Cinder driver failure: %(message)s")
-
-
-# Tegile Storage drivers
-class TegileAPIException(VolumeBackendAPIException):
-    message = _("Unexpected response from Tegile IntelliFlash API")
-
-
 # NexentaStor driver exception
 class NexentaException(VolumeDriverException):
     message = "%(message)s"
@@ -1386,15 +1296,6 @@ class SynoAuthError(VolumeDriverException):
 
 class SynoLUNNotExist(VolumeDriverException):
     message = _("LUN not found by UUID: %(uuid)s.")
-
-
-# Reduxio driver
-class RdxAPICommandException(VolumeDriverException):
-    message = _("Reduxio API Command Exception")
-
-
-class RdxAPIConnectionException(VolumeDriverException):
-    message = _("Reduxio API Connection Exception")
 
 
 class AttachmentSpecsNotFound(NotFound):

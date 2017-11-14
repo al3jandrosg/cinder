@@ -308,11 +308,11 @@ class DbCommands(object):
             ran = sum([done for found, done, remaining in migrations.values()])
             if not unlimited:
                 break
-
-        t = prettytable.PrettyTable([_('Migration'),
-                                     _('Found'),
-                                     _('Done'),
-                                     _('Remaining')])
+        headers = ["{}".format(_('Migration')),
+                   "{}".format(_('Found')),
+                   "{}".format(_('Done')),
+                   "{}".format(_('Remaining'))]
+        t = prettytable.PrettyTable(headers)
         for name in sorted(migration_info.keys()):
             info = migration_info[name]
             t.add_row([name, info[0], info[1], info[2]])
@@ -551,7 +551,7 @@ class ServiceCommands(BaseCommand):
             rpc_version = svc.rpc_current_version
             object_version = svc.object_current_version
             cluster = svc.cluster_name or ''
-            print(print_format % (svc.binary, svc.host.partition('.')[0],
+            print(print_format % (svc.binary, svc.host,
                                   svc.availability_zone, status, art,
                                   updated_at, rpc_version, object_version,
                                   cluster))

@@ -20,6 +20,7 @@ from webob import exc
 
 from cinder.api import common
 from cinder.api import extensions
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder import backup
 from cinder import db
@@ -78,9 +79,18 @@ class AdminController(wsgi.Controller):
         return update
 
     def authorize(self, context, action_name):
-        # e.g. "snapshot_admin_actions:reset_status"
-        action = '%s_admin_actions:%s' % (self.resource_name, action_name)
-        extensions.extension_authorizer('volume', action)(context)
+        # TODO(tommylike): We have two different ways to authorize during
+        # implementing code base policies, the if/else statement can be
+        # removed when all resources are upgraded.
+        if self.resource_name in ['backup', 'snapshot']:
+            context.authorize(
+                'volume_extension:%(resource)s_admin_actions:%(action)s' %
+                {'resource': self.resource_name,
+                 'action': action_name})
+        else:
+            # e.g. "snapshot_admin_actions:reset_status"
+            action = '%s_admin_actions:%s' % (self.resource_name, action_name)
+            extensions.extension_authorizer('volume', action)(context)
 
     def _remove_worker(self, context, id):
         # Remove the cleanup worker from the DB when we change a resource
@@ -245,7 +255,8 @@ class VolumeAdminController(AdminController):
         volume = self._get(context, id)
         params = body['os-migrate_volume']
 
-        cluster_name, host = common.get_cluster_host(req, params, '3.16')
+        cluster_name, host = common.get_cluster_host(req, params,
+                                                     mv.VOLUME_MIGRATE_CLUSTER)
         force_host_copy = utils.get_bool_param('force_host_copy', params)
         lock_volume = utils.get_bool_param('lock_volume', params)
         self.volume_api.migrate_volume(context, volume, host, cluster_name,

@@ -21,6 +21,7 @@ import webob
 from webob import exc
 
 from cinder.api import common
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder.api.v2 import volumes as volumes_v2
 from cinder.api.v3.views import volumes as volume_views_v3
@@ -32,8 +33,6 @@ import cinder.policy
 from cinder import utils
 
 LOG = logging.getLogger(__name__)
-
-SUMMARY_BASE_MICRO_VERSION = '3.12'
 
 
 def check_policy(context, action, target_obj=None):
@@ -65,7 +64,7 @@ class VolumeController(volumes_v2.VolumeController):
         force = False
 
         params = ""
-        if req_version.matches('3.23'):
+        if req_version.matches(mv.VOLUME_LIST_BOOTABLE):
             force = utils.get_bool_param('force', req.params)
             if cascade or force:
                 params = "(cascade: %(c)s, force: %(f)s)" % {'c': cascade,
@@ -88,10 +87,10 @@ class VolumeController(volumes_v2.VolumeController):
     @common.process_general_filtering('volume')
     def _process_volume_filtering(self, context=None, filters=None,
                                   req_version=None):
-        if req_version.matches(None, "3.3"):
+        if req_version.matches(None, mv.MESSAGES):
             filters.pop('glance_metadata', None)
 
-        if req_version.matches(None, "3.9"):
+        if req_version.matches(None, mv.BACKUP_UPDATE):
             filters.pop('group_id', None)
 
         utils.remove_invalid_filter_options(
@@ -119,7 +118,8 @@ class VolumeController(volumes_v2.VolumeController):
         if 'name' in filters:
             filters['display_name'] = filters.pop('name')
 
-        strict = req.api_version_request.matches("3.2", None)
+        strict = req.api_version_request.matches(
+            mv.VOLUME_LIST_BOOTABLE, None)
         self.volume_api.check_volume_filters(filters, strict)
 
         volumes = self.volume_api.get_all(context, marker, limit,
@@ -140,7 +140,7 @@ class VolumeController(volumes_v2.VolumeController):
             volumes = self._view_builder.summary_list(req, volumes)
         return volumes
 
-    @wsgi.Controller.api_version(SUMMARY_BASE_MICRO_VERSION)
+    @wsgi.Controller.api_version(mv.VOLUME_SUMMARY)
     def summary(self, req):
         """Return summary of volumes."""
         view_builder_v3 = volume_views_v3.ViewBuilder()
@@ -154,7 +154,7 @@ class VolumeController(volumes_v2.VolumeController):
             context, filters=filters)
 
         req_version = req.api_version_request
-        if req_version.matches("3.36"):
+        if req_version.matches(mv.VOLUME_SUMMARY_METADATA):
             all_distinct_metadata = metadata
         else:
             all_distinct_metadata = None
@@ -163,7 +163,7 @@ class VolumeController(volumes_v2.VolumeController):
                                              all_distinct_metadata)
 
     @wsgi.response(http_client.ACCEPTED)
-    @wsgi.Controller.api_version('3.40')
+    @wsgi.Controller.api_version(mv.VOLUME_REVERT)
     @wsgi.action('revert')
     def revert(self, req, id, body):
         """revert a volume to a snapshot"""
@@ -208,8 +208,8 @@ class VolumeController(volumes_v2.VolumeController):
         context = req.environ['cinder.context']
 
         req_version = req.api_version_request
-        # Remove group_id from body if max version is less than 3.13.
-        if req_version.matches(None, "3.12"):
+        # Remove group_id from body if max version is less than GROUP_VOLUME.
+        if req_version.matches(None, mv.get_prior_version(mv.GROUP_VOLUME)):
             # NOTE(xyang): The group_id is from a group created with a
             # group_type. So with this group_id, we've got a group_type
             # for this volume. Also if group_id is passed in, that means
@@ -227,6 +227,14 @@ class VolumeController(volumes_v2.VolumeController):
         volume = body['volume']
         kwargs = {}
         self.validate_name_and_description(volume)
+
+        # Check up front for legacy replication parameters to quick fail
+        source_replica = volume.get('source_replica')
+        if source_replica:
+            msg = _("Creating a volume from a replica source was part of the "
+                    "replication v1 implementation which is no longer "
+                    "available.")
+            raise exception.InvalidInput(reason=msg)
 
         # NOTE(thingee): v2 API allows name instead of display_name
         if 'name' in volume:
@@ -272,23 +280,6 @@ class VolumeController(volumes_v2.VolumeController):
         else:
             kwargs['source_volume'] = None
 
-        source_replica = volume.get('source_replica')
-        if source_replica is not None:
-            if not uuidutils.is_uuid_like(source_replica):
-                msg = _("Source replica ID '%s' must be a "
-                        "valid UUID") % source_replica
-                raise exc.HTTPBadRequest(explanation=msg)
-            # Not found exception will be handled at the wsgi level
-            src_vol = self.volume_api.get_volume(context,
-                                                 source_replica)
-            if src_vol['replication_status'] == 'disabled':
-                explanation = _('source volume id:%s is not'
-                                ' replicated') % source_replica
-                raise exc.HTTPBadRequest(explanation=explanation)
-            kwargs['source_replica'] = src_vol
-        else:
-            kwargs['source_replica'] = None
-
         kwargs['group'] = None
         kwargs['consistencygroup'] = None
         consistencygroup_id = volume.get('consistencygroup_id')
@@ -311,8 +302,6 @@ class VolumeController(volumes_v2.VolumeController):
             size = kwargs['snapshot']['volume_size']
         elif size is None and kwargs['source_volume'] is not None:
             size = kwargs['source_volume']['size']
-        elif size is None and kwargs['source_replica'] is not None:
-            size = kwargs['source_replica']['size']
 
         LOG.info("Create volume of %s GB", size)
 

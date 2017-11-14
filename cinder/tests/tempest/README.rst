@@ -5,7 +5,7 @@ Tempest Integration for Cinder
 This directory contains additional Cinder tempest tests.
 
 See the tempest plugin docs for information on using it:
-http://docs.openstack.org/developer/tempest/plugin.html#using-plugins
+https://docs.openstack.org/tempest/latest/plugin.html#using-plugins
 
 To run all tests from this plugin, install cinder into your environment. Then
 from the tempest directory run::
@@ -30,7 +30,6 @@ work. Update backend information to fit your environment.
     MYSQL_PASSWORD=$ADMIN_PASSWORD
     RABBIT_PASSWORD=$ADMIN_PASSWORD
     SERVICE_PASSWORD=$ADMIN_PASSWORD
-    SCREEN_LOGDIR=/opt/stack/screen-logs
     LOGFILE=$DEST/logs/stack.sh.log
     LOGDAYS=2
     SYSLOG=False

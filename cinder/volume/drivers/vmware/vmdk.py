@@ -63,6 +63,9 @@ TMP_IMAGES_DATASTORE_FOLDER_PATH = "cinder_temp/"
 
 EXTRA_CONFIG_VOLUME_ID_KEY = "cinder.volume.id"
 
+EXTENSION_KEY = 'org.openstack.storage'
+EXTENSION_TYPE = 'volume'
+
 vmdk_opts = [
     cfg.StrOpt('vmware_host_ip',
                help='IP address for connecting to VMware vCenter server.'),
@@ -137,6 +140,10 @@ vmdk_opts = [
                         volumeops.VirtualDiskAdapterType.IDE],
                default=volumeops.VirtualDiskAdapterType.LSI_LOGIC,
                help='Default adapter type to be used for attaching volumes.'),
+    cfg.StrOpt('vmware_snapshot_format',
+               choices=['template', 'COW'],
+               default='template',
+               help='Volume snapshot format in vCenter server.'),
 ]
 
 CONF = cfg.CONF
@@ -658,6 +665,34 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     def remove_export(self, context, volume):
         pass
 
+    def _get_snapshot_group_folder(self, volume, backing):
+        dc = self.volumeops.get_dc(backing)
+        return self._get_volume_group_folder(
+            dc, volume.project_id, snapshot=True)
+
+    def _create_snapshot_template_format(self, snapshot, backing):
+        volume = snapshot.volume
+        folder = self._get_snapshot_group_folder(volume, backing)
+        datastore = self.volumeops.get_datastore(backing)
+
+        if self._in_use(volume):
+            tmp_backing = self._create_temp_backing_from_attached_vmdk(
+                volume, None, None, folder, datastore, tmp_name=snapshot.name)
+        else:
+            tmp_backing = self.volumeops.clone_backing(
+                snapshot.name, backing, None, volumeops.FULL_CLONE_TYPE,
+                datastore, folder=folder)
+
+        try:
+            self.volumeops.mark_backing_as_template(tmp_backing)
+        except exceptions.VimException:
+            with excutils.save_and_reraise_exception():
+                LOG.error("Error marking temporary backing as template.")
+                self._delete_temp_backing(tmp_backing)
+
+        return {'provider_location':
+                self.volumeops.get_inventory_path(tmp_backing)}
+
     def _create_snapshot(self, snapshot):
         """Creates a snapshot.
 
@@ -669,49 +704,78 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         """
 
         volume = snapshot['volume']
-        if volume['status'] != 'available':
+        snapshot_format = self.configuration.vmware_snapshot_format
+        if self._in_use(volume) and snapshot_format == 'COW':
             msg = _("Snapshot of volume not supported in "
                     "state: %s.") % volume['status']
             LOG.error(msg)
             raise exception.InvalidVolume(msg)
+
         backing = self.volumeops.get_backing(snapshot['volume_name'])
         if not backing:
             LOG.info("There is no backing, so will not create "
                      "snapshot: %s.", snapshot['name'])
             return
-        self.volumeops.create_snapshot(backing, snapshot['name'],
-                                       snapshot['display_description'])
+
+        model_update = None
+        if snapshot_format == 'COW':
+            self.volumeops.create_snapshot(backing, snapshot['name'],
+                                           snapshot['display_description'])
+        else:
+            model_update = self._create_snapshot_template_format(
+                snapshot, backing)
+
         LOG.info("Successfully created snapshot: %s.", snapshot['name'])
+        return model_update
 
     def create_snapshot(self, snapshot):
         """Creates a snapshot.
 
         :param snapshot: Snapshot object
         """
-        self._create_snapshot(snapshot)
+        return self._create_snapshot(snapshot)
+
+    def _get_template_by_inv_path(self, inv_path):
+        template = self.volumeops.get_entity_by_inventory_path(inv_path)
+        if template is None:
+            LOG.error("Template not found at path: %s.", inv_path)
+            raise vmdk_exceptions.TemplateNotFoundException(path=inv_path)
+        else:
+            return template
+
+    def _delete_snapshot_template_format(self, snapshot):
+        template = self._get_template_by_inv_path(snapshot.provider_location)
+        self.volumeops.delete_backing(template)
 
     def _delete_snapshot(self, snapshot):
         """Delete snapshot.
 
         If the volume does not have a backing or the snapshot does not exist
-        then simply pass, else delete the snapshot. Snapshot deletion of only
-        available volume is supported.
+        then simply pass, else delete the snapshot. The volume must not be
+        attached for deletion of snapshot in COW format.
 
         :param snapshot: Snapshot object
         """
+        inv_path = snapshot.provider_location
+        is_template = inv_path is not None
+
         backing = self.volumeops.get_backing(snapshot.volume_name)
         if not backing:
             LOG.debug("Backing does not exist for volume.",
                       resource=snapshot.volume)
-        elif not self.volumeops.get_snapshot(backing, snapshot.name):
+        elif (not is_template and
+                not self.volumeops.get_snapshot(backing, snapshot.name)):
             LOG.debug("Snapshot does not exist in backend.", resource=snapshot)
-        elif self._in_use(snapshot.volume):
+        elif self._in_use(snapshot.volume) and not is_template:
             msg = _("Delete snapshot of volume not supported in "
                     "state: %s.") % snapshot.volume.status
             LOG.error(msg)
             raise exception.InvalidSnapshot(reason=msg)
         else:
-            self.volumeops.delete_snapshot(backing, snapshot.name)
+            if is_template:
+                self._delete_snapshot_template_format(snapshot)
+            else:
+                self.volumeops.delete_snapshot(backing, snapshot.name)
 
     def delete_snapshot(self, snapshot):
         """Delete snapshot.
@@ -853,6 +917,12 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         return (dc_ref, ds_name, folder_path)
 
+    def _get_vsphere_url(self, context, image_service, image_id):
+        (direct_url, _locations) = image_service.get_location(context,
+                                                              image_id)
+        if direct_url and direct_url.startswith('vsphere://'):
+            return direct_url
+
     def _create_virtual_disk_from_sparse_image(
             self, context, image_service, image_id, image_size_in_bytes,
             dc_ref, ds_name, folder_path, disk_name):
@@ -868,9 +938,16 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                   "image: %(image_id)s.",
                   {'path': src_path.get_descriptor_ds_file_path(),
                    'image_id': image_id})
-        self._copy_image(context, dc_ref, image_service, image_id,
-                         image_size_in_bytes, ds_name,
-                         src_path.get_descriptor_file_path())
+
+        vsphere_url = self._get_vsphere_url(context, image_service,
+                                            image_id)
+        if vsphere_url:
+            self.volumeops.copy_datastore_file(
+                vsphere_url, dc_ref, src_path.get_descriptor_ds_file_path())
+        else:
+            self._copy_image(context, dc_ref, image_service, image_id,
+                             image_size_in_bytes, ds_name,
+                             src_path.get_descriptor_file_path())
 
         # Copy sparse disk to create a flat extent virtual disk.
         dest_path = volumeops.FlatExtentVirtualDiskPath(ds_name,
@@ -923,9 +1000,15 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             EAGER_ZEROED_THICK_VMDK_TYPE)
         # Upload the image and use it as the flat extent.
         try:
-            self._copy_image(context, dc_ref, image_service, image_id,
-                             image_size_in_bytes, ds_name,
-                             path.get_flat_extent_file_path())
+            vsphere_url = self._get_vsphere_url(context, image_service,
+                                                image_id)
+            if vsphere_url:
+                self.volumeops.copy_datastore_file(
+                    vsphere_url, dc_ref, path.get_flat_extent_ds_file_path())
+            else:
+                self._copy_image(context, dc_ref, image_service, image_id,
+                                 image_size_in_bytes, ds_name,
+                                 path.get_flat_extent_file_path())
         except Exception:
             # Delete the descriptor.
             with excutils.save_and_reraise_exception():
@@ -1569,18 +1652,9 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         (_vm, disk) = self._get_existing(existing_ref)
         return int(math.ceil(disk.capacityInKB * units.Ki / float(units.Gi)))
 
-    def manage_existing(self, volume, existing_ref):
-        """Brings an existing virtual disk under Cinder management.
-
-        Detaches the virtual disk identified by existing_ref and attaches
-        it to a volume backing.
-
-        :param volume: Cinder volume to manage
-        :param existing_ref: Driver-specific information used to identify a
-                             volume
-        """
-        (vm, disk) = self._get_existing(existing_ref)
-
+    def _manage_existing_int(self, volume, vm, disk):
+        LOG.debug("Creating volume from disk: %(disk)s attached to %(vm)s.",
+                  {'disk': disk, 'vm': vm})
         # Create a backing for the volume.
         create_params = {CREATE_PARAM_DISK_LESS: True}
         backing = self._create_backing(volume, create_params=create_params)
@@ -1609,6 +1683,19 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             profile_id,
             dest_path.get_descriptor_ds_file_path())
         self.volumeops.update_backing_disk_uuid(backing, volume['id'])
+
+    def manage_existing(self, volume, existing_ref):
+        """Brings an existing virtual disk under Cinder management.
+
+        Detaches the virtual disk identified by existing_ref and attaches
+        it to a volume backing.
+
+        :param volume: Cinder volume to manage
+        :param existing_ref: Driver-specific information used to identify a
+                             volume
+        """
+        (vm, disk) = self._get_existing(existing_ref)
+        self._manage_existing_int(volume, vm, disk)
 
     def unmanage(self, volume):
         backing = self.volumeops.get_backing(volume['name'])
@@ -1675,6 +1762,24 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                         ' to %(ver)s in a future release.',
                         {'ver': self.NEXT_MIN_SUPPORTED_VC_VERSION})
 
+    def _register_extension(self):
+        ext = vim_util.find_extension(self.session.vim, EXTENSION_KEY)
+        if ext:
+            LOG.debug('Extension %s already exists.', EXTENSION_KEY)
+        else:
+            try:
+                vim_util.register_extension(self.session.vim,
+                                            EXTENSION_KEY,
+                                            EXTENSION_TYPE,
+                                            label='OpenStack Cinder')
+                LOG.info('Registered extension %s.', EXTENSION_KEY)
+            except exceptions.VimFaultException as e:
+                if 'InvalidArgument' in e.fault_list:
+                    LOG.debug('Extension %s is already registered.',
+                              EXTENSION_KEY)
+                else:
+                    raise
+
     def do_setup(self, context):
         """Any initialization the volume driver does while starting."""
         self._validate_params()
@@ -1697,10 +1802,13 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             # Destroy current session so that it is recreated with pbm enabled
             self._session = None
 
+        self._register_extension()
+
         # recreate session and initialize volumeops and ds_sel
         # TODO(vbala) remove properties: session, volumeops and ds_sel
         max_objects = self.configuration.vmware_max_objects_retrieval
-        self._volumeops = volumeops.VMwareVolumeOps(self.session, max_objects)
+        self._volumeops = volumeops.VMwareVolumeOps(
+            self.session, max_objects, EXTENSION_KEY, EXTENSION_TYPE)
         self._ds_sel = hub.DatastoreSelector(
             self.volumeops, self.session, max_objects)
 
@@ -1715,8 +1823,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                  "%(ip)s.", {'driver': self.__class__.__name__,
                              'ip': self.configuration.vmware_host_ip})
 
-    def _get_volume_group_folder(self, datacenter, project_id):
-        """Get inventory folder for organizing volume backings.
+    def _get_volume_group_folder(self, datacenter, project_id, snapshot=False):
+        """Get inventory folder for organizing volume backings and snapshots.
 
         The inventory folder for organizing volume backings has the following
         hierarchy:
@@ -1725,13 +1833,19 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         where volume_folder is the vmdk driver config option
         "vmware_volume_folder".
 
+        A sub-folder named 'Snapshots' under volume_folder is used for
+        organizing snapshots in template format.
+
         :param datacenter: Reference to the datacenter
         :param project_id: OpenStack project ID
+        :param snapshot: Return folder for snapshot if True
         :return: Reference to the inventory folder
         """
         volume_folder_name = self.configuration.vmware_volume_folder
         project_folder_name = "Project (%s)" % project_id
         folder_names = ['OpenStack', project_folder_name, volume_folder_name]
+        if snapshot:
+            folder_names.append('Snapshots')
         return self.volumeops.create_vm_inventory_folder(datacenter,
                                                          folder_names)
 
@@ -1861,6 +1975,30 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             self._extend_backing(clone, volume['size'])
         LOG.info("Successfully created clone: %s.", clone)
 
+    def _create_volume_from_template(self, volume, path):
+        LOG.debug("Creating backing for volume: %(volume_id)s from template "
+                  "at path: %(path)s.",
+                  {'volume_id': volume.id,
+                   'path': path})
+        template = self._get_template_by_inv_path(path)
+
+        # Create temporary backing by cloning the template.
+        tmp_name = uuidutils.generate_uuid()
+        (host, rp, folder, summary) = self._select_ds_for_volume(volume)
+        datastore = summary.datastore
+        disk_type = VMwareVcVmdkDriver._get_disk_type(volume)
+        tmp_backing = self.volumeops.clone_backing(tmp_name,
+                                                   template,
+                                                   None,
+                                                   volumeops.FULL_CLONE_TYPE,
+                                                   datastore,
+                                                   disk_type=disk_type,
+                                                   host=host,
+                                                   resource_pool=rp,
+                                                   folder=folder)
+
+        self._create_volume_from_temp_backing(volume, tmp_backing)
+
     def _create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot.
 
@@ -1877,17 +2015,22 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                      "volume: %(vol)s.",
                      {'snap': snapshot['name'], 'vol': volume['name']})
             return
-        snapshot_moref = self.volumeops.get_snapshot(backing,
-                                                     snapshot['name'])
-        if not snapshot_moref:
-            LOG.info("There is no snapshot point for the snapshotted "
-                     "volume: %(snap)s. Not creating any backing for "
-                     "the volume: %(vol)s.",
-                     {'snap': snapshot['name'], 'vol': volume['name']})
-            return
-        clone_type = VMwareVcVmdkDriver._get_clone_type(volume)
-        self._clone_backing(volume, backing, snapshot_moref, clone_type,
-                            snapshot['volume_size'])
+
+        inv_path = snapshot.get('provider_location')
+        if inv_path:
+            self._create_volume_from_template(volume, inv_path)
+        else:
+            snapshot_moref = self.volumeops.get_snapshot(backing,
+                                                         snapshot['name'])
+            if not snapshot_moref:
+                LOG.info("There is no snapshot point for the snapshotted "
+                         "volume: %(snap)s. Not creating any backing for "
+                         "the volume: %(vol)s.",
+                         {'snap': snapshot['name'], 'vol': volume['name']})
+                return
+            clone_type = VMwareVcVmdkDriver._get_clone_type(volume)
+            self._clone_backing(volume, backing, snapshot_moref, clone_type,
+                                snapshot['volume_size'])
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot.
@@ -1896,6 +2039,47 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param snapshot: Reference to snapshot entity
         """
         self._create_volume_from_snapshot(volume, snapshot)
+
+    def _get_volume_device_uuid(self, instance, volume_id):
+        prop = 'config.extraConfig["volume-%s"]' % volume_id
+        opt_val = self.session.invoke_api(vim_util,
+                                          'get_object_property',
+                                          self.session.vim,
+                                          instance,
+                                          prop)
+        if opt_val is not None:
+            return opt_val.value
+
+    def _create_temp_backing_from_attached_vmdk(
+            self, src_vref, host, rp, folder, datastore, tmp_name=None):
+        instance = self.volumeops.get_backing_by_uuid(
+            src_vref['volume_attachment'][0]['instance_uuid'])
+        vol_dev_uuid = self._get_volume_device_uuid(instance, src_vref['id'])
+        LOG.debug("Cloning volume device: %(dev)s attached to instance: "
+                  "%(instance)s.", {'dev': vol_dev_uuid,
+                                    'instance': instance})
+
+        tmp_name = tmp_name or uuidutils.generate_uuid()
+        return self.volumeops.clone_backing(
+            tmp_name, instance, None, volumeops.FULL_CLONE_TYPE, datastore,
+            host=host, resource_pool=rp, folder=folder,
+            disks_to_clone=[vol_dev_uuid])
+
+    def _create_volume_from_temp_backing(self, volume, tmp_backing):
+        try:
+            disk_device = self.volumeops._get_disk_device(tmp_backing)
+            self._manage_existing_int(volume, tmp_backing, disk_device)
+        finally:
+            self._delete_temp_backing(tmp_backing)
+
+    def _clone_attached_volume(self, src_vref, volume):
+        # Clone the vmdk attached to the instance to create a temporary
+        # backing.
+        (host, rp, folder, summary) = self._select_ds_for_volume(volume)
+        datastore = summary.datastore
+        tmp_backing = self._create_temp_backing_from_attached_vmdk(
+            src_vref, host, rp, folder, datastore)
+        self._create_volume_from_temp_backing(volume, tmp_backing)
 
     def _create_cloned_volume(self, volume, src_vref):
         """Creates volume clone.
@@ -1912,6 +2096,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                      "Not creating any backing for volume: %(vol)s.",
                      {'src': src_vref['name'], 'vol': volume['name']})
             return
+
         clone_type = VMwareVcVmdkDriver._get_clone_type(volume)
         snapshot = None
         if clone_type == volumeops.LINKED_CLONE_TYPE:
@@ -1925,18 +2110,22 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             # snapshot.
             snap_name = 'temp-snapshot-%s' % volume['id']
             snapshot = self.volumeops.create_snapshot(backing, snap_name, None)
-        try:
-            self._clone_backing(volume, backing, snapshot, clone_type,
-                                src_vref['size'])
-        finally:
-            if snapshot:
-                # Delete temporary snapshot.
-                try:
-                    self.volumeops.delete_snapshot(backing, snap_name)
-                except exceptions.VimException:
-                    LOG.debug("Unable to delete temporary snapshot: %s of "
-                              "volume backing.", snap_name, resource=volume,
-                              exc_info=True)
+
+        if self._in_use(src_vref):
+            self._clone_attached_volume(src_vref, volume)
+        else:
+            try:
+                self._clone_backing(volume, backing, snapshot, clone_type,
+                                    src_vref['size'])
+            finally:
+                if snapshot:
+                    # Delete temporary snapshot.
+                    try:
+                        self.volumeops.delete_snapshot(backing, snap_name)
+                    except exceptions.VimException:
+                        LOG.debug("Unable to delete temporary snapshot: %s of "
+                                  "volume backing.", snap_name,
+                                  resource=volume, exc_info=True)
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates volume clone.

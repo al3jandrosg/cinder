@@ -24,6 +24,7 @@ from oslo_log import log as logging
 from six.moves import urllib
 import webob
 
+from cinder.api import microversions as mv
 from cinder.common import constants
 from cinder import exception
 from cinder.i18n import _
@@ -36,12 +37,6 @@ api_common_opts = [
                default=1000,
                help='The maximum number of items that a collection '
                     'resource returns in a single response'),
-    cfg.StrOpt('osapi_volume_base_URL',
-               help='DEPRECATED: Base URL that will be presented to users in '
-                    'links to the OpenStack Volume API',
-               deprecated_name='osapi_compute_link_prefix',
-               deprecated_since='Pike',
-               deprecated_reason='Duplicate config option.'),
     cfg.StrOpt('resource_query_filters_file',
                default='/etc/cinder/resource_filters.json',
                help="Json file indicating user visible filter "
@@ -66,8 +61,6 @@ CONF.register_opts(api_common_opts)
 
 LOG = logging.getLogger(__name__)
 _FILTERS_COLLECTION = None
-FILTERING_VERSION = '3.31'
-LIKE_FILTER_VERSION = '3.34'
 
 ATTRIBUTE_CONVERTERS = {'name~': 'display_name~',
                         'description~': 'display_description~'}
@@ -170,29 +163,6 @@ def limited(items, request, max_limit=None):
                                                   max_limit)
     range_end = offset + (limit or max_limit)
     return items[offset:range_end]
-
-
-def limited_by_marker(items, request, max_limit=None):
-    """Return a slice of items according to the requested marker and limit."""
-    max_limit = max_limit or CONF.osapi_max_limit
-    marker, limit, __ = get_pagination_params(request.GET.copy(), max_limit)
-
-    start_index = 0
-    if marker:
-        start_index = -1
-        for i, item in enumerate(items):
-            if 'flavorid' in item:
-                if item['flavorid'] == marker:
-                    start_index = i + 1
-                    break
-            elif item['id'] == marker or item.get('uuid') == marker:
-                start_index = i + 1
-                break
-        if start_index < 0:
-            msg = _('marker [%s] not found') % marker
-            raise webob.exc.HTTPBadRequest(explanation=msg)
-    range_end = start_index + limit
-    return items[start_index:range_end]
 
 
 def get_sort_params(params, default_key='created_at', default_dir='desc'):
@@ -492,9 +462,9 @@ def process_general_filtering(resource):
             req_version = kwargs.get('req_version')
             filters = kwargs.get('filters')
             context = kwargs.get('context')
-            if req_version.matches(FILTERING_VERSION):
+            if req_version.matches(mv.RESOURCE_FILTER):
                 support_like = False
-                if req_version.matches(LIKE_FILTER_VERSION):
+                if req_version.matches(mv.LIKE_FILTER):
                     support_like = True
                 reject_invalid_filters(context, filters,
                                        resource, support_like)

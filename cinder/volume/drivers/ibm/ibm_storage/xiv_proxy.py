@@ -105,7 +105,7 @@ class XIVProxy(proxy.IBMStorageProxy):
 
     Supports IBM XIV, Spectrum Accelerate, A9000, A9000R
     Version: 2.1.0
-    Required pyxcli version: 1.1.4
+    Required pyxcli version: 1.1.5
 
     .. code:: text
 
@@ -355,7 +355,7 @@ class XIVProxy(proxy.IBMStorageProxy):
         if specs is None or specs == {}:
             return ''
 
-        for key, value in specs.items():
+        for key, value in sorted(specs.items()):
             perf_class_name += '_' + key + '_' + value
 
         try:
@@ -522,18 +522,21 @@ class XIVProxy(proxy.IBMStorageProxy):
                            ' should be the same')
                 elif volume.host != volume.group.host:
                     msg = 'Cannot add volume to Group on different host'
-                else:
+                elif volume.group['replication_status'] == 'enabled':
+                    # if group is mirrored and enabled, compare state.
                     group_name = self._cg_name_from_group(volume.group)
                     me = mirrored_entities.MirroredEntities(
                         self.ibm_storage_cli)
                     me_objs = me.get_mirror_resources_by_name_map()
-                    vol_sync_state = me_objs['volumes'][volume.name].sync_state
-                    cg_sync_state = me_objs['cgs'][group_name].sync_state
+                    vol_obj = me_objs['volumes'][volume.name]
+                    vol_sync_state = vol_obj['sync_state']
+                    cg_sync_state = me_objs['cgs'][group_name]['sync_state']
 
                     if (vol_sync_state != 'Synchronized' or
                             cg_sync_state != 'Synchronized'):
                         msg = ('Cannot add volume to Group. Both volume and '
                                'group should have sync_state = Synchronized')
+
                 if msg:
                     LOG.error(msg)
                     raise self.meta['exception'].VolumeBackendAPIException(
@@ -590,12 +593,18 @@ class XIVProxy(proxy.IBMStorageProxy):
                 self._update_consistencygroup(context, group,
                                               remove_volumes=volumes)
                 for volume in volumes:
-                    repl.VolumeReplication(self).create_replication(
-                        volume.name, replication_info)
+                    enabled_status = fields.ReplicationStatus.ENABLED
+                    if volume['replication_status'] != enabled_status:
+                        repl.VolumeReplication(self).create_replication(
+                            volume.name, replication_info)
 
             # mirror entire group
             group_name = self._cg_name_from_group(group)
-            self._create_consistencygroup_on_remote(context, group_name)
+            try:
+                self._create_consistencygroup_on_remote(context, group_name)
+            except errors.CgNameExistsError:
+                LOG.debug("CG name %(cg)s exists, no need to open it on "
+                          "secondary backend.", {'cg': group_name})
             repl.GroupReplication(self).create_replication(group_name,
                                                            replication_info)
 
@@ -647,6 +656,13 @@ class XIVProxy(proxy.IBMStorageProxy):
                 # we need to unlock it for further use.
                 try:
                     self.ibm_storage_cli.cmd.vol_unlock(vol=volume.name)
+                    self.ibm_storage_remote_cli.cmd.vol_unlock(
+                        vol=volume.name)
+                    self.ibm_storage_remote_cli.cmd.cg_remove_vol(
+                        vol=volume.name)
+                except errors.VolumeBadNameError:
+                    LOG.debug("Failed to delete vol %(vol)s - "
+                              "ignoring.", {'vol': volume.name})
                 except errors.XCLIError as e:
                     details = self._get_code_and_status_or_message(e)
                     msg = ('Failed to unlock volumes %(details)s' %
@@ -666,6 +682,17 @@ class XIVProxy(proxy.IBMStorageProxy):
 
             # update status
             for volume in volumes:
+                try:
+                    self.ibm_storage_cli.cmd.vol_unlock(vol=volume.name)
+                    self.ibm_storage_remote_cli.cmd.vol_unlock(
+                        vol=volume.name)
+                except errors.XCLIError as e:
+                    details = self._get_code_and_status_or_message(e)
+                    msg = (_('Failed to unlock volumes %(details)s'),
+                           {'details': details})
+                    LOG.error(msg)
+                    raise self.meta['exception'].VolumeBackendAPIException(
+                        data=msg)
                 updated_volumes.append(
                     {'id': volume['id'],
                      'replication_status': fields.ReplicationStatus.DISABLED})
@@ -1606,8 +1633,7 @@ class XIVProxy(proxy.IBMStorageProxy):
             self.meta['stat']['rpo'] = repl.Replication.get_supported_rpo()
             self.meta['stat']['replication_count'] = len(self.targets)
             self.meta['stat']['replication_targets'] = [target for target in
-                                                        six.iterkeys(
-                                                            self.targets)]
+                                                        self.targets.keys()]
 
         self.meta['stat']['timestamp'] = datetime.datetime.utcnow()
 
@@ -2589,27 +2615,28 @@ class XIVProxy(proxy.IBMStorageProxy):
         :returns: array of FC target WWPNs
         """
         target_wwpns = []
+        all_target_ports = []
 
         fc_port_list = self._call_xiv_xcli("fc_port_list")
-        if host is None:
-            target_wwpns += (
-                [t.get('wwpn') for t in
-                 fc_port_list if
-                 t.get('wwpn') != '0000000000000000' and
-                 t.get('role') == 'Target' and
-                 t.get('port_state') == 'Online'])
-        else:
+        all_target_ports += ([t for t in fc_port_list if
+                              t.get('wwpn') != '0000000000000000' and
+                              t.get('role') == 'Target' and
+                              t.get('port_state') == 'Online'])
+
+        if host:
             host_conect_list = self._call_xiv_xcli("host_connectivity_list",
                                                    host=host.get('name'))
             for connection in host_conect_list:
                 fc_port = connection.get('local_fc_port')
                 target_wwpns += (
-                    [t.get('wwpn') for t in
-                     fc_port_list if
-                     t.get('wwpn') != '0000000000000000' and
-                     t.get('role') == 'Target' and
-                     t.get('port_state') == 'Online' and
-                     t.get('component_id') == fc_port])
+                    [target.get('wwpn') for target in all_target_ports if
+                     target.get('component_id') == fc_port])
+
+        if not target_wwpns:
+            LOG.debug('No fc targets found accessible to host: %s. Return list'
+                      ' of all available FC targets', host)
+            target_wwpns = ([target.get('wwpn')
+                             for target in all_target_ports])
 
         fc_targets = list(set(target_wwpns))
         fc_targets.sort(key=self._sort_last_digit)

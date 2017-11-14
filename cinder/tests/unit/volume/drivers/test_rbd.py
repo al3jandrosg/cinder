@@ -873,8 +873,8 @@ class RBDTestCase(test.TestCase):
                         (self.volume_b.name, 'clone_snap'))))
                 self.assertEqual(
                     1, self.mock_rbd.RBD.return_value.clone.call_count)
-                self.mock_rbd.Image.return_value.close \
-                    .assert_called_once_with()
+                self.assertEqual(
+                    2, self.mock_rbd.Image.return_value.close.call_count)
                 self.assertTrue(mock_get_clone_depth.called)
                 mock_resize.assert_not_called()
                 mock_enable_repl.assert_not_called()
@@ -909,7 +909,8 @@ class RBDTestCase(test.TestCase):
         image.create_snap.assert_called_once_with(name + '.clone_snap')
         image.protect_snap.assert_called_once_with(name + '.clone_snap')
         self.assertEqual(1, self.mock_rbd.RBD.return_value.clone.call_count)
-        self.mock_rbd.Image.return_value.close.assert_called_once_with()
+        self.assertEqual(
+            2, self.mock_rbd.Image.return_value.close.call_count)
         mock_get_clone_depth.assert_called_once_with(
             self.mock_client().__enter__(), self.volume_a.name)
         mock_resize.assert_not_called()
@@ -938,8 +939,8 @@ class RBDTestCase(test.TestCase):
                         (self.volume_b.name, 'clone_snap'))))
                 self.assertEqual(
                     1, self.mock_rbd.RBD.return_value.clone.call_count)
-                self.mock_rbd.Image.return_value.close \
-                    .assert_called_once_with()
+                self.assertEqual(
+                    2, self.mock_rbd.Image.return_value.close.call_count)
                 self.assertTrue(mock_get_clone_depth.called)
                 self.assertEqual(
                     1, mock_resize.call_count)
@@ -996,7 +997,7 @@ class RBDTestCase(test.TestCase):
 
                 # We expect the driver to close both volumes, so 2 is expected
                 self.assertEqual(
-                    2, self.mock_rbd.Image.return_value.close.call_count)
+                    3, self.mock_rbd.Image.return_value.close.call_count)
                 self.assertTrue(mock_get_clone_depth.called)
                 mock_enable_repl.assert_not_called()
 
@@ -1029,7 +1030,8 @@ class RBDTestCase(test.TestCase):
             (self.mock_rbd.Image.return_value.remove_snap
              .assert_called_once_with('.'.join(
                  (self.volume_b.name, 'clone_snap'))))
-            self.mock_rbd.Image.return_value.close.assert_called_once_with()
+            self.assertEqual(
+                1, self.mock_rbd.Image.return_value.close.call_count)
             mock_enable_repl.assert_not_called()
 
     @common_mocks
@@ -1121,19 +1123,13 @@ class RBDTestCase(test.TestCase):
 
     @ddt.data(True, False)
     @common_mocks
-    def test_update_volume_stats(self, replication_enabled):
-        client = self.mock_client.return_value
-        client.__enter__.return_value = client
-
-        client.cluster = mock.Mock()
-        client.cluster.mon_command = mock.Mock()
-        client.cluster.mon_command.return_value = (
-            0, '{"stats":{"total_bytes":64385286144,'
-            '"total_used_bytes":3289628672,"total_avail_bytes":61095657472},'
-            '"pools":[{"name":"rbd","id":2,"stats":{"kb_used":1510197,'
-            '"bytes_used":1546440971,"max_avail":28987613184,"objects":412}},'
-            '{"name":"volumes","id":3,"stats":{"kb_used":0,"bytes_used":0,'
-            '"max_avail":28987613184,"objects":0}}]}\n', '')
+    @mock.patch('cinder.volume.drivers.rbd.RBDDriver._get_usage_info')
+    @mock.patch('cinder.volume.drivers.rbd.RBDDriver._get_pool_stats')
+    def test_update_volume_stats(self, replication_enabled, stats_mock,
+                                 usage_mock):
+        stats_mock.return_value = (mock.sentinel.free_capacity_gb,
+                                   mock.sentinel.total_capacity_gb)
+        usage_mock.return_value = mock.sentinel.provisioned_capacity_gb
 
         expected = dict(
             volume_backend_name='RBD',
@@ -1141,11 +1137,11 @@ class RBDTestCase(test.TestCase):
             vendor_name='Open Source',
             driver_version=self.driver.VERSION,
             storage_protocol='ceph',
-            total_capacity_gb=28.44,
-            free_capacity_gb=27.0,
+            total_capacity_gb=mock.sentinel.total_capacity_gb,
+            free_capacity_gb=mock.sentinel.free_capacity_gb,
             reserved_percentage=0,
             thin_provisioning_support=True,
-            provisioned_capacity_gb=0.0,
+            provisioned_capacity_gb=mock.sentinel.provisioned_capacity_gb,
             max_over_subscription_ratio=1.0,
             multiattach=False)
 
@@ -1162,19 +1158,12 @@ class RBDTestCase(test.TestCase):
                          mock_driver_configuration)
 
         actual = self.driver.get_volume_stats(True)
-        client.cluster.mon_command.assert_called_once_with(
-            '{"prefix":"df", "format":"json"}', '')
         self.assertDictEqual(expected, actual)
 
     @common_mocks
-    def test_update_volume_stats_error(self):
-        client = self.mock_client.return_value
-        client.__enter__.return_value = client
-
-        client.cluster = mock.Mock()
-        client.cluster.mon_command = mock.Mock()
-        client.cluster.mon_command.return_value = (22, '', '')
-
+    @mock.patch('cinder.volume.drivers.rbd.RBDDriver._get_usage_info')
+    @mock.patch('cinder.volume.drivers.rbd.RBDDriver._get_pool_stats')
+    def test_update_volume_stats_error(self, stats_mock, usage_mock):
         self.mock_object(self.driver.configuration, 'safe_get',
                          mock_driver_configuration)
 
@@ -1187,14 +1176,65 @@ class RBDTestCase(test.TestCase):
                         free_capacity_gb='unknown',
                         reserved_percentage=0,
                         multiattach=False,
-                        provisioned_capacity_gb=0.0,
+                        provisioned_capacity_gb=0,
                         max_over_subscription_ratio=1.0,
                         thin_provisioning_support=True)
 
         actual = self.driver.get_volume_stats(True)
-        client.cluster.mon_command.assert_called_once_with(
-            '{"prefix":"df", "format":"json"}', '')
         self.assertDictEqual(expected, actual)
+
+    @ddt.data(
+        # Normal case, no quota and dynamic total
+        {'free_capacity': 27.0, 'total_capacity': 28.44},
+        # No quota and static total
+        {'dynamic_total': False,
+         'free_capacity': 27.0, 'total_capacity': 59.96},
+        # Quota and dynamic total
+        {'quota_max_bytes': 3221225472, 'max_avail': 1073741824,
+         'free_capacity': 1, 'total_capacity': 2.44},
+        # Quota and static total
+        {'quota_max_bytes': 3221225472, 'max_avail': 1073741824,
+         'dynamic_total': False,
+         'free_capacity': 1, 'total_capacity': 3.00},
+        # Quota and dynamic total when free would be negative
+        {'quota_max_bytes': 1073741824,
+         'free_capacity': 0, 'total_capacity': 1.44},
+    )
+    @ddt.unpack
+    @common_mocks
+    def test_get_pool(self, free_capacity, total_capacity,
+                      max_avail=28987613184, quota_max_bytes=0,
+                      dynamic_total=True):
+        client = self.mock_client.return_value
+        client.__enter__.return_value = client
+        client.cluster.mon_command.side_effect = [
+            (0, '{"stats":{"total_bytes":64385286144,'
+             '"total_used_bytes":3289628672,"total_avail_bytes":61095657472},'
+             '"pools":[{"name":"rbd","id":2,"stats":{"kb_used":1510197,'
+             '"bytes_used":1546440971,"max_avail":%s,"objects":412}},'
+             '{"name":"volumes","id":3,"stats":{"kb_used":0,"bytes_used":0,'
+             '"max_avail":28987613184,"objects":0}}]}\n' % max_avail, ''),
+            (0, '{"pool_name":"volumes","pool_id":4,"quota_max_objects":0,'
+             '"quota_max_bytes":%s}\n' % quota_max_bytes, ''),
+        ]
+        with mock.patch.object(self.driver.configuration, 'safe_get',
+                               return_value=dynamic_total):
+            result = self.driver._get_pool_stats()
+        client.cluster.mon_command.assert_has_calls([
+            mock.call('{"prefix":"df", "format":"json"}', ''),
+            mock.call('{"prefix":"osd pool get-quota", "pool": "rbd",'
+                      ' "format":"json"}', ''),
+        ])
+        self.assertEqual((free_capacity, total_capacity), result)
+
+    @common_mocks
+    def test_get_pool_stats_failure(self):
+        client = self.mock_client.return_value
+        client.__enter__.return_value = client
+        client.cluster.mon_command.return_value = (-1, '', '')
+
+        result = self.driver._get_pool_stats()
+        self.assertEqual(('unknown', 'unknown'), result)
 
     @common_mocks
     def test_get_mon_addrs(self):
@@ -1532,6 +1572,64 @@ class RBDTestCase(test.TestCase):
 
         self.assertEqual(1, mock_driver._disconnect_from_rados.call_count)
 
+    def test_rbd_volume_proxy_external_conn(self):
+        mock_driver = mock.Mock(name='driver')
+        mock_driver._connect_to_rados.return_value = (None, None)
+        with driver.RBDVolumeProxy(mock_driver, self.volume_a.name,
+                                   client='fake_cl', ioctx='fake_io'):
+
+            mock_driver._connect_to_rados.assert_not_called()
+
+        mock_driver._disconnect_from_rados.assert_not_called()
+
+    def test_rbd_volume_proxy_external_conn_no_iocxt(self):
+        mock_driver = mock.Mock(name='driver')
+        mock_driver._connect_to_rados.return_value = ('fake_cl', 'fake_io')
+        with driver.RBDVolumeProxy(mock_driver, self.volume_a.name,
+                                   client='fake_cl', pool='vol_pool'):
+            mock_driver._connect_to_rados.assert_called_once_with(
+                'vol_pool', None, None)
+
+        mock_driver._disconnect_from_rados.assert_called_once_with(
+            'fake_cl', 'fake_io')
+
+    def test_rbd_volume_proxy_external_conn_error(self):
+        mock_driver = mock.Mock(name='driver')
+        mock_driver._connect_to_rados.return_value = (None, None)
+
+        class RBDError(Exception):
+            pass
+
+        mock_driver.rbd.Error = RBDError
+        mock_driver.rbd.Image.side_effect = RBDError()
+
+        self.assertRaises(RBDError, driver.RBDVolumeProxy,
+                          mock_driver, self.volume_a.name,
+                          client='fake_cl', ioctx='fake_io')
+
+        mock_driver._connect_to_rados.assert_not_called()
+        mock_driver._disconnect_from_rados.assert_not_called()
+
+    def test_rbd_volume_proxy_conn_error(self):
+        mock_driver = mock.Mock(name='driver')
+        mock_driver._connect_to_rados.return_value = (
+            'fake_client', 'fake_ioctx')
+
+        class RBDError(Exception):
+            pass
+
+        mock_driver.rbd.Error = RBDError
+        mock_driver.rbd.Image.side_effect = RBDError()
+
+        self.assertRaises(RBDError, driver.RBDVolumeProxy,
+                          mock_driver, self.volume_a.name,
+                          pool='fake-volumes')
+
+        mock_driver._connect_to_rados.assert_called_once_with(
+            'fake-volumes', None, None)
+        mock_driver._disconnect_from_rados.assert_called_once_with(
+            'fake_client', 'fake_ioctx')
+
     @common_mocks
     def test_connect_to_rados(self):
         # Default
@@ -1787,6 +1885,45 @@ class RBDTestCase(test.TestCase):
         # Make sure the exception was raised
         self.assertEqual(RAISED_EXCEPTIONS,
                          [self.mock_rbd.ImageExists])
+
+    @mock.patch('cinder.volume.drivers.rbd.RBDVolumeProxy')
+    @mock.patch('cinder.volume.drivers.rbd.RADOSClient')
+    @mock.patch('cinder.volume.drivers.rbd.RBDDriver.RBDProxy')
+    def test__get_usage_info(self, rbdproxy_mock, client_mock, volproxy_mock):
+        def FakeVolProxy(size):
+            if size == -1:
+                size_mock = mock.Mock(side_effect=MockImageNotFoundException)
+            else:
+                size_mock = mock.Mock(return_value=size * units.Gi)
+            return mock.Mock(return_value=mock.Mock(size=size_mock))
+
+        volumes = ['volume-1', 'non-existent', 'non-cinder-volume']
+
+        client = client_mock.return_value.__enter__.return_value
+        rbdproxy_mock.return_value.list.return_value = volumes
+
+        volproxy_mock.side_effect = [
+            mock.Mock(**{'__enter__': FakeVolProxy(1.0),
+                         '__exit__': mock.Mock()}),
+            mock.Mock(**{'__enter__': FakeVolProxy(-1),
+                         '__exit__': mock.Mock()}),
+            mock.Mock(**{'__enter__': FakeVolProxy(2.0),
+                         '__exit__': mock.Mock()})
+        ]
+
+        with mock.patch.object(self.driver, 'rbd') as mock_rbd:
+            mock_rbd.ImageNotFound = MockImageNotFoundException
+            total_provision = self.driver._get_usage_info()
+
+        rbdproxy_mock.return_value.list.assert_called_once_with(client.ioctx)
+        volproxy_mock.assert_has_calls([
+            mock.call(self.driver, volumes[0], read_only=True,
+                      client=client.cluster, ioctx=client.ioctx),
+            mock.call(self.driver, volumes[1], read_only=True,
+                      client=client.cluster, ioctx=client.ioctx),
+        ])
+
+        self.assertEqual(3.00, total_provision)
 
 
 class ManagedRBDTestCase(test_driver.BaseDriverTestCase):

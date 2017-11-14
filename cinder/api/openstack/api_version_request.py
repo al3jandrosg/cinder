@@ -106,16 +106,17 @@ REST_API_VERSION_HISTORY = """
              'volume:extend_attached_volume' policy rule. Extend in reserved
              state is intentionally NOT allowed.
     * 3.43 - Support backup CRUD with metadata.
+    * 3.44 - Add attachment-complete.
 """
 
 # The minimum and maximum versions of the API supported
 # The default api version request is defined to be the
 # minimum version of the API supported.
-# Explicitly using /v1 or /v2 endpoints will still work
+# Explicitly using /v2 endpoints will still work
 _MIN_API_VERSION = "3.0"
-_MAX_API_VERSION = "3.43"
-_LEGACY_API_VERSION1 = "1.0"
+_MAX_API_VERSION = "3.44"
 _LEGACY_API_VERSION2 = "2.0"
+UPDATED = "2017-09-19T20:18:14Z"
 
 
 # NOTE(cyeoh): min and max versions declared as functions so we can
@@ -127,10 +128,6 @@ def min_api_version():
 
 def max_api_version():
     return APIVersionRequest(_MAX_API_VERSION)
-
-
-def legacy_api_version1():
-    return APIVersionRequest(_LEGACY_API_VERSION1)
 
 
 def legacy_api_version2():

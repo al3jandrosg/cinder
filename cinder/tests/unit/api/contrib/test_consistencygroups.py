@@ -591,7 +591,11 @@ class ConsistencyGroupsAPITestCase(test.TestCase):
         self.assertEqual(fields.ConsistencyGroupStatus.DELETED, cg.status)
         self.assertIsNone(cg.host)
 
-    def test_create_delete_consistencygroup_update_quota(self):
+    @mock.patch('cinder.quota.GROUP_QUOTAS.reserve',
+                return_value='reservations')
+    @mock.patch('cinder.quota.GROUP_QUOTAS.commit')
+    def test_create_delete_consistencygroup_update_quota(self, mock_commit,
+                                                         mock_reserve):
         name = 'mycg'
         description = 'consistency group 1'
         fake_grp_type = {'id': fake.GROUP_TYPE_ID, 'name': 'fake_grp_type'}
@@ -604,12 +608,14 @@ class ConsistencyGroupsAPITestCase(test.TestCase):
         self.mock_object(self.cg_api, 'update_quota')
         cg = self.cg_api.create(self.ctxt, name, description,
                                 fake.GROUP_TYPE_ID, fake_vol_type['name'])
-        self.cg_api.update_quota.assert_called_once_with(
-            self.ctxt, cg, 1)
+        # Verify the quota reservation and commit was called
+        mock_reserve.assert_called_once_with(self.ctxt,
+                                             project_id=self.ctxt.project_id,
+                                             groups=1)
+        mock_commit.assert_called_once_with(self.ctxt, 'reservations')
 
         self.assertEqual(fields.ConsistencyGroupStatus.CREATING, cg.status)
         self.assertIsNone(cg.host)
-        self.cg_api.update_quota.reset_mock()
         cg.status = fields.ConsistencyGroupStatus.ERROR
         self.cg_api.delete(self.ctxt, cg)
 
@@ -1105,16 +1111,23 @@ class ConsistencyGroupsAPITestCase(test.TestCase):
         consistencygroup.destroy()
 
     def test_update_consistencygroup_invalid_state(self):
+        volume_type_id = utils.create_volume_type(
+            context.get_admin_context(), self, name='my_vol_type')['id']
         consistencygroup = self._create_consistencygroup(
             status=fields.ConsistencyGroupStatus.CREATING,
+            volume_type_ids=[volume_type_id],
             ctxt=self.ctxt)
+        add_volume_id = utils.create_volume(
+            self.ctxt,
+            testcase_instance=self,
+            volume_type_id=volume_type_id)['id']
         req = webob.Request.blank('/v2/%s/consistencygroups/%s/update' %
                                   (fake.PROJECT_ID, consistencygroup.id))
         req.method = 'PUT'
         req.headers['Content-Type'] = 'application/json'
         body = {"consistencygroup": {"name": "new name",
                                      "description": None,
-                                     "add_volumes": None,
+                                     "add_volumes": add_volume_id,
                                      "remove_volumes": None, }}
         req.body = jsonutils.dump_as_bytes(body)
         res = req.get_response(fakes.wsgi_app(

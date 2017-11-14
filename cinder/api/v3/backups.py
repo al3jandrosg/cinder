@@ -19,14 +19,13 @@ from oslo_log import log as logging
 from webob import exc
 
 from cinder.api.contrib import backups as backups_v2
+from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
-from cinder.backup import api as backup_api
+from cinder.api.v3.views import backups as backup_views
 from cinder import exception
 from cinder.i18n import _
+from cinder.policies import backups as policy
 
-
-BACKUP_UPDATE_MICRO_VERSION = '3.9'
-BACKUP_TENANT_MICRO_VERSION = '3.18'
 
 LOG = logging.getLogger(__name__)
 
@@ -34,7 +33,9 @@ LOG = logging.getLogger(__name__)
 class BackupsController(backups_v2.BackupsController):
     """The backups API controller for the OpenStack API V3."""
 
-    @wsgi.Controller.api_version(BACKUP_UPDATE_MICRO_VERSION)
+    _view_builder_class = backup_views.ViewBuilder
+
+    @wsgi.Controller.api_version(mv.BACKUP_UPDATE)
     def update(self, req, id, body):
         """Update a backup."""
         context = req.environ['cinder.context']
@@ -50,7 +51,8 @@ class BackupsController(backups_v2.BackupsController):
         if 'description' in backup_update:
             update_dict['display_description'] = (
                 backup_update.pop('description'))
-        if req_version.matches('3.43') and 'metadata' in backup_update:
+        if (req_version.matches(
+                mv.BACKUP_METADATA) and 'metadata' in backup_update):
             update_dict['metadata'] = backup_update.pop('metadata')
         # Check no unsupported fields.
         if backup_update:
@@ -77,9 +79,9 @@ class BackupsController(backups_v2.BackupsController):
         req.cache_db_backup(backup)
 
         resp_backup = self._view_builder.detail(req, backup)
-        if req_version.matches(BACKUP_TENANT_MICRO_VERSION):
+        if req_version.matches(mv.BACKUP_PROJECT):
             try:
-                backup_api.check_policy(context, 'backup_project_attribute')
+                context.authorize(policy.BACKUP_ATTRIBUTES_POLICY)
                 self._add_backup_project_attribute(req, resp_backup['backup'])
             except exception.PolicyNotAuthorized:
                 pass
@@ -90,9 +92,9 @@ class BackupsController(backups_v2.BackupsController):
         context = req.environ['cinder.context']
         req_version = req.api_version_request
 
-        if req_version.matches(BACKUP_TENANT_MICRO_VERSION):
+        if req_version.matches(mv.BACKUP_PROJECT):
             try:
-                backup_api.check_policy(context, 'backup_project_attribute')
+                context.authorize(policy.BACKUP_ATTRIBUTES_POLICY)
                 for bak in resp_backup['backups']:
                     self._add_backup_project_attribute(req, bak)
             except exception.PolicyNotAuthorized:
@@ -100,7 +102,7 @@ class BackupsController(backups_v2.BackupsController):
         return resp_backup
 
     def _convert_sort_name(self, req_version, sort_keys):
-        if req_version.matches("3.37") and 'name' in sort_keys:
+        if req_version.matches(mv.BACKUP_SORT_NAME) and 'name' in sort_keys:
             sort_keys[sort_keys.index('name')] = 'display_name'
 
 

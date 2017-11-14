@@ -283,10 +283,10 @@ class Request(webob.Request):
 
         Microversions starts with /v3, so if a client sends a request for
         version 1.0 or 2.0 with the /v3 endpoint, throw an exception.
-        Sending a header with any microversion to a /v1 or /v2 endpoint will
+        Sending a header with any microversion to a /v2 endpoint will
         be ignored.
-        Note that a microversion must be set for the legacy endpoints. This
-        will appear as 1.0 and 2.0 for /v1 and /v2.
+        Note that a microversion must be set for the legacy endpoint. This
+        will appear as 2.0 for /v2.
         """
         if API_VERSION_REQUEST_HEADER in self.headers and 'v3' in url:
             hdr_string = self.headers[API_VERSION_REQUEST_HEADER]
@@ -318,9 +318,7 @@ class Request(webob.Request):
                         max_ver=api_version.max_api_version().get_string())
 
         else:
-            if 'v1' in url:
-                self.api_version_request = api_version.legacy_api_version1()
-            elif 'v2' in url:
+            if 'v2' in url:
                 self.api_version_request = api_version.legacy_api_version2()
             else:
                 self.api_version_request = api_version.APIVersionRequest(
@@ -1235,9 +1233,12 @@ class Controller(object):
         return decorator
 
     @staticmethod
-    def is_valid_body(body, entity_name):
+    def assert_valid_body(body, entity_name):
+        fail_msg = _(
+            "Missing required element '%s' in request body.") % entity_name
+
         if not (body and entity_name in body):
-            return False
+            raise webob.exc.HTTPBadRequest(explanation=fail_msg)
 
         def is_dict(d):
             try:
@@ -1247,22 +1248,7 @@ class Controller(object):
                 return False
 
         if not is_dict(body[entity_name]):
-            return False
-
-        return True
-
-    @staticmethod
-    def assert_valid_body(body, entity_name):
-        # NOTE: After v1 api is deprecated need to merge 'is_valid_body' and
-        #       'assert_valid_body' in to one method. Right now it is not
-        #       possible to modify 'is_valid_body' to raise exception because
-        #       in case of V1 api when 'is_valid_body' return False,
-        #       'HTTPUnprocessableEntity' exception is getting raised and in
-        #       V2 api 'HTTPBadRequest' exception is getting raised.
-        if not Controller.is_valid_body(body, entity_name):
-            raise webob.exc.HTTPBadRequest(
-                explanation=_("Missing required element '%s' in "
-                              "request body.") % entity_name)
+            raise webob.exc.HTTPBadRequest(explanation=fail_msg)
 
     @staticmethod
     def validate_name_and_description(body):

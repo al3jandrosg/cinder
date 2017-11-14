@@ -1,3 +1,15 @@
+cinder (2:12.0.0~b1-0ubuntu1) bionic; urgency=medium
+
+  * New upstream milestone for OpenStack Queens.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/drop-openstackdoctheme.patch: Dropped. No longer needed.
+  * d/control, d/rules: Switch from ostestr to stestr as upstream has to run
+    unit tests. Also drop blacklist as the corresponding bug is now fixed.
+  * d/cinder-common.install, cinder-volume.install: Adjust paths for
+    config file install sources.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 14 Nov 2017 12:47:46 -0500
+
 cinder (2:11.0.0-0ubuntu3) bionic; urgency=medium
 
   * d/control: Move apache dependencies to cinder-api binary package

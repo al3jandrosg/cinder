@@ -5,18 +5,17 @@ Quota sets extension (os-quota-sets)
 
 Administrators only, depending on policy settings.
 
-Shows, updates, and deletes quotas for a tenant.
+Shows, updates, and deletes quotas for a project.
 
 Show quotas
 ~~~~~~~~~~~
 
-.. rest_method::  GET /v2/{admin_tenant_id}/os-quota-sets/{tenant_id}
+.. rest_method::  GET /v2/{admin_project_id}/os-quota-sets/{project_id}
 
-Shows quotas for a tenant.
+Shows quotas for a project.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -24,8 +23,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - tenant_id: quotas_tenant_id
-   - admin_tenant_id: admin_tenant_id
+   - project_id: quotas_project_id
+   - admin_project_id: admin_project_id
    - usage: usage
 
 
@@ -61,13 +60,12 @@ Response Example
 Update quotas
 ~~~~~~~~~~~~~
 
-.. rest_method::  PUT /v2/{admin_tenant_id}/os-quota-sets/{tenant_id}
+.. rest_method::  PUT /v2/{admin_project_id}/os-quota-sets/{project_id}
 
-Updates quotas for a tenant.
+Updates quotas for a project.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -91,8 +89,8 @@ Request
    - fixed_ips: fixed_ips
    - id: id
    - security_groups: security_groups
-   - tenant_id: quotas_tenant_id
-   - admin_tenant_id: admin_tenant_id
+   - project_id: quotas_project_id
+   - admin_project_id: admin_project_id
 
 Request Example
 ---------------
@@ -132,13 +130,12 @@ Response Example
 Delete quotas
 ~~~~~~~~~~~~~
 
-.. rest_method::  DELETE /v2/{admin_tenant_id}/os-quota-sets/{tenant_id}
+.. rest_method::  DELETE /v2/{admin_project_id}/os-quota-sets/{project_id}
 
-Deletes quotas for a tenant so the quotas revert to default values.
+Deletes quotas for a project so the quotas revert to default values.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -146,8 +143,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - tenant_id: quotas_tenant_id
-   - admin_tenant_id: admin_tenant_id
+   - project_id: quotas_project_id
+   - admin_project_id: admin_project_id
 
 Response Example
 ----------------
@@ -158,13 +155,12 @@ Response Example
 Get default quotas
 ~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  GET /v2/{admin_tenant_id}/os-quota-sets/{tenant_id}/defaults
+.. rest_method::  GET /v2/{admin_project_id}/os-quota-sets/{project_id}/defaults
 
-Gets default quotas for a tenant.
+Gets default quotas for a project.
 
 
 Normal response codes: 200
-Error response codes:
 
 
 Request
@@ -172,8 +168,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - tenant_id: tenant_id
-   - admin_tenant_id: admin_tenant_id
+   - project_id: quotas_project_id
+   - admin_project_id: admin_project_id
 
 
 Response Parameters

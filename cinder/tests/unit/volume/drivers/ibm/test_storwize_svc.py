@@ -640,6 +640,68 @@ port_speed!N/A
 
         return self._print_info_cmd(rows=node_infos[node_id], **kwargs)
 
+    def _cmd_lstargetportfc(self, **kwargs):
+        ports = [None] * 17
+        ports[0] = ['id', 'WWPN', 'WWNN', 'port_id', 'owning_node_id',
+                    'current_node_id', 'nportid', 'host_io_permitted',
+                    'virtualized']
+        ports[1] = ['0', '5005076801106CFE', '5005076801106CFE', '1', '1',
+                    '1', '042200', 'no', 'no']
+        ports[2] = ['0', '5005076801996CFE', '5005076801106CFE', '1', '1',
+                    '1', '042200', 'yes', 'yes']
+        ports[3] = ['0', '5005076801206CFE', '5005076801106CFE', '2', '1',
+                    '1', '042200', 'no', 'no']
+        ports[4] = ['0', '5005076801A96CFE', '5005076801106CFE', '2', '1',
+                    '1', '042200', 'yes', 'yes']
+        ports[5] = ['0', '5005076801306CFE', '5005076801106CFE', '3', '1',
+                    '', '042200', 'no', 'no']
+        ports[6] = ['0', '5005076801B96CFE', '5005076801106CFE', '3', '1',
+                    '', '042200', 'yes', 'yes']
+        ports[7] = ['0', '5005076801406CFE', '5005076801106CFE', '4', '1',
+                    '', '042200', 'no', 'no']
+        ports[8] = ['0', '5005076801C96CFE', '5005076801106CFE', '4', '1',
+                    '', '042200', 'yes', 'yes']
+        ports[9] = ['0', '5005076801101806', '5005076801101806', '1', '2',
+                    '2', '042200', 'no', 'no']
+        ports[10] = ['0', '5005076801991806', '5005076801101806', '1', '2',
+                     '2', '042200', 'yes', 'yes']
+        ports[11] = ['0', '5005076801201806', '5005076801101806', '2', '2',
+                     '2', '042200', 'no', 'no']
+        ports[12] = ['0', '5005076801A91806', '5005076801101806', '2', '2',
+                     '2', '042200', 'yes', 'yes']
+        ports[13] = ['0', '5005076801301806', '5005076801101806', '3', '2',
+                     '', '042200', 'no', 'no']
+        ports[14] = ['0', '5005076801B91806', '5005076801101806', '3', '2',
+                     '', '042200', 'yes', 'yes']
+        ports[15] = ['0', '5005076801401806', '5005076801101806', '4', '2',
+                     '', '042200', 'no', 'no']
+        ports[16] = ['0', '5005076801C91806', '5005076801101806', '4', '2',
+                     '', '042200', 'yes', 'yes']
+
+        if 'filtervalue' in kwargs:
+            rows = []
+            rows.append(['id', 'WWPN', 'WWNN', 'port_id', 'owning_node_id',
+                         'current_node_id', 'nportid', 'host_io_permitted',
+                         'virtualized'])
+
+            if ':' in kwargs['filtervalue']:
+                filter1 = kwargs['filtervalue'].split(':')[0]
+                filter2 = kwargs['filtervalue'].split(':')[1]
+                value1 = filter1.split('=')[1]
+                value2 = filter2.split('=')[1]
+                for v in ports:
+                    if(six.text_type(v[4]) == value1 and six.text_type(
+                            v[7]) == value2):
+                        rows.append(v)
+            else:
+                value = kwargs['filtervalue'].split('=')[1]
+                for v in ports:
+                    if six.text_type(v[4]) == value:
+                        rows.append(v)
+        else:
+            rows = ports
+        return self._print_info_cmd(rows=rows, **kwargs)
+
     # Print mostly made-up stuff in the correct syntax
     def _cmd_lsportip(self, **kwargs):
         if self._next_cmd_error['lsportip'] == 'ip_no_config':
@@ -2435,7 +2497,7 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
                        '_do_initialize_connection')
     def test_storwize_do_terminate_iscsi_connection(self, init_conn,
                                                     term_conn):
-        # create a iSCSI volume
+        # create an iSCSI volume
         volume_iSCSI = self._create_volume()
         extra_spec = {'capabilities:storage_protocol': '<in> iSCSI'}
         vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
@@ -2454,7 +2516,7 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
     @mock.patch.object(storwize_svc_iscsi.StorwizeSVCISCSIDriver,
                        '_do_terminate_connection')
     def test_storwize_initialize_iscsi_connection_failure(self, term_conn):
-        # create a iSCSI volume
+        # create an iSCSI volume
         volume_iSCSI = self._create_volume()
         extra_spec = {'capabilities:storage_protocol': '<in> iSCSI'}
         vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
@@ -2472,7 +2534,7 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
         term_conn.assert_called_once_with(volume_iSCSI, connector)
 
     def test_storwize_terminate_iscsi_connection_multi_attach(self):
-        # create a iSCSI volume
+        # create an iSCSI volume
         volume_iSCSI = self._create_volume()
         extra_spec = {'capabilities:storage_protocol': '<in> iSCSI'}
         vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
@@ -3292,6 +3354,67 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
 
         self.assertItemsEqual(term_data, term_ret)
 
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_conn_fc_wwpns')
+    def test_storwize_npiv_initiator_target_map(self, get_fc_wwpns):
+        # create a FC volume
+        get_fc_wwpns.side_effect = [[]]
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 7, 0, 0),
+                                'topology': 'standard',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            self.fc_driver.do_setup(None)
+        volume_fc = self._create_volume()
+        extra_spec = {'capabilities:storage_protocol': '<in> FC'}
+        vol_type_fc = volume_types.create(self.ctxt, 'FC', extra_spec)
+        volume_fc['volume_type_id'] = vol_type_fc['id']
+
+        connector = {'host': 'storwize-svc-host',
+                     'wwnns': ['20000090fa17311e', '20000090fa17311f'],
+                     'wwpns': ['ff00000000000000', 'ff00000000000001'],
+                     'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
+        conn_info = self.fc_driver.initialize_connection(volume_fc, connector)
+        expected_target_wwn = ['5005076801A91806',
+                               '5005076801B96CFE',
+                               '5005076801A96CFE',
+                               '5005076801B91806',
+                               '5005076801C96CFE',
+                               '5005076801996CFE',
+                               '5005076801C91806',
+                               '5005076801991806']
+        self.assertItemsEqual(expected_target_wwn, conn_info[
+            'data']['target_wwn'])
+
+        # Terminate connection
+        term_ret = self.fc_driver.terminate_connection(volume_fc, connector)
+        target_wwn1 = term_ret['data']['initiator_target_map'][
+            'ff00000000000000']
+        target_wwn2 = term_ret['data']['initiator_target_map'][
+            'ff00000000000001']
+
+        # Check that the initiator_target_map is as expected
+        expected_term_data = ['5005076801A96CFE',
+                              '5005076801B96CFE',
+                              '5005076801C96CFE',
+                              '5005076801406CFE',
+                              '5005076801A91806',
+                              '5005076801301806',
+                              '5005076801C91806',
+                              '5005076801B91806',
+                              '5005076801201806',
+                              '5005076801401806',
+                              '5005076801991806',
+                              '5005076801101806',
+                              '5005076801996CFE',
+                              '5005076801206CFE',
+                              '5005076801106CFE',
+                              '5005076801306CFE']
+        self.assertItemsEqual(expected_term_data, target_wwn1)
+        self.assertItemsEqual(expected_term_data, target_wwn2)
+
     def test_storwize_svc_fc_host_maps(self):
         # Create two volumes to be used in mappings
 
@@ -3955,13 +4078,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         vol2 = testutils.create_volume(self.ctxt)
         vol3 = testutils.create_volume(self.ctxt)
 
-        # Try to clone where source size > target size
-        vol1['size'] = vol2['size'] + 1
-        self.assertRaises(exception.InvalidInput,
-                          self.driver.create_cloned_volume,
-                          vol2, vol1)
-        self._assert_vol_exists(vol2['name'], False)
-
         # Try to clone where source size = target size
         vol1['size'] = vol2['size']
         if self.USESIM:
@@ -4017,14 +4133,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                               self.driver.create_volume_from_snapshot,
                               vol2, snap1)
             self._assert_vol_exists(vol2['name'], False)
-
-        # Try to create where volume size < snapshot size
-        snap1['volume_size'] += 1
-        self.assertRaises(exception.InvalidInput,
-                          self.driver.create_volume_from_snapshot,
-                          vol2, snap1)
-        self._assert_vol_exists(vol2['name'], False)
-        snap1['volume_size'] -= 1
 
         # Try to create where volume size > snapshot size
         vol2['size'] += 1
@@ -4536,7 +4644,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
     def test_storwize_svc_get_vdisk_params(self):
         self.driver.do_setup(None)
-        fake_qos = {'qos:IOThrottling': 5000}
+        fake_qos = {'qos:IOThrottling': '5000'}
         expected_qos = {'IOThrottling': 5000}
         fake_opts = self._get_default_opts()
         # The parameters retured should be the same to the default options,
@@ -4622,7 +4730,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
         # If the QoS is set both via the qos association and the
         # extra specs, the one from the qos association will take effect.
-        fake_qos_associate = {'qos:IOThrottling': 6000}
+        fake_qos_associate = {'qos:IOThrottling': '6000'}
         expected_qos_associate = {'IOThrottling': 6000}
         vol_type_qos = self._create_volume_type_qos_both(fake_qos,
                                                          fake_qos_associate)

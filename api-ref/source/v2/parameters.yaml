@@ -7,9 +7,9 @@ x-openstack-request-id:
   type: string
 
 # variables in path
-admin_tenant_id:
+admin_project_id:
   description: |
-    The UUID of the administrative tenant.
+    The UUID of the administrative project.
   in: path
   required: true
   type: string
@@ -55,7 +55,7 @@ hostname:
     The name of the host that hosts the storage back
     end.
   in: path
-  required: false
+  required: true
   type: string
 key_1:
   description: |
@@ -96,23 +96,11 @@ quota_class_name:
   in: path
   required: true
   type: string
-quotas_tenant_id:
+quotas_project_id:
   description: |
-    The UUID of the tenant in a multi-tenancy cloud.
+    The UUID of the project in a multi-tenancy cloud.
   in: path
   required: true
-  type: string
-snapshot_id_1:
-  description: |
-    The UUID of the snapshot.
-  in: path
-  required: false
-  type: string
-tenant_id:
-  description: |
-    The UUID of the tenant in a multi-tenancy cloud.
-  in: path
-  required: false
   type: string
 transfer_id:
   description: |
@@ -161,7 +149,7 @@ action:
   type: string
 all-tenants:
   description: |
-    Shows details for all tenants. Admin only..
+    Shows details for all projects. Admin only.
   in: query
   required: false
   type: string
@@ -204,20 +192,6 @@ marker:
   in: query
   required: false
   type: string
-metadata_query:
-  description: |
-    Filters results by a metadata key and value pair.
-    Default=None.
-  in: query
-  required: true
-  type: object
-migration_status_query:
-  description: |
-    Filters results by a migration status. Default=None.
-    Admin only.
-  in: query
-  required: false
-  type: string
 name_volume:
   description: |
     Filters results by a name. Default=None.
@@ -257,22 +231,6 @@ sort_key:
   in: query
   required: false
   type: string
-sort_key_1:
-  description: |
-    Sorts by an image attribute. A valid value is
-    ``name``, ``status``, ``container_format``, ``disk_format``,
-    ``size``, ``id``, ``created_at``, or ``updated_at``. Default is
-    ``created_at``. The API uses the natural sorting direction of the
-    ``sort_key`` attribute value.
-  in: query
-  required: false
-  type: string
-status_query:
-  description: |
-    Filters results by a status. Default=None.
-  in: query
-  required: false
-  type: boolean
 usage:
   description: |
     Set to ``usage=true`` to show quota usage.
@@ -361,6 +319,18 @@ backup:
   in: body
   required: true
   type: object
+backup_service:
+  description: |
+    The service used to perform the backup.
+  in: body
+  required: true
+  type: string
+backup_url:
+  description: |
+    The backup encoded metadata.
+  in: body
+  required: true
+  type: string
 backups:
   description: |
     A list of ``backup`` objects.
@@ -448,7 +418,7 @@ control_location:
 cores:
   description: |
     The number of instance cores that are allowed for
-    each tenant.
+    each project.
   in: body
   required: true
   type: integer
@@ -641,7 +611,7 @@ fail_reason:
 fixed_ips:
   description: |
     The number of fixed IP addresses that are allowed
-    for each tenant. Must be equal to or greater than the number of
+    for each project. Must be equal to or greater than the number of
     allowed instances.
   in: body
   required: true
@@ -649,7 +619,7 @@ fixed_ips:
 floating_ips:
   description: |
     The number of floating IP addresses that are
-    allowed for each tenant.
+    allowed for each project.
   in: body
   required: true
   type: integer
@@ -701,6 +671,12 @@ host_name:
     The name of the attaching host.
   in: body
   required: false
+  type: string
+host_name_1:
+  description: |
+    The name of the host that hosts the storage backend.
+  in: body
+  required: true
   type: string
 host_service:
   description: |
@@ -795,7 +771,7 @@ injected_file_path_bytes:
 injected_files:
   description: |
     The number of injected files that are allowed for
-    each tenant.
+    each project.
   in: body
   required: true
   type: integer
@@ -808,7 +784,7 @@ instance_uuid:
 instances:
   description: |
     The number of instances that are allowed for each
-    tenant.
+    project.
   in: body
   required: true
   type: integer
@@ -1313,7 +1289,7 @@ os-vol-mig-status-attr:name_id:
   type: string
 os-vol-tenant-attr:tenant_id:
   description: |
-    The tenant ID which the volume belongs to.
+    The project ID which the volume belongs to.
   in: body
   required: true
   type: string
@@ -1367,6 +1343,13 @@ project_id_1:
   in: body
   required: true
   type: string
+project_id_2:
+  description: |
+    The UUID of the project which the host resource belongs to.
+    In the summary resource, the value is ``(total)``.
+  in: body
+  required: true
+  type: string
 properties:
   description: |
     The backend volume capabilities list, which is
@@ -1414,7 +1397,7 @@ quota_set:
 ram:
   description: |
     The amount of instance RAM in megabytes that are
-    allowed for each tenant.
+    allowed for each project.
   in: body
   required: true
   type: integer
@@ -1493,31 +1476,25 @@ security_group_rules:
 security_groups:
   description: |
     The number of security groups that are allowed
-    for each tenant.
+    for each project.
   in: body
   required: true
   type: integer
 service_state:
   description: |
-    The state of the service. One of ``available`` or ``unavailable``.
+    The state of the service. One of ``enabled`` or ``disabled``.
   in: body
   required: true
   type: string
 service_status:
   description: |
-    The status of the service. One of ``enabled`` or ``disabled``.
+    The status of the service. One of ``available`` or ``unavailable``.
   in: body
   required: true
   type: string
 size:
   description: |
     The size of the volume, in gibibytes (GiB).
-  in: body
-  required: true
-  type: integer
-size_1:
-  description: |
-    The size of the backup, in GB.
   in: body
   required: true
   type: integer
@@ -1528,12 +1505,6 @@ snapshot:
   in: body
   required: true
   type: string
-snapshot_1:
-  description: |
-    A ``snapshot`` object.
-  in: body
-  required: true
-  type: object
 snapshot_id:
   description: |
     To create a volume from an existing snapshot,
@@ -1548,14 +1519,6 @@ snapshot_id_2:
   in: body
   required: true
   type: string
-snapshot_id_3:
-  description: |
-    The UUID of the source volume snapshot. The API
-    creates a new volume snapshot with the same size as the source
-    volume snapshot.
-  in: body
-  required: true
-  type: string
 source_cgid:
   description: |
     The UUID of the source consistency group.
@@ -1564,7 +1527,8 @@ source_cgid:
   type: string
 source_replica:
   description: |
-    The UUID of the primary volume to clone.
+    The UUID of the replication volume to clone. This was for legacy
+    replication functionality and is no longer supported.
   in: body
   required: false
   type: string
@@ -1575,30 +1539,12 @@ source_volid:
   in: body
   required: false
   type: string
-source_volid_1:
-  description: |
-    The UUID of the source volume.
-  in: body
-  required: true
-  type: string
 specs:
   description: |
     A ``specs`` object.
   in: body
   required: true
   type: object
-specs_1:
-  description: |
-    Specification key and value pairs.
-  in: body
-  required: true
-  type: object
-specs_2:
-  description: |
-    Specification key and value pairs.
-  in: body
-  required: true
-  type: string
 status:
   description: |
     The ``status`` of the consistency group snapshot.
@@ -1630,20 +1576,6 @@ status_4:
   in: body
   required: true
   type: string
-status_5:
-  description: |
-    The consistency group status. A valid value is
-    ``creating``, ``available``, ``error``, ``deleting``,
-    ``updating``, or ``invalid``.
-  in: body
-  required: true
-  type: string
-status_6:
-  description: |
-    The volume status.
-  in: body
-  required: false
-  type: string
 status_7:
   description: |
     The status for the backup.
@@ -1654,13 +1586,6 @@ storage_protocol:
   description: |
     The storage back end for the back-end volume. For
     example, ``iSCSI`` or ``FC``.
-  in: body
-  required: true
-  type: string
-storage_protocol_1:
-  description: |
-    The storage protocol, such as Fibre Channel,
-    iSCSI, NFS, and so on.
   in: body
   required: true
   type: string
