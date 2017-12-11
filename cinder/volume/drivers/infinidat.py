@@ -119,7 +119,7 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
     VERSION = '1.5'
 
     # ThirdPartySystems wiki page
-    CI_WIKI_NAME = "INFINIDAT_Cinder_CI"
+    CI_WIKI_NAME = "INFINIDAT_CI"
 
     def __init__(self, *args, **kwargs):
         super(InfiniboxVolumeDriver, self).__init__(*args, **kwargs)
@@ -441,6 +441,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
             total_capacity_gb = float(physical_capacity_bytes) / units.Gi
             qos_support = (hasattr(self._system.compat, "has_qos") and
                            self._system.compat.has_qos())
+            max_osr = self.configuration.max_over_subscription_ratio
+            thin = self.configuration.san_thin_provision
             self._volume_stats = dict(volume_backend_name=self._backend_name,
                                       vendor_name=VENDOR_NAME,
                                       driver_version=self.VERSION,
@@ -449,7 +451,10 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                                       total_capacity_gb=total_capacity_gb,
                                       free_capacity_gb=free_capacity_gb,
                                       consistent_group_snapshot_enabled=True,
-                                      QoS_support=qos_support)
+                                      QoS_support=qos_support,
+                                      thin_provisioning_support=thin,
+                                      thick_provisioning_support=not thin,
+                                      max_over_subscription_ratio=max_osr)
         return self._volume_stats
 
     def _create_volume(self, volume):

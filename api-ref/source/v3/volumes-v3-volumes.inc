@@ -86,6 +86,7 @@ Request
    - limit: limit
    - offset: offset
    - marker: marker
+   - with_count: with_count
 
 
 Response Parameters
@@ -110,6 +111,7 @@ Response Parameters
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
    - metadata: metadata
    - status: status_3
+   - volume_image_metadata: volume_image_metadata
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid
@@ -121,6 +123,7 @@ Response Parameters
    - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volumes: volumes
    - volume_type: volume_type
+   - count: count
 
 
 
@@ -185,6 +188,7 @@ Request
    - description: description
    - multiattach: multiattach
    - snapshot_id: snapshot_id
+   - backup_id: backup_id_1
    - name: name_13
    - imageRef: imageRef
    - volume_type: volume_type
@@ -260,6 +264,7 @@ Request
    - limit: limit
    - offset: offset
    - marker: marker
+   - with_count: with_count
 
 
 Response Parameters
@@ -271,6 +276,7 @@ Response Parameters
    - id: id_5
    - links: links_3
    - name: name_13
+   - count: count
 
 
 
@@ -329,6 +335,7 @@ Response Parameters
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
    - metadata: metadata
    - status: status_3
+   - volume_image_metadata: volume_image_metadata
    - description: description
    - multiattach: multiattach
    - source_volid: source_volid

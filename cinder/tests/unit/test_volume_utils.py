@@ -21,6 +21,7 @@ import io
 import mock
 import six
 
+from castellan import key_manager
 import ddt
 from oslo_concurrency import processutils
 from oslo_config import cfg
@@ -30,7 +31,6 @@ from cinder import context
 from cinder import db
 from cinder.db.sqlalchemy import models
 from cinder import exception
-from cinder import keymgr
 from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit.backup import fake_backup
@@ -162,7 +162,7 @@ class NotifyUsageTestCase(test.TestCase):
             'volume_size': 1,
             'snapshot_id': fake.SNAPSHOT_ID,
             'display_name': '11',
-            'created_at': mock.ANY,
+            'created_at': '2014-12-11T10:10:00+00:00',
             'status': fields.SnapshotStatus.ERROR,
             'deleted': '',
             'metadata': six.text_type({'fake_snap_meta_key':
@@ -371,8 +371,7 @@ class NotifyUsageTestCase(test.TestCase):
         expected_backup = raw_backup.copy()
         expected_backup['tenant_id'] = expected_backup.pop('project_id')
         expected_backup['backup_id'] = expected_backup.pop('id')
-        expected_backup['created_at'] = (
-            six.text_type(expected_backup['created_at']) + '+00:00')
+        expected_backup['created_at'] = '2015-01-01T01:01:01+00:00'
 
         usage_info = volume_utils._usage_from_backup(backup_obj)
         self.assertDictEqual(expected_backup, usage_info)
@@ -994,9 +993,9 @@ class VolumeUtilsTestCase(test.TestCase):
             'backend',
             'cinder.keymgr.conf_key_mgr.ConfKeyManager',
             group='key_manager')
-        key_manager = keymgr.API()
+        km = key_manager.API()
         volume_utils.create_encryption_key(ctxt,
-                                           key_manager,
+                                           km,
                                            fake.VOLUME_TYPE_ID)
         is_encryption.assert_called_once_with(ctxt,
                                               fake.VOLUME_TYPE_ID)

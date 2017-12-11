@@ -39,6 +39,7 @@ intact.
 import requests
 import time
 
+from castellan import key_manager
 from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging as messaging
@@ -64,7 +65,6 @@ from cinder.i18n import _
 from cinder.image import cache as image_cache
 from cinder.image import glance
 from cinder.image import image_utils
-from cinder import keymgr as key_manager
 from cinder import manager
 from cinder.message import api as message_api
 from cinder.message import message_field
@@ -120,14 +120,15 @@ volume_manager_opts = [
                 default=False,
                 help='Offload pending volume delete during '
                      'volume service startup'),
+    cfg.StrOpt('zoning_mode',
+               help="FC Zoning mode configured, only 'fabric' is "
+                    "supported now."),
 ]
 
 volume_backend_opts = [
     cfg.StrOpt('volume_driver',
                default='cinder.volume.drivers.lvm.LVMVolumeDriver',
                help='Driver to use for volume creation'),
-    cfg.StrOpt('zoning_mode',
-               help='FC Zoning mode configured'),
     cfg.StrOpt('extra_capabilities',
                default='{}',
                help='User defined capabilities, a JSON formatted string '
@@ -205,6 +206,7 @@ class VolumeManager(manager.CleanableManager,
         self.configuration = config.Configuration(volume_backend_opts,
                                                   config_group=service_name)
         self.stats = {}
+        self.service_uuid = None
 
         if not volume_driver:
             # Get from configuration, which will get the default
@@ -214,6 +216,10 @@ class VolumeManager(manager.CleanableManager,
             LOG.warning("Driver path %s is deprecated, update your "
                         "configuration to the new path.", volume_driver)
             volume_driver = MAPPING[volume_driver]
+
+        vol_db_empty = self._set_voldb_empty_at_startup_indicator(
+            context.get_admin_context())
+        LOG.debug("Cinder Volume DB check: vol_db_empty=%s", vol_db_empty)
 
         # We pass the current setting for service.active_backend_id to
         # the driver on init, in case there was a restart or something
@@ -231,6 +237,7 @@ class VolumeManager(manager.CleanableManager,
                      "for driver init.")
         else:
             curr_active_backend_id = service.active_backend_id
+            self.service_uuid = service.uuid
 
         if self.configuration.suppress_requests_ssl_warnings:
             LOG.warning("Suppressing requests library SSL Warnings")
@@ -246,6 +253,7 @@ class VolumeManager(manager.CleanableManager,
             db=self.db,
             host=self.host,
             cluster_name=self.cluster,
+            is_vol_db_empty=vol_db_empty,
             active_backend_id=curr_active_backend_id)
 
         if self.cluster and not self.driver.SUPPORTS_ACTIVE_ACTIVE:
@@ -334,6 +342,23 @@ class VolumeManager(manager.CleanableManager,
 
         self.stats['pools'][pool]['allocated_capacity_gb'] = pool_sum
         self.stats['allocated_capacity_gb'] += volume['size']
+
+    def _set_voldb_empty_at_startup_indicator(self, ctxt):
+        """Determine if the Cinder volume DB is empty.
+
+        A check of the volume DB is done to determine whether it is empty or
+        not at this point.
+
+        :param ctxt: our working context
+        """
+        vol_entries = self.db.volume_get_all(ctxt, None, 1, filters=None)
+
+        if len(vol_entries) == 0:
+            LOG.info("Determined volume DB was empty at startup.")
+            return True
+        else:
+            LOG.info("Determined volume DB was not empty at startup.")
+            return False
 
     def _sync_provider_info(self, ctxt, volumes, snapshots):
         # NOTE(jdg): For now this just updates provider_id, we can add more
@@ -655,6 +680,16 @@ class VolumeManager(manager.CleanableManager,
                 # volume stats as these are decremented on delete.
                 self._update_allocated_capacity(volume)
 
+        shared_targets = (
+            1
+            if self.driver.capabilities.get('shared_targets', True)
+            else 0)
+        updates = {'service_uuid': self.service_uuid,
+                   'shared_targets': shared_targets}
+
+        volume.update(updates)
+        volume.save()
+
         LOG.info("Created volume successfully.", resource=volume)
         return volume.id
 
@@ -877,16 +912,12 @@ class VolumeManager(manager.CleanableManager,
     def _revert_to_snapshot(self, context, volume, snapshot):
         """Use driver or generic method to rollback volume."""
 
-        self._notify_about_volume_usage(context, volume, "revert.start")
-        self._notify_about_snapshot_usage(context, snapshot, "revert.start")
         try:
             self.driver.revert_to_snapshot(context, volume, snapshot)
         except (NotImplementedError, AttributeError):
             LOG.info("Driver's 'revert_to_snapshot' is not found. "
                      "Try to use copy-snapshot-to-volume method.")
             self._revert_to_snapshot_generic(context, volume, snapshot)
-        self._notify_about_volume_usage(context, volume, "revert.end")
-        self._notify_about_snapshot_usage(context, snapshot, "revert.end")
 
     def _create_backup_snapshot(self, context, volume):
         kwargs = {
@@ -922,9 +953,18 @@ class VolumeManager(manager.CleanableManager,
         backup_snapshot = None
         try:
             LOG.info("Start to perform revert to snapshot process.")
+
+            self._notify_about_volume_usage(context, volume,
+                                            "revert.start")
+            self._notify_about_snapshot_usage(context, snapshot,
+                                              "revert.start")
+
             # Create a snapshot which can be used to restore the volume
             # data by hand if revert process failed.
-            backup_snapshot = self._create_backup_snapshot(context, volume)
+
+            if self.driver.snapshot_revert_use_temp_snapshot():
+                backup_snapshot = self._create_backup_snapshot(context,
+                                                               volume)
             self._revert_to_snapshot(context, volume, snapshot)
         except Exception as error:
             with excutils.save_and_reraise_exception():
@@ -985,6 +1025,8 @@ class VolumeManager(manager.CleanableManager,
                'successfully.')
         msg_args = {'v_id': volume.id, 'snap_id': snapshot.id}
         LOG.info(msg, msg_args)
+        self._notify_about_volume_usage(context, volume, "revert.end")
+        self._notify_about_snapshot_usage(context, snapshot, "revert.end")
 
     @objects.Snapshot.set_workers
     def create_snapshot(self, context, snapshot):
@@ -2328,6 +2370,24 @@ class VolumeManager(manager.CleanableManager,
 
     @periodic_task.periodic_task
     def _report_driver_status(self, context):
+        # It's possible during live db migration that the self.service_uuid
+        # value isn't set (we didn't restart services), so we'll go ahead
+        # and make this a part of the service periodic
+        if not self.service_uuid:
+            svc_host = vol_utils.extract_host(self.host, 'backend')
+            # We hack this with a try/except for unit tests temporarily
+            try:
+                service = objects.Service.get_by_args(
+                    context,
+                    svc_host,
+                    constants.VOLUME_BINARY)
+                self.service_uuid = service.uuid
+            except exception.ServiceNotFound:
+                LOG.warning("Attempt to update service_uuid "
+                            "resulted in a Service NotFound "
+                            "exception, service_uuid field on "
+                            "volumes will be NULL.")
+
         if not self.driver.initialized:
             if self.driver.configuration.config_group is None:
                 config_group = ''
@@ -2677,7 +2737,9 @@ class VolumeManager(manager.CleanableManager,
 
             # Don't allow volume with replicas to be migrated
             rep_status = volume.replication_status
-            if rep_status is not None and rep_status != 'disabled':
+            if(rep_status is not None and rep_status not in
+                    [fields.ReplicationStatus.DISABLED,
+                     fields.ReplicationStatus.NOT_CAPABLE]):
                 _retype_error(context, volume, old_reservations,
                               new_reservations, status_update)
                 msg = _("Volume must not be replicated.")

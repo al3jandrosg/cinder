@@ -21,8 +21,8 @@ volume type to handle the request.
 
 For information about how to use volume types to create multiple-
 storage back ends, see `Configure multiple-storage back ends
-<http://docs.openstack.org/admin-
-guide/blockstorage_multi_backend.html>`_.
+<https://docs.openstack.org/cinder/latest/admin
+/blockstorage-multi-backend.html>`_.
 
 
 Normal response codes: 200
@@ -340,8 +340,8 @@ based on the volume type.
 
 For information about how to use volume types to create multiple-
 storage back ends, see `Configure multiple-storage back ends
-<http://docs.openstack.org/admin-
-guide/blockstorage_multi_backend.html>`_.
+<https://docs.openstack.org/cinder/latest/admin
+/blockstorage-multi-backend.html>`_.
 
 
 Normal response codes: 200
@@ -385,7 +385,7 @@ Response Example
    :language: javascript
 
 Show an encryption type
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/encryption
 
@@ -429,8 +429,34 @@ Response Example
    :language: javascript
 
 
-Delete an encryption type
+Show encryption specs item
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/encryption/{key}
+
+To show encryption specs item for an existing volume type.
+
+Normal response codes: 200
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_type_id: volume_type_id
+   - key: key_5
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/encryption-type-specific-specs-show-response.json
+   :language: javascript
+
+
+Delete an encryption type
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  GET /v3/{project_id}/types/{volume_type_id}/encryption/{encryption_id}
 
@@ -452,7 +478,7 @@ Request
 
 
 Create an encryption type
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/types/{volume_type_id}/encryption
 
@@ -504,7 +530,7 @@ Response Example
 
 
 Update an encryption type
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v3/{project_id}/types/{volume_type_id}/encryption/{encryption_id}
 

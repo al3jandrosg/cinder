@@ -16,14 +16,15 @@
 import ast
 from copy import deepcopy
 import os.path
+import random
 import sys
 
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import strutils
 import six
-import uuid
 
+from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
@@ -55,6 +56,7 @@ REPLICATION_ERROR = fields.ReplicationStatus.ERROR
 vmax_opts = [
     cfg.StrOpt('cinder_dell_emc_config_file',
                default=CINDER_EMC_CONFIG_FILE,
+               deprecated_for_removal=True,
                help='Use this file for cinder emc plugin '
                     'config data.'),
     cfg.IntOpt('interval',
@@ -68,7 +70,22 @@ vmax_opts = [
     cfg.BoolOpt('initiator_check',
                 default=False,
                 help='Use this value to enable '
-                     'the initiator_check.')]
+                     'the initiator_check.'),
+    cfg.PortOpt(utils.VMAX_SERVER_PORT,
+                default=8443,
+                help='REST server port number.'),
+    cfg.StrOpt(utils.VMAX_ARRAY,
+               help='Serial number of the array to connect to.'),
+    cfg.StrOpt(utils.VMAX_SRP,
+               help='Storage resource pool on array to use for provisioning.'),
+    cfg.StrOpt(utils.VMAX_SERVICE_LEVEL,
+               help='Service level to use for provisioning storage.'),
+    cfg.StrOpt(utils.VMAX_WORKLOAD,
+               help='Workload'),
+    cfg.ListOpt(utils.VMAX_PORT_GROUPS,
+                bounds=True,
+                help='List of port groups containing frontend ports '
+                     'configured prior for server connection.')]
 
 CONF.register_opts(vmax_opts, group=configuration.SHARED_CONF_GROUP)
 
@@ -81,18 +98,6 @@ class VMAXCommon(object):
     It supports VMAX 3 and VMAX All Flash arrays.
 
     """
-    VERSION = "3.0.0"
-
-    stats = {'driver_version': '3.0',
-             'free_capacity_gb': 0,
-             'reserved_percentage': 0,
-             'storage_protocol': None,
-             'total_capacity_gb': 0,
-             'vendor_name': 'Dell EMC',
-             'volume_backend_name': None,
-             'replication_enabled': False,
-             'replication_targets': None}
-
     pool_info = {'backend_name': None,
                  'config_file': None,
                  'arrays_info': {},
@@ -123,8 +128,10 @@ class VMAXCommon(object):
     def _gather_info(self):
         """Gather the relevant information for update_volume_stats."""
         self._get_attributes_from_config()
-        array_info = self.utils.parse_file_to_get_array_map(
-            self.pool_info['config_file'])
+        array_info = self.get_attributes_from_cinder_config()
+        if array_info is None:
+            array_info = self.utils.parse_file_to_get_array_map(
+                self.pool_info['config_file'])
         self.rest.set_rest_credentials(array_info)
         finalarrayinfolist = self._get_slo_workload_combinations(
             array_info)
@@ -242,6 +249,7 @@ class VMAXCommon(object):
         :returns:  model_update - dict
         """
         model_update = {}
+        rep_driver_data = {}
         volume_id = volume.id
         extra_specs = self._initial_setup(volume)
 
@@ -252,25 +260,49 @@ class VMAXCommon(object):
         volume_dict = (self._create_volume(
             volume_name, volume_size, extra_specs))
 
-        if volume.group_id is not None:
-            group_name = self._find_volume_group_name_from_id(
-                extra_specs[utils.ARRAY], volume.group_id)
-            if group_name is not None:
-                self.masking.add_volume_to_storage_group(
-                    extra_specs[utils.ARRAY], volume_dict['device_id'],
-                    group_name, volume_name, extra_specs)
-
         # Set-up volume replication, if enabled
         if self.utils.is_replication_enabled(extra_specs):
             rep_update = self._replicate_volume(volume, volume_name,
                                                 volume_dict, extra_specs)
+            rep_driver_data = rep_update['replication_driver_data']
             model_update.update(rep_update)
+
+        # Add volume to group, if required
+        if volume.group_id is not None:
+            if (volume_utils.is_group_a_cg_snapshot_type(volume.group)
+                    or volume.group.is_replicated):
+                self._add_new_volume_to_volume_group(
+                    volume, volume_dict['device_id'], volume_name,
+                    extra_specs, rep_driver_data)
 
         LOG.info("Leaving create_volume: %(name)s. Volume dict: %(dict)s.",
                  {'name': volume_name, 'dict': volume_dict})
         model_update.update(
             {'provider_location': six.text_type(volume_dict)})
         return model_update
+
+    def _add_new_volume_to_volume_group(self, volume, device_id, volume_name,
+                                        extra_specs, rep_driver_data=None):
+        """Add a new volume to a volume group.
+
+        This may also be called after extending a replicated volume.
+        :param volume: the volume object
+        :param device_id: the device id
+        :param volume_name: the volume name
+        :param extra_specs: the extra specifications
+        :param rep_driver_data: the replication driver data, optional
+        """
+        self.utils.check_replication_matched(volume, extra_specs)
+        group_name = self.provision.get_or_create_volume_group(
+            extra_specs[utils.ARRAY], volume.group, extra_specs)
+        self.masking.add_volume_to_storage_group(
+            extra_specs[utils.ARRAY], device_id,
+            group_name, volume_name, extra_specs)
+        # Add remote volume to remote group, if required
+        if volume.group.is_replicated:
+            self._add_remote_vols_to_volume_group(
+                extra_specs[utils.ARRAY],
+                [volume], volume.group, extra_specs, rep_driver_data)
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot.
@@ -398,9 +430,14 @@ class VMAXCommon(object):
         elif not sourcedevice_id or not snap_name:
             LOG.info("No snapshot found on the array")
         else:
-            self.provision.delete_volume_snap_check_for_links(
-                extra_specs[utils.ARRAY], snap_name,
-                sourcedevice_id, extra_specs)
+            @coordination.synchronized("emc-source-{sourcedevice_id}")
+            def do_delete_volume_snap_check_for_links(sourcedevice_id):
+                # Ensure snap has not been recently deleted
+                self.provision.delete_volume_snap_check_for_links(
+                    extra_specs[utils.ARRAY], snap_name,
+                    sourcedevice_id, extra_specs)
+            do_delete_volume_snap_check_for_links(sourcedevice_id)
+
             LOG.info("Leaving delete_snapshot: %(ssname)s.",
                      {'ssname': snap_name})
 
@@ -418,7 +455,8 @@ class VMAXCommon(object):
         volume_name = volume.name
         LOG.debug("Detaching volume %s.", volume_name)
         return self.masking.remove_and_reset_members(
-            array, device_id, volume_name, extra_specs, True, connector)
+            array, volume, device_id, volume_name,
+            extra_specs, True, connector)
 
     def _unmap_lun(self, volume, connector):
         """Unmaps a volume from the host.
@@ -581,7 +619,7 @@ class VMAXCommon(object):
         else:
             masking_view_dict['isLiveMigration'] = False
         rollback_dict = self.masking.setup_masking_view(
-            masking_view_dict[utils.ARRAY],
+            masking_view_dict[utils.ARRAY], volume,
             masking_view_dict, extra_specs)
 
         # Find host lun id again after the volume is exported to the host.
@@ -752,7 +790,10 @@ class VMAXCommon(object):
                         'max_over_subscription_ratio':
                             max_oversubscription_ratio,
                         'reserved_percentage': reserved_percentage,
-                        'replication_enabled': self.replication_enabled
+                        'replication_enabled': self.replication_enabled,
+                        'group_replication_enabled': self.replication_enabled,
+                        'consistent_group_replication_enabled':
+                            self.replication_enabled
                         }
                 if array_reserve_percent:
                     if isinstance(reserved_percentage, int):
@@ -821,7 +862,8 @@ class VMAXCommon(object):
                 array_reserve_percent)
 
     def _set_config_file_and_get_extra_specs(self, volume,
-                                             volume_type_id=None):
+                                             volume_type_id=None,
+                                             register_config_file=True):
         """Given the volume object get the associated volumetype.
 
         Given the volume object get the associated volumetype and the
@@ -842,13 +884,15 @@ class VMAXCommon(object):
             qos_specs = res['qos_specs']
 
         config_group = None
+        config_file = None
         # If there are no extra specs then the default case is assumed.
         if extra_specs:
             config_group = self.configuration.config_group
             if extra_specs.get('replication_enabled') == '<is> True':
                 extra_specs[utils.IS_RE] = True
-        config_file = self._register_config_file_from_config_group(
-            config_group)
+        if register_config_file:
+            config_file = self._register_config_file_from_config_group(
+                config_group)
         return extra_specs, config_file, qos_specs
 
     def _find_device_on_array(self, volume, extra_specs):
@@ -872,21 +916,8 @@ class VMAXCommon(object):
                 device_id = name['keybindings']['DeviceID']
             else:
                 device_id = None
-            element_name = self.utils.get_volume_element_name(
-                volume_name)
-            admin_metadata = {}
-            if 'admin_metadata' in volume:
-                admin_metadata = volume.admin_metadata
-            if 'targetVolumeName' in admin_metadata:
-                target_vol_name = admin_metadata['targetVolumeName']
-                founddevice_id = self.rest.find_volume_device_id(
-                    array, target_vol_name)
-            else:
-                founddevice_id = self.rest.find_volume_device_id(
-                    array, element_name)
-            # Allow for an external app to delete the volume.
-            if device_id and device_id != founddevice_id:
-                founddevice_id = None
+            founddevice_id = self.rest.check_volume_device_id(
+                array, device_id, volume_name)
 
         if founddevice_id is None:
             LOG.debug("Volume %(volume_name)s not found on the array.",
@@ -1040,11 +1071,17 @@ class VMAXCommon(object):
         :raises: VolumeBackendAPIException:
         """
         try:
-            extra_specs, config_file, qos_specs = (
-                self._set_config_file_and_get_extra_specs(
-                    volume, volume_type_id))
-            array_info = self.utils.parse_file_to_get_array_map(
-                config_file)
+            array_info = self.get_attributes_from_cinder_config()
+            if array_info:
+                extra_specs, config_file, qos_specs = (
+                    self._set_config_file_and_get_extra_specs(
+                        volume, volume_type_id, register_config_file=False))
+            else:
+                extra_specs, config_file, qos_specs = (
+                    self._set_config_file_and_get_extra_specs(
+                        volume, volume_type_id))
+                array_info = self.utils.parse_file_to_get_array_map(
+                    self.pool_info['config_file'])
             if not array_info:
                 exception_message = (_(
                     "Unable to get corresponding record for srp."))
@@ -1492,7 +1529,7 @@ class VMAXCommon(object):
             raise exception.VolumeBackendAPIException(data=error_message)
 
     def _remove_vol_and_cleanup_replication(
-            self, array, device_id, volume_name, extra_specs, volume=None):
+            self, array, device_id, volume_name, extra_specs, volume):
         """Remove a volume from its storage groups and cleanup replication.
 
         :param array: the array serial number
@@ -1503,7 +1540,7 @@ class VMAXCommon(object):
         """
         # Remove from any storage groups
         self.masking.remove_and_reset_members(
-            array, device_id, volume_name, extra_specs, False)
+            array, volume, device_id, volume_name, extra_specs, False)
         # Cleanup remote replication
         if self.utils.is_replication_enabled(extra_specs):
             self.cleanup_lun_replication(volume, volume_name,
@@ -1705,9 +1742,12 @@ class VMAXCommon(object):
                     # The snapshot name will only have 'temp' (or EMC_SMI for
                     # legacy volumes) if it is a temporary volume.
                     # Only then is it a candidate for deletion.
-                    if 'temp' or 'EMC_SMI' in snap_name:
-                        self.provision.delete_temp_volume_snap(
-                            array, snap_name, source)
+                    if 'temp' in snap_name or 'EMC_SMI' in snap_name:
+                        @coordination.synchronized("emc-source-{source}")
+                        def do_delete_temp_volume_snap(source):
+                            self.provision.delete_temp_volume_snap(
+                                array, snap_name, source)
+                        do_delete_temp_volume_snap(source)
 
     def manage_existing(self, volume, external_ref):
         """Manages an existing VMAX Volume (import to Cinder).
@@ -1947,20 +1987,21 @@ class VMAXCommon(object):
                  'targetHost': host['host'],
                  'cc': do_change_compression})
             return self._migrate_volume(
-                extra_specs[utils.ARRAY], device_id,
+                extra_specs[utils.ARRAY], volume, device_id,
                 extra_specs[utils.SRP], target_slo,
                 target_workload, volume_name, new_type, extra_specs)
 
         return False
 
     def _migrate_volume(
-            self, array, device_id, srp, target_slo,
+            self, array, volume, device_id, srp, target_slo,
             target_workload, volume_name, new_type, extra_specs):
         """Migrate from one slo/workload combination to another.
 
         This requires moving the volume from its current SG to a
         new or existing SG that has the target attributes.
         :param array: the array serial number
+        :param volume: the volume object
         :param device_id: the device number
         :param srp: the storage resource pool
         :param target_slo: the target service level
@@ -1999,7 +2040,7 @@ class VMAXCommon(object):
                 array, device_id, target_sg_name, volume_name, extra_specs)
         else:
             self.masking.remove_and_reset_members(
-                array, device_id, volume_name, target_extra_specs,
+                array, volume, device_id, volume_name, target_extra_specs,
                 reset=True)
 
         # Check that it has been added.
@@ -2139,7 +2180,7 @@ class VMAXCommon(object):
 
         # Enable rdf replication and establish the link
         rdf_dict = self.enable_rdf(
-            array, device_id, rdf_group_no, self.rep_config,
+            array, volume, device_id, rdf_group_no, self.rep_config,
             target_name, remote_array, target_device_id, extra_specs)
 
         LOG.info('Successfully setup replication for %s.',
@@ -2183,7 +2224,7 @@ class VMAXCommon(object):
                 if target_device is not None:
                     # Clean-up target
                     self.masking.remove_and_reset_members(
-                        remote_array, target_device, volume_name,
+                        remote_array, volume, target_device, volume_name,
                         rep_extra_specs, False)
                     self._cleanup_remote_target(
                         array, remote_array, device_id, target_device,
@@ -2221,7 +2262,7 @@ class VMAXCommon(object):
         """
         are_vols_paired, local_vol_state, pair_state = (
             self.rest.are_vols_rdf_paired(
-                array, remote_array, device_id, target_device, rdf_group))
+                array, remote_array, device_id, target_device))
         if are_vols_paired:
             # Break the sync relationship.
             self.provision.break_rdf_relationship(
@@ -2298,8 +2339,11 @@ class VMAXCommon(object):
         :param secondary_id: the target backend
         :param groups: replication groups
         :returns: secondary_id, volume_update_list, group_update_list
+        :raises: VolumeBackendAPIException
         """
         volume_update_list = []
+        group_update_list = []
+        group_fo = None
         if secondary_id != 'default':
             if not self.failover:
                 self.failover = True
@@ -2319,6 +2363,7 @@ class VMAXCommon(object):
             if self.failover:
                 self.failover = False
                 secondary_id = None
+                group_fo = 'default'
             else:
                 exception_message = (_(
                     "Cannot failback backend %(backend)s- backend not "
@@ -2329,6 +2374,20 @@ class VMAXCommon(object):
                 LOG.error(exception_message)
                 raise exception.VolumeBackendAPIException(
                     data=exception_message)
+
+        if groups:
+            for group in groups:
+                vol_list = []
+                for index, vol in enumerate(volumes):
+                    if vol.group_id == group.id:
+                        vol_list.append(volumes.pop(index))
+                grp_update, vol_updates = (
+                    self.failover_replication(
+                        None, group, vol_list, group_fo, host=True))
+
+                group_update_list.append({'group_id': group.id,
+                                          'updates': grp_update})
+                volume_update_list += vol_updates
 
         for volume in volumes:
             extra_specs = self._initial_setup(volume)
@@ -2351,7 +2410,7 @@ class VMAXCommon(object):
                     volume_update_list.append(recovery)
 
         LOG.info("Failover host complete.")
-        return secondary_id, volume_update_list, []
+        return secondary_id, volume_update_list, group_update_list
 
     def _failover_volume(self, vol, failover, extra_specs):
         """Failover a volume.
@@ -2454,8 +2513,7 @@ class VMAXCommon(object):
                 target_device = remote_device
                 are_vols_paired, local_vol_state, pair_state = (
                     self.rest.are_vols_rdf_paired(
-                        array, remote_array, device_id,
-                        target_device, rdf_group))
+                        array, remote_array, device_id, target_device))
                 if not are_vols_paired:
                     target_device = None
         except (KeyError, ValueError):
@@ -2488,13 +2546,13 @@ class VMAXCommon(object):
                 # have a mix of replicated and non-replicated volumes as
                 # the SRDF groups become unmanageable).
                 self.masking.remove_and_reset_members(
-                    array, device_id, volume_name, extra_specs, False)
+                    array, volume, device_id, volume_name, extra_specs, False)
 
                 # Repeat on target side
                 rep_extra_specs = self._get_replication_extra_specs(
                     extra_specs, self.rep_config)
                 self.masking.remove_and_reset_members(
-                    remote_array, target_device, volume_name,
+                    remote_array, volume, target_device, volume_name,
                     rep_extra_specs, False)
 
                 LOG.info("Breaking replication relationship...")
@@ -2517,6 +2575,11 @@ class VMAXCommon(object):
                 self.setup_volume_replication(
                     array, volume, device_id, extra_specs, target_device)
 
+                # Check if volume needs to be returned to volume group
+                if volume.group_id:
+                    self._add_new_volume_to_volume_group(
+                        volume, device_id, volume_name, extra_specs)
+
             except Exception as e:
                 exception_message = (_("Error extending volume. "
                                        "Error received was %(e)s") %
@@ -2533,11 +2596,12 @@ class VMAXCommon(object):
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(data=exception_message)
 
-    def enable_rdf(self, array, device_id, rdf_group_no, rep_config,
+    def enable_rdf(self, array, volume, device_id, rdf_group_no, rep_config,
                    target_name, remote_array, target_device, extra_specs):
         """Create a replication relationship with a target volume.
 
         :param array: the array serial number
+        :param volume: the volume object
         :param device_id: the device id
         :param rdf_group_no: the rdf group number
         :param rep_config: the replication config
@@ -2553,10 +2617,10 @@ class VMAXCommon(object):
             # Remove source and target instances from their
             # default storage groups
             self.masking.remove_and_reset_members(
-                array, device_id, target_name, extra_specs, False)
+                array, volume, device_id, target_name, extra_specs, False)
 
             self.masking.remove_and_reset_members(
-                remote_array, target_device, target_name,
+                remote_array, volume, target_device, target_name,
                 rep_extra_specs, False)
 
             # Establish replication relationship
@@ -2579,7 +2643,7 @@ class VMAXCommon(object):
                  "group. Volume name: %(name)s "),
                 {'name': target_name})
             self.masking.remove_and_reset_members(
-                remote_array, target_device, target_name,
+                remote_array, volume, target_device, target_name,
                 rep_extra_specs, False)
             self._cleanup_remote_target(
                 array, remote_array, device_id, target_device,
@@ -2669,7 +2733,8 @@ class VMAXCommon(object):
 
         return rep_extra_specs
 
-    def get_secondary_stats_info(self, rep_config, array_info):
+    @staticmethod
+    def get_secondary_stats_info(rep_config, array_info):
         """On failover, report on secondary array statistics.
 
         :param rep_config: the replication configuration
@@ -2715,10 +2780,11 @@ class VMAXCommon(object):
 
         :param context: the context
         :param group: the group object to be created
-        :returns: dict -- modelUpdate = {'status': 'available'}
+        :returns: dict -- modelUpdate
         :raises: VolumeBackendAPIException, NotImplementedError
         """
-        if not volume_utils.is_group_a_cg_snapshot_type(group):
+        if (not volume_utils.is_group_a_cg_snapshot_type(group)
+                and not group.is_replicated):
             raise NotImplementedError()
 
         model_update = {'status': fields.GroupStatus.AVAILABLE}
@@ -2735,6 +2801,15 @@ class VMAXCommon(object):
                 self.interval, self.retries)
             self.provision.create_volume_group(
                 array, vol_grp_name, interval_retries_dict)
+            if group.is_replicated:
+                LOG.debug("Group: %(group)s is a replication group.",
+                          {'group': group.id})
+                # Create remote group
+                __, remote_array = self.get_rdf_details(array)
+                self.provision.create_volume_group(
+                    remote_array, vol_grp_name, interval_retries_dict)
+                model_update.update({
+                    'replication_status': fields.ReplicationStatus.ENABLED})
         except Exception:
             exception_message = (_("Failed to create generic volume group:"
                                    " %(volGrpName)s.")
@@ -2756,7 +2831,8 @@ class VMAXCommon(object):
         """
         LOG.info("Delete generic volume group: %(group)s.",
                  {'group': group.id})
-        if not volume_utils.is_group_a_cg_snapshot_type(group):
+        if (not volume_utils.is_group_a_cg_snapshot_type(group)
+                and not group.is_replicated):
             raise NotImplementedError()
         model_update, volumes_model_update = self._delete_group(
             group, volumes)
@@ -2793,33 +2869,36 @@ class VMAXCommon(object):
         intervals_retries_dict = self.utils.get_intervals_retries_dict(
             self.interval, self.retries)
         deleted_volume_device_ids = []
+
+        # Remove replication for group, if applicable
+        if group.is_replicated:
+            self._cleanup_group_replication(
+                array, vol_grp_name, volume_device_ids,
+                intervals_retries_dict)
         try:
-            # If there are no volumes in sg then delete it
-            if not volume_device_ids:
-                self.rest.delete_storage_group(array, vol_grp_name)
-                model_update = {'status': fields.GroupStatus.DELETED}
-                volumes_model_update = self.utils.update_volume_model_updates(
-                    volumes_model_update, volumes, group.id, status='deleted')
-                return model_update, volumes_model_update
-            # First remove all the volumes from the SG
-            self.masking.remove_volumes_from_storage_group(
-                array, volume_device_ids, vol_grp_name, intervals_retries_dict)
-            for vol in volumes:
-                for extraspecs_dict in extraspecs_dict_list:
-                    if vol.volume_type_id in extraspecs_dict['volumeTypeId']:
-                        extraspecs = extraspecs_dict.get(utils.EXTRA_SPECS)
-                        device_id = self._find_device_on_array(vol,
-                                                               extraspecs)
-                        if device_id in volume_device_ids:
-                            self._remove_vol_and_cleanup_replication(
-                                array, device_id,
-                                vol.name, extraspecs, vol)
-                            self._delete_from_srp(
-                                array, device_id, "group vol", extraspecs)
-                        else:
-                            LOG.debug("Volume not present in storage group.")
-                        # Add the device id to the deleted list
-                        deleted_volume_device_ids.append(device_id)
+            if volume_device_ids:
+                # First remove all the volumes from the SG
+                self.masking.remove_volumes_from_storage_group(
+                    array, volume_device_ids, vol_grp_name,
+                    intervals_retries_dict)
+                for vol in volumes:
+                    for extraspecs_dict in extraspecs_dict_list:
+                        if (vol.volume_type_id in
+                                extraspecs_dict['volumeTypeId']):
+                            extraspecs = extraspecs_dict.get(
+                                utils.EXTRA_SPECS)
+                            device_id = self._find_device_on_array(
+                                vol, extraspecs)
+                            if device_id in volume_device_ids:
+                                self.masking.remove_and_reset_members(
+                                    array, vol, device_id, vol.name,
+                                    extraspecs, False)
+                                self._delete_from_srp(
+                                    array, device_id, "group vol", extraspecs)
+                            else:
+                                LOG.debug("Volume not found on the array.")
+                            # Add the device id to the deleted list
+                            deleted_volume_device_ids.append(device_id)
             # Once all volumes are deleted then delete the SG
             self.rest.delete_storage_group(array, vol_grp_name)
             model_update = {'status': fields.GroupStatus.DELETED}
@@ -2857,6 +2936,38 @@ class VMAXCommon(object):
                           {'ex': ex, 'sg_name': vol_grp_name})
 
         return model_update, volumes_model_update
+
+    def _cleanup_group_replication(
+            self, array, vol_grp_name, volume_device_ids, extra_specs):
+        """Cleanup remote replication.
+
+        Break and delete the rdf replication relationship and
+        delete the remote storage group and member devices.
+        :param array: the array serial number
+        :param vol_grp_name: the volume group name
+        :param volume_device_ids: the device ids of the local volumes
+        :param extra_specs: the extra specifications
+        """
+        rdf_group_no, remote_array = self.get_rdf_details(array)
+        # Delete replication for group, if applicable
+        if volume_device_ids:
+            self.provision.delete_group_replication(
+                array, vol_grp_name, rdf_group_no, extra_specs)
+        remote_device_ids = self._get_members_of_volume_group(
+            remote_array, vol_grp_name)
+        # Remove volumes from remote replication group
+        if remote_device_ids:
+            self.masking.remove_volumes_from_storage_group(
+                remote_array, remote_device_ids, vol_grp_name, extra_specs)
+        for device_id in remote_device_ids:
+            # Make sure they are not members of any other storage groups
+            self.masking.remove_and_reset_members(
+                remote_array, None, device_id, 'target_vol',
+                extra_specs, False)
+            self._delete_from_srp(
+                remote_array, device_id, "group vol", extra_specs)
+        # Once all volumes are deleted then delete the SG
+        self.rest.delete_storage_group(remote_array, vol_grp_name)
 
     def create_group_snapshot(self, context, group_snapshot, snapshots):
         """Creates a generic volume group snapshot.
@@ -3003,21 +3114,6 @@ class VMAXCommon(object):
 
         return model_update, snapshots_model_update
 
-    def _find_volume_group_name_from_id(self, array, group_id):
-        """Finds the volume group name given its id
-
-        :param array: the array serial number
-        :param group_id: the group id
-        :returns: group_name: Name of the group
-        """
-        group_name = None
-        sg_list = self.rest.get_storage_group_list(array)
-        for sg in sg_list:
-            if group_id in sg:
-                group_name = sg
-                return group_name
-        return group_name
-
     def _find_volume_group(self, array, group):
         """Finds a volume group given the group.
 
@@ -3061,7 +3157,8 @@ class VMAXCommon(object):
                  "This adds and/or removes volumes from "
                  "a generic volume group.",
                  {'group': group.id})
-        if not volume_utils.is_group_a_cg_snapshot_type(group):
+        if (not volume_utils.is_group_a_cg_snapshot_type(group)
+                and not group.is_replicated):
             raise NotImplementedError()
 
         array, __ = self.utils.get_volume_group_utils(
@@ -3073,25 +3170,35 @@ class VMAXCommon(object):
         remove_device_ids = self._get_volume_device_ids(remove_vols, array)
         vol_grp_name = None
         try:
-            volume_group = self._find_volume_group(
-                array, group)
+            volume_group = self._find_volume_group(array, group)
             if volume_group:
                 if 'name' in volume_group:
                     vol_grp_name = volume_group['name']
             if vol_grp_name is None:
-                raise exception.GroupNotFound(
-                    group_id=group.id)
+                raise exception.GroupNotFound(group_id=group.id)
             interval_retries_dict = self.utils.get_intervals_retries_dict(
                 self.interval, self.retries)
             # Add volume(s) to the group
             if add_device_ids:
+                self.utils.check_rep_status_enabled(group)
+                for vol in add_vols:
+                    extra_specs = self._initial_setup(vol)
+                    self.utils.check_replication_matched(vol, extra_specs)
                 self.masking.add_volumes_to_storage_group(
                     array, add_device_ids, vol_grp_name, interval_retries_dict)
+                if group.is_replicated:
+                    # Add remote volumes to remote storage group
+                    self._add_remote_vols_to_volume_group(
+                        array, add_vols, group, interval_retries_dict)
             # Remove volume(s) from the group
             if remove_device_ids:
                 self.masking.remove_volumes_from_storage_group(
                     array, remove_device_ids,
                     vol_grp_name, interval_retries_dict)
+                if group.is_replicated:
+                    # Remove remote volumes from the remote storage group
+                    self._remove_remote_vols_from_volume_group(
+                        array, remove_vols, group, interval_retries_dict)
         except exception.GroupNotFound:
             raise
         except Exception as ex:
@@ -3103,6 +3210,57 @@ class VMAXCommon(object):
             raise exception.VolumeBackendAPIException(data=exception_message)
 
         return model_update, None, None
+
+    def _add_remote_vols_to_volume_group(
+            self, array, volumes, group,
+            extra_specs, rep_driver_data=None):
+        """Add the remote volumes to their volume group.
+
+        :param array: the array serial number
+        :param volumes: list of volumes
+        :param group: the id of the group
+        :param extra_specs: the extra specifications
+        :param rep_driver_data: replication driver data, optional
+        """
+        remote_device_list = []
+        __, remote_array = self.get_rdf_details(array)
+        for vol in volumes:
+            try:
+                remote_loc = ast.literal_eval(vol.replication_driver_data)
+            except (ValueError, KeyError):
+                remote_loc = ast.literal_eval(rep_driver_data)
+            founddevice_id = self.rest.check_volume_device_id(
+                remote_array, remote_loc['device_id'], vol.id)
+            if founddevice_id is not None:
+                remote_device_list.append(founddevice_id)
+        group_name = self.provision.get_or_create_volume_group(
+            remote_array, group, extra_specs)
+        self.masking.add_volumes_to_storage_group(
+            remote_array, remote_device_list, group_name, extra_specs)
+        LOG.info("Added volumes to remote volume group.")
+
+    def _remove_remote_vols_from_volume_group(
+            self, array, volumes, group, extra_specs):
+        """Remove the remote volumes from their volume group.
+
+        :param array: the array serial number
+        :param volumes: list of volumes
+        :param group: the id of the group
+        :param extra_specs: the extra specifications
+        """
+        remote_device_list = []
+        __, remote_array = self.get_rdf_details(array)
+        for vol in volumes:
+            remote_loc = ast.literal_eval(vol.replication_driver_data)
+            founddevice_id = self.rest.check_volume_device_id(
+                remote_array, remote_loc['device_id'], vol.id)
+            if founddevice_id is not None:
+                remote_device_list.append(founddevice_id)
+        group_name = self.provision.get_or_create_volume_group(
+            array, group, extra_specs)
+        self.masking.remove_volumes_from_storage_group(
+            remote_array, remote_device_list, group_name, extra_specs)
+        LOG.info("Removed volumes from remote volume group.")
 
     def _get_volume_device_ids(self, volumes, array):
         """Get volume device ids from volume.
@@ -3167,7 +3325,6 @@ class VMAXCommon(object):
         tgt_name = self.utils.update_volume_group_name(group)
         self.create_group(context, group)
         model_update = {'status': fields.GroupStatus.AVAILABLE}
-        snap_name = None
         try:
             array, extraspecs_dict_list = (
                 self.utils.get_volume_group_utils(
@@ -3186,8 +3343,8 @@ class VMAXCommon(object):
                     if volume.volume_type_id in (
                             extraspecs_dict['volumeTypeId']):
                         extraspecs = extraspecs_dict.get(utils.EXTRA_SPECS)
-                        # Create a random UUID and use it as volume name
-                        target_volume_name = six.text_type(uuid.uuid4())
+                        target_volume_name = (
+                            self.utils.get_volume_element_name(volume.id))
                         volume_dict = self.provision.create_volume_from_sg(
                             array, target_volume_name,
                             tgt_name, volume_size, extraspecs)
@@ -3217,7 +3374,6 @@ class VMAXCommon(object):
             self.provision.link_and_break_replica(
                 array, vol_grp_name, tgt_name, snap_name,
                 interval_retries_dict, delete_snapshot=create_snapshot)
-
         except Exception:
             exception_message = (_("Failed to create vol grp %(volGrpName)s"
                                    " from source %(grpSnapshot)s.")
@@ -3228,16 +3384,242 @@ class VMAXCommon(object):
         volumes_model_update = self.utils.update_volume_model_updates(
             volumes_model_update, volumes, group.id, model_update['status'])
 
-        # Update the provider_location
+        # Update the provider_location & replication status
         for volume_model_update in volumes_model_update:
             if volume_model_update['id'] in dict_volume_dicts:
                 volume_model_update.update(
                     {'provider_location': six.text_type(
                         dict_volume_dicts[volume_model_update['id']])})
-
-        # Update the volumes_model_update with admin_metadata
-        self.utils.update_admin_metadata(volumes_model_update,
-                                         key='targetVolumeName',
-                                         values=target_volume_names)
+            if group.is_replicated:
+                volumes_model_update = self._replicate_group(
+                    array, volumes_model_update,
+                    tgt_name, interval_retries_dict)
+                model_update.update({
+                    'replication_status': fields.ReplicationStatus.ENABLED})
 
         return model_update, volumes_model_update
+
+    def _replicate_group(self, array, volumes_model_update,
+                         group_name, extra_specs):
+        """Replicate a cloned volume group.
+
+        :param array: the array serial number
+        :param volumes_model_update: the volumes model updates
+        :param group_name: the group name
+        :param extra_specs: the extra specs
+        :return: volumes_model_update
+        """
+        rdf_group_no, remote_array = self.get_rdf_details(array)
+        self.rest.replicate_group(
+            array, group_name, rdf_group_no, remote_array, extra_specs)
+        # Need to set SRP to None for generic volume group - Not set
+        # automatically, and a volume can only be in one storage group
+        # managed by FAST
+        self.rest.set_storagegroup_srp(array, group_name, "None", extra_specs)
+        for volume_model_update in volumes_model_update:
+            vol_id = volume_model_update['id']
+            loc = ast.literal_eval(volume_model_update['provider_location'])
+            src_device_id = loc['device_id']
+            rdf_vol_details = self.rest.get_rdf_group_volume(
+                array, src_device_id)
+            tgt_device_id = rdf_vol_details['remoteDeviceID']
+            element_name = self.utils.get_volume_element_name(vol_id)
+            self.rest.rename_volume(remote_array, tgt_device_id, element_name)
+            rep_update = {'device_id': tgt_device_id, 'array': remote_array}
+            volume_model_update.update(
+                {'replication_driver_data': six.text_type(rep_update),
+                 'replication_status': fields.ReplicationStatus.ENABLED})
+        return volumes_model_update
+
+    def enable_replication(self, context, group, volumes):
+        """Enable replication for a group.
+
+        Replication is enabled on replication-enabled groups by default.
+        :param context: the context
+        :param group: the group object
+        :param volumes: the list of volumes
+        :returns: model_update, None
+        """
+        if not group.is_replicated:
+            raise NotImplementedError()
+
+        model_update = {}
+        if not volumes:
+            # Return if empty group
+            return model_update, None
+
+        try:
+            vol_grp_name = None
+            extra_specs = self._initial_setup(volumes[0])
+            array = extra_specs[utils.ARRAY]
+            volume_group = self._find_volume_group(array, group)
+            if volume_group:
+                if 'name' in volume_group:
+                    vol_grp_name = volume_group['name']
+            if vol_grp_name is None:
+                raise exception.GroupNotFound(group_id=group.id)
+
+            rdf_group_no, _ = self.get_rdf_details(array)
+            self.provision.enable_group_replication(
+                array, vol_grp_name, rdf_group_no, extra_specs)
+            model_update.update({
+                'replication_status': fields.ReplicationStatus.ENABLED})
+        except Exception as e:
+            model_update.update({
+                'replication_status': fields.ReplicationStatus.ERROR})
+            LOG.error("Error enabling replication on group %(group)s. "
+                      "Exception received: %(e)s.",
+                      {'group': group.id, 'e': e})
+
+        return model_update, None
+
+    def disable_replication(self, context, group, volumes):
+        """Disable replication for a group.
+
+        :param context: the context
+        :param group: the group object
+        :param volumes: the list of volumes
+        :returns: model_update, None
+        """
+        if not group.is_replicated:
+            raise NotImplementedError()
+
+        model_update = {}
+        if not volumes:
+            # Return if empty group
+            return model_update, None
+
+        try:
+            vol_grp_name = None
+            extra_specs = self._initial_setup(volumes[0])
+            array = extra_specs[utils.ARRAY]
+            volume_group = self._find_volume_group(array, group)
+            if volume_group:
+                if 'name' in volume_group:
+                    vol_grp_name = volume_group['name']
+            if vol_grp_name is None:
+                raise exception.GroupNotFound(group_id=group.id)
+
+            rdf_group_no, _ = self.get_rdf_details(array)
+            self.provision.disable_group_replication(
+                array, vol_grp_name, rdf_group_no, extra_specs)
+            model_update.update({
+                'replication_status': fields.ReplicationStatus.DISABLED})
+        except Exception as e:
+            model_update.update({
+                'replication_status': fields.ReplicationStatus.ERROR})
+            LOG.error("Error disabling replication on group %(group)s. "
+                      "Exception received: %(e)s.",
+                      {'group': group.id, 'e': e})
+
+        return model_update, None
+
+    def failover_replication(self, context, group, volumes,
+                             secondary_backend_id=None, host=False):
+        """Failover replication for a group.
+
+        :param context: the context
+        :param group: the group object
+        :param volumes: the list of volumes
+        :param secondary_backend_id: the secondary backend id - default None
+        :param host: flag to indicate if whole host is being failed over
+        :returns: model_update, None
+        """
+        if not group.is_replicated:
+            raise NotImplementedError()
+
+        model_update = {}
+        vol_model_updates = []
+        if not volumes:
+            # Return if empty group
+            return model_update, vol_model_updates
+
+        try:
+            vol_grp_name = None
+            extra_specs = self._initial_setup(volumes[0])
+            array = extra_specs[utils.ARRAY]
+            volume_group = self._find_volume_group(array, group)
+            if volume_group:
+                if 'name' in volume_group:
+                    vol_grp_name = volume_group['name']
+            if vol_grp_name is None:
+                raise exception.GroupNotFound(group_id=group.id)
+
+            rdf_group_no, _ = self.get_rdf_details(array)
+            # As we only support a single replication target, ignore
+            # any secondary_backend_id which is not 'default'
+            failover = False if secondary_backend_id == 'default' else True
+            self.provision.failover_group(
+                array, vol_grp_name, rdf_group_no, extra_specs, failover)
+            if failover:
+                model_update.update({
+                    'replication_status':
+                        fields.ReplicationStatus.FAILED_OVER})
+                vol_rep_status = fields.ReplicationStatus.FAILED_OVER
+            else:
+                model_update.update({
+                    'replication_status': fields.ReplicationStatus.ENABLED})
+                vol_rep_status = fields.ReplicationStatus.ENABLED
+
+        except Exception as e:
+            model_update.update({
+                'replication_status': fields.ReplicationStatus.ERROR})
+            vol_rep_status = fields.ReplicationStatus.ERROR
+            LOG.error("Error failover replication on group %(group)s. "
+                      "Exception received: %(e)s.",
+                      {'group': group.id, 'e': e})
+
+        for vol in volumes:
+            loc = vol.provider_location
+            rep_data = vol.replication_driver_data
+            if vol_rep_status != fields.ReplicationStatus.ERROR:
+                loc = vol.replication_driver_data
+                rep_data = vol.provider_location
+            update = {'id': vol.id,
+                      'replication_status': vol_rep_status,
+                      'provider_location': loc,
+                      'replication_driver_data': rep_data}
+            if host:
+                update = {'volume_id': vol.id, 'updates': update}
+            vol_model_updates.append(update)
+
+        return model_update, vol_model_updates
+
+    def get_attributes_from_cinder_config(self):
+        LOG.debug("Using cinder.conf file")
+        kwargs = None
+        username = self.configuration.safe_get(utils.VMAX_USER_NAME)
+        password = self.configuration.safe_get(utils.VMAX_PASSWORD)
+        if username and password:
+            serial_number = self.configuration.safe_get(utils.VMAX_ARRAY)
+            if serial_number is None:
+                LOG.error("Array Serial Number must be set in cinder.conf")
+            srp_name = self.configuration.safe_get(utils.VMAX_SRP)
+            if srp_name is None:
+                LOG.error("SRP Name must be set in cinder.conf")
+            slo = self.configuration.safe_get(utils.VMAX_SERVICE_LEVEL)
+            workload = self.configuration.safe_get(utils.WORKLOAD)
+            port_groups = self.configuration.safe_get(utils.VMAX_PORT_GROUPS)
+            random_portgroup = None
+            if port_groups:
+                random_portgroup = random.choice(self.configuration.safe_get(
+                    utils.VMAX_PORT_GROUPS))
+            kwargs = (
+                {'RestServerIp': self.configuration.safe_get(
+                    utils.VMAX_SERVER_IP),
+                 'RestServerPort': self.configuration.safe_get(
+                    utils.VMAX_SERVER_PORT),
+                 'RestUserName': username,
+                 'RestPassword': password,
+                 'SSLCert': self.configuration.safe_get('driver_client_cert'),
+                 'SerialNumber': serial_number,
+                 'srpName': srp_name,
+                 'PortGroup': random_portgroup})
+            if self.configuration.safe_get('driver_ssl_cert_verify'):
+                kwargs.update({'SSLVerify': self.configuration.safe_get(
+                    'driver_ssl_cert_path')})
+            else:
+                kwargs.update({'SSLVerify': False})
+            if slo is not None:
+                kwargs.update({'ServiceLevel': slo, 'Workload': workload})
+        return kwargs

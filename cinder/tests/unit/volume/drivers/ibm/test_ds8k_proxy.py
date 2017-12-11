@@ -44,9 +44,12 @@ from cinder.volume.drivers.ibm.ibm_storage import ds8k_restclient as restclient
 mock_logger.stop()
 
 TEST_VOLUME_ID = '0001'
+TEST_VOLUME_ID_2 = '0002'
 TEST_HOST_ID = 'H1'
 TEST_VOLUME_BACKEND_NAME = 'ds8k_backend'
 TEST_GROUP_HOST = 'test_host@' + TEST_VOLUME_BACKEND_NAME + '#fakepool'
+TEST_HOST_1 = 'test_host@' + TEST_VOLUME_BACKEND_NAME
+TEST_HOST_2 = TEST_GROUP_HOST
 TEST_LUN_ID = '00'
 TEST_POOLS_STR = 'P0,P1'
 TEST_POOL_ID_1 = 'P0'
@@ -780,6 +783,7 @@ FAKE_FAILBACK_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_FAILOVER_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_CHANGE_VOLUME_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_POST_FLASHCOPIES_RESPONSE = FAKE_GENERIC_RESPONSE
+FAKE_DELETE_FLASHCOPIES_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_POST_UNFREEZE_FLASHCOPIES_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_CREATE_LCU_RESPONSE = FAKE_GENERIC_RESPONSE
 FAKE_ASSIGN_HOST_PORT_RESPONSE = FAKE_GENERIC_RESPONSE
@@ -809,11 +813,15 @@ FAKE_REST_API_RESPONSES = {
         FAKE_CHANGE_VOLUME_RESPONSE,
     TEST_TARGET_DS8K_IP + '/volumes/' + TEST_VOLUME_ID + '/put':
         FAKE_CHANGE_VOLUME_RESPONSE,
+    TEST_SOURCE_DS8K_IP + '/volumes/' + TEST_VOLUME_ID_2 + '/get':
+        FAKE_GET_VOLUME_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/volumes/delete':
         FAKE_DELETE_VOLUME_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/volumes/' + TEST_VOLUME_ID + '/delete':
         FAKE_DELETE_VOLUME_RESPONSE,
     TEST_TARGET_DS8K_IP + '/volumes/' + TEST_VOLUME_ID + '/delete':
+        FAKE_DELETE_VOLUME_RESPONSE,
+    TEST_SOURCE_DS8K_IP + '/volumes/' + TEST_VOLUME_ID_2 + '/delete':
         FAKE_DELETE_VOLUME_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/lss/get':
         FAKE_GET_LSS_RESPONSE,
@@ -887,6 +895,9 @@ FAKE_REST_API_RESPONSES = {
         FAKE_PAUSE_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/cs/flashcopies/post':
         FAKE_POST_FLASHCOPIES_RESPONSE,
+    TEST_SOURCE_DS8K_IP + '/cs/flashcopies/' + TEST_VOLUME_ID + ":" +
+    TEST_VOLUME_ID_2 + '/delete':
+        FAKE_DELETE_FLASHCOPIES_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/cs/flashcopies/unfreeze/post':
         FAKE_POST_UNFREEZE_FLASHCOPIES_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/cs/pprcs/physical_links/get':
@@ -1017,7 +1028,7 @@ class FakeDS8KProxy(ds8kproxy.DS8KProxy):
 
     def __init__(self, storage_info, logger, exception,
                  driver=None, active_backend_id=None,
-                 HTTPConnectorObject=None):
+                 HTTPConnectorObject=None, host=TEST_HOST_1):
         with mock.patch.object(proxy.IBMStorageProxy,
                                '_get_safely_from_configuration') as get_conf:
             get_conf.side_effect = [{}, False]
@@ -1031,6 +1042,7 @@ class FakeDS8KProxy(ds8kproxy.DS8KProxy):
         self._active_backend_id = active_backend_id
         self.configuration = driver.configuration
         self.consisgroup_cache = {}
+        self._host = host
         self.setup(None)
 
     def setup(self, context):
@@ -1049,6 +1061,7 @@ class FakeDS8KProxy(ds8kproxy.DS8KProxy):
         # set up replication target
         if repl_devices:
             self._do_replication_setup(repl_devices, self._helper)
+        self._check_async_cloned_volumes()
 
     def _do_replication_setup(self, devices, src_helper):
         self._replication = FakeReplication(src_helper, devices[0])
@@ -1087,7 +1100,7 @@ class DS8KProxyTest(test.TestCase):
 
     def _create_volume(self, **kwargs):
         properties = {
-            'host': 'openstack@ds8k_backend#ds8k_pool',
+            'host': TEST_HOST_2,
             'size': 1
         }
         for p in properties.keys():
@@ -1900,6 +1913,97 @@ class DS8KProxyTest(test.TestCase):
         self.driver.delete_volume(volume)
         self.assertTrue(mock_delete_lun_by_id.called)
         self.assertTrue(mock_delete_lun.called)
+
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_async_clone_volume(self, mock_get_flashcopy):
+        """clone the volume asynchronously."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        src_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location)
+        location = six.text_type({'vol_hex_id': None})
+        metadata = [{'key': 'async_clone', 'value': True}]
+        tgt_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location,
+                                      volume_metadata=metadata)
+
+        self.mock_object(eventlet, 'spawn')
+        mock_get_flashcopy.return_value = [TEST_FLASHCOPY]
+        volume_update = self.driver.create_cloned_volume(tgt_vol, src_vol)
+        self.assertEqual(
+            TEST_VOLUME_ID,
+            ast.literal_eval(volume_update['provider_location'])['vol_hex_id'])
+        self.assertEqual('started', volume_update['metadata']['flashcopy'])
+        eventlet.spawn.assert_called()
+
+    def test_check_async_cloned_volumes_when_initialize_driver(self):
+        """initialize driver should check volumes cloned asynchronously."""
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        src_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location)
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID_2})
+        metadata = [{'key': 'flashcopy', 'value': 'started'}]
+        self._create_volume(volume_type_id=vol_type.id,
+                            source_volid=src_vol.id,
+                            provider_location=location,
+                            volume_metadata=metadata)
+        self.mock_object(eventlet, 'spawn')
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        eventlet.spawn.assert_called()
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_wait_flashcopy_when_async_clone_volume(
+            self, mock_get_flashcopy, mock_sleep):
+        """clone volume asynchronously when flashcopy failed."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        src_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location)
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID_2})
+        metadata = [{'key': 'async_clone', 'value': True}]
+        tgt_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location,
+                                      volume_metadata=metadata)
+
+        src_lun = ds8kproxy.Lun(src_vol)
+        tgt_lun = ds8kproxy.Lun(tgt_vol)
+        mock_get_flashcopy.side_effect = (
+            restclient.APIException('flashcopy fails.'))
+        self.driver._wait_flashcopy([src_lun], [tgt_lun])
+        self.assertEqual('error', tgt_lun.status)
+        self.assertEqual('error', tgt_vol.metadata['flashcopy'])
+        self.assertEqual('error', tgt_vol.status)
+        self.assertIsNotNone(tgt_vol.metadata.get('error_msg'))
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_wait_flashcopy_when_async_clone_volume_2(
+            self, mock_get_flashcopy, mock_sleep):
+        """clone volume asynchronously when flashcopy successed."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        src_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location)
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID_2})
+        metadata = [{'key': 'async_clone', 'value': True}]
+        tgt_vol = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location,
+                                      volume_metadata=metadata)
+        src_lun = ds8kproxy.Lun(src_vol)
+        tgt_lun = ds8kproxy.Lun(tgt_vol)
+        mock_get_flashcopy.return_value = {}
+        self.driver._wait_flashcopy([src_lun], [tgt_lun])
+        self.assertEqual('available', tgt_lun.status)
+        self.assertEqual('success', tgt_vol.metadata['flashcopy'])
 
     @mock.patch.object(eventlet, 'sleep')
     @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
@@ -2789,6 +2893,24 @@ class DS8KProxyTest(test.TestCase):
         self.assertRaises(exception.VolumeDriverException,
                           self.driver.create_group, self.ctxt, group)
 
+    @ddt.data('group_replication_enabled',
+              'consistent_group_replication_enabled')
+    def test_create_replication_group_update_replication_status(self, key):
+        """create replication group should update replication_status."""
+        self.configuration.lss_range_for_cg = '20-23'
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        group_type = group_types.create(self.ctxt, 'group', {key: '<is> True'})
+        group = self._create_group(host=TEST_GROUP_HOST,
+                                   group_type_id=group_type.id)
+        model_update = self.driver.create_group(self.ctxt, group)
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+
     def test_delete_consistency_group_sucessfully(self):
         """test a successful consistency group deletion."""
         self.driver = FakeDS8KProxy(self.storage_info, self.logger,
@@ -2851,7 +2973,8 @@ class DS8KProxyTest(test.TestCase):
         vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
                                        {'replication_enabled': '<is> True'})
         location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
-        data = json.dumps({'vol_hex_id': TEST_VOLUME_ID})
+        data = json.dumps(
+            {TEST_TARGET_DS8K_IP: {'vol_hex_id': TEST_VOLUME_ID}})
         volume = self._create_volume(volume_type_id=vol_type.id,
                                      provider_location=location,
                                      replication_driver_data=data,
@@ -2877,7 +3000,8 @@ class DS8KProxyTest(test.TestCase):
         vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
                                        {'replication_enabled': '<is> True'})
         location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
-        data = json.dumps({'vol_hex_id': TEST_VOLUME_ID})
+        data = json.dumps(
+            {TEST_TARGET_DS8K_IP: {'vol_hex_id': TEST_VOLUME_ID}})
         volume = self._create_volume(volume_type_id=vol_type.id,
                                      provider_location=location,
                                      replication_driver_data=data,
@@ -3118,8 +3242,7 @@ class DS8KProxyTest(test.TestCase):
                 self.ctxt, group, [volume], None, None, src_group, [src_vol]))
         self.assertEqual('2200',
                          volumes_model_update[0]['metadata']['vol_hex_id'])
-        self.assertEqual(fields.GroupStatus.AVAILABLE,
-                         model_update['status'])
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
 
     @mock.patch.object(eventlet, 'sleep')
     @mock.patch.object(helper.DS8KCommonHelper, '_create_lun')
@@ -3159,11 +3282,13 @@ class DS8KProxyTest(test.TestCase):
                 [snapshot], None, None))
         self.assertEqual(
             '2200', volumes_model_update[0]['metadata']['vol_hex_id'])
-        self.assertEqual(fields.GroupStatus.AVAILABLE,
-                         model_update['status'])
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
 
-    def test_create_group_from_generic_group(self):
-        """create group from generic group is not implemented."""
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_create_group_from_replication_group(self, mock_get_flashcopy,
+                                                 mock_sleep):
+        """create group from replication group."""
         self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
         self.driver = FakeDS8KProxy(self.storage_info, self.logger,
                                     self.exception, self)
@@ -3179,7 +3304,8 @@ class DS8KProxyTest(test.TestCase):
         vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
                                        {'replication_enabled': '<is> True'})
         location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
-        data = json.dumps({'vol_hex_id': TEST_VOLUME_ID})
+        data = json.dumps(
+            {TEST_TARGET_DS8K_IP: {'vol_hex_id': TEST_VOLUME_ID}})
         src_volume = self._create_volume(volume_type_id=vol_type.id,
                                          provider_location=location,
                                          replication_driver_data=data,
@@ -3188,11 +3314,12 @@ class DS8KProxyTest(test.TestCase):
         group = self._create_group(host=TEST_GROUP_HOST,
                                    group_type_id=group_type.id)
         volume = self._create_volume(group_id=group.id)
-
-        self.assertRaises(NotImplementedError,
-                          self.driver.create_group_from_src,
-                          self.ctxt, group, [volume],
-                          None, None, src_group, [src_volume])
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+        model_update, volumes_model_update = self.driver.create_group_from_src(
+            self.ctxt, group, [volume], None, None, src_group, [src_volume])
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
 
     @mock.patch.object(eventlet, 'sleep')
     @mock.patch.object(helper.DS8KCommonHelper, 'get_pprc_pairs')

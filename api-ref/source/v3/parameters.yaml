@@ -67,12 +67,6 @@ group_snapshot_id:
   in: path
   required: true
   type: string
-group_type_id:
-  description: |
-    The UUID for an existing group type.
-  in: path
-  required: false
-  type: string
 group_type_id_1:
   description: |
     The UUID for an existing group type.
@@ -110,6 +104,12 @@ key_3:
 key_4:
   description: |
     The key name of the extra spec for a volume type.
+  in: path
+  required: true
+  type: string
+key_5:
+  description: |
+    The key name of the encryption spec for a volume type.
   in: path
   required: true
   type: string
@@ -398,6 +398,13 @@ vol_type_id_query:
   in: query
   required: true
   type: string
+with_count:
+  description: |
+    Whether to show ``count`` in API response or not, default is ``False``.
+  in: query
+  required: false
+  type: boolean
+  min_version: 3.45
 
 # variables in body
 absolute:
@@ -542,6 +549,13 @@ backup_gigabytes_usage:
   in: body
   required: true
   type: object
+backup_id_1:
+  description: |
+    The UUID of the backup.
+  in: body
+  required: false
+  type: string
+  min_version: 3.46
 backup_service:
   description: |
     The service used to perform the backup.
@@ -740,6 +754,13 @@ control_location:
   in: body
   required: false
   type: string
+count:
+  description: |
+    The total count of requested resource before pagination is applied.
+  in: body
+  required: false
+  type: integer
+  min_version: 3.45
 create-from-src:
   description: |
     The create from source action.
@@ -866,6 +887,12 @@ description_15:
     The volume type description.
   in: body
   required: false
+  type: string
+description_16:
+  description: |
+    The group snapshot description.
+  in: body
+  required: true
   type: string
 description_2:
   description: |
@@ -1108,7 +1135,7 @@ group_id_1:
   description: |
     The ID of the group.
   in: body
-  required: false
+  required: true
   type: string
 group_name:
   description: |
@@ -1738,6 +1765,12 @@ name_18:
     The group snapshot name.
   in: body
   required: false
+  type: string
+name_19:
+  description: |
+    The group snapshot name.
+  in: body
+  required: true
   type: string
 name_2:
   description: |
@@ -2732,6 +2765,14 @@ volume_id_7:
   in: body
   required: true
   type: string
+volume_image_metadata:
+  description: |
+    List of image metadata entries.  Only included for volumes that were
+    created from an image, or from a snapshot of a volume originally created
+    from an image.
+  in: body
+  required: false
+  type: object
 volume_name:
   description: |
     The volume name.
@@ -2756,8 +2797,8 @@ volume_type_2:
     volume type.  Default is ``None``.  For information about how to
     use volume types to create multiple- storage back ends, see
     `Configure multiple-storage back ends
-    <http://docs.openstack.org/admin-
-    guide/blockstorage_multi_backend.html>`_.
+    <https://docs.openstack.org/cinder/latest
+    /admin/blockstorage-multi-backend.html>`_.
   in: body
   required: false
   type: string
@@ -2767,8 +2808,8 @@ volume_type_3:
     storage back ends, the scheduler determines where to send the
     volume based on the volume type.  For information about how to use
     volume types to create multiple- storage back ends, see `Configure
-    multiple-storage back ends <http://docs.openstack.org/admin-
-    guide/blockstorage_multi_backend.html>`_.
+    multiple-storage back ends <https://docs.openstack.org/cinder/latest
+    /admin/blockstorage-multi-backend.html>`_.
   in: body
   required: true
   type: string
@@ -2803,8 +2844,8 @@ volume_types:
     the volume based on the volume type.  For information about how to
     use volume types to create multiple- storage back ends, see
     `Configure multiple-storage back ends
-    <http://docs.openstack.org/admin-
-    guide/blockstorage_multi_backend.html>`_.
+    <https://docs.openstack.org/cinder/latest
+    /admin/blockstorage-multi-backend.html>`_.
   in: body
   required: true
   type: array
@@ -2815,8 +2856,8 @@ volume_types_2:
     the volume based on the volume type.  For information about how to
     use volume types to create multiple-storage back ends, see
     `Configure multiple-storage back ends
-    <http://docs.openstack.org/admin-
-    guide/blockstorage_multi_backend.html>`_.
+    <https://docs.openstack.org/cinder/latest
+    /admin/blockstorage-multi-backend.html>`_.
   in: body
   required: true
   type: string

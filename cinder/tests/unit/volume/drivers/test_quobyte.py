@@ -46,9 +46,6 @@ class FakeDb(object):
         """Mock this if you want results from it."""
         return []
 
-    def volume_get_all(self, *a, **kw):
-        return []
-
 
 class QuobyteDriverTestCase(test.TestCase):
     """Test case for Quobyte driver."""
@@ -109,6 +106,17 @@ class QuobyteDriverTestCase(test.TestCase):
         mypart.device = "quobyte@"
         mypart.mountpoint = self.TEST_MNT_POINT
         return [mypart]
+
+    def test__create_regular_file(self):
+        with mock.patch.object(self._driver, "_execute") as qb_exec_mock:
+            tmp_path = "/path/for/test"
+            test_size = 1
+
+            self._driver._create_regular_file(tmp_path, test_size)
+
+            qb_exec_mock.assert_called_once_with(
+                'fallocate', '-l', '%sG' % test_size, tmp_path,
+                run_as_root=self._driver._execute_as_root)
 
     def test_local_path(self):
         """local_path common use case."""
@@ -664,6 +672,8 @@ class QuobyteDriverTestCase(test.TestCase):
                                          snapshot['id']: snap_file})
         image_utils.qemu_img_info = mock.Mock(return_value=img_info)
         drv._set_rw_permissions_for_all = mock.Mock()
+        drv._find_share = mock.Mock()
+        drv._find_share.return_value = "/some/arbitrary/path"
 
         drv._copy_volume_from_snapshot(snapshot, dest_volume, size)
 
@@ -719,14 +729,12 @@ class QuobyteDriverTestCase(test.TestCase):
 
         drv._ensure_shares_mounted = mock.Mock()
         drv._find_share = mock.Mock(return_value=self.TEST_QUOBYTE_VOLUME)
-        drv._do_create_volume = mock.Mock()
         drv._copy_volume_from_snapshot = mock.Mock()
 
         drv.create_volume_from_snapshot(new_volume, snap_ref)
 
         drv._ensure_shares_mounted.assert_called_once_with()
         drv._find_share.assert_called_once_with(new_volume)
-        drv._do_create_volume.assert_called_once_with(new_volume)
         (drv._copy_volume_from_snapshot.
          assert_called_once_with(snap_ref, new_volume, new_volume['size']))
 
@@ -936,8 +944,29 @@ class QuobyteDriverTestCase(test.TestCase):
 
     @mock.patch.object(psutil, "disk_partitions")
     @mock.patch.object(os, "stat")
-    def test_validate_volume_all_good(self, stat_mock, part_mock):
+    def test_validate_volume_all_good_prefix_val(self, stat_mock, part_mock):
         part_mock.return_value = self.get_mock_partitions()
+        drv = self._driver
+
+        def statMockCall(*args):
+            if args[0] == self.TEST_MNT_POINT:
+                stat_result = mock.Mock()
+                stat_result.st_size = 0
+                return stat_result
+            return os.stat(args)
+        stat_mock.side_effect = statMockCall
+
+        drv._validate_volume(self.TEST_MNT_POINT)
+
+        stat_mock.assert_called_once_with(self.TEST_MNT_POINT)
+        part_mock.assert_called_once_with(all=True)
+
+    @mock.patch.object(psutil, "disk_partitions")
+    @mock.patch.object(os, "stat")
+    def test_validate_volume_all_good_subtype_val(self, stat_mock, part_mock):
+        part_mock.return_value = self.get_mock_partitions()
+        part_mock.return_value[0].device = "not_quobyte"
+        part_mock.return_value[0].fstype = "fuse.quobyte"
         drv = self._driver
 
         def statMockCall(*args):

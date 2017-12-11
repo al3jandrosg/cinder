@@ -65,48 +65,32 @@ class VolumeOpsTestCase(test.TestCase):
         vm.propSet = [prop]
         return vm
 
-    def test_get_backing(self):
-        name = 'mock-backing'
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                'get_backing_by_uuid')
+    def test_get_backing(self, get_backing_by_uuid):
+        ref = mock.sentinel.ref
+        get_backing_by_uuid.return_value = ref
 
-        # Test no result
-        self.session.invoke_api.return_value = None
-        result = self.vops.get_backing(name)
-        self.assertIsNone(result)
-        self.session.invoke_api.assert_called_once_with(vim_util,
-                                                        'get_objects',
-                                                        self.session.vim,
-                                                        'VirtualMachine',
-                                                        self.MAX_OBJECTS)
+        name = mock.sentinel.name
+        backing_uuid = mock.sentinel.backing_uuid
+        ret = self.vops.get_backing(name, backing_uuid)
 
-        # Test single result
-        vm = self.vm(name)
-        vm.obj = mock.sentinel.vm_obj
-        retrieve_result = mock.Mock(spec=object)
-        retrieve_result.objects = [vm]
-        self.session.invoke_api.return_value = retrieve_result
-        self.vops.cancel_retrieval = mock.Mock(spec=object)
-        result = self.vops.get_backing(name)
-        self.assertEqual(mock.sentinel.vm_obj, result)
-        self.session.invoke_api.assert_called_with(vim_util, 'get_objects',
-                                                   self.session.vim,
-                                                   'VirtualMachine',
-                                                   self.MAX_OBJECTS)
-        self.vops.cancel_retrieval.assert_called_once_with(retrieve_result)
+        self.assertEqual(ref, ret)
+        get_backing_by_uuid.assert_called_once_with(backing_uuid)
 
-        # Test multiple results
-        retrieve_result2 = mock.Mock(spec=object)
-        retrieve_result2.objects = [vm('1'), vm('2'), vm('3')]
-        self.session.invoke_api.return_value = retrieve_result2
-        self.vops.continue_retrieval = mock.Mock(spec=object)
-        self.vops.continue_retrieval.return_value = retrieve_result
-        result = self.vops.get_backing(name)
-        self.assertEqual(mock.sentinel.vm_obj, result)
-        self.session.invoke_api.assert_called_with(vim_util, 'get_objects',
-                                                   self.session.vim,
-                                                   'VirtualMachine',
-                                                   self.MAX_OBJECTS)
-        self.vops.continue_retrieval.assert_called_once_with(retrieve_result2)
-        self.vops.cancel_retrieval.assert_called_with(retrieve_result)
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                'get_backing_by_uuid')
+    def test_get_backing_legacy(self, get_backing_by_uuid):
+        ref = mock.sentinel.ref
+        get_backing_by_uuid.return_value = None
+        name = mock.sentinel.name
+        self.vops._backing_ref_cache[name] = ref
+
+        backing_uuid = mock.sentinel.backing_uuid
+        ret = self.vops.get_backing(name, backing_uuid)
+
+        self.assertEqual(ref, ret)
+        get_backing_by_uuid.assert_called_once_with(backing_uuid)
 
     def test_get_backing_by_uuid(self):
         backing = mock.sentinel.backing
@@ -121,6 +105,65 @@ class VolumeOpsTestCase(test.TestCase):
             uuid=uuid,
             vmSearch=True,
             instanceUuid=True)
+
+    def _create_property(self, name, val):
+        prop = mock.Mock()
+        prop.name = name
+        prop.val = val
+        return prop
+
+    def _create_backing_obj(self, name, ref, instance_uuid=None, vol_id=None):
+        name_prop = self._create_property('name', name)
+        instance_uuid_prop = self._create_property('config.instanceUuid',
+                                                   instance_uuid)
+        vol_id_val = mock.Mock(value=vol_id)
+        vol_id_prop = self._create_property(
+            'config.extraConfig["cinder.volume.id"]', vol_id_val)
+
+        backing = mock.Mock()
+        backing.obj = ref
+        backing.propSet = [name_prop, instance_uuid_prop, vol_id_prop]
+        return backing
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                'continue_retrieval', return_value=None)
+    def test_build_backing_ref_cache(self, continue_retrieval):
+        uuid1 = 'd68cbee0-c1f7-4886-98a4-cf2201461c6e'
+        ref1 = mock.sentinel.ref1
+        non_vol_backing = self._create_backing_obj(
+            'foo', ref1, instance_uuid=uuid1)
+
+        uuid2 = 'f36f0e87-97e0-4a1c-b788-2f84f1376960'
+        ref2 = mock.sentinel.ref2
+        legacy_vol_backing = self._create_backing_obj(
+            'volume-f36f0e87-97e0-4a1c-b788-2f84f1376960', ref2,
+            instance_uuid=uuid2)
+
+        uuid3 = '405d6afd-43be-4ce0-9e5f-fd49559e2763'
+        ref3 = mock.sentinel.ref3
+        vol_backing = self._create_backing_obj(
+            'volume-405d6afd-43be-4ce0-9e5f-fd49559e2763', ref3,
+            instance_uuid=uuid3, vol_id=uuid3)
+
+        result = mock.Mock(objects=[
+            non_vol_backing, legacy_vol_backing, vol_backing])
+        self.session.invoke_api.return_value = result
+
+        self.vops.build_backing_ref_cache()
+        exp_cache = {'foo': ref1,
+                     'volume-f36f0e87-97e0-4a1c-b788-2f84f1376960': ref2}
+        self.assertEqual(exp_cache, self.vops._backing_ref_cache)
+        self.session.invoke_api.assert_called_once_with(
+            vim_util,
+            'get_objects',
+            self.session.vim,
+            'VirtualMachine',
+            self.MAX_OBJECTS,
+            properties_to_collect=[
+                'name',
+                'config.instanceUuid',
+                'config.extraConfig["cinder.volume.id"]'])
+        continue_retrieval.assert_called_once_with(result)
 
     def test_delete_backing(self):
         backing = mock.sentinel.backing
@@ -946,6 +989,33 @@ class VolumeOpsTestCase(test.TestCase):
                                                'RemoveSnapshot_Task',
                                                snapshot, removeChildren=False)
             self.session.wait_for_task.assert_called_once_with(task)
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                'get_snapshot')
+    def test_revert_to_snapshot_with_missing_snapshot(self, get_snapshot):
+        get_snapshot.return_value = None
+
+        backing = mock.sentinel.backing
+        self.assertRaises(vmdk_exceptions.SnapshotNotFoundException,
+                          self.vops.revert_to_snapshot, backing, 'foo')
+        get_snapshot.assert_called_once_with(backing, 'foo')
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                'get_snapshot')
+    def test_revert_to_snapshot(self, get_snapshot):
+        snapshot = mock.sentinel.snapshot
+        get_snapshot.return_value = snapshot
+
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        backing = mock.sentinel.backing
+        self.vops.revert_to_snapshot(backing, 'foo')
+
+        get_snapshot.assert_called_once_with(backing, 'foo')
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim, 'RevertToSnapshot_Task', snapshot)
+        self.session.wait_for_task.assert_called_once_with(task)
 
     def test_get_folder(self):
         folder = mock.sentinel.folder
@@ -1773,6 +1843,222 @@ class VolumeOpsTestCase(test.TestCase):
             destinationDatacenter=mock.sentinel.dest_dc_ref)
         self.session.wait_for_task.assert_called_once_with(mock.sentinel.task)
 
+    @ddt.data(volumeops.VirtualDiskType.EAGER_ZEROED_THICK,
+              volumeops.VirtualDiskType.PREALLOCATED,
+              volumeops.VirtualDiskType.THIN)
+    def test_create_fcd_backing_spec(self, disk_type):
+        spec = mock.Mock()
+        self.session.vim.client.factory.create.return_value = spec
+
+        ds_ref = mock.sentinel.ds_ref
+        ret = self.vops._create_fcd_backing_spec(disk_type, ds_ref)
+
+        if disk_type == volumeops.VirtualDiskType.PREALLOCATED:
+            prov_type = 'lazyZeroedThick'
+        else:
+            prov_type = disk_type
+        self.assertEqual(prov_type, ret.provisioningType)
+        self.assertEqual(ds_ref, ret.datastore)
+        self.session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VslmCreateSpecDiskFileBackingSpec')
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                '_create_fcd_backing_spec')
+    def test_create_fcd(self, create_fcd_backing_spec):
+        spec = mock.Mock()
+        self.session.vim.client.factory.create.return_value = spec
+
+        backing_spec = mock.sentinel.backing_spec
+        create_fcd_backing_spec.return_value = backing_spec
+
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        task_info = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        task_info.result.config.id.id = fcd_id
+        self.session.wait_for_task.return_value = task_info
+
+        name = mock.sentinel.name
+        size_mb = 1024
+        ds_ref_val = mock.sentinel.ds_ref_val
+        ds_ref = mock.Mock(value=ds_ref_val)
+        disk_type = mock.sentinel.disk_type
+        ret = self.vops.create_fcd(name, size_mb, ds_ref, disk_type)
+
+        self.assertEqual(fcd_id, ret.fcd_id)
+        self.assertEqual(ds_ref_val, ret.ds_ref_val)
+        self.session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VslmCreateSpec')
+        create_fcd_backing_spec.assert_called_once_with(disk_type, ds_ref)
+        self.assertEqual(1024, spec.capacityInMB)
+        self.assertEqual(name, spec.name)
+        self.assertEqual(backing_spec, spec.backingSpec)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'CreateDisk_Task',
+            self.session.vim.service_content.vStorageObjectManager,
+            spec=spec)
+        self.session.wait_for_task.assert_called_once_with(task)
+
+    def test_delete_fcd(self):
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        fcd_location = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd_location.id.return_value = fcd_id
+        ds_ref = mock.sentinel.ds_ref
+        fcd_location.ds_ref.return_value = ds_ref
+
+        self.vops.delete_fcd(fcd_location)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'DeleteVStorageObject_Task',
+            self.session.vim.service_content.vStorageObjectManager,
+            id=fcd_id,
+            datastore=ds_ref)
+        self.session.wait_for_task(task)
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                '_create_fcd_backing_spec')
+    def test_clone_fcd(self, create_fcd_backing_spec):
+        spec = mock.Mock()
+        self.session.vim.client.factory.create.return_value = spec
+
+        backing_spec = mock.sentinel.backing_spec
+        create_fcd_backing_spec.return_value = backing_spec
+
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        task_info = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        task_info.result.config.id.id = fcd_id
+        self.session.wait_for_task.return_value = task_info
+
+        fcd_location = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd_location.id.return_value = fcd_id
+        ds_ref = mock.sentinel.ds_ref
+        fcd_location.ds_ref.return_value = ds_ref
+
+        name = mock.sentinel.name
+        dest_ds_ref_val = mock.sentinel.dest_ds_ref_val
+        dest_ds_ref = mock.Mock(value=dest_ds_ref_val)
+        disk_type = mock.sentinel.disk_type
+        ret = self.vops.clone_fcd(name, fcd_location, dest_ds_ref, disk_type)
+
+        self.assertEqual(fcd_id, ret.fcd_id)
+        self.assertEqual(dest_ds_ref_val, ret.ds_ref_val)
+        self.session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VslmCloneSpec')
+        create_fcd_backing_spec.assert_called_once_with(disk_type, dest_ds_ref)
+        self.assertEqual(name, spec.name)
+        self.assertEqual(backing_spec, spec.backingSpec)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'CloneVStorageObject_Task',
+            self.session.vim.service_content.vStorageObjectManager,
+            id=fcd_id,
+            datastore=ds_ref,
+            spec=spec)
+        self.session.wait_for_task.assert_called_once_with(task)
+
+    def test_extend_fcd(self):
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        fcd_location = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd_location.id.return_value = fcd_id
+        ds_ref = mock.sentinel.ds_ref
+        fcd_location.ds_ref.return_value = ds_ref
+
+        new_size_mb = 1024
+        self.vops.extend_fcd(fcd_location, new_size_mb)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'ExtendDisk_Task',
+            self.session.vim.service_content.vStorageObjectManager,
+            id=fcd_id,
+            datastore=ds_ref,
+            newCapacityInMB=new_size_mb)
+        self.session.wait_for_task(task)
+
+    def test_register_disk(self):
+        fcd = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd.config.id = mock.Mock(id=fcd_id)
+        self.session.invoke_api.return_value = fcd
+
+        vmdk_url = mock.sentinel.vmdk_url
+        name = mock.sentinel.name
+        ds_ref_val = mock.sentinel.ds_ref_val
+        ds_ref = mock.Mock(value=ds_ref_val)
+        ret = self.vops.register_disk(vmdk_url, name, ds_ref)
+
+        self.assertEqual(fcd_id, ret.fcd_id)
+        self.assertEqual(ds_ref_val, ret.ds_ref_val)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'RegisterDisk',
+            self.session.vim.service_content.vStorageObjectManager,
+            path=vmdk_url,
+            name=name)
+
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                '_create_controller_config_spec')
+    @mock.patch('cinder.volume.drivers.vmware.volumeops.VMwareVolumeOps.'
+                '_reconfigure_backing')
+    def test_attach_fcd(self, reconfigure_backing, create_controller_spec):
+        reconfig_spec = mock.Mock()
+        self.session.vim.client.factory.create.return_value = reconfig_spec
+        spec = mock.Mock()
+        create_controller_spec.return_value = spec
+
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        backing = mock.sentinel.backing
+        fcd_location = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd_location.id.return_value = fcd_id
+        ds_ref = mock.sentinel.ds_ref
+        fcd_location.ds_ref.return_value = ds_ref
+        self.vops.attach_fcd(backing, fcd_location)
+
+        self.session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VirtualMachineConfigSpec')
+        create_controller_spec.assert_called_once_with(
+            volumeops.VirtualDiskAdapterType.LSI_LOGIC)
+        self.assertEqual([spec], reconfig_spec.deviceChange)
+        reconfigure_backing.assert_called_once_with(backing, reconfig_spec)
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'AttachDisk_Task',
+            backing,
+            diskId=fcd_id,
+            datastore=ds_ref)
+        self.session.wait_for_task.assert_called_once_with(task)
+
+    def test_detach_fcd(self):
+        task = mock.sentinel.task
+        self.session.invoke_api.return_value = task
+
+        backing = mock.sentinel.backing
+        fcd_location = mock.Mock()
+        fcd_id = mock.sentinel.fcd_id
+        fcd_location.id.return_value = fcd_id
+        self.vops.detach_fcd(backing, fcd_location)
+
+        self.session.invoke_api.assert_called_once_with(
+            self.session.vim,
+            'DetachDisk_Task',
+            backing,
+            diskId=fcd_id)
+        self.session.wait_for_task.assert_called_once_with(task)
+
 
 class VirtualDiskPathTest(test.TestCase):
     """Unit tests for VirtualDiskPath."""
@@ -1921,3 +2207,44 @@ class ControllerTypeTest(test.TestCase):
             volumeops.ControllerType.PARA_VIRTUAL))
         self.assertFalse(volumeops.ControllerType.is_scsi_controller(
             volumeops.ControllerType.IDE))
+
+
+class FcdLocationTest(test.TestCase):
+    """Unit tests for FcdLocation."""
+
+    def test_create(self):
+        fcd_id = mock.sentinel.fcd_id
+        fcd_id_obj = mock.Mock(id=fcd_id)
+        ds_ref_val = mock.sentinel.ds_ref_val
+        ds_ref = mock.Mock(value=ds_ref_val)
+        fcd_loc = volumeops.FcdLocation.create(fcd_id_obj, ds_ref)
+        self.assertEqual(fcd_id, fcd_loc.fcd_id)
+        self.assertEqual(ds_ref_val, fcd_loc.ds_ref_val)
+
+    def test_provider_location(self):
+        fcd_loc = volumeops.FcdLocation('123', 'ds1')
+        self.assertEqual('123@ds1', fcd_loc.provider_location())
+
+    def test_ds_ref(self):
+        fcd_loc = volumeops.FcdLocation('123', 'ds1')
+        ds_ref = fcd_loc.ds_ref()
+        self.assertEqual('ds1', ds_ref.value)
+
+    def test_id(self):
+        id_obj = mock.Mock()
+        cf = mock.Mock()
+        cf.create.return_value = id_obj
+
+        fcd_loc = volumeops.FcdLocation('123', 'ds1')
+        fcd_id = fcd_loc.id(cf)
+        self.assertEqual('123', fcd_id.id)
+        cf.create.assert_called_once_with('ns0:ID')
+
+    def test_from_provider_location(self):
+        fcd_loc = volumeops.FcdLocation.from_provider_location('123@ds1')
+        self.assertEqual('123', fcd_loc.fcd_id)
+        self.assertEqual('ds1', fcd_loc.ds_ref_val)
+
+    def test_str(self):
+        fcd_loc = volumeops.FcdLocation('123', 'ds1')
+        self.assertEqual('123@ds1', str(fcd_loc))

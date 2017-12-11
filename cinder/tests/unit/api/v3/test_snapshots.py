@@ -14,14 +14,15 @@
 #    under the License.
 
 import ddt
-
 import mock
+from oslo_utils import strutils
 
 from cinder.api import microversions as mv
 from cinder.api.v3 import snapshots
 from cinder import context
 from cinder import exception
 from cinder.objects import fields
+from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import test
 from cinder.tests.unit.api import fakes
 from cinder.tests.unit import fake_constants as fake
@@ -34,7 +35,7 @@ UUID = '00000000-0000-0000-0000-000000000001'
 INVALID_UUID = '00000000-0000-0000-0000-000000000002'
 
 
-def stub_get(self, context, *args, **kwargs):
+def fake_get(self, context, *args, **kwargs):
     vol = {'id': fake.VOLUME_ID,
            'size': 100,
            'name': 'fake',
@@ -64,7 +65,8 @@ def create_snapshot_query_with_metadata(metadata_query_string,
 class SnapshotApiTest(test.TestCase):
     def setUp(self):
         super(SnapshotApiTest, self).setUp()
-        self.stubs.Set(volume.api.API, 'get', stub_get)
+        self.mock_object(volume.api.API, 'get', fake_get)
+        self.mock_object(scheduler_rpcapi.SchedulerAPI, 'create_snapshot')
         self.controller = snapshots.SnapshotsController()
         self.ctx = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True)
 
@@ -150,6 +152,97 @@ class SnapshotApiTest(test.TestCase):
 
         self.assertEqual(1, len(res_dict['snapshots']))
         self.assertEqual(snapshot1.id, res_dict['snapshots'][0]['id'])
+
+    def _create_multiple_snapshots_with_different_project(self):
+        volume1 = test_utils.create_volume(self.ctx,
+                                           project=fake.PROJECT_ID)
+        volume2 = test_utils.create_volume(self.ctx,
+                                           project=fake.PROJECT2_ID)
+        test_utils.create_snapshot(
+            context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True),
+            volume1.id)
+        test_utils.create_snapshot(
+            context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True),
+            volume1.id)
+        test_utils.create_snapshot(
+            context.RequestContext(fake.USER_ID, fake.PROJECT2_ID, True),
+            volume2.id)
+
+    @ddt.data('snapshots', 'snapshots/detail')
+    def test_list_snapshot_with_count_param_version_not_matched(self, action):
+        self._create_multiple_snapshots_with_different_project()
+
+        is_detail = True if 'detail' in action else False
+        req = fakes.HTTPRequest.blank("/v3/%s?with_count=True" % action)
+        req.headers = mv.get_mv_header(
+            mv.get_prior_version(mv.SUPPORT_COUNT_INFO))
+        req.api_version_request = mv.get_api_version(
+            mv.get_prior_version(mv.SUPPORT_COUNT_INFO))
+        ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True)
+        req.environ['cinder.context'] = ctxt
+        res_dict = self.controller._items(req, is_detail=is_detail)
+        self.assertNotIn('count', res_dict)
+
+    @ddt.data({'method': 'snapshots',
+               'display_param': 'True'},
+              {'method': 'snapshots',
+               'display_param': 'False'},
+              {'method': 'snapshots',
+               'display_param': '1'},
+              {'method': 'snapshots/detail',
+               'display_param': 'True'},
+              {'method': 'snapshots/detail',
+               'display_param': 'False'},
+              {'method': 'snapshots/detail',
+               'display_param': '1'}
+              )
+    @ddt.unpack
+    def test_list_snapshot_with_count_param(self, method, display_param):
+        self._create_multiple_snapshots_with_different_project()
+
+        is_detail = True if 'detail' in method else False
+        show_count = strutils.bool_from_string(display_param, strict=True)
+        # Request with 'with_count' and 'limit'
+        req = fakes.HTTPRequest.blank(
+            "/v3/%s?with_count=%s&limit=1" % (method, display_param))
+        req.headers = mv.get_mv_header(mv.SUPPORT_COUNT_INFO)
+        req.api_version_request = mv.get_api_version(mv.SUPPORT_COUNT_INFO)
+        ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, False)
+        req.environ['cinder.context'] = ctxt
+        res_dict = self.controller._items(req, is_detail=is_detail)
+        self.assertEqual(1, len(res_dict['snapshots']))
+        if show_count:
+            self.assertEqual(2, res_dict['count'])
+        else:
+            self.assertNotIn('count', res_dict)
+
+        # Request with 'with_count'
+        req = fakes.HTTPRequest.blank(
+            "/v3/%s?with_count=%s" % (method, display_param))
+        req.headers = mv.get_mv_header(mv.SUPPORT_COUNT_INFO)
+        req.api_version_request = mv.get_api_version(mv.SUPPORT_COUNT_INFO)
+        ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, False)
+        req.environ['cinder.context'] = ctxt
+        res_dict = self.controller._items(req, is_detail=is_detail)
+        self.assertEqual(2, len(res_dict['snapshots']))
+        if show_count:
+            self.assertEqual(2, res_dict['count'])
+        else:
+            self.assertNotIn('count', res_dict)
+
+        # Request with admin context and 'all_tenants'
+        req = fakes.HTTPRequest.blank(
+            "/v3/%s?with_count=%s&all_tenants=1" % (method, display_param))
+        req.headers = mv.get_mv_header(mv.SUPPORT_COUNT_INFO)
+        req.api_version_request = mv.get_api_version(mv.SUPPORT_COUNT_INFO)
+        ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True)
+        req.environ['cinder.context'] = ctxt
+        res_dict = self.controller._items(req, is_detail=is_detail)
+        self.assertEqual(3, len(res_dict['snapshots']))
+        if show_count:
+            self.assertEqual(3, res_dict['count'])
+        else:
+            self.assertNotIn('count', res_dict)
 
     def test_snapshot_list_with_sort_name(self):
         self._create_snapshot(name='test1')

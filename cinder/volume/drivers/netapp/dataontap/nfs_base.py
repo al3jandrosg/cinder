@@ -25,7 +25,6 @@ import copy
 import math
 import os
 import re
-import shutil
 import threading
 import time
 
@@ -112,9 +111,7 @@ class NetAppNfsDriver(driver.ManageableVD,
             loopingcalls.ONE_HOUR)
 
     def _delete_snapshots_marked_for_deletion(self):
-        volume_list = self._get_backing_flexvol_names()
-        snapshots = self.zapi_client.get_snapshots_marked_for_deletion(
-            volume_list)
+        snapshots = self.zapi_client.get_snapshots_marked_for_deletion()
         for snapshot in snapshots:
             self.zapi_client.delete_snapshot(
                 snapshot['volume_name'], snapshot['name'])
@@ -1001,11 +998,13 @@ class NetAppNfsDriver(driver.ManageableVD,
             src_vol = os.path.join(nfs_mount, vol_path)
             dst_vol = os.path.join(nfs_mount, volume['name'])
             try:
-                shutil.move(src_vol, dst_vol)
+                self._execute("mv", src_vol, dst_vol,
+                              run_as_root=self._execute_as_root,
+                              check_exit_code=True)
                 LOG.debug("Setting newly managed Cinder volume name to %s",
                           volume['name'])
                 self._set_rw_permissions_for_all(dst_vol)
-            except (OSError, IOError) as err:
+            except processutils.ProcessExecutionError as err:
                 exception_msg = (_("Failed to manage existing volume %(name)s,"
                                    " because rename operation failed:"
                                    " Error msg: %(msg)s."),

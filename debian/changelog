@@ -1,3 +1,16 @@
+cinder (2:12.0.0~b2-0ubuntu1) bionic; urgency=medium
+
+  * d/watch: Scope to 12.x series.
+  * New upstream milestone for OpenStack Queens.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/*: wrap-and-sort -bast.
+  * d/rules: Switch back to ostestr for unit test execution.
+  * d/control,compat: Bump debhelper compat to 10, drop BD on dh-
+    systemd.
+  * d/control: Bumped Standards-Version to 4.1.2.
+
+ -- James Page <james.page@ubuntu.com>  Mon, 11 Dec 2017 11:43:44 +0000
+
 cinder (2:12.0.0~b1-0ubuntu1) bionic; urgency=medium
 
   * New upstream milestone for OpenStack Queens.

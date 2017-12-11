@@ -37,8 +37,8 @@ from cinder.cmd import rtstool as cinder_rtstool
 from cinder.cmd import scheduler as cinder_scheduler
 from cinder.cmd import volume as cinder_volume
 from cinder.cmd import volume_usage_audit
-from cinder.common import constants
 from cinder import context
+from cinder.db.sqlalchemy import api as sqlalchemy_api
 from cinder import exception
 from cinder.objects import fields
 from cinder import test
@@ -46,7 +46,9 @@ from cinder.tests.unit import fake_cluster
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_service
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import utils
 from cinder import version
+from cinder.volume import rpcapi
 
 CONF = cfg.CONF
 
@@ -78,8 +80,9 @@ class TestCinderApiCmd(test.TestCase):
         rpc_init.assert_called_once_with(CONF)
         process_launcher.assert_called_once_with()
         wsgi_service.assert_called_once_with('osapi_volume')
-        launcher.launch_service.assert_called_once_with(server,
-                                                        workers=server.workers)
+        launcher.launch_service.assert_called_once_with(
+            server,
+            workers=server.workers)
         launcher.wait.assert_called_once_with()
 
 
@@ -215,7 +218,7 @@ class TestCinderManageCmd(test.TestCase):
 
     @mock.patch("oslo_db.sqlalchemy.migration.db_sync")
     def test_db_commands_script_not_present(self, db_sync):
-        db_sync.side_effect = oslo_exception.DbMigrationError
+        db_sync.side_effect = oslo_exception.DBMigrationError(None)
         db_cmds = cinder_manage.DbCommands()
         exit = self.assertRaises(SystemExit, db_cmds.sync, 101)
         self.assertEqual(1, exit.code)
@@ -227,7 +230,7 @@ class TestCinderManageCmd(test.TestCase):
         exit = self.assertRaises(SystemExit, db_cmds.online_data_migrations)
         self.assertEqual(0, exit.code)
         cinder_manage.DbCommands.online_migrations[0].assert_has_calls(
-            (mock.call(mock.ANY, 50, False),) * 2)
+            (mock.call(mock.ANY, 50),) * 2)
 
     def _fake_db_command(self, migrations=None):
         if migrations is None:
@@ -254,17 +257,17 @@ class TestCinderManageCmd(test.TestCase):
         expected = """\
 5 rows matched query mock_mig_1, 4 migrated, 1 remaining
 6 rows matched query mock_mig_2, 6 migrated, 0 remaining
-+------------+-------+------+-----------+
-| Migration  | Found | Done | Remaining |
-+------------+-------+------+-----------+
-| mock_mig_1 |   5   |  4   |     1     |
-| mock_mig_2 |   6   |  6   |     0     |
-+------------+-------+------+-----------+
++------------+--------------+-----------+
+| Migration  | Total Needed | Completed |
++------------+--------------+-----------+
+| mock_mig_1 |      5       |     4     |
+| mock_mig_2 |      6       |     6     |
++------------+--------------+-----------+
 """
         command.online_migrations[0].assert_has_calls([mock.call(ctxt,
-                                                                 10, False)])
+                                                                 10)])
         command.online_migrations[1].assert_has_calls([mock.call(ctxt,
-                                                                 6, False)])
+                                                                 6)])
 
         self.assertEqual(expected, sys.stdout.getvalue())
 
@@ -273,10 +276,10 @@ class TestCinderManageCmd(test.TestCase):
     def test_db_commands_online_data_migrations_ignore_state_and_max(self):
         db_cmds = cinder_manage.DbCommands()
         exit = self.assertRaises(SystemExit, db_cmds.online_data_migrations,
-                                 2, True)
+                                 2)
         self.assertEqual(1, exit.code)
         cinder_manage.DbCommands.online_migrations[0].assert_called_once_with(
-            mock.ANY, 2, True)
+            mock.ANY, 2)
 
     @mock.patch('cinder.cmd.manage.DbCommands.online_migrations',
                 (mock.Mock(side_effect=((2, 2), (0, 0)), __name__='foo'),))
@@ -300,10 +303,6 @@ class TestCinderManageCmd(test.TestCase):
         with mock.patch('sys.stdout', new=six.StringIO()):
             version_cmds.__call__()
             version_string.assert_called_once_with()
-
-    def test_purge_age_in_days_value_equal_to_zero(self):
-        age_in_days = 0
-        self._test_purge_invalid_age_in_days(age_in_days)
 
     def test_purge_with_negative_age_in_days(self):
         age_in_days = -1
@@ -335,8 +334,10 @@ class TestCinderManageCmd(test.TestCase):
     @mock.patch('cinder.context.get_admin_context')
     def test_host_commands_list(self, get_admin_context, service_get_all):
         get_admin_context.return_value = mock.sentinel.ctxt
-        service_get_all.return_value = [{'host': 'fake-host',
-                                         'availability_zone': 'fake-az'}]
+        service_get_all.return_value = [
+            {'host': 'fake-host',
+             'availability_zone': 'fake-az',
+             'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}]
 
         with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
             expected_out = ("%(host)-25s\t%(zone)-15s\n" %
@@ -356,10 +357,13 @@ class TestCinderManageCmd(test.TestCase):
     def test_host_commands_list_with_zone(self, get_admin_context,
                                           service_get_all):
         get_admin_context.return_value = mock.sentinel.ctxt
-        service_get_all.return_value = [{'host': 'fake-host',
-                                         'availability_zone': 'fake-az1'},
-                                        {'host': 'fake-host',
-                                         'availability_zone': 'fake-az2'}]
+        service_get_all.return_value = [
+            {'host': 'fake-host',
+             'availability_zone': 'fake-az1',
+             'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'},
+            {'host': 'fake-host',
+             'availability_zone': 'fake-az2',
+             'uuid': '4200b32b-0bf9-436c-86b2-0675f6ac218e'}]
 
         with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
             expected_out = ("%(host)-25s\t%(zone)-15s\n" %
@@ -373,26 +377,6 @@ class TestCinderManageCmd(test.TestCase):
             get_admin_context.assert_called_once_with()
             service_get_all.assert_called_once_with(mock.sentinel.ctxt)
             self.assertEqual(expected_out, fake_out.getvalue())
-
-    @mock.patch('cinder.objects.base.CinderObjectSerializer')
-    @mock.patch('cinder.rpc.get_client')
-    @mock.patch('cinder.rpc.init')
-    @mock.patch('cinder.rpc.initialized', return_value=False)
-    @mock.patch('oslo_messaging.Target')
-    def test_volume_commands_init(self, messaging_target, rpc_initialized,
-                                  rpc_init, get_client, object_serializer):
-        mock_target = messaging_target.return_value
-        mock_rpc_client = get_client.return_value
-
-        volume_cmds = cinder_manage.VolumeCommands()
-        rpc_client = volume_cmds._rpc_client()
-
-        rpc_initialized.assert_called_once_with()
-        rpc_init.assert_called_once_with(CONF)
-        messaging_target.assert_called_once_with(topic=constants.VOLUME_TOPIC)
-        get_client.assert_called_once_with(mock_target,
-                                           serializer=object_serializer())
-        self.assertEqual(mock_rpc_client, rpc_client)
 
     @mock.patch('cinder.db.sqlalchemy.api.volume_get')
     @mock.patch('cinder.context.get_admin_context')
@@ -418,10 +402,16 @@ class TestCinderManageCmd(test.TestCase):
         volume_cmds.delete(volume_id)
 
         volume_get.assert_called_once_with(ctxt, volume_id)
-        mock_client.prepare.assert_called_once_with(server=host)
-        cctxt.cast.assert_called_once_with(ctxt, 'delete_volume',
-                                           volume_id=volume['id'],
-                                           volume=volume_obj)
+        mock_client.prepare.assert_called_once_with(
+            server="fake",
+            topic="cinder-volume.fake@host",
+            version="3.0")
+
+        cctxt.cast.assert_called_once_with(
+            ctxt, 'delete_volume',
+            cascade=False,
+            unmanage_only=False,
+            volume=volume_obj)
 
     @mock.patch('cinder.db.volume_destroy')
     @mock.patch('cinder.db.sqlalchemy.api.volume_get')
@@ -692,7 +682,8 @@ class TestCinderManageCmd(test.TestCase):
                    'disabled': False,
                    'rpc_current_version': '1.1',
                    'object_current_version': '1.1',
-                   'cluster_name': 'my_cluster'}
+                   'cluster_name': 'my_cluster',
+                   'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}
         for binary in ('volume', 'scheduler', 'backup'):
             service['binary'] = 'cinder-%s' % binary
             self._test_service_commands_list(service)
@@ -704,7 +695,8 @@ class TestCinderManageCmd(test.TestCase):
                    'updated_at': None,
                    'disabled': False,
                    'rpc_current_version': '1.1',
-                   'object_current_version': '1.1'}
+                   'object_current_version': '1.1',
+                   'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}
         for binary in ('volume', 'scheduler', 'backup'):
             service['binary'] = 'cinder-%s' % binary
             self._test_service_commands_list(service)
@@ -965,7 +957,10 @@ class TestCinderManageCmd(test.TestCase):
         self.assertEqual(2, exit)
 
     @mock.patch('cinder.db.service_destroy')
-    @mock.patch('cinder.db.service_get', return_value = {'id': '12'})
+    @mock.patch(
+        'cinder.db.service_get',
+        return_value = {'id': '12',
+                        'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'})
     def test_remove_service_success(self, mock_get_by_args,
                                     mock_service_destroy):
         service_commands = cinder_manage.ServiceCommands()
@@ -2012,3 +2007,97 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
             mock.call(ctxt, backup1, 'delete.end',
                       extra_usage_info=extra_info_backup_delete)
         ])
+
+
+class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
+    """Unit tests for cinder.db.api.service_*."""
+
+    def setUp(self):
+        super(TestVolumeSharedTargetsOnlineMigration, self).setUp()
+
+        def _get_minimum_rpc_version_mock(ctxt, binary):
+            binary_map = {
+                'cinder-volume': rpcapi.VolumeAPI,
+            }
+            return binary_map[binary].RPC_API_VERSION
+
+        self.patch('cinder.objects.Service.get_minimum_rpc_version',
+                   side_effect=_get_minimum_rpc_version_mock)
+
+    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
+                return_value='1.8')
+    def test_shared_targets_migrations(self, mock_version):
+        """Ensure we can update the column."""
+        ctxt = context.get_admin_context()
+        sqlalchemy_api.volume_create(
+            ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'service_uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'})
+
+        # Create another one correct setting
+        sqlalchemy_api.volume_create(
+            ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'shared_targets': False,
+             'service_uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'})
+
+        # Need a service to query
+        values = {
+            'host': 'host1@lvm-driver1',
+            'binary': 'cinder-volume',
+            'topic': 'cinder-volume',
+            'uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'}
+        utils.create_service(ctxt, values)
+
+        # Run the migration and verify that we updated 1 entry
+        with mock.patch('cinder.volume.rpcapi.VolumeAPI.get_capabilities',
+                        return_value={'shared_targets': False}):
+            total, updated = (
+                cinder_manage.shared_targets_online_data_migration(
+                    ctxt, 10))
+            self.assertEqual(1, total)
+            self.assertEqual(1, updated)
+
+    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
+                return_value='1.8')
+    def test_shared_targets_migrations_with_limit(self, mock_version):
+        """Ensure we update in batches."""
+        ctxt = context.get_admin_context()
+        # default value in db for shared_targets on a volume
+        # is True, so don't need to set it here explicitly
+        sqlalchemy_api.volume_create(
+            ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'service_uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'})
+
+        sqlalchemy_api.volume_create(
+            ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'service_uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'})
+
+        sqlalchemy_api.volume_create(
+            ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'service_uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'})
+
+        values = {
+            'host': 'host1@lvm-driver1',
+            'binary': 'cinder-volume',
+            'topic': 'cinder-volume',
+            'uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'}
+        utils.create_service(ctxt, values)
+
+        # Run the migration and verify that we updated 1 entry
+        with mock.patch('cinder.volume.rpcapi.VolumeAPI.get_capabilities',
+                        return_value={'shared_targets': False}):
+            total, updated = (
+                cinder_manage.shared_targets_online_data_migration(
+                    ctxt, 2))
+            self.assertEqual(3, total)
+            self.assertEqual(2, updated)
+
+            total, updated = (
+                cinder_manage.shared_targets_online_data_migration(
+                    ctxt, 2))
+            self.assertEqual(1, total)
+            self.assertEqual(1, updated)

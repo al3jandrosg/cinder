@@ -25,14 +25,13 @@ import functools
 import itertools
 import re
 import sys
-import threading
 import time
 import uuid
 
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_db import options
-from oslo_db.sqlalchemy import session as db_session
+from oslo_db.sqlalchemy import enginefacade
 from oslo_log import log as logging
 from oslo_utils import importutils
 from oslo_utils import timeutils
@@ -68,42 +67,30 @@ LOG = logging.getLogger(__name__)
 
 options.set_defaults(CONF, connection='sqlite:///$state_path/cinder.sqlite')
 
-_LOCK = threading.Lock()
-_FACADE = None
+main_context_manager = enginefacade.transaction_context()
 
 
-def _create_facade_lazily():
-    global _LOCK
-    with _LOCK:
-        global _FACADE
-        if _FACADE is None:
-            _FACADE = db_session.EngineFacade(
-                CONF.database.connection,
-                **dict(CONF.database)
-            )
-
-            # NOTE(geguileo): To avoid a cyclical dependency we import the
-            # group here.  Dependency cycle is objects.base requires db.api,
-            # which requires db.sqlalchemy.api, which requires service which
-            # requires objects.base
-            CONF.import_group("profiler", "cinder.service")
-            if CONF.profiler.enabled:
-                if CONF.profiler.trace_sqlalchemy:
-                    osprofiler_sqlalchemy.add_tracing(sqlalchemy,
-                                                      _FACADE.get_engine(),
-                                                      "db")
-
-        return _FACADE
+def configure(conf):
+    main_context_manager.configure(**dict(conf.database))
+    # NOTE(geguileo): To avoid a cyclical dependency we import the
+    # group here.  Dependency cycle is objects.base requires db.api,
+    # which requires db.sqlalchemy.api, which requires service which
+    # requires objects.base
+    CONF.import_group("profiler", "cinder.service")
+    if CONF.profiler.enabled:
+        if CONF.profiler.trace_sqlalchemy:
+            lambda eng: osprofiler_sqlalchemy.add_tracing(sqlalchemy,
+                                                          eng, "db")
 
 
-def get_engine():
-    facade = _create_facade_lazily()
-    return facade.get_engine()
+def get_engine(use_slave=False):
+    return main_context_manager._factory.get_legacy_facade().get_engine(
+        use_slave=use_slave)
 
 
-def get_session(**kwargs):
-    facade = _create_facade_lazily()
-    return facade.get_session(**kwargs)
+def get_session(use_slave=False, **kwargs):
+    return main_context_manager._factory.get_legacy_facade().get_session(
+        use_slave=use_slave, **kwargs)
 
 
 def dispose_engine():
@@ -274,11 +261,12 @@ def handle_db_data_error(f):
 def model_query(context, model, *args, **kwargs):
     """Query helper that accounts for context's `read_deleted` field.
 
-    :param context: context to query under
-    :param session: if present, the session to use
+    :param context:      context to query under
+    :param model:        Model to query. Must be a subclass of ModelBase.
+    :param args:         Arguments to query. If None - model is used.
     :param read_deleted: if present, overrides context's read_deleted field.
     :param project_only: if present and context is user-type, then restrict
-            query to match the context's project_id.
+                         query to match the context's project_id.
     """
     session = kwargs.get('session') or get_session()
     read_deleted = kwargs.get('read_deleted') or context.read_deleted
@@ -556,10 +544,17 @@ def service_get_all(context, backend_match_level=None, **filters):
 
 
 @require_admin_context
-def service_create(context, values):
-    if not values.get('uuid'):
-        values['uuid'] = str(uuid.uuid4())
+def service_get_by_uuid(context, service_uuid):
+    query = model_query(context, models.Service).fitler_by(uuid=service_uuid)
+    result = query.first()
+    if not result:
+        raise exception.ServiceNotFound(service_id=service_uuid)
 
+    return result
+
+
+@require_admin_context
+def service_create(context, values):
     service_ref = models.Service()
     service_ref.update(values)
     if not CONF.enable_new_services:
@@ -585,6 +580,90 @@ def service_update(context, service_id, values):
         raise exception.ServiceNotFound(service_id=service_id)
 
 
+@enginefacade.writer
+def service_uuids_online_data_migration(context, max_count):
+    from cinder.objects import service
+
+    updated = 0
+    total = model_query(context, models.Service).filter_by(uuid=None).count()
+    db_services = model_query(context, models.Service).filter_by(
+        uuid=None).limit(max_count).all()
+    for db_service in db_services:
+        # The conversion in the Service object code
+        # will generate a UUID and save it for us.
+        service_obj = service.Service._from_db_object(
+            context, service.Service(), db_service)
+        if 'uuid' in service_obj:
+            updated += 1
+    return total, updated
+
+
+@require_admin_context
+def backup_service_online_migration(context, max_count):
+    name_rules = {'cinder.backup.drivers.swift':
+                  'cinder.backup.drivers.swift.SwiftBackupDriver',
+                  'cinder.backup.drivers.ceph':
+                  'cinder.backup.drivers.ceph.CephBackupDriver',
+                  'cinder.backup.drivers.glusterfs':
+                  'cinder.backup.drivers.glusterfs.GlusterfsBackupDriver',
+                  'cinder.backup.drivers.google':
+                  'cinder.backup.drivers.google.GoogleBackupDriver',
+                  'cinder.backup.drivers.nfs':
+                  'cinder.backup.drivers.nfs.NFSBackupDriver',
+                  'cinder.backup.drivers.tsm':
+                  'cinder.backup.drivers.tsm.TSMBackupDriver',
+                  'cinder.backup.drivers.posix':
+                  'cinder.backup.drivers.posix.PosixBackupDriver'}
+    total = 0
+    updated = 0
+    session = get_session()
+    with session.begin():
+        total = model_query(
+            context, models.Backup, session=session).filter(
+            models.Backup.service.in_(name_rules.keys())).count()
+        backups = (model_query(
+            context, models.Backup, session=session).filter(
+            models.Backup.service.in_(
+                name_rules.keys())).limit(max_count)).all()
+        if len(backups):
+            for backup in backups:
+                updated += 1
+                backup.service = name_rules[backup.service]
+
+    return total, updated
+
+
+@enginefacade.writer
+def volume_service_uuids_online_data_migration(context, max_count):
+    """Update volume service_uuid columns."""
+
+    updated = 0
+    query = model_query(context,
+                        models.Volume).filter_by(service_uuid=None)
+    total = query.count()
+    vol_refs = query.limit(max_count).all()
+
+    service_refs = model_query(context, models.Service).filter_by(
+        topic="cinder-volume").limit(max_count).all()
+
+    # build a map to access the service uuid by host
+    svc_map = {}
+    for svc in service_refs:
+        svc_map[svc.host] = svc.uuid
+
+    # update our volumes appropriately
+    for v in vol_refs:
+        host = v.host.split('#')
+        v['service_uuid'] = svc_map[host[0]]
+        # re-use the session we already have associated with the
+        # volumes here (from the query above)
+        session = query.session
+        with session.begin():
+            v.save(session)
+        updated += 1
+    return total, updated
+
+
 ###################
 
 
@@ -604,6 +683,7 @@ def is_backend_frozen(context, host, cluster_name):
 
 
 ###################
+
 
 def _cluster_query(context, is_up=None, get_services=False,
                    services_summary=False, read_deleted='no',
@@ -1389,7 +1469,7 @@ def quota_destroy_by_project(*args, **kwargs):
     quota_destroy_all_by_project(only_quotas=True, *args, **kwargs)
 
 
-@require_admin_context
+@require_context
 @_retry_on_deadlock
 def quota_destroy_all_by_project(context, project_id, only_quotas=False):
     """Destroy all quotas associated with a project.
@@ -1578,13 +1658,15 @@ def volume_data_get_for_host(context, host, count_only=False):
 
 @require_admin_context
 def _volume_data_get_for_project(context, project_id, volume_type_id=None,
-                                 session=None):
+                                 session=None, host=None):
     query = model_query(context,
                         func.count(models.Volume.id),
                         func.sum(models.Volume.size),
                         read_deleted="no",
                         session=session).\
         filter_by(project_id=project_id)
+    if host:
+        query = query.filter(_filter_host(models.Volume.host, host))
 
     if volume_type_id:
         query = query.filter_by(volume_type_id=volume_type_id)
@@ -1615,8 +1697,10 @@ def _backup_data_get_for_project(context, project_id, volume_type_id=None,
 
 
 @require_admin_context
-def volume_data_get_for_project(context, project_id, volume_type_id=None):
-    return _volume_data_get_for_project(context, project_id, volume_type_id)
+def volume_data_get_for_project(context, project_id,
+                                volume_type_id=None, host=None):
+    return _volume_data_get_for_project(context, project_id,
+                                        volume_type_id, host=host)
 
 
 @require_admin_context
@@ -2329,6 +2413,23 @@ def _generate_paginate_query(context, session, marker, limit, sort_keys,
                                           marker=marker_object,
                                           sort_dirs=sort_dirs,
                                           offset=offset)
+
+
+def calculate_resource_count(context, resource_type, filters):
+    """Calculate total count with filters applied"""
+
+    session = get_session()
+    if resource_type not in CALCULATE_COUNT_HELPERS.keys():
+        raise exception.InvalidInput(
+            reason=_("Model %s doesn't support "
+                     "counting resource.") % resource_type)
+    get_query, process_filters = CALCULATE_COUNT_HELPERS[resource_type]
+    query = get_query(context, session=session)
+    if filters:
+        query = process_filters(query, filters)
+        if query is None:
+            return 0
+    return query.with_entities(func.count()).scalar()
 
 
 @apply_like_filters(model=models.Volume)
@@ -3194,27 +3295,31 @@ def snapshot_get_all_by_project(context, project_id, filters=None, marker=None,
 
 @require_context
 def _snapshot_data_get_for_project(context, project_id, volume_type_id=None,
-                                   session=None):
+                                   session=None, host=None):
     authorize_project_context(context, project_id)
     query = model_query(context,
                         func.count(models.Snapshot.id),
                         func.sum(models.Snapshot.volume_size),
                         read_deleted="no",
-                        session=session).\
-        filter_by(project_id=project_id)
-
-    if volume_type_id:
-        query = query.join('volume').filter_by(volume_type_id=volume_type_id)
-
-    result = query.first()
+                        session=session)
+    if volume_type_id or host:
+        query = query.join('volume')
+        if volume_type_id:
+            query = query.filter(
+                models.Volume.volume_type_id == volume_type_id)
+        if host:
+            query = query.filter(_filter_host(models.Volume.host, host))
+    result = query.filter(models.Snapshot.project_id == project_id).first()
 
     # NOTE(vish): convert None to 0
     return (result[0] or 0, result[1] or 0)
 
 
 @require_context
-def snapshot_data_get_for_project(context, project_id, volume_type_id=None):
-    return _snapshot_data_get_for_project(context, project_id, volume_type_id)
+def snapshot_data_get_for_project(context, project_id,
+                                  volume_type_id=None, host=None):
+    return _snapshot_data_get_for_project(context, project_id, volume_type_id,
+                                          host=host)
 
 
 @require_context
@@ -6556,6 +6661,13 @@ PAGINATION_HELPERS = {
 }
 
 
+CALCULATE_COUNT_HELPERS = {
+    'volume': (_volume_get_query, _process_volume_filters),
+    'snapshot': (_snaps_get_query, _process_snaps_filters),
+    'backup': (_backups_get_query, _process_backups_filters),
+}
+
+
 ###############################
 
 
@@ -6784,8 +6896,10 @@ def worker_destroy(context, **filters):
 
 @require_context
 def resource_exists(context, model, resource_id, session=None):
+    conditions = [model.id == resource_id]
     # Match non deleted resources by the id
-    conditions = [model.id == resource_id, ~model.deleted]
+    if 'no' == context.read_deleted:
+        conditions.append(~model.deleted)
     # If the context is not admin we limit it to the context's project
     if is_user_context(context) and hasattr(model, 'project_id'):
         conditions.append(model.project_id == context.project_id)

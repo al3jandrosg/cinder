@@ -615,6 +615,18 @@ class AdminActionsTest(BaseAdminTest):
         volume = self._migrate_volume_exec(self.ctx, volume, host,
                                            expected_status)
 
+    def test_migrate_volume_replication_not_caple_success(self):
+        expected_status = http_client.ACCEPTED
+        host = 'test2'
+        volume = self._migrate_volume_prep()
+        # current status is available
+        volume = self._create_volume(self.ctx,
+                                     {'provider_location': '',
+                                      'attach_status': None,
+                                      'replication_status': 'not-capable'})
+        volume = self._migrate_volume_exec(self.ctx, volume, host,
+                                           expected_status)
+
     def test_migrate_volume_as_non_admin(self):
         expected_status = http_client.FORBIDDEN
         host = 'test2'
@@ -770,7 +782,8 @@ class AdminActionsTest(BaseAdminTest):
                                   mock_service_get_all):
         mock_service_get_all.return_value = [
             {'availability_zone': "az1", 'host': 'testhost',
-             'disabled': 0, 'updated_at': timeutils.utcnow()}]
+             'disabled': 0, 'updated_at': timeutils.utcnow(),
+             'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}]
         # admin context
         mock_check_support.return_value = True
         # current status is dependent on argument: test_status.

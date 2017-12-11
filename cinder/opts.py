@@ -74,6 +74,10 @@ from cinder.volume.drivers.coprhd import common as \
     cinder_volume_drivers_coprhd_common
 from cinder.volume.drivers.coprhd import scaleio as \
     cinder_volume_drivers_coprhd_scaleio
+from cinder.volume.drivers.datacore import driver as \
+    cinder_volume_drivers_datacore_driver
+from cinder.volume.drivers.datacore import iscsi as \
+    cinder_volume_drivers_datacore_iscsi
 from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell_emc import ps as \
@@ -123,6 +127,10 @@ from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_fc as \
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_iscsi as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvciscsi
 from cinder.volume.drivers import infinidat as cinder_volume_drivers_infinidat
+from cinder.volume.drivers.inspur.instorage import instorage_common as \
+    cinder_volume_drivers_inspur_instorage_instoragecommon
+from cinder.volume.drivers.inspur.instorage import instorage_iscsi as \
+    cinder_volume_drivers_inspur_instorage_instorageiscsi
 from cinder.volume.drivers.kaminario import kaminario_common as \
     cinder_volume_drivers_kaminario_kaminariocommon
 from cinder.volume.drivers.lenovo import lenovo_common as \
@@ -137,6 +145,7 @@ from cinder.volume.drivers import nimble as cinder_volume_drivers_nimble
 from cinder.volume.drivers.prophetstor import options as \
     cinder_volume_drivers_prophetstor_options
 from cinder.volume.drivers import pure as cinder_volume_drivers_pure
+from cinder.volume.drivers import qnap as cinder_volume_drivers_qnap
 from cinder.volume.drivers import quobyte as cinder_volume_drivers_quobyte
 from cinder.volume.drivers import rbd as cinder_volume_drivers_rbd
 from cinder.volume.drivers import remotefs as cinder_volume_drivers_remotefs
@@ -241,6 +250,12 @@ def list_opts():
                 [cinder_volume_api.az_cache_time_opt],
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
+                cinder_volume_drivers_datacore_driver.datacore_opts,
+                cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
+                cinder_volume_drivers_inspur_instorage_instoragecommon.
+                instorage_mcs_opts,
+                cinder_volume_drivers_inspur_instorage_instorageiscsi.
+                instorage_mcs_iscsi_opts,
                 cinder_volume_manager.volume_manager_opts,
                 cinder_wsgi_eventletserver.socket_opts,
             )),
@@ -303,7 +318,6 @@ def list_opts():
                 cinder_volume_drivers_netapp_options.netapp_transport_opts,
                 cinder_volume_drivers_netapp_options.netapp_basicauth_opts,
                 cinder_volume_drivers_netapp_options.netapp_cluster_opts,
-                cinder_volume_drivers_netapp_options.netapp_7mode_opts,
                 cinder_volume_drivers_netapp_options.netapp_provisioning_opts,
                 cinder_volume_drivers_netapp_options.netapp_img_cache_opts,
                 cinder_volume_drivers_netapp_options.netapp_eseries_opts,
@@ -320,6 +334,7 @@ def list_opts():
                 cinder_volume_drivers_nimble.nimble_opts,
                 cinder_volume_drivers_prophetstor_options.DPL_OPTS,
                 cinder_volume_drivers_pure.PURE_OPTS,
+                cinder_volume_drivers_qnap.qnap_opts,
                 cinder_volume_drivers_quobyte.volume_opts,
                 cinder_volume_drivers_rbd.RBD_OPTS,
                 cinder_volume_drivers_remotefs.nas_opts,

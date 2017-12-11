@@ -159,6 +159,7 @@ volume_opts = [
                      'storage if the driver supports it.'),
     cfg.FloatOpt('max_over_subscription_ratio',
                  default=20.0,
+                 min=1,
                  help='Float representation of the over subscription ratio '
                       'when thin provisioning is involved. Default ratio is '
                       '20.0, meaning provisioned capacity can be 20 times of '
@@ -1102,6 +1103,13 @@ class BaseVD(object):
         """
         return self.configuration.safe_get("backup_use_temp_snapshot")
 
+    def snapshot_revert_use_temp_snapshot(self):
+        # Specify whether a temporary backup snapshot should be used when
+        # reverting a snapshot. For some backends, this operation is not
+        # needed or not supported, in which case the driver should override
+        # this method.
+        return True
+
     def snapshot_remote_attachable(self):
         # TODO(lixiaoy1): the method will be deleted later when remote
         # attach snapshot is implemented.
@@ -1843,6 +1851,19 @@ class BaseVD(object):
 
     def accept_transfer(self, context, volume, new_user, new_project):
         pass
+
+    def create_volume_from_backup(self, volume, backup):
+        """Creates a volume from a backup.
+
+        Can optionally return a Dictionary of changes to the volume object to
+        be persisted.
+
+        :param volume: the volume object to be created.
+        :param backup: the backup object as source.
+        :returns: volume_model_update
+        """
+
+        raise NotImplementedError()
 
 
 @six.add_metaclass(abc.ABCMeta)

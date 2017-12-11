@@ -448,6 +448,33 @@ class VMAXProvision(object):
         self.rest.modify_rdf_device_pair(
             array, device_id, rdf_group, extra_specs, split=False)
 
+    def get_or_create_volume_group(self, array, group, extra_specs):
+        """Get or create a volume group.
+
+        Sometimes it may be necessary to recreate a volume group on the
+        backend - for example, when the last member volume has been removed
+        from the group, but the cinder group object has not been deleted.
+        :param array: the array serial number
+        :param group: the group object
+        :param extra_specs: the extra specifications
+        :return: group name
+        """
+        vol_grp_name = self.utils.update_volume_group_name(group)
+        return self.get_or_create_group(array, vol_grp_name, extra_specs)
+
+    def get_or_create_group(self, array, group_name, extra_specs):
+        """Get or create a generic volume group.
+
+        :param array: the array serial number
+        :param group_name: the group name
+        :param extra_specs: the extra specifications
+        :return: group name
+        """
+        storage_group = self.rest.get_storage_group(array, group_name)
+        if not storage_group:
+            self.create_volume_group(array, group_name, extra_specs)
+        return group_name
+
     def create_volume_group(self, array, group_name, extra_specs):
         """Create a generic volume group.
 
@@ -569,3 +596,67 @@ class VMAXProvision(object):
         timer = loopingcall.FixedIntervalLoopingCall(_unlink_grp)
         rc = timer.start(interval=UNLINK_INTERVAL).wait()
         return rc
+
+    def enable_group_replication(self, array, storagegroup_name,
+                                 rdf_group_num, extra_specs):
+        """Resume rdf replication on a storage group.
+
+        Replication is enabled by default. This allows resuming
+        replication on a suspended group.
+        :param array: the array serial number
+        :param storagegroup_name: the storagegroup name
+        :param rdf_group_num: the rdf group number
+        :param extra_specs: the extra specifications
+        """
+        action = "Resume"
+        self.rest.modify_storagegroup_rdf(
+            array, storagegroup_name, rdf_group_num, action, extra_specs)
+
+    def disable_group_replication(self, array, storagegroup_name,
+                                  rdf_group_num, extra_specs):
+        """Suspend rdf replication on a storage group.
+
+        This does not delete the rdf pairs, that can only be done
+        by deleting the group. This method suspends all i/o activity
+        on the rdf links.
+        :param array: the array serial number
+        :param storagegroup_name: the storagegroup name
+        :param rdf_group_num: the rdf group number
+        :param extra_specs: the extra specifications
+        """
+        action = "Suspend"
+        self.rest.modify_storagegroup_rdf(
+            array, storagegroup_name, rdf_group_num, action, extra_specs)
+
+    def failover_group(self, array, storagegroup_name,
+                       rdf_group_num, extra_specs, failover=True):
+        """Failover or failback replication on a storage group.
+
+        :param array: the array serial number
+        :param storagegroup_name: the storagegroup name
+        :param rdf_group_num: the rdf group number
+        :param extra_specs: the extra specifications
+        :param failover: flag to indicate failover/ failback
+        """
+        action = "Failover" if failover else "Failback"
+        self.rest.modify_storagegroup_rdf(
+            array, storagegroup_name, rdf_group_num, action, extra_specs)
+
+    def delete_group_replication(self, array, storagegroup_name,
+                                 rdf_group_num, extra_specs):
+        """Split replication for a group and delete the pairs.
+
+        :param array: the array serial number
+        :param storagegroup_name: the storage group name
+        :param rdf_group_num: the rdf group number
+        :param extra_specs: the extra specifications
+        """
+        action = "Split"
+        LOG.debug("Splitting remote replication for group %(sg)s",
+                  {'sg': storagegroup_name})
+        self.rest.modify_storagegroup_rdf(
+            array, storagegroup_name, rdf_group_num, action, extra_specs)
+        LOG.debug("Deleting remote replication for group %(sg)s",
+                  {'sg': storagegroup_name})
+        self.rest.delete_storagegroup_rdf(
+            array, storagegroup_name, rdf_group_num)

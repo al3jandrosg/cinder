@@ -17,6 +17,7 @@
 
 import abc
 
+from castellan import key_manager
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -25,7 +26,7 @@ import six
 from cinder.db import base
 from cinder import exception
 from cinder.i18n import _
-from cinder import keymgr as key_manager
+from cinder.volume import utils as vol_utils
 
 service_opts = [
     cfg.IntOpt('backup_metadata_version', default=2,
@@ -57,6 +58,14 @@ class BackupMetadataAPI(base.Base):
     def __init__(self, context, db=None):
         super(BackupMetadataAPI, self).__init__(db)
         self.context = context
+        self._key_mgr = None
+
+    @property
+    def _key_manager(self):
+        # Allows for lazy initialization of the key manager
+        if self._key_mgr is None:
+            self._key_mgr = key_manager.API(CONF)
+        return self._key_mgr
 
     @staticmethod
     def _is_serializable(value):
@@ -89,8 +98,9 @@ class BackupMetadataAPI(base.Base):
                     continue
                 # Copy the encryption key UUID for backup
                 if key is 'encryption_key_id' and value is not None:
-                    km = key_manager.API(CONF)
-                    value = km.store(self.context, km.get(self.context, value))
+                    value = vol_utils.clone_encryption_key(self.context,
+                                                           self._key_manager,
+                                                           value)
                     LOG.debug("Copying encryption key UUID for backup.")
                 container[type_tag][key] = value
 

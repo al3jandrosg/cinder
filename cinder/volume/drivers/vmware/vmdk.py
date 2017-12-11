@@ -351,7 +351,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         :param volume: Volume object
         """
-        backing = self.volumeops.get_backing(volume['name'])
+        backing = self.volumeops.get_backing(volume['name'], volume['id'])
         if not backing:
             LOG.info("Backing not available, no operation "
                      "to be performed.")
@@ -553,6 +553,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             'volume': backing.value,
             'volume_id': volume.id,
             'name': volume.name,
+            'profile_id': self._get_storage_profile_id(volume)
         }
 
         # vmdk connector in os-brick needs additional connection info.
@@ -585,9 +586,11 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             connection_info['data']['config'] = vmdk_connector_config
 
         LOG.debug("Returning connection_info (volume: '%(volume)s', volume_id:"
-                  " '%(volume_id)s') for connector: %(connector)s.",
+                  " '%(volume_id)s'), profile_id: '%(profile_id)s' for "
+                  "connector: %(connector)s.",
                   {'volume': connection_info['data']['volume'],
                    'volume_id': volume.id,
+                   'profile_id': connection_info['data']['profile_id'],
                    'connector': connector})
 
         return connection_info
@@ -601,7 +604,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param connector: Connector information
         :return: Return connection information
         """
-        backing = self.volumeops.get_backing(volume.name)
+        backing = self.volumeops.get_backing(volume.name, volume.id)
         if 'instance' in connector:
             # The instance exists
             instance = vim_util.get_moref(connector['instance'],
@@ -711,7 +714,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             LOG.error(msg)
             raise exception.InvalidVolume(msg)
 
-        backing = self.volumeops.get_backing(snapshot['volume_name'])
+        backing = self.volumeops.get_backing(snapshot['volume_name'],
+                                             volume['id'])
         if not backing:
             LOG.info("There is no backing, so will not create "
                      "snapshot: %s.", snapshot['name'])
@@ -759,7 +763,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         inv_path = snapshot.provider_location
         is_template = inv_path is not None
 
-        backing = self.volumeops.get_backing(snapshot.volume_name)
+        backing = self.volumeops.get_backing(snapshot.volume_name,
+                                             snapshot.volume.id)
         if not backing:
             LOG.debug("Backing does not exist for volume.",
                       resource=snapshot.volume)
@@ -1231,7 +1236,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                 LOG.exception("Error occurred while copying image: %(id)s "
                               "to volume: %(vol)s.",
                               {'id': image_id, 'vol': volume['name']})
-                backing = self.volumeops.get_backing(volume['name'])
+                backing = self.volumeops.get_backing(volume['name'],
+                                                     volume['id'])
                 if backing:
                     # delete the backing
                     self.volumeops.delete_backing(backing)
@@ -1316,7 +1322,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         # If the user-specified volume size is greater than backing's
         # current disk size, we should extend the disk.
         volume_size = volume['size'] * units.Gi
-        backing = self.volumeops.get_backing(volume['name'])
+        backing = self.volumeops.get_backing(volume['name'], volume['id'])
         disk_size = self.volumeops.get_disk_size(backing)
         if volume_size > disk_size:
             LOG.debug("Extending volume: %(name)s since the user specified "
@@ -1352,7 +1358,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         VMwareVcVmdkDriver._validate_disk_format(image_meta['disk_format'])
 
         # get backing vm of volume and its vmdk path
-        backing = self.volumeops.get_backing(volume['name'])
+        backing = self.volumeops.get_backing(volume['name'], volume['id'])
         if not backing:
             LOG.info("Backing not found, creating for volume: %s",
                      volume['name'])
@@ -1412,7 +1418,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             return False
 
         # If the backing doesn't exist, retype is NOP.
-        backing = self.volumeops.get_backing(volume['name'])
+        backing = self.volumeops.get_backing(volume['name'], volume['id'])
         if backing is None:
             LOG.debug("Backing for volume: %s doesn't exist; retype is NOP.",
                       volume['name'])
@@ -1567,7 +1573,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param new_size: new size in GB to extend this volume to
         """
         vol_name = volume['name']
-        backing = self.volumeops.get_backing(vol_name)
+        backing = self.volumeops.get_backing(vol_name, volume['id'])
         if not backing:
             LOG.info("There is no backing for volume: %s; no need to "
                      "extend the virtual disk.", vol_name)
@@ -1698,7 +1704,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         self._manage_existing_int(volume, vm, disk)
 
     def unmanage(self, volume):
-        backing = self.volumeops.get_backing(volume['name'])
+        backing = self.volumeops.get_backing(volume['name'], volume['id'])
         if backing:
             extra_config = self._get_extra_config(volume)
             for key in extra_config:
@@ -1818,6 +1824,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             self._clusters = self.volumeops.get_cluster_refs(
                 cluster_names).values()
             LOG.info("Using compute cluster(s): %s.", cluster_names)
+
+        self.volumeops.build_backing_ref_cache()
 
         LOG.info("Successfully setup driver: %(driver)s for server: "
                  "%(ip)s.", {'driver': self.__class__.__name__,
@@ -2008,7 +2016,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param volume: New Volume object
         :param snapshot: Reference to snapshot entity
         """
-        backing = self.volumeops.get_backing(snapshot['volume_name'])
+        backing = self.volumeops.get_backing(snapshot['volume_name'],
+                                             snapshot['volume']['id'])
         if not backing:
             LOG.info("There is no backing for the snapshotted volume: "
                      "%(snap)s. Not creating any backing for the "
@@ -2090,7 +2099,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         :param volume: New Volume object
         :param src_vref: Source Volume object
         """
-        backing = self.volumeops.get_backing(src_vref['name'])
+        backing = self.volumeops.get_backing(src_vref['name'], src_vref['id'])
         if not backing:
             LOG.info("There is no backing for the source volume: %(src)s. "
                      "Not creating any backing for volume: %(vol)s.",
@@ -2137,8 +2146,22 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
     def accept_transfer(self, context, volume, new_user, new_project):
         """Accept the transfer of a volume for a new user/project."""
-        backing = self.volumeops.get_backing(volume.name)
+        backing = self.volumeops.get_backing(volume.name, volume.id)
         if backing:
             dc = self.volumeops.get_dc(backing)
             new_folder = self._get_volume_group_folder(dc, new_project)
             self.volumeops.move_backing_to_folder(backing, new_folder)
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        inv_path = snapshot.provider_location
+        is_template = inv_path is not None
+        if is_template:
+            LOG.error("Revert to template based snapshot is not supported.")
+            raise exception.InvalidSnapshot("Cannot revert to template "
+                                            "based snapshot")
+
+        backing = self.volumeops.get_backing(volume.name)
+        if not backing:
+            LOG.debug("Backing does not exist for volume.", resource=volume)
+        else:
+            self.volumeops.revert_to_snapshot(backing, snapshot.name)

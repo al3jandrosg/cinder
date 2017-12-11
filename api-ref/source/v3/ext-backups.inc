@@ -62,6 +62,7 @@ Request
    - limit: limit
    - offset: offset
    - marker: marker
+   - with_count: with_count
 
 
 Response Parameters
@@ -88,6 +89,7 @@ Response Parameters
    - data_timestamp: data_timestamp
    - snapshot_id: snapshot_id_2
    - os-backup-project-attr:project_id: os-backup-project-attr:project_id
+   - count: count
 
 Response Example
 ----------------
@@ -176,8 +178,14 @@ Restore a backup
 
 Restores a Block Storage backup to an existing or new Block Storage volume.
 
-You must specify either the UUID or name of the volume. If you
-specify both the UUID and name, the UUID takes priority.
+The name parameter will work only if a new volume is created.
+
+If UUID is specified, the backup will be restored to the specified volume.
+
+If no existing volume UUID is provided, the backup will be restored to a
+new volume matching the size and name of the originally backed up volume.
+In this case, if the name parameter is provided, it will be used as the
+name of the new volume.
 
 Normal response codes: 202
 
@@ -329,6 +337,7 @@ Request
    - sort: sort
    - limit: limit
    - marker: marker
+   - with_count: with_count
 
 Response Parameters
 -------------------
@@ -339,6 +348,7 @@ Response Parameters
    - id: id_1
    - links: links_1
    - name: name_1
+   - count: count
 
 Response Example
 ----------------

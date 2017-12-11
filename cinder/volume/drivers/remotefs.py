@@ -30,7 +30,6 @@ from oslo_utils import units
 import six
 
 from cinder import compute
-from cinder import context
 from cinder import coordination
 from cinder import db
 from cinder import exception
@@ -149,44 +148,19 @@ class RemoteFSDriver(driver.BaseVD):
     # We let the drivers inheriting this specify
     # whether thin provisioning is supported or not.
     _thin_provisioning_support = False
+    _thick_provisioning_support = False
 
     def __init__(self, *args, **kwargs):
         super(RemoteFSDriver, self).__init__(*args, **kwargs)
         self.shares = {}
         self._mounted_shares = []
         self._execute_as_root = True
-        self._is_voldb_empty_at_startup = self._check_if_volume_db_is_empty()
+        self._is_voldb_empty_at_startup = kwargs.pop('is_vol_db_empty', None)
         self._supports_encryption = False
 
         if self.configuration:
             self.configuration.append_config_values(nas_opts)
             self.configuration.append_config_values(volume_opts)
-
-    def _set_voldb_empty_at_startup_indicator(self, ctxt):
-        """Determine if the Cinder volume DB is empty.
-
-        A check of the volume DB is done to determine whether it is empty or
-        not at this point.
-
-        :param ctxt: our working context
-        """
-        if not self.db:
-            return False
-        vol_entries = self.db.volume_get_all(ctxt, None, 1, filters=None)
-
-        if len(vol_entries) == 0:
-            LOG.info("Determined volume DB was empty at startup.")
-            return True
-        else:
-            LOG.info("Determined volume DB was not empty at startup.")
-            return False
-
-    def _check_if_volume_db_is_empty(self):
-        vol_db_empty = self._set_voldb_empty_at_startup_indicator(
-            context.get_admin_context())
-        LOG.debug("Cinder Volume DB check: vol_db_empty=%s", vol_db_empty)
-
-        return vol_db_empty
 
     def check_for_setup_error(self):
         """Just to override parent behavior."""
@@ -624,8 +598,8 @@ class RemoteFSDriver(driver.BaseVD):
         NAS file operations. This base method will set the NAS security
         options to false.
         """
-        doc_html = ("http://docs.openstack.org/admin-guide"
-                    "/blockstorage_nfs_backend.html")
+        doc_html = ("https://docs.openstack.org/cinder/latest/admin"
+                    "/blockstorage-nfs-backend.html")
         self.configuration.nas_secure_file_operations = 'false'
         LOG.warning("The NAS file operations will be run as root: "
                     "allowing root level access at the storage backend. "
@@ -716,6 +690,13 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
         super(RemoteFSSnapDriverBase, self).do_setup(context)
 
         self._nova = compute.API()
+
+    def snapshot_revert_use_temp_snapshot(self):
+        # Considering that RemoteFS based drivers use COW images
+        # for storing snapshots, having chains of such images,
+        # creating a backup snapshot when reverting one is not
+        # actutally helpful.
+        return False
 
     def _local_volume_dir(self, volume):
         share = volume.provider_location
@@ -1607,6 +1588,9 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
     def _extend_volume(self, volume, size_gb):
         raise NotImplementedError()
 
+    def _revert_to_snapshot(self, context, volume, snapshot):
+        raise NotImplementedError()
+
 
 class RemoteFSSnapDriver(RemoteFSSnapDriverBase):
     @locked_volume_id_operation
@@ -1642,6 +1626,12 @@ class RemoteFSSnapDriver(RemoteFSSnapDriverBase):
     def extend_volume(self, volume, size_gb):
         return self._extend_volume(volume, size_gb)
 
+    @locked_volume_id_operation
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert to specified snapshot."""
+
+        return self._revert_to_snapshot(context, volume, snapshot)
+
 
 class RemoteFSSnapDriverDistributed(RemoteFSSnapDriverBase):
     @coordination.synchronized('{self.driver_prefix}-{snapshot.volume.id}')
@@ -1676,6 +1666,12 @@ class RemoteFSSnapDriverDistributed(RemoteFSSnapDriverBase):
     @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def extend_volume(self, volume, size_gb):
         return self._extend_volume(volume, size_gb)
+
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert to specified snapshot."""
+
+        return self._revert_to_snapshot(context, volume, snapshot)
 
 
 class RemoteFSPoolMixin(object):
@@ -1727,6 +1723,8 @@ class RemoteFSPoolMixin(object):
                         self.configuration.max_over_subscription_ratio),
                     'thin_provisioning_support': (
                         self._thin_provisioning_support),
+                    'thick_provisioning_support': (
+                        self._thick_provisioning_support),
                     'QoS_support': False,
                     }
 
@@ -1737,3 +1735,48 @@ class RemoteFSPoolMixin(object):
         data['pools'] = pools
 
         self._stats = data
+
+
+class RevertToSnapshotMixin(object):
+
+    def _revert_to_snapshot(self, context, volume, snapshot):
+        """Revert a volume to specified snapshot
+
+        The volume must not be attached. Only the latest snapshot
+        can be used.
+        """
+        status = snapshot.volume.status
+        acceptable_states = ['available', 'reverting']
+
+        self._validate_state(status, acceptable_states)
+
+        LOG.debug('Reverting volume %(vol)s to snapshot %(snap)s',
+                  {'vol': snapshot.volume.id, 'snap': snapshot.id})
+
+        info_path = self._local_path_volume_info(snapshot.volume)
+        snap_info = self._read_info_file(info_path)
+
+        snapshot_file = snap_info[snapshot.id]
+        active_file = snap_info['active']
+
+        if not utils.paths_normcase_equal(snapshot_file, active_file):
+            msg = _("Could not revert volume '%(volume_id)s' to snapshot "
+                    "'%(snapshot_id)s' as it does not "
+                    "appear to be the latest snapshot. Current active "
+                    "image: %(active_file)s.")
+            raise exception.InvalidSnapshot(
+                msg % dict(snapshot_id=snapshot.id,
+                           active_file=active_file,
+                           volume_id=volume.id))
+
+        snapshot_path = os.path.join(
+            self._local_volume_dir(snapshot.volume), snapshot_file)
+        backing_filename = self._qemu_img_info(
+            snapshot_path, volume.name).backing_file
+
+        # We revert the volume to the latest snapshot by recreating the top
+        # image from the chain.
+        # This workflow should work with most (if not all) drivers inheriting
+        # this class.
+        self._delete(snapshot_path)
+        self._do_create_snapshot(snapshot, backing_filename, snapshot_path)

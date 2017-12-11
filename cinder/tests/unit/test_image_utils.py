@@ -1,4 +1,3 @@
-
 # Copyright (c) 2013 eNovance , Inc.
 # All Rights Reserved.
 #
@@ -31,6 +30,7 @@ from cinder.volume import throttling
 
 
 class TestQemuImgInfo(test.TestCase):
+    @mock.patch('os.name', new='posix')
     @mock.patch('oslo_utils.imageutils.QemuImgInfo')
     @mock.patch('cinder.utils.execute')
     def test_qemu_img_info(self, mock_exec, mock_info):
@@ -45,6 +45,7 @@ class TestQemuImgInfo(test.TestCase):
                                           prlimit=image_utils.QEMU_IMG_LIMITS)
         self.assertEqual(mock_info.return_value, output)
 
+    @mock.patch('os.name', new='posix')
     @mock.patch('oslo_utils.imageutils.QemuImgInfo')
     @mock.patch('cinder.utils.execute')
     def test_qemu_img_info_not_root(self, mock_exec, mock_info):
@@ -138,7 +139,7 @@ class TestConvertImage(test.TestCase):
 
             self.assertIsNone(output)
             mock_exec.assert_called_once_with('cgcmd', 'qemu-img', 'convert',
-                                              '-t', 'none', '-O', out_format,
+                                              '-O', out_format, '-t', 'none',
                                               source, dest, run_as_root=True)
 
         mock_exec.reset_mock()
@@ -172,7 +173,7 @@ class TestConvertImage(test.TestCase):
             mock_info.assert_called_once_with(source, run_as_root=True)
             self.assertIsNone(output)
             mock_exec.assert_called_once_with('cgcmd', 'qemu-img', 'convert',
-                                              '-t', 'none', '-O', out_format,
+                                              '-O', out_format, '-t', 'none',
                                               source, dest, run_as_root=True)
 
         mock_exec.reset_mock()
@@ -198,13 +199,17 @@ class TestConvertImage(test.TestCase):
         source = mock.sentinel.source
         dest = mock.sentinel.dest
         out_format = mock.sentinel.out_format
+        out_subformat = 'fake_subformat'
         mock_info.return_value.virtual_size = 1048576
 
-        output = image_utils.convert_image(source, dest, out_format)
+        output = image_utils.convert_image(source, dest, out_format,
+                                           out_subformat=out_subformat)
 
         self.assertIsNone(output)
         mock_exec.assert_called_once_with('qemu-img', 'convert', '-O',
-                                          out_format, source, dest,
+                                          out_format, '-o',
+                                          'subformat=%s' % out_subformat,
+                                          source, dest,
                                           run_as_root=True)
 
     @mock.patch('cinder.volume.utils.check_for_odirect_support',
@@ -220,13 +225,17 @@ class TestConvertImage(test.TestCase):
         source = mock.sentinel.source
         dest = mock.sentinel.dest
         out_format = mock.sentinel.out_format
+        out_subformat = 'fake_subformat'
         mock_info.side_effect = ValueError
 
-        output = image_utils.convert_image(source, dest, out_format)
+        output = image_utils.convert_image(source, dest, out_format,
+                                           out_subformat=out_subformat)
 
         self.assertIsNone(output)
         mock_exec.assert_called_once_with('qemu-img', 'convert', '-O',
-                                          out_format, source, dest,
+                                          out_format, '-o',
+                                          'subformat=%s' % out_subformat,
+                                          source, dest,
                                           run_as_root=True)
 
     @mock.patch('cinder.image.image_utils.qemu_img_info')
@@ -246,7 +255,7 @@ class TestConvertImage(test.TestCase):
 
             self.assertIsNone(output)
             mock_exec.assert_called_once_with('qemu-img', 'convert',
-                                              '-t', 'none', '-O', out_format,
+                                              '-O', out_format, '-t', 'none',
                                               source, dest, run_as_root=True)
 
 
@@ -706,6 +715,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
         volume_format = mock.sentinel.volume_format
+        out_subformat = None
         blocksize = mock.sentinel.blocksize
 
         data = mock_info.return_value
@@ -728,6 +738,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
                                              run_as_root=True,
                                              src_format='raw')
 
@@ -750,6 +761,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
         volume_format = mock.sentinel.volume_format
+        out_subformat = None
         blocksize = mock.sentinel.blocksize
         ctxt.user_id = user_id = mock.sentinel.user_id
         project_id = mock.sentinel.project_id
@@ -777,6 +789,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
                                              run_as_root=run_as_root,
                                              src_format='raw')
 
@@ -798,6 +811,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
         volume_format = mock.sentinel.volume_format
+        out_subformat = None
         blocksize = mock.sentinel.blocksize
         ctxt.user_id = user_id = mock.sentinel.user_id
         project_id = mock.sentinel.project_id
@@ -827,6 +841,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         mock_repl_xen.assert_called_once_with(tmp)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
                                              run_as_root=run_as_root,
                                              src_format=expect_format)
 
@@ -846,6 +861,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
         volume_format = mock.sentinel.volume_format
+        out_subformat = None
         blocksize = mock.sentinel.blocksize
         ctxt.user_id = user_id = mock.sentinel.user_id
         project_id = mock.sentinel.project_id
@@ -874,6 +890,7 @@ class TestFetchToVolumeFormat(test.TestCase):
                                            tmp, user_id, project_id)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
                                              run_as_root=run_as_root,
                                              src_format=expect_format)
 
@@ -898,6 +915,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
         volume_format = mock.sentinel.volume_format
+        out_subformat = None
         blocksize = mock.sentinel.blocksize
 
         data = mock_info.return_value
@@ -927,6 +945,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_repl_xen.called)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
                                              run_as_root=True,
                                              src_format='raw')
 
@@ -1296,6 +1315,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         mock_repl_xen.assert_called_once_with(tmp)
         self.assertFalse(mock_copy.called)
         mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=None,
                                              run_as_root=run_as_root,
                                              src_format='raw')
 
@@ -1474,6 +1494,9 @@ class TestVhdUtils(test.TestCase):
                      mock.sentinel.third,
                      mock.sentinel.fourth,
                      mock.sentinel.fifth)
+
+        # os.path.join does not work with MagicMock objects on Windows.
+        mock_temp.return_value.__enter__.return_value = 'fake_temp_dir'
 
         output = image_utils.coalesce_chain(vhd_chain)
 

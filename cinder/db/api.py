@@ -93,6 +93,18 @@ def dispose_engine():
 ###################
 
 
+def service_uuids_online_data_migration(context, max_count):
+    return IMPL.service_uuids_online_data_migration(context, max_count)
+
+
+def backup_service_online_migration(context, max_count):
+    return IMPL.backup_service_online_migration(context, max_count)
+
+
+def volume_service_uuids_online_data_migration(context, max_count):
+    return IMPL.volume_service_uuids_online_data_migration(context, max_count)
+
+
 def service_destroy(context, service_id):
     """Destroy the service or raise if it does not exist."""
     return IMPL.service_destroy(context, service_id)
@@ -140,6 +152,14 @@ def service_update(context, service_id, values):
     Raises NotFound if service does not exist.
     """
     return IMPL.service_update(context, service_id, values)
+
+
+def service_get_by_uuid(context, service_uuid):
+    """Get a service by it's uuid.
+
+    Return Service ref or raise if it does not exist.
+    """
+    return IMPL.service_get_by_uuid(context, service_uuid)
 
 
 ###############
@@ -241,9 +261,9 @@ def volume_data_get_for_host(context, host, count_only=False):
                                          count_only)
 
 
-def volume_data_get_for_project(context, project_id):
+def volume_data_get_for_project(context, project_id, host=None):
     """Get (volume_count, gigabytes) for project."""
-    return IMPL.volume_data_get_for_project(context, project_id)
+    return IMPL.volume_data_get_for_project(context, project_id, host=host)
 
 
 def volume_destroy(context, volume_id):
@@ -267,6 +287,10 @@ def volume_get_all(context, marker=None, limit=None, sort_keys=None,
     return IMPL.volume_get_all(context, marker, limit, sort_keys=sort_keys,
                                sort_dirs=sort_dirs, filters=filters,
                                offset=offset)
+
+
+def calculate_resource_count(context, resource_type, filters):
+    return IMPL.calculate_resource_count(context, resource_type, filters)
 
 
 def volume_get_all_by_host(context, host, filters=None):
@@ -485,11 +509,13 @@ def snapshot_update(context, snapshot_id, values):
     return IMPL.snapshot_update(context, snapshot_id, values)
 
 
-def snapshot_data_get_for_project(context, project_id, volume_type_id=None):
+def snapshot_data_get_for_project(context, project_id, volume_type_id=None,
+                                  host=None):
     """Get count and gigabytes used for snapshots for specified project."""
     return IMPL.snapshot_data_get_for_project(context,
                                               project_id,
-                                              volume_type_id)
+                                              volume_type_id,
+                                              host=host)
 
 
 def snapshot_get_all_active_by_window(context, begin, end=None,

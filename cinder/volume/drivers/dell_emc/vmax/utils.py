@@ -59,6 +59,17 @@ EXTRA_SPECS = 'extra_specs'
 IS_RE = 'replication_enabled'
 DISABLECOMPRESSION = 'storagetype:disablecompression'
 
+# Cinder.conf vmax configuration
+VMAX_SERVER_IP = 'san_ip'
+VMAX_USER_NAME = 'san_login'
+VMAX_PASSWORD = 'san_password'
+VMAX_SERVER_PORT = 'san_rest_port'
+VMAX_ARRAY = 'vmax_array'
+VMAX_WORKLOAD = 'vmax_workload'
+VMAX_SRP = 'vmax_srp'
+VMAX_SERVICE_LEVEL = 'vmax_service_level'
+VMAX_PORT_GROUPS = 'vmax_port_groups'
+
 
 class VMAXUtils(object):
     """Utility class for Rest based VMAX volume drivers.
@@ -325,6 +336,8 @@ class VMAXUtils(object):
         :param file_name: the configuration file
         :returns: list
         """
+        LOG.warning("Use of xml file in backend configuration is deprecated "
+                    "in Queens and will not be supported in future releases.")
         kwargs = {}
         my_file = open(file_name, 'r')
         data = my_file.read()
@@ -538,9 +551,15 @@ class VMAXUtils(object):
         try:
             pool_details = extraspecs['pool_name'].split('+')
             extraspecs[SLO] = pool_details[0]
-            extraspecs[WORKLOAD] = pool_details[1]
-            extraspecs[SRP] = pool_details[2]
-            extraspecs[ARRAY] = pool_details[3]
+            if len(pool_details) == 4:
+                extraspecs[WORKLOAD] = pool_details[1]
+                extraspecs[SRP] = pool_details[2]
+                extraspecs[ARRAY] = pool_details[3]
+            else:
+                # Assume no workload given in pool name
+                extraspecs[SRP] = pool_details[1]
+                extraspecs[ARRAY] = pool_details[2]
+                extraspecs[WORKLOAD] = 'NONE'
         except KeyError:
             LOG.error("Error parsing SLO, workload from"
                       " the provided extra_specs.")
@@ -558,22 +577,6 @@ class VMAXUtils(object):
         default_dict[INTERVAL] = interval
         default_dict[RETRIES] = retries
         return default_dict
-
-    @staticmethod
-    def update_admin_metadata(volumes_model_update, key, values):
-        """Update the volume_model_updates with admin metadata.
-
-        :param volumes_model_update: List of volume model updates
-        :param key: Key to be updated in the admin_metadata
-        :param values: Dictionary of values per volume id
-        """
-        for volume_model_update in volumes_model_update:
-            volume_id = volume_model_update['id']
-            if volume_id in values:
-                admin_metadata = {}
-                admin_metadata.update({key: values[volume_id]})
-                volume_model_update.update(
-                    {'admin_metadata': admin_metadata})
 
     def get_volume_group_utils(self, group, interval, retries):
         """Standard utility for generic volume groups.
@@ -639,7 +642,7 @@ class VMAXUtils(object):
         :returns: group_name -- formatted name + id
         """
         group_name = ""
-        if group.name is not None:
+        if group.name is not None and group.name != group.id:
             group_name = (
                 self.truncate_string(
                     group.name, TRUNCATE_27) + "_")
@@ -685,3 +688,44 @@ class VMAXUtils(object):
             new_pool['pool_name'] = new_pool_name
             pools.append(new_pool)
         return pools
+
+    def check_replication_matched(self, volume, extra_specs):
+        """Check volume type and group type.
+
+        This will make sure they do not conflict with each other.
+        :param volume: volume to be checked
+        :param extra_specs: the extra specifications
+        :raises: InvalidInput
+        """
+        # If volume is not a member of group, skip this check anyway.
+        if not volume.group:
+            return
+        vol_is_re = self.is_replication_enabled(extra_specs)
+        group_is_re = volume.group.is_replicated
+
+        if not (vol_is_re == group_is_re):
+            msg = _('Replication should be enabled or disabled for both '
+                    'volume or group. Volume replication status: '
+                    '%(vol_status)s, group replication status: '
+                    '%(group_status)s') % {
+                        'vol_status': vol_is_re, 'group_status': group_is_re}
+            raise exception.InvalidInput(reason=msg)
+
+    @staticmethod
+    def check_rep_status_enabled(group):
+        """Check replication status for group.
+
+        Group status must be enabled before proceeding with certain
+        operations.
+        :param group: the group object
+        :raises: InvalidInput
+        """
+        if group.is_replicated:
+            if group.replication_status != fields.ReplicationStatus.ENABLED:
+                msg = (_('Replication status should be %s for '
+                         'replication-enabled group.')
+                       % fields.ReplicationStatus.ENABLED)
+                raise exception.InvalidInput(reason=msg)
+        else:
+            LOG.debug('Replication is not enabled on group %s, '
+                      'skip status check.', group.id)

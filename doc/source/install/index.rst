@@ -1,8 +1,8 @@
 .. _cinder:
 
-============================
-Cinder Installation Tutorial
-============================
+=========================
+Cinder Installation Guide
+=========================
 
 The Block Storage service (cinder) provides block storage devices
 to guest instances. The method in which the storage is provisioned and
@@ -15,7 +15,7 @@ nodes. Depending upon the drivers used, the volume service can run
 on controller nodes, compute nodes, or standalone storage nodes.
 
 For more information, see the
-`Configuration Reference <https://docs.openstack.org/ocata/config-reference/block-storage/volume-drivers.html>`_.
+`Configuration Reference <https://docs.openstack.org/cinder/latest/configuration/block-storage/volume-drivers.html>`_.
 
 
 Prerequisites
@@ -23,7 +23,7 @@ Prerequisites
 
 This documentation specifically covers the installation of the Cinder Block Storage service.  Before following this
 guide you will need to prepare your OpenStack environment using the instructions in the
-`OpenStack Installation Tutorial <https://docs.openstack.org/install-guide/>`_.
+`OpenStack Installation Guide <https://docs.openstack.org/install-guide/>`_.
 
 Once able to 'Launch an instance' in your OpenStack environment follow the instructions below to add
 Cinder to the base environment.

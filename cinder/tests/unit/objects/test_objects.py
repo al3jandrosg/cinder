@@ -42,12 +42,12 @@ object_data = {
     'ManageableVolumeList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'QualityOfServiceSpecs': '1.0-0b212e0a86ee99092229874e03207fe8',
     'QualityOfServiceSpecsList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'RequestSpec': '1.1-b0bd1a28d191d75648901fa853e8a733',
-    'Service': '1.4-a6727ccda6d4043f5e38e75c7c518c7f',
+    'RequestSpec': '1.3-9510bf37e30fd4c282599a4b2a26675e',
+    'Service': '1.6-e881b6b324151dd861e09cdfffcdaccd',
     'ServiceList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'Snapshot': '1.5-ac1cdbd5b89588f6a8f44afdf6b8b201',
     'SnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'Volume': '1.6-7d3bc8577839d5725670d55e480fe95f',
+    'Volume': '1.8-6cf615b72269cef48702a2a5c2940159',
     'VolumeList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'VolumeAttachment': '1.2-b68b357a1756582b706006ea9de40c9a',
     'VolumeAttachmentList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
@@ -101,6 +101,12 @@ class TestObjectVersions(test.TestCase):
         # db model and object match.
         def _check_table_matched(db_model, cls):
             for column in db_model.__table__.columns:
+
+                # NOTE(jdg): Model and Object don't match intentionally here
+                if (column.name in cls.fields and
+                        (column.name == 'uuid' and name == 'Service')):
+                    continue
+
                 # NOTE(xyang): Skip the comparison of the colume name
                 # group_type_id in table Group because group_type_id
                 # is in the object Group but it is stored in a different

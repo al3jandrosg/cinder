@@ -1,35 +1,206 @@
 CHANGES
 =======
 
+12.0.0.0b2
+----------
+
+* Updated from global requirements
+* Fix for volume from image snapshot free space issue
+* INFINIDAT: change CI\_WIKI\_NAME
+* V3 jsonschema validation: Group types
+* Add test for volume create with non-ascii characters
+* Add shared\_targets and service\_uuid to volumes
+* Imported Translations from Zanata
+* Remove extra test variable assignment
+* Tests: Cleanup utils.create\_volume fields
+* Imported Translations from Zanata
+* Discrepancy in api-ref and code for create group snapshot API
+* Tests: Fix Storwize hash randomization failure
+* Disallow managed volume to be managed again
+* Fix project\_domain\_name and user\_domain\_name in doc
+* Mock out CLI execution in NEC driver tests
+* Add shared\_targets flag to Volumes
+* Allow purging of records less than 1 day old
+* Support create volume from backup
+* Fix 'KeyError' when 'with\_count' is not specified
+* Consolidate code that manages encryption keys
+* Use new oslo.db test cases
+* Move legacy-cinder-tox-\* jobs in-tree
+* Add cleanup to TestCase.flags()
+* HPE3PAR: Create FC vlun as host sees
+* Support create a volume from image snapshot
+* Filter valid FC initiator while FC attaching
+* Fix retype migrating volume with rep\_status 'not-capable'
+* Adds DataCore Volume Drivers
+* Handle quota in 2 phases when managing resource
+* RBD: support driver-assisted volume migration
+* Update access control of show under hostAPI
+* Modify the wrong link in document
+* V3 jsonschema validation: Attachments
+* Add fixture to only emit DeprecationWarning once
+* Remove DB authorisation checking with quota API operations
+* Update oslo.context RequestContext args
+* Update bindep.txt for doc builds
+* nimble: handle unicode strings in volume create
+* Add service\_uuid FK to volumes
+* Fix group\_type\_id in api-ref
+* Imported Translations from Zanata
+* VMware: Backend driver for VStorageObject
+* NetApp ONTAP: Fix delayed snapshot deletion call
+* Suppress UT log messages
+* Try Fetching value from 'cluster' when raise exception
+* Fix v3 api-ref for restoring backup are wrongly described
+* Fix qos-spec-v2-qos-specs error
+* Add v3 api-ref for showing encryption specs item
+* Explicitly set expected log level for tests
+* Update api-ref to include volume\_image\_metadata
+* Remove ExceptionTestCase
+* V3 jsonschema validation: base schema framework
+* Check available capacity before creating resources
+* Remove setting of version/release from releasenotes
+* Test os-brick master in LIO gate job
+* Storwize: revert to snapshot support
+* Fix cinder-manage volume delete
+* api-ref: fix 203 error response codes to be 403
+* Inspur Cinder iSCSI driver
+* [Trivial] set min max\_over\_subscription\_ratio to 1
+* Add doc/source/\_static/cinder.policy.yaml.sample to .gitignore
+* Fix 'D005 No newline at end of file' Error
+* Fix controller install document indentation
+* Fix earlier backup records can't be restored
+* NetApp cDot: Fix manage volumes
+* Fix resource count for os-host show
+* Correct gb,snapshot quota update in group snapshot
+* HPE 3PAR: Handle single path in FC configuration
+* NetApp ONTAP: Remove orphaned 7mode file
+* Prevent leaking encryption key when deleting volume
+* Schedule request to scheduler when create group from resource
+* Re-add QNAP Cinder volume driver
+* Add missing 'obj\_make\_compatible' in RequestSpec object
+* Tests: Rework volume deletion w/ invalid status test
+* set vg\_thin\_pool\_size to float type
+* Added mount fstype based validation of Quobyte mounts
+* HPE3PAR: Modify host & clear zone after detach
+* Use oslo\_db.sqlalchemy.enginefacade
+* Add .zuul.yaml with LIO job
+* Updated from global requirements
+* Unity: Remove redundant debug logging
+* Change default test log level
+* Handle assertRaisesRegexp Python 3 deprecation
+* Switch kaminario to use standard trace decorator
+* NetApp E-series: Fix provisioned\_capacity\_gb
+* Fix VolumeAttachment OVO Volume lazy loading
+* Use oslo\_log instead of logging
+* Remove deprecated keymgr code
+* HPE 3PAR: Adding driver capability
+* Improve cinder revert-to-snapshot notifications
+* create\_volume: cleanup consistencygroup when driver exception
+* Improve deleting-missing-backup exception handling
+* SMBFS: add fixed image support
+* ScaleIO - Cleanup and enhance configuration doc
+* Remove unused print\_function imports
+* Schedule the request to scheduler when creating from snapshot/volume
+* Optimizes volume creation in the Quobyte Driver
+* ScaleIO: Update CI Wiki name
+* ScaleIO: adapt to moved connector constants
+* imageutils: allow passing subformat when converting
+* Unity: Fix duplicate hosts created with same name
+* Update setup instructions
+* Make test logging setup fixture disable future setup
+* Use total reserved quota value instead of partial
+* Tintri - Updated driver docs with new nfs option
+* Fix imageutils tests on windows
+* Fix api-ref for group snapshots API
+* HPE 3PAR: ISCSI/FC drivers – code refactoring
+* Storwize: Fix typo in log message
+* SMBFS: Enable reverting snapshots
+* DS8K: update replication\_status in generic group APIs
+* Disco driver: Fix the location to get the disco connector constant
+* Storwize: add backup snapshots support
+* Fix migate\_volume API with replication\_status ‘not-capable’
+* Make service object UUID not nullable
+* Don't fail when deleting missing backup
+* ibm-storage: Fix create\_volume\_from\_snapshot
+* Fix incorrect use of assertFalse causing CI failed
+* [TrivialFix] Remove errant comma in capabilities policies
+* Tests: Fix coverage unit test failure
+* Dell EMC: Update PS and SC CI wiki names
+* Dell EMC PS: Fix Duplicate ACL records Issue
+* Completely remove mox from Cinder unittest
+* Support count info in List&Detail APIs
+* Remove doc/build before running docs job
+* VMware: Add profile ID to connection info
+* VMware: Revert to snapshot
+* VMware: Improve scalability of querying volumes
+* Fix manage\_existing API behaving wrongly with storage pools
+* NetApp ONTAP: Remove support for 7mode systems
+* Fix key\_manager API call
+* Revert "Tests: Fail if oslo.versionedobjects issues Invalid UUID warnings"
+* Imported Translations from Zanata
+* INFINIDAT: add support for overprovisioning
+* Clean up driver configuration reference
+* Fix migration 112 to use live\_data\_migration API
+* Enable using extra-specs for SF attributes
+* Add policy documentation and sample file
+* ScaleIO Driver - include snap usage in provisioned capacity
+* VMAX driver - Deprecate backend xml configuration
+* VMAX driver - Remove workload for next gen arrays
+* VMAX driver - Implement Tiramisu feature on VMAX
+
 12.0.0.0b1
 ----------
 
+* Revert "Move vol\_db\_empty to NFS driver"
+* Change Install 'Tutorials' to 'Guides'
+* Add index for reservations on (deleted, uuid)
+* Redundant alias in import statement
+* RemoteFS: revert snapshot support
+* DS8K: support clone volume asynchronously
+* Move 'zoning\_mode' back to DEFAULT section
 * Add display\_name to solidfire volume attributes
+* FlashSystem: Add CMMVC6045E CLI error for multi-host mapping
 * Add v3 api-ref for updating specific extra specs for a volume type
 * Fix "import xx as xx" grammer
+* NEC driver: Never use target info in migration\_status
+* VMAX driver - detach volume shouldn't remove from volume groups
+* VMAX driver - Volume identifier issues
+* VMAX driver - concurrently deleting volumes can fail
+* Replace http with https for doc links in cinder
+* [policy in code] Add support for volume, volume type resources
+* DS8000 ConsistencyGroup failed to update group with volumes
+* ScaleIO Driver: Backup volume via snapshot
 * Run backup compression on native thread
 * Fix backup compression unit tests
 * Make stringify header work under python2
+* Api-ref: Add missing api response for volume transfer
 * Switch from ostestr to stestr
 * Add v3 api-ref for showing all/specific extra specs for a volume type
 * Remove deprecated nova config options
 * Switch Rally Task To format V2
 * Update configuration names in ITRI DISCO volume driver
+* Kaminario K2: Add non discovery iSCSI multipath
+* Fix backup-import error when the deleted record in the same db
 * Updated from global requirements
+* FlashSystems: permit snapshot/clone volumes larger than source
 * Deprecate SolidFire Image Caching feature
 * [policy in code] Add support for service, limits
 * [policy in code] Add support for qos and quota resources
+* Vzstorage: improvement of create\_cloned\_volume
 * [policy in code] Add support for group, g-snapshot resources
 * Add ability to specify backup driver via class name
 * Add documentation for API 'validate\_setup\_for\_nested\_quota\_use'
 * [policy in code] Add support for backup resource
 * VMAX driver - documentation updates around versions
+* Add Storwize replication group support
+* VNX: Fix issue when creating without type
 * Remove deprecated VD base classes which are not used now
 * Kaminario K2: Support duplicated FQDN in network
 * NEC driver: Fix exception in terminate\_connection with no connector
 * [policy in code] Add support for snapshot resource
 * Add v3 api-ref for deleting extra spec for a volume type
+* Switch base to the latest in doc link address
 * Replace the usage of some aliases in tempest
+* Update tenant to project in cli quota doc
 * ScaleIO Driver - adding cache and refactoring tests
 * Remove API check is\_valid\_body
 * Add .stestr.conf configuration
@@ -57,10 +228,14 @@ CHANGES
 * Doc: Move generalized\_filters to admin
 * Doc: Configuration: Remove some outdated Ceph info
 * Add ploop to parallels naming conversion
+* Generate create\_at date in usage in isoformat for backups/snapshots
 * Add uuid to services entries
 * Fix tempest test revet\_client typo
 * Fix Tempest Volume Revert test
 * Fix Reset a snapshot's status API Request Example
+* Replace DbMigrationError with DBMigrationError
+* Fix description for volume\_type object in API Ref
+* Mark Cisco FC ZM driver as unsupported
 * Fix v3 api-ref for updating extra specs of volume type
 * Add backups v3 views
 * Storwize: add NPIV support
@@ -435,6 +610,7 @@ CHANGES
 * Fix errors preventing doc builds
 * VMAX driver - Compression, replacing SMI-S with REST
 * VMAX driver - QoS, replacing SMI-S with REST
+* Remove the unnecessary pv\_list assign during LVM object init
 * Fix some reST field lists in docstrings
 * VNX: wrong size of volume from image cache
 * Update attachment\_delete for multiple attachments
@@ -463,6 +639,7 @@ CHANGES
 * Unify host naming in readme file
 * Move driver options to "backend\_defaults" section
 * Use SnapshotStatus enum field
+* Fix scheduler\_host\_manager limitation
 * Improve Capacity filter logging
 * IBM Storage: fix create volume with --group-id
 * Add 'LUNType' configuration verification for Dorado array

@@ -162,6 +162,79 @@ class DBAPIServiceTestCase(BaseTest):
 
     """Unit tests for cinder.db.api.service_*."""
 
+    def test_service_uuid_migrations(self):
+        # Force create one entry with no UUID
+        sqlalchemy_api.service_create(self.ctxt, {
+            'host': 'host1',
+            'binary': 'cinder-volume',
+            'topic': 'volume', })
+
+        # Create another one with a valid UUID
+        sqlalchemy_api.service_create(self.ctxt, {
+            'host': 'host2',
+            'binary': 'cinder-volume',
+            'topic': 'volume',
+            'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'})
+
+        # Run the migration and verify that we updated 1 entry
+        total, updated = db.service_uuids_online_data_migration(
+            self.ctxt, 10)
+
+        self.assertEqual(1, total)
+        self.assertEqual(1, updated)
+
+    def test_service_uuid_migrations_with_limit(self):
+        sqlalchemy_api.service_create(self.ctxt, {
+            'host': 'host1',
+            'binary': 'cinder-volume',
+            'topic': 'volume', })
+        sqlalchemy_api.service_create(self.ctxt, {
+            'host': 'host2',
+            'binary': 'cinder-volume',
+            'topic': 'volume', })
+        sqlalchemy_api.service_create(self.ctxt, {
+            'host': 'host3',
+            'binary': 'cinder-volume',
+            'topic': 'volume', })
+        # Run the migration and verify that we updated 1 entry
+        total, updated = db.service_uuids_online_data_migration(
+            self.ctxt, 2)
+
+        self.assertEqual(3, total)
+        self.assertEqual(2, updated)
+
+        # Now get the rest, intentionally setting max > what we should have
+        total, updated = db.service_uuids_online_data_migration(
+            self.ctxt, 2)
+
+        self.assertEqual(1, total)
+        self.assertEqual(1, updated)
+
+    @ddt.data({'count': 5, 'total': 3, 'updated': 3},
+              {'count': 2, 'total': 3, 'updated': 2})
+    @ddt.unpack
+    def test_backup_service_online_migration(self, count, total, updated):
+        volume = utils.create_volume(self.ctxt)
+        sqlalchemy_api.backup_create(self.ctxt, {
+            'service': 'cinder.backup.drivers.swift',
+            'volume_id': volume.id
+        })
+        sqlalchemy_api.backup_create(self.ctxt, {
+            'service': 'cinder.backup.drivers.ceph',
+            'volume_id': volume.id
+        })
+        sqlalchemy_api.backup_create(self.ctxt, {
+            'service': 'cinder.backup.drivers.glusterfs',
+            'volume_id': volume.id
+        })
+        sqlalchemy_api.backup_create(self.ctxt, {
+            'service': 'cinder.backup.drivers.fake_backup_service',
+            'volume_id': volume.id
+        })
+        t, u = db.backup_service_online_migration(self.ctxt, count)
+        self.assertEqual(total, t)
+        self.assertEqual(updated, u)
+
     def test_service_create(self):
         # Add a cluster value to the service
         values = {'cluster_name': 'cluster'}
@@ -387,6 +460,61 @@ class DBAPIServiceTestCase(BaseTest):
         self.assertIsInstance(binary_op, sqlalchemy_api.sql.functions.Function)
         self.assertEqual('binary', binary_op.name)
 
+    def test_volume_service_uuid_migrations(self):
+        # Force create one entry with no UUID
+        sqlalchemy_api.volume_create(self.ctxt,
+                                     {'host': 'host1@lvm-driver1#lvm-driver1'})
+
+        # Create another one with a valid UUID
+        sqlalchemy_api.volume_create(
+            self.ctxt,
+            {'host': 'host1@lvm-driver1#lvm-driver1',
+             'service_uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'})
+
+        # Need a service to query
+        values = {
+            'host': 'host1@lvm-driver1',
+            'binary': 'cinder-volume',
+            'topic': 'cinder-volume'}
+        utils.create_service(self.ctxt, values)
+
+        # Run the migration and verify that we updated 1 entry
+        total, updated = db.volume_service_uuids_online_data_migration(
+            self.ctxt, 10)
+
+        self.assertEqual(1, total)
+        self.assertEqual(1, updated)
+
+    def test_volume_service_uuid_migrations_with_limit(self):
+        """Test db migrate of volumes in batches."""
+        db.volume_create(
+            self.ctxt, {'host': 'host1@lvm-driver1#lvm-driver1'})
+        db.volume_create(
+            self.ctxt, {'host': 'host1@lvm-driver1#lvm-driver1'})
+        db.volume_create(
+            self.ctxt, {'host': 'host1@lvm-driver1#lvm-driver1'})
+
+        values = {
+            'host': 'host1@lvm-driver1',
+            'binary': 'cinder-volume',
+            'topic': 'cinder-volume',
+            'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}
+        utils.create_service(self.ctxt, values)
+
+        # Run the migration and verify that we updated 2 entries
+        total, updated = db.volume_service_uuids_online_data_migration(
+            self.ctxt, 2)
+
+        self.assertEqual(3, total)
+        self.assertEqual(2, updated)
+
+        # Now get the ,last one (intentionally setting max > expected)
+        total, updated = db.volume_service_uuids_online_data_migration(
+            self.ctxt, 2)
+
+        self.assertEqual(1, total)
+        self.assertEqual(1, updated)
+
 
 @ddt.ddt
 class DBAPIVolumeTestCase(BaseTest):
@@ -500,6 +628,22 @@ class DBAPIVolumeTestCase(BaseTest):
             self.assertEqual((THREE, THREE_HUNDREDS),
                              db.volume_data_get_for_project(
                                  self.ctxt, 'p%d' % i))
+
+    def test_volume_data_get_for_project_with_host(self):
+
+        db.volume_create(self.ctxt, {'project_id': fake.PROJECT_ID,
+                                     'size': 100,
+                                     'host': 'host1'})
+        db.volume_create(self.ctxt, {'project_id': fake.PROJECT2_ID,
+                                     'size': 200,
+                                     'host': 'host1'})
+        db.volume_create(self.ctxt, {'project_id': fake.PROJECT2_ID,
+                                     'size': 300,
+                                     'host': 'host2'})
+        resp = db.volume_data_get_for_project(self.ctxt,
+                                              fake.PROJECT2_ID,
+                                              host='host2')
+        self.assertEqual((1, 300), resp)
 
     def test_volume_detached_from_instance(self):
         volume = db.volume_create(self.ctxt, {})
@@ -1771,6 +1915,27 @@ class DBAPISnapshotTestCase(BaseTest):
                                             'project2',
                                             {'fake_key': 'fake'}),
                                         ignored_keys='volume')
+
+    def test_snapshot_get_all_by_project_with_host(self):
+        db.volume_create(self.ctxt, {'id': 1, 'host': 'host1', 'size': 1,
+                                     'project_id': fake.PROJECT_ID})
+        db.volume_create(self.ctxt, {'id': 2, 'host': 'host1', 'size': 2,
+                                     'project_id': fake.PROJECT2_ID})
+        db.volume_create(self.ctxt, {'id': 3, 'host': 'host2', 'size': 3,
+                                     'project_id': fake.PROJECT2_ID})
+        db.snapshot_create(self.ctxt, {'id': 1, 'volume_id': 1,
+                                       'project_id': fake.PROJECT_ID,
+                                       'volume_size': 1})
+        db.snapshot_create(self.ctxt, {'id': 2, 'volume_id': 2,
+                                       'project_id': fake.PROJECT2_ID,
+                                       'volume_size': 2})
+        db.snapshot_create(self.ctxt, {'id': 3, 'volume_id': 3,
+                                       'project_id': fake.PROJECT2_ID,
+                                       'volume_size': 3})
+        resp = db.snapshot_data_get_for_project(self.ctxt,
+                                                fake.PROJECT2_ID,
+                                                host='host2')
+        self.assertEqual((1, 3), resp)
 
     def test_snapshot_metadata_get(self):
         metadata = {'a': 'b', 'c': 'd'}
@@ -3083,6 +3248,56 @@ class DBAPIGenericTestCase(BaseTest):
         # Admin can find it
         res = sqlalchemy_api.resource_exists(self.ctxt, model, snap.id)
         self.assertTrue(res, msg="Admin cannot find the Snapshot")
+
+
+class EngineFacadeTestCase(BaseTest):
+
+    """Tests for message operations"""
+    def setUp(self):
+        super(EngineFacadeTestCase, self).setUp()
+        self.user_id = fake.USER_ID
+        self.project_id = fake.PROJECT_ID
+        self.context = context.RequestContext(self.user_id, self.project_id)
+
+    @mock.patch.object(sqlalchemy_api, 'get_session')
+    def test_use_single_context_session_writer(self, mock_get_session):
+        # Checks that session in context would not be overwritten by
+        # annotation @sqlalchemy_api.main_context_manager.writer if annotation
+        # is used twice.
+
+        @sqlalchemy_api.main_context_manager.writer
+        def fake_parent_method(context):
+            session = context.session
+            return fake_child_method(context), session
+
+        @sqlalchemy_api.main_context_manager.writer
+        def fake_child_method(context):
+            session = context.session
+            sqlalchemy_api.model_query(context, models.Volume)
+            return session
+
+        parent_session, child_session = fake_parent_method(self.context)
+        self.assertEqual(parent_session, child_session)
+
+    @mock.patch.object(sqlalchemy_api, 'get_session')
+    def test_use_single_context_session_reader(self, mock_get_session):
+        # Checks that session in context would not be overwritten by
+        # annotation @sqlalchemy_api.main_context_manager.reader if annotation
+        # is used twice.
+
+        @sqlalchemy_api.main_context_manager.reader
+        def fake_parent_method(context):
+            session = context.session
+            return fake_child_method(context), session
+
+        @sqlalchemy_api.main_context_manager.reader
+        def fake_child_method(context):
+            session = context.session
+            sqlalchemy_api.model_query(context, models.Volume)
+            return session
+
+        parent_session, child_session = fake_parent_method(self.context)
+        self.assertEqual(parent_session, child_session)
 
 
 @ddt.ddt

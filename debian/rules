@@ -17,7 +17,7 @@ get-orig-source:
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	stestr run
+	ostestr
 endif
 
 override_dh_install:

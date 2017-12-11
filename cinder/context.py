@@ -21,6 +21,7 @@ import copy
 
 from oslo_config import cfg
 from oslo_context import context
+from oslo_db.sqlalchemy import enginefacade
 from oslo_log import log as logging
 from oslo_utils import timeutils
 import six
@@ -45,6 +46,7 @@ CONF.register_opts(context_opts)
 LOG = logging.getLogger(__name__)
 
 
+@enginefacade.transaction_context_provider
 class RequestContext(context.RequestContext):
     """Security context and request information.
 
@@ -64,11 +66,10 @@ class RequestContext(context.RequestContext):
         :param overwrite: Set to False to ensure that the greenthread local
             copy of the index is not overwritten.
         """
-        # NOTE(jamielennox): oslo.context still uses some old variables names.
-        # These arguments are maintained instead of passed as kwargs to
-        # maintain the interface for tests.
-        kwargs.setdefault('user', user_id)
-        kwargs.setdefault('tenant', project_id)
+        # NOTE(smcginnis): To keep it compatible for code using positional
+        # args, explicityly set user_id and project_id in kwargs.
+        kwargs.setdefault('user_id', user_id)
+        kwargs.setdefault('project_id', project_id)
 
         super(RequestContext, self).__init__(is_admin=is_admin, **kwargs)
 
@@ -120,7 +121,7 @@ class RequestContext(context.RequestContext):
         result['user_id'] = self.user_id
         result['project_id'] = self.project_id
         result['project_name'] = self.project_name
-        result['domain'] = self.domain
+        result['domain_id'] = self.domain_id
         result['read_deleted'] = self.read_deleted
         result['remote_address'] = self.remote_address
         result['timestamp'] = self.timestamp.isoformat()
@@ -134,7 +135,7 @@ class RequestContext(context.RequestContext):
         return cls(user_id=values.get('user_id'),
                    project_id=values.get('project_id'),
                    project_name=values.get('project_name'),
-                   domain=values.get('domain'),
+                   domain_id=values.get('domain_id'),
                    read_deleted=values.get('read_deleted'),
                    remote_address=values.get('remote_address'),
                    timestamp=values.get('timestamp'),
@@ -144,8 +145,8 @@ class RequestContext(context.RequestContext):
                    is_admin=values.get('is_admin'),
                    roles=values.get('roles'),
                    auth_token=values.get('auth_token'),
-                   user_domain=values.get('user_domain'),
-                   project_domain=values.get('project_domain'))
+                   user_domain_id=values.get('user_domain_id'),
+                   project_domain_id=values.get('project_domain_id'))
 
     def authorize(self, action, target=None, target_obj=None, fatal=True):
         """Verifies that the given action is valid on the target in this context.
@@ -205,28 +206,6 @@ class RequestContext(context.RequestContext):
 
     def deepcopy(self):
         return copy.deepcopy(self)
-
-    # NOTE(sirp): the openstack/common version of RequestContext uses
-    # tenant/user whereas the Cinder version uses project_id/user_id.
-    # NOTE(adrienverge): The Cinder version of RequestContext now uses
-    # tenant/user internally, so it is compatible with context-aware code from
-    # openstack/common. We still need this shim for the rest of Cinder's
-    # code.
-    @property
-    def project_id(self):
-        return self.tenant
-
-    @project_id.setter
-    def project_id(self, value):
-        self.tenant = value
-
-    @property
-    def user_id(self):
-        return self.user
-
-    @user_id.setter
-    def user_id(self, value):
-        self.user = value
 
 
 def get_admin_context(read_deleted="no"):

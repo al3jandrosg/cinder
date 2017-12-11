@@ -25,25 +25,16 @@ from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
 from cinder.api.v2 import volumes as volumes_v2
 from cinder.api.v3.views import volumes as volume_views_v3
+from cinder.backup import api as backup_api
 from cinder import exception
 from cinder import group as group_api
 from cinder.i18n import _
+from cinder.image import glance
 from cinder import objects
-import cinder.policy
+from cinder.policies import volumes as policy
 from cinder import utils
 
 LOG = logging.getLogger(__name__)
-
-
-def check_policy(context, action, target_obj=None):
-    target = {
-        'project_id': context.project_id,
-        'user_id': context.user_id
-    }
-    target.update(target_obj or {})
-
-    _action = 'volume:%s' % action
-    cinder.policy.enforce(context, _action, target)
 
 
 class VolumeController(volumes_v2.VolumeController):
@@ -53,6 +44,7 @@ class VolumeController(volumes_v2.VolumeController):
 
     def __init__(self, ext_mgr):
         self.group_api = group_api.API()
+        self.backup_api = backup_api.API()
         super(VolumeController, self).__init__(ext_mgr)
 
     def delete(self, req, id):
@@ -74,7 +66,7 @@ class VolumeController(volumes_v2.VolumeController):
                  {'id': id, 'params': params}, context=context)
 
         if force:
-            check_policy(context, 'force_delete')
+            context.authorize(policy.FORCE_DELETE_POLICY)
 
         volume = self.volume_api.get(context, id)
 
@@ -108,6 +100,12 @@ class VolumeController(volumes_v2.VolumeController):
         sort_keys, sort_dirs = common.get_sort_params(params)
         filters = params
 
+        show_count = False
+        if req_version.matches(
+                mv.SUPPORT_COUNT_INFO) and 'with_count' in filters:
+            show_count = utils.get_bool_param('with_count', filters)
+            filters.pop('with_count')
+
         self._process_volume_filtering(context=context, filters=filters,
                                        req_version=req_version)
 
@@ -125,9 +123,13 @@ class VolumeController(volumes_v2.VolumeController):
         volumes = self.volume_api.get_all(context, marker, limit,
                                           sort_keys=sort_keys,
                                           sort_dirs=sort_dirs,
-                                          filters=filters,
+                                          filters=filters.copy(),
                                           viewable_admin_meta=True,
                                           offset=offset)
+        total_count = None
+        if show_count:
+            total_count = self.volume_api.calculate_resource_count(
+                context, 'volume', filters)
 
         for volume in volumes:
             utils.add_visible_admin_metadata(volume)
@@ -135,9 +137,11 @@ class VolumeController(volumes_v2.VolumeController):
         req.cache_db_volumes(volumes.objects)
 
         if is_detail:
-            volumes = self._view_builder.detail_list(req, volumes)
+            volumes = self._view_builder.detail_list(
+                req, volumes, total_count)
         else:
-            volumes = self._view_builder.summary_list(req, volumes)
+            volumes = self._view_builder.summary_list(
+                req, volumes, total_count)
         return volumes
 
     @wsgi.Controller.api_version(mv.VOLUME_SUMMARY)
@@ -192,6 +196,31 @@ class VolumeController(volumes_v2.VolumeController):
             raise exc.HTTPConflict(explanation=six.text_type(e))
         except exception.VolumeSizeExceedsAvailableQuota as e:
             raise exc.HTTPForbidden(explanation=six.text_type(e))
+
+    def _get_image_snapshot(self, context, image_uuid):
+        image_snapshot = None
+        if image_uuid:
+            image_service = glance.get_default_image_service()
+            image_meta = image_service.show(context, image_uuid)
+            if image_meta is not None:
+                bdms = image_meta.get('properties', {}).get(
+                    'block_device_mapping', [])
+                if bdms:
+                    boot_bdm = [bdm for bdm in bdms if (
+                        bdm.get('source_type') == 'snapshot' and
+                        bdm.get('boot_index') == 0)]
+                    if boot_bdm:
+                        try:
+                            image_snapshot = self.volume_api.get_snapshot(
+                                context, boot_bdm[0].get('snapshot_id'))
+                            return image_snapshot
+                        except exception.NotFound:
+                            explanation = _(
+                                'Nova specific image is found, but boot '
+                                'volume snapshot id:%s not found.'
+                            ) % boot_bdm[0].get('snapshot_id')
+                            raise exc.HTTPNotFound(explanation=explanation)
+            return image_snapshot
 
     @wsgi.response(http_client.ACCEPTED)
     def create(self, req, body):
@@ -297,19 +326,39 @@ class VolumeController(volumes_v2.VolumeController):
             # Not found exception will be handled at the wsgi level
             kwargs['group'] = self.group_api.get(context, group_id)
 
+        if self.ext_mgr.is_loaded('os-image-create'):
+            image_ref = volume.get('imageRef')
+            if image_ref is not None:
+                image_uuid = self._image_uuid_from_ref(image_ref, context)
+                image_snapshot = self._get_image_snapshot(context, image_uuid)
+                if (req_version.matches(mv.get_api_version(
+                        mv.SUPPORT_NOVA_IMAGE)) and image_snapshot):
+                    kwargs['snapshot'] = image_snapshot
+                else:
+                    kwargs['image_id'] = image_uuid
+
+        # Add backup if min version is greater than or equal
+        # to VOLUME_CREATE_FROM_BACKUP.
+        if req_version.matches(mv.VOLUME_CREATE_FROM_BACKUP, None):
+            backup_id = volume.get('backup_id')
+            if backup_id:
+                if not uuidutils.is_uuid_like(backup_id):
+                    msg = _("Backup ID must be in UUID form.")
+                    raise exc.HTTPBadRequest(explanation=msg)
+                kwargs['backup'] = self.backup_api.get(context,
+                                                       backup_id=backup_id)
+            else:
+                kwargs['backup'] = None
+
         size = volume.get('size', None)
         if size is None and kwargs['snapshot'] is not None:
             size = kwargs['snapshot']['volume_size']
         elif size is None and kwargs['source_volume'] is not None:
             size = kwargs['source_volume']['size']
+        elif size is None and kwargs.get('backup') is not None:
+            size = kwargs['backup']['size']
 
         LOG.info("Create volume of %s GB", size)
-
-        if self.ext_mgr.is_loaded('os-image-create'):
-            image_ref = volume.get('imageRef')
-            if image_ref is not None:
-                image_uuid = self._image_uuid_from_ref(image_ref, context)
-                kwargs['image_id'] = image_uuid
 
         kwargs['availability_zone'] = volume.get('availability_zone', None)
         kwargs['scheduler_hints'] = volume.get('scheduler_hints', None)

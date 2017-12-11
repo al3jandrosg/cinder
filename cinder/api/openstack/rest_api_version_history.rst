@@ -373,3 +373,19 @@ user documentation.
   Support attachment completion. See the
   `API reference <https://developer.openstack.org/api-ref/block-storage/v3/index.html#complete-attachment>`__
   for details.
+
+3.45
+----
+  Add ``count`` field to volume, backup and snapshot list and detail APIs.
+
+3.46
+----
+  Support create volume by Nova specific image (0 size image).
+
+3.47
+----
+  Support create volume from backup.
+
+3.48
+----
+  Add ``shared_targets`` and ``service_uuid`` fields to volume.

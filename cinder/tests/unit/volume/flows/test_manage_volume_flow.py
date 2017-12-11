@@ -109,7 +109,9 @@ class ManageVolumeFlowTestCase(test.TestCase):
             'context': mock.sentinel.context,
             'volume': mock.sentinel.volume,
             'manage_existing_ref': mock.sentinel.ref,
-            'optional_args': {'is_quota_committed': False},
+            'group_snapshot': None,
+            'optional_args': {'is_quota_committed': False,
+                              'update_size': True}
         }
 
         manager.get_flow(
@@ -135,6 +137,7 @@ class ManageVolumeFlowTestCase(test.TestCase):
             'context',
             'volume',
             'manage_existing_ref',
+            'group_snapshot',
             'optional_args',
         ]
 

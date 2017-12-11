@@ -36,7 +36,6 @@ from oslo_messaging import conffixture as messaging_conffixture
 from oslo_serialization import jsonutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
-from oslotest import moxstubout
 import six
 import testtools
 
@@ -58,6 +57,7 @@ from cinder.volume import utils
 CONF = cfg.CONF
 
 _DB_CACHE = None
+SESSION_CONFIGURED = False
 
 
 class TestingException(Exception):
@@ -67,6 +67,12 @@ class TestingException(Exception):
 class Database(fixtures.Fixture):
 
     def __init__(self, db_api, db_migrate, sql_connection):
+        # NOTE(lhx_): oslo_db.enginefacade is configured in tests the same
+        # way as it's done for any other services that uses the db
+        global SESSION_CONFIGURED
+        if not SESSION_CONFIGURED:
+            sqla_api.configure(CONF)
+            SESSION_CONFIGURED = True
         self.sql_connection = sql_connection
 
         # Suppress logging for test runs
@@ -95,6 +101,15 @@ class TestCase(testtools.TestCase):
     RESOURCE_FILTER_PATH = 'etc/cinder/resource_filters.json'
     MOCK_WORKER = True
     MOCK_TOOZ = True
+
+    def __init__(self, *args, **kwargs):
+        super(TestCase, self).__init__(*args, **kwargs)
+
+        # Suppress some log messages during test runs
+        castellan_logger = logging.getLogger('castellan')
+        castellan_logger.setLevel(logging.ERROR)
+        stevedore_logger = logging.getLogger('stevedore')
+        stevedore_logger.setLevel(logging.ERROR)
 
     def _get_joined_notifier(self, *args, **kwargs):
         # We create a new fake notifier but we join the notifications with
@@ -195,6 +210,10 @@ class TestCase(testtools.TestCase):
                                  sql_connection=CONF.database.connection)
         self.useFixture(_DB_CACHE)
 
+        # NOTE(blk-u): WarningsFixture must be after the Database fixture
+        # because sqlalchemy-migrate messes with the warnings filters.
+        self.useFixture(cinder_fixtures.WarningsFixture())
+
         # NOTE(danms): Make sure to reset us back to non-remote objects
         # for each test to avoid interactions. Also, backup the object
         # registry.
@@ -203,11 +222,6 @@ class TestCase(testtools.TestCase):
             objects_base.CinderObjectRegistry._registry._obj_classes)
         self.addCleanup(self._restore_obj_registry)
 
-        # emulate some of the mox stuff, we can't use the metaclass
-        # because it screws with our generators
-        mox_fixture = self.useFixture(moxstubout.MoxStubout())
-        self.mox = mox_fixture.mox
-        self.stubs = mox_fixture.stubs
         self.addCleanup(CONF.reset)
         self.addCleanup(self._common_cleanup)
         self.injected = []
@@ -243,7 +257,6 @@ class TestCase(testtools.TestCase):
                                  ),
                                  self.RESOURCE_FILTER_PATH))
         self._disable_osprofiler()
-        self._disallow_invalid_uuids()
 
         # NOTE(geguileo): This is required because common get_by_id method in
         # cinder.db.sqlalchemy.api caches get methods and if we use a mocked
@@ -255,6 +268,13 @@ class TestCase(testtools.TestCase):
                              group='coordination')
         coordination.COORDINATOR.start()
         self.addCleanup(coordination.COORDINATOR.stop)
+
+        if six.PY3:
+            # TODO(smcginnis) Python 3 deprecates assertRaisesRegexp to
+            # assertRaisesRegex, but Python 2 does not have the new name. This
+            # can be removed once we stop supporting py2 or the new name is
+            # added.
+            self.assertRaisesRegexp = self.assertRaisesRegex
 
     def _restore_obj_registry(self):
         objects_base.CinderObjectRegistry._registry._obj_classes = \
@@ -270,17 +290,6 @@ class TestCase(testtools.TestCase):
         mock_decorator = mock.MagicMock(side_effect=side_effect)
         p = mock.patch("osprofiler.profiler.trace_cls",
                        return_value=mock_decorator)
-        p.start()
-
-    def _disallow_invalid_uuids(self):
-        def catch_uuid_warning(message, *args, **kwargs):
-            ovo_message = "invalid UUID. Using UUIDFields with invalid UUIDs " \
-                          "is no longer supported"
-            if ovo_message in message:
-                raise AssertionError(message)
-
-        p = mock.patch("warnings.warn",
-                       side_effect=catch_uuid_warning)
         p.start()
 
     def _common_cleanup(self):
@@ -315,7 +324,7 @@ class TestCase(testtools.TestCase):
         """Override CONF variables for a test."""
         group = kw.pop('group', None)
         for k, v in kw.items():
-            CONF.set_override(k, v, group)
+            self.override_config(k, v, group)
 
     def start_service(self, name, host=None, **kwargs):
         host = host if host else uuid.uuid4().hex

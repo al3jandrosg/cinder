@@ -15,16 +15,7 @@
 
 from castellan import options as castellan_opts
 from oslo_config import cfg
-from oslo_log import log as logging
-from oslo_utils import importutils
-
-LOG = logging.getLogger(__name__)
 
 CONF = cfg.CONF
 
 castellan_opts.set_defaults(CONF)
-
-
-def API(conf=CONF):
-    cls = importutils.import_class(conf.key_manager.backend)
-    return cls(conf)
