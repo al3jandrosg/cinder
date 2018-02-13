@@ -89,13 +89,6 @@ sf_opts = [
                     'This is required or deployments that have implemented '
                     'the use of VLANs for iSCSI networks in their cloud.'),
 
-    cfg.BoolOpt('sf_enable_volume_mapping',
-                default=True,
-                help='Create an internal mapping of volume IDs and account.  '
-                     'Optimizes lookups and performance at the expense of '
-                     'memory, very large deployments may want to consider '
-                     'setting to False.'),
-
     cfg.PortOpt('sf_api_port',
                 default=443,
                 help='SolidFire API port. Useful if the device api is behind '
@@ -166,10 +159,12 @@ class SolidFireDriver(san.SanISCSIDriver):
           2.0.8 - Add active status filter to get volume ops
           2.0.9 - Always purge on delete volume
           2.0.10 - Add response to debug on retryable errors
+          2.0.11 - Add ability to failback replicating volumes
+          2.0.12 - Fix bug #1744005
 
     """
 
-    VERSION = '2.0.10'
+    VERSION = '2.0.12'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "NetApp_SolidFire_CI"
@@ -210,7 +205,7 @@ class SolidFireDriver(san.SanISCSIDriver):
     def __init__(self, *args, **kwargs):
         super(SolidFireDriver, self).__init__(*args, **kwargs)
         self.failed_over_id = kwargs.get('active_backend_id', None)
-        self.active_cluster_info = {}
+        self.replication_status = kwargs.get('replication_status', "na")
         self.configuration.append_config_values(sf_opts)
         self.template_account_id = None
         self.max_volumes_per_account = 1990
@@ -220,17 +215,26 @@ class SolidFireDriver(san.SanISCSIDriver):
         self.failed_over = False
         self.target_driver = SolidFireISCSI(solidfire_driver=self,
                                             configuration=self.configuration)
+        self.default_cluster = self._create_cluster_reference()
+        self.active_cluster = self.default_cluster
+
+        # If we're failed over, we need to parse things out and set the active
+        # cluster appropriately
         if self.failed_over_id:
+            self.failed_over = True
             remote_info = self._get_remote_info_by_id(self.failed_over_id)
             if remote_info:
-                self._set_active_cluster_info(remote_info['endpoint'])
+                self.active_cluster = self._create_cluster_reference(
+                    remote_info['endpoint'])
             else:
                 LOG.error('Failed to initialize SolidFire driver to '
                           'a remote cluster specified at id: %s',
                           self.failed_over_id)
-        else:
-            self._set_active_cluster_info()
 
+        # NOTE(jdg):  This works even in a failed over state, because what we
+        # do is use self.active_cluster in issue_api_request so by default we
+        # always use the currently active cluster, override that by provding
+        # an endpoint to issue_api_request if needed
         try:
             self._update_cluster_status()
         except exception.SolidFireAPIException:
@@ -240,8 +244,7 @@ class SolidFireDriver(san.SanISCSIDriver):
             account = self.configuration.sf_template_account_name
             self.template_account_id = self._create_template_account(account)
 
-        if not self.failed_over_id:
-            self._set_cluster_pairs()
+        self._set_cluster_pairs()
 
     def locked_image_id_operation(f, external=False):
         def lvo_inner1(inst, *args, **kwargs):
@@ -348,7 +351,8 @@ class SolidFireDriver(san.SanISCSIDriver):
                     remote_info['clusterPairID'] = ep['clusterPairID']
                     break
 
-            if not remote_pair:
+            if (not remote_pair and
+                    remote_info['mvip'] != self.active_cluster['mvip']):
                 # NOTE(jdg): create_remote_pairing sets the
                 # clusterPairID in remote_info for us
                 self._create_remote_pairing(remote_info)
@@ -356,23 +360,51 @@ class SolidFireDriver(san.SanISCSIDriver):
             LOG.debug("Setting replication_enabled to True.")
             self.replication_enabled = True
 
-    def _set_active_cluster_info(self, endpoint=None):
+    def _create_cluster_reference(self, endpoint=None):
+        cluster_ref = {}
+        cluster_ref['endpoint'] = endpoint
         if not endpoint:
-            self.active_cluster_info['endpoint'] = self._build_endpoint_info()
+            cluster_ref['endpoint'] = self._build_endpoint_info()
+
+        cluster_info = (self._issue_api_request(
+            'GetClusterInfo', {}, endpoint=cluster_ref['endpoint'])
+            ['result']['clusterInfo'])
+
+        for k, v in cluster_info.items():
+            cluster_ref[k] = v
+
+        # Add a couple extra things that are handy for us
+        cluster_ref['clusterAPIVersion'] = (
+            self._issue_api_request('GetClusterVersionInfo',
+                                    {}, endpoint=cluster_ref['endpoint'])
+            ['result']['clusterAPIVersion'])
+
+        # FIXME(jdg): This is fine for the default/base cluster, but
+        # if we have a secondary configured, and are using vlans etc
+        # we don't use what's in the config (that's the primary only),
+        # we need to set this from the replication_device config
+        if self.configuration.get('sf_svip', None):
+            cluster_ref['svip'] = (
+                self.configuration.get('sf_svip'))
+        return cluster_ref
+
+    def _set_active_cluster(self, endpoint=None):
+        if not endpoint:
+            self.active_cluster['endpoint'] = self._build_endpoint_info()
         else:
-            self.active_cluster_info['endpoint'] = endpoint
+            self.active_cluster['endpoint'] = endpoint
 
         for k, v in self._issue_api_request(
                 'GetClusterInfo',
                 {})['result']['clusterInfo'].items():
-            self.active_cluster_info[k] = v
+            self.active_cluster[k] = v
 
         # Add a couple extra things that are handy for us
-        self.active_cluster_info['clusterAPIVersion'] = (
+        self.active_cluster['clusterAPIVersion'] = (
             self._issue_api_request('GetClusterVersionInfo',
                                     {})['result']['clusterAPIVersion'])
         if self.configuration.get('sf_svip', None):
-            self.active_cluster_info['svip'] = (
+            self.active_cluster['svip'] = (
                 self.configuration.get('sf_svip'))
 
     def _create_provider_id_string(self,
@@ -383,7 +415,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         # swap that with the parent volume id
         return "%s %s %s" % (resource_id,
                              account_or_vol_id,
-                             self.active_cluster_info['uuid'])
+                             self.active_cluster['uuid'])
 
     def _init_snapshot_mappings(self, srefs):
         updates = []
@@ -470,7 +502,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         if params is None:
             params = {}
         if endpoint is None:
-            endpoint = self.active_cluster_info['endpoint']
+            endpoint = self.active_cluster['endpoint']
 
         payload = {'method': method, 'params': params}
         url = '%s/json-rpc/%s/' % (endpoint['url'], version)
@@ -497,10 +529,6 @@ class SolidFireDriver(san.SanISCSIDriver):
 
         return response
 
-    def _get_active_volumes_by_sfaccount(self, account_id, endpoint=None):
-        return [v for v in self._get_volumes_by_sfaccount(account_id, endpoint)
-                if v['status'] == "active"]
-
     def _get_volumes_by_sfaccount(self, account_id, endpoint=None):
         """Get all volumes on cluster for specified account."""
         params = {'accountID': account_id}
@@ -508,6 +536,61 @@ class SolidFireDriver(san.SanISCSIDriver):
             'ListVolumesForAccount',
             params,
             endpoint=endpoint)['result']['volumes']
+
+    def _get_volumes_for_account(self, sf_account_id, cinder_uuid=None):
+        # ListVolumesForAccount gives both Active and Deleted
+        # we require the solidfire accountID, uuid of volume
+        # is optional
+        vols = self._get_volumes_by_sfaccount(sf_account_id)
+        if cinder_uuid:
+            vlist = [v for v in vols if
+                     cinder_uuid in v['name']]
+        else:
+            vlist = [v for v in vols]
+        vlist = sorted(vlist, key=lambda k: k['volumeID'])
+        return vlist
+
+    def _get_sfvol_by_cinder_vref(self, vref):
+        sfvol = None
+        provider_id = vref.get('provider_id', None)
+        if provider_id:
+            try:
+                sf_vid, sf_aid, sf_cluster_id = provider_id.split(' ')
+            except ValueError:
+                LOG.warning("Invalid provider_id entry for volume: %s",
+                            vref.id)
+            else:
+                # So there shouldn't be any clusters out in the field that are
+                # running Element < 8.0, but just in case; we'll to a try
+                # block here and fall back to the old methods just to be safe
+                try:
+                    sfvol = self._issue_api_request(
+                        'ListVolumes',
+                        {'startVolumeID': sf_vid,
+                         'limit': 1},
+                        version='8.0')['result']['volumes'][0]
+                except Exception:
+                    pass
+        if not sfvol:
+            LOG.info("Failed to find volume by provider_id, "
+                     "attempting ListForAccount")
+            for account in self._get_sfaccounts_for_tenant(vref.project_id):
+                sfvols = self._issue_api_request(
+                    'ListVolumesForAccount',
+                    {'accountID': account['accountID']})['result']['volumes']
+                if len(sfvols) >= 1:
+                    sfvol = sfvols[0]
+                    break
+        if not sfvol:
+            # Hmmm, frankly if we get here there's a problem,
+            # but try one last trick
+            LOG.info("Failed to find volume by provider_id or account, "
+                     "attempting find by attributes.")
+            for v in sfvols:
+                if v['Attributes'].get('uuid', None):
+                    sfvol = v
+                    break
+        return sfvol
 
     def _get_sfaccount_by_name(self, sf_account_name, endpoint=None):
         """Get SolidFire account object by name."""
@@ -577,7 +660,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         if endpoint:
             iscsi_portal = endpoint['svip']
         else:
-            iscsi_portal = self.active_cluster_info['svip']
+            iscsi_portal = self.active_cluster['svip']
 
         if ':' not in iscsi_portal:
             iscsi_portal += ':3260'
@@ -769,7 +852,13 @@ class SolidFireDriver(san.SanISCSIDriver):
         # and over-ride any existing
         # extra-specs settings if present
         if qos_specs_id is not None:
-            kvs = qos_specs.get_qos_specs(ctxt, qos_specs_id)['specs']
+            # Policy changes require admin context to get QoS specs
+            # at the object layer (base:get_by_id), we can either
+            # explicitly promote here, or pass in a context of None
+            # and let the qos_specs api get an admin context for us
+            # personally I prefer explicit, so here ya go.
+            admin_ctxt = context.get_admin_context()
+            kvs = qos_specs.get_qos_specs(admin_ctxt, qos_specs_id)['specs']
         else:
             kvs = specs
 
@@ -1039,19 +1128,6 @@ class SolidFireDriver(san.SanISCSIDriver):
                         'secondary SolidFire accounts.')
                 raise exception.SolidFireDriverException(msg)
         return sf_account
-
-    def _get_volumes_for_account(self, sf_account_id, cinder_uuid=None):
-        # ListVolumesForAccount gives both Active and Deleted
-        # we require the solidfire accountID, uuid of volume
-        # is optional
-        vols = self._get_active_volumes_by_sfaccount(sf_account_id)
-        if cinder_uuid:
-            vlist = [v for v in vols if
-                     cinder_uuid in v['name']]
-        else:
-            vlist = [v for v in vols]
-        vlist = sorted(vlist, key=lambda k: k['volumeID'])
-        return vlist
 
     def _create_vag(self, iqn, vol_id=None):
         """Create a volume access group(vag).
@@ -1343,7 +1419,11 @@ class SolidFireDriver(san.SanISCSIDriver):
         type_ref = volume_types.get_volume_type(ctxt, type_id)
         specs = type_ref.get('extra_specs')
 
-        if specs.get('replication', 'disabled').lower() == 'enabled':
+        # We use the replication_enabled flag for both the trigger in the
+        # driver, as well as capabilities for scheduler. Note we don't
+        # require or check for the additional "replication:True|False"
+        # spec in the type any longer.
+        if specs.get('replication_enabled', "") == "<is> True":
             rep_opts['targets'] = specs.get(
                 'solidfire:replication_targets', self.cluster_pairs[0])
         return rep_opts
@@ -1421,27 +1501,11 @@ class SolidFireDriver(san.SanISCSIDriver):
     def delete_volume(self, volume):
         """Delete SolidFire Volume from device.
 
-         SolidFire allows multiple volumes with same name,
-         volumeID is what's guaranteed unique.
+        SolidFire allows multiple volumes with same name,
+        volumeID is what's guaranteed unique.
 
         """
-        sf_vol = None
-        accounts = self._get_sfaccounts_for_tenant(volume['project_id'])
-        if accounts is None:
-            LOG.error("Account for Volume ID %s was not found on "
-                      "the SolidFire Cluster while attempting "
-                      "delete_volume operation!", volume['id'])
-            LOG.error("This usually means the volume was never "
-                      "successfully created.")
-            return
-
-        for acc in accounts:
-            vols = self._get_volumes_for_account(acc['accountID'],
-                                                 volume['name_id'])
-            if vols:
-                sf_vol = vols[0]
-                break
-
+        sf_vol = self._get_sfvol_by_cinder_vref(volume)
         if sf_vol is not None:
             for vp in sf_vol.get('volumePairs', []):
                 LOG.debug("Deleting paired volume on remote cluster...")
@@ -1488,9 +1552,9 @@ class SolidFireDriver(san.SanISCSIDriver):
                                             params,
                                             version='6.0')
                     return
-        # Make sure it's not "old style" using clones as snaps
-        LOG.debug("Snapshot not found, checking old style clones.")
-        self.delete_volume(snapshot)
+        LOG.warning(
+            "Snapshot %s not found, old style clones may not be deleted.",
+            snapshot.id)
 
     def create_snapshot(self, snapshot):
         sfaccount = self._get_sfaccount(snapshot['project_id'])
@@ -1819,7 +1883,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         data['replication_enabled'] = self.replication_enabled
         if self.replication_enabled:
             data['replication'] = 'enabled'
-        data['active_cluster_mvip'] = self.active_cluster_info['mvip']
+        data['active_cluster_mvip'] = self.active_cluster['mvip']
         data['reserved_percentage'] = self.configuration.reserved_percentage
         data['QoS_support'] = True
 
@@ -2053,35 +2117,88 @@ class SolidFireDriver(san.SanISCSIDriver):
         self._issue_api_request('ModifyVolume',
                                 params, version='5.0')
 
-    def _failover_volume(self, remote_vol, remote):
+    def _failover_volume(self, src_vol, tgt_vol, tgt_cluster):
         """Modify remote volume to R/W mode."""
-        self._issue_api_request(
-            'RemoveVolumePair',
-            {'volumeID': remote_vol['volumeID']},
-            endpoint=remote['endpoint'], version='7.0')
+        # Put the src in tgt mode assuming it's still available
+        # catch the exception if the cluster isn't available and
+        # continue on
+        params = {'volumeID': src_vol['volumeID'],
+                  'access': 'replicationTarget'}
+        try:
+            self._issue_api_request('ModifyVolume', params)
+        except exception.SolidFireAPIException:
+            # FIXME
+            pass
 
-        params = {'volumeID': remote_vol['volumeID'],
+        # Now call out to the remote and make the tgt our new src
+        params = {'volumeID': tgt_vol['volumeID'],
                   'access': 'readWrite'}
         self._issue_api_request('ModifyVolume', params,
-                                endpoint=remote['endpoint'])
+                                endpoint=tgt_cluster['endpoint'])
 
     def failover_host(self, context, volumes, secondary_id=None, groups=None):
-        """Failover to replication target."""
+        """Failover to replication target.
+
+        In order to do failback, you MUST specify the original/default cluster
+        using secondary_id option.  You can do this simply by specifying:
+        `secondary_id=default`
+        """
+        failback = False
         volume_updates = []
         remote = None
+        secondary_id = secondary_id.lower() if secondary_id else None
 
+        # FIXME(jdg): There's an awful lot going on in this if/else block
+        # it's pretty simple in terms of what it does, but would be
+        # good to come back and clean it up and make it a bit more
+        # readable/maintainable.
+
+        # There's two cases we have to deal with
+        #  1. Caller specified a backend target to fail too
+        #  2. Caller just wants to failover to anything available
+        # In case `1` we need to check if they specified the default
+        # and want to failback, so make sure we're even failed-over
+        #
+        # In case `2` they didn't specify a target, but if we're failed
+        # over already, can't just grab a target off the list, we might
+        # already be on that target, so check that and try and go back to
+        # whence you came
         if secondary_id:
-            for rc in self.cluster_pairs:
-                if rc['mvip'] == secondary_id:
-                    remote = rc
-                    break
+            if secondary_id == "default" and not self.failed_over:
+                LOG.error("SolidFire driver received failover_host "
+                          "specifying failback to default, the "
+                          "host however is not in `failed_over` "
+                          "state, so can't failback.")
+                raise exception.InvalidReplicationTarget
+            elif secondary_id == "default" and self.failed_over:
+                remote = self.default_cluster
+                failback = True
+                # TODO(jdg): Add a simple check here to make
+                # sure the default is online
+            else:
+                for rc in self.cluster_pairs:
+                    if rc['mvip'] == secondary_id:
+                        remote = rc
+                        break
             if not remote:
                 LOG.error("SolidFire driver received failover_host "
                           "but was unable to find specified replication "
                           "pair with id: %s.", secondary_id)
                 raise exception.InvalidReplicationTarget
         else:
-            remote = self.cluster_pairs[0]
+            # Otherwise, we just grab a target off the list
+            # but beware, we may already be failed over and there
+            # may not be another target left, so recycle back to
+            # the default
+            if self.failed_over:
+                for cp in self.cluster_pairs:
+                    if cp['endpoint'] != self.active_cluster['endpoint']:
+                        remote = cp
+                if not remote:
+                    remote = self.default_cluster
+                    failback = True
+            else:
+                remote = self.cluster_pairs[0]
 
         if not remote or not self.replication_enabled:
             LOG.error("SolidFire driver received failover_host "
@@ -2092,24 +2209,25 @@ class SolidFireDriver(san.SanISCSIDriver):
                                                       "on non replicated "
                                                       "backend."))
 
-        remote_vols = self._map_sf_volumes(volumes,
+        # Ok, that was annoying; get on with it
+        target_vols = self._map_sf_volumes(volumes,
                                            endpoint=remote['endpoint'])
         primary_vols = self._map_sf_volumes(volumes)
         for v in volumes:
-            remote_vlist = [sfv for sfv in remote_vols
+            target_vlist = [sfv for sfv in target_vols
                             if sfv['cinder_id'] == v['id']]
 
-            if len(remote_vlist) > 0:
-                remote_vol = remote_vlist[0]
-                self._failover_volume(remote_vol, remote)
+            if len(target_vlist) > 0:
+                target_vol = target_vlist[0]
+                # BOOKMARK This fails on failback using 'default'
+                #
                 primary_vol = [sfv for sfv in primary_vols if
                                sfv['cinder_id'] == v['id']][0]
-                if len(primary_vol['volumePairs']) > 0:
-                    self._issue_api_request(
-                        'RemoveVolumePair',
-                        {'volumeID': primary_vol['volumeID']},
-                        version='7.0')
-                iqn = remote_vol['iqn']
+                self._failover_volume(primary_vol, target_vol, remote)
+
+                # Now  we need to update the iqn of the volume to match
+                # the target svip etc
+                iqn = target_vol['iqn']
                 volume_updates.append(
                     {'volume_id': v['id'],
                      'updates': {
@@ -2126,10 +2244,14 @@ class SolidFireDriver(san.SanISCSIDriver):
         # has been pretty much stateless and has allowed customers to run
         # active/active HA c-vol services with SolidFire.  The introduction of
         # the active_cluster and failed_over attributes is going to break that
-        # but for now that's going to be the trade off of using replciation
-        self.active_cluster_info = remote
+        # but for now that's going to be the trade off of using replication
+        active_cluster_id = remote['mvip']
+        self.active_cluster = remote
         self.failed_over = True
-        return remote['mvip'], volume_updates, []
+        if failback:
+            active_cluster_id = 'default'
+
+        return active_cluster_id, volume_updates, []
 
     def freeze_backend(self, context):
         """Freeze backend notification."""

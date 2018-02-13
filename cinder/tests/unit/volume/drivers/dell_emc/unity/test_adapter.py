@@ -15,12 +15,12 @@
 
 import contextlib
 import functools
-import unittest
 
 import mock
 from oslo_utils import units
 
 from cinder import exception
+from cinder import test
 from cinder.tests.unit.volume.drivers.dell_emc.unity \
     import fake_exception as ex
 from cinder.tests.unit.volume.drivers.dell_emc.unity import test_client
@@ -141,6 +141,12 @@ class MockClient(object):
             raise ex.DetachIsCalled()
 
     @staticmethod
+    def detach_all(lun):
+        error_ids = ['lun_44']
+        if lun.get_id() in error_ids:
+            raise ex.DetachAllIsCalled()
+
+    @staticmethod
     def get_iscsi_target_info(allowed_ports=None):
         return [{'portal': '1.2.3.4:1234', 'iqn': 'iqn.1-1.com.e:c.a.a0'},
                 {'portal': '1.2.3.5:1234', 'iqn': 'iqn.1-1.com.e:c.a.a1'}]
@@ -191,6 +197,9 @@ class MockClient(object):
     @property
     def system(self):
         return self._system
+
+    def restore_snapshot(self, snap_name):
+        return test_client.MockResource(name="back_snap")
 
 
 class MockLookupService(object):
@@ -329,8 +338,9 @@ class IdMatcher(object):
 ########################
 
 @mock.patch.object(adapter, 'storops_ex', new=ex)
-class CommonAdapterTest(unittest.TestCase):
+class CommonAdapterTest(test.TestCase):
     def setUp(self):
+        super(CommonAdapterTest, self).setUp()
         self.adapter = mock_adapter(adapter.CommonAdapter)
 
     def test_get_managed_pools(self):
@@ -441,6 +451,13 @@ class CommonAdapterTest(unittest.TestCase):
             self.adapter.terminate_connection(volume, connector)
 
         self.assertRaises(ex.DetachIsCalled, f)
+
+    def test_terminate_connection_force_detach(self):
+        def f():
+            volume = MockOSResource(provider_location='id^lun_44', id='id_44')
+            self.adapter.terminate_connection(volume, None)
+
+        self.assertRaises(ex.DetachAllIsCalled, f)
 
     def test_terminate_connection_snapshot(self):
         def f():
@@ -685,9 +702,15 @@ class CommonAdapterTest(unittest.TestCase):
             config.unity_io_ports = ['', '   ']
             self.adapter.normalize_config(config)
 
+    def test_restore_snapshot(self):
+        volume = MockOSResource(id='1', name='vol_1')
+        snapshot = MockOSResource(id='2', name='snap_1')
+        self.adapter.restore_snapshot(volume, snapshot)
 
-class FCAdapterTest(unittest.TestCase):
+
+class FCAdapterTest(test.TestCase):
     def setUp(self):
+        super(FCAdapterTest, self).setUp()
         self.adapter = mock_adapter(adapter.FCAdapter)
 
     def test_setup(self):
@@ -799,8 +822,9 @@ class FCAdapterTest(unittest.TestCase):
             self.adapter.validate_ports(['spa_iom*', 'spc_invalid'])
 
 
-class ISCSIAdapterTest(unittest.TestCase):
+class ISCSIAdapterTest(test.TestCase):
     def setUp(self):
+        super(ISCSIAdapterTest, self).setUp()
         self.adapter = mock_adapter(adapter.ISCSIAdapter)
 
     def test_iscsi_protocol(self):

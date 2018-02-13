@@ -1,7 +1,7 @@
 .. -*- rst -*-
 
-Consistency groups
-==================
+Consistency groups (DEPRECATED)
+===============================
 
 Consistency groups enable you to create snapshots at the exact same
 point in time from multiple volumes. For example, a database might
@@ -31,6 +31,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - marker: marker
@@ -69,7 +70,7 @@ Request
 
    - project_id: project_id_path
    - consistencygroup: consistencygroup
-   - description: description_6
+   - description: description_11
    - availability_zone: availability_zone
    - volume_types: volume_types_2
    - name: name_15
@@ -87,7 +88,7 @@ Response
 
    - consistencygroup: consistencygroup
    - status: status_1
-   - description: description_11
+   - description: description_6
    - availability_zone: availability_zone
    - created_at: created_at
    - volume_types: volume_types
@@ -123,7 +124,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_1
-   - description: description
+   - description: description_6
    - availability_zone: availability_zone
    - created_at: created_at
    - volume_types: volume_types
@@ -156,7 +157,7 @@ Request
    - consistencygroup-from-src: consistencygroup-from-src
    - status: status_1
    - user_id: user_id
-   - description: description
+   - description: description_11
    - cgsnapshot_id: cgsnapshot_id
    - source_cgid: source_cgid
    - project_id: project_id
@@ -213,6 +214,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - marker: marker
@@ -225,7 +227,7 @@ Response Parameters
 
    - consistencygroups: consistencygroups
    - status: status_1
-   - description: description
+   - description: description_6
    - availability_zone: availability_zone
    - created_at: created_at
    - volume_types: volume_types
@@ -258,7 +260,7 @@ Request
    - consistencygroup_id: consistencygroup_id_2
    - consistencygroup: consistencygroup
    - remove_volumes: remove_volumes
-   - description: description
+   - description: description_11
    - add_volumes: add_volumes
    - name: name
 

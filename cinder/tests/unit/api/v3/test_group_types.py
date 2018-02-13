@@ -141,6 +141,24 @@ class GroupTypesApiTest(test.TestCase):
             self.ctxt, 'group_type1', {},
             boolean_is_public, description=None)
 
+    @mock.patch.object(group_types, "get_group_type_by_name")
+    @mock.patch.object(group_types, "create")
+    @mock.patch("cinder.api.openstack.wsgi.Request.cache_resource")
+    @mock.patch("cinder.api.views.types.ViewBuilder.show")
+    def test_create_group_type_with_group_specs_null(
+            self, mock_show, mock_cache_resource,
+            mock_create, mock_get):
+
+        req = fakes.HTTPRequest.blank('/v3/%s/types' % fake.PROJECT_ID,
+                                      version=mv.GROUP_TYPE)
+        req.environ['cinder.context'] = self.ctxt
+
+        body = {"group_type": {"name": "group_type1",
+                               "group_specs": None}}
+        self.controller.create(req, body=body)
+        mock_create.assert_called_once_with(
+            self.ctxt, 'group_type1', None, True, description=None)
+
     @ddt.data(fake.GROUP_TYPE_ID, IN_USE_GROUP_TYPE)
     def test_group_type_destroy(self, grp_type_id):
         grp_type = {'id': grp_type_id, 'name': 'grp' + grp_type_id}
@@ -338,6 +356,43 @@ class GroupTypesApiTest(test.TestCase):
         mock_update.assert_called_once_with(
             self.ctxt, type_id, 'group_type1', None,
             is_public=boolean_is_public)
+
+    def test_update_group_type_with_name_null(self):
+        req = fakes.HTTPRequest.blank(
+            '/v3/%s/types/%s' % (fake.PROJECT_ID, fake.GROUP_TYPE_ID),
+            version=mv.GROUP_TYPE)
+        req.environ['cinder.context'] = self.ctxt
+        body = {"group_type": {"name": None}}
+        self.assertRaises(webob.exc.HTTPBadRequest, self.controller.update,
+                          req, fake.GROUP_TYPE_ID, body=body)
+
+    @ddt.data({"group_type": {"name": None,
+                              "description": "description"}},
+              {"group_type": {"name": "test",
+                              "is_public": True}},
+              {"group_type": {"description": None,
+                              "is_public": True}})
+    def test_update_group_type(self, body):
+        req = fakes.HTTPRequest.blank(
+            '/v3/%s/types/%s' % (fake.PROJECT_ID, fake.GROUP_TYPE_ID),
+            version=mv.GROUP_TYPE)
+
+        group_type_1 = group_types.create(self.ctxt, 'group_type')
+
+        req.environ['cinder.context'] = self.ctxt
+        res = self.controller.update(req, group_type_1.get('id'), body=body)
+
+        expected_name = body['group_type'].get('name')
+        if expected_name is not None:
+            self.assertEqual(expected_name, res['group_type']['name'])
+
+        expected_is_public = body['group_type'].get('is_public')
+        if expected_is_public is not None:
+            self.assertEqual(expected_is_public,
+                             res['group_type']['is_public'])
+
+        self.assertEqual(body['group_type'].get('description'),
+                         res['group_type']['description'])
 
     def test_group_types_show(self):
         self.mock_object(group_types, 'get_group_type',

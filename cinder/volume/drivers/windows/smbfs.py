@@ -14,6 +14,7 @@
 #    under the License.
 
 import os
+import re
 import sys
 
 from os_brick.remotefs import windows_remotefs as remotefs_brick
@@ -42,35 +43,11 @@ volume_opts = [
     cfg.StrOpt('smbfs_shares_config',
                default=r'C:\OpenStack\smbfs_shares.txt',
                help='File with the list of available smbfs shares.'),
-    cfg.StrOpt('smbfs_allocation_info_file_path',
-               default=r'C:\OpenStack\allocation_data.txt',
-               help=('The path of the automatically generated file containing '
-                     'information about volume disk space allocation.'),
-               deprecated_for_removal=True,
-               deprecated_since="11.0.0",
-               deprecated_reason="This allocation file is no longer used."),
     cfg.StrOpt('smbfs_default_volume_format',
                default='vhd',
                choices=['vhd', 'vhdx'],
                help=('Default format that will be used when creating volumes '
                      'if no volume format is specified.')),
-    cfg.BoolOpt('smbfs_sparsed_volumes',
-                default=True,
-                help=('Create volumes as sparsed files which take no space '
-                      'rather than regular files when using raw format, '
-                      'in which case volume creation takes lot of time.')),
-    cfg.FloatOpt('smbfs_used_ratio',
-                 default=None,
-                 help=('Percent of ACTUAL usage of the underlying volume '
-                       'before no new volumes can be allocated to the volume '
-                       'destination.'),
-                 deprecated_for_removal=True),
-    cfg.FloatOpt('smbfs_oversub_ratio',
-                 default=None,
-                 help=('This will compare the allocated to available space on '
-                       'the volume destination.  If the ratio exceeds this '
-                       'number, the destination will no longer be valid.'),
-                 deprecated_for_removal=True),
     cfg.StrOpt('smbfs_mount_point_base',
                default=r'C:\OpenStack\_mnt',
                help=('Base dir containing mount points for smbfs shares.')),
@@ -85,16 +62,11 @@ volume_opts = [
 CONF = cfg.CONF
 CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
-# TODO(lpetrut): drop the following default values. The according
-# smbfs driver opts are getting deprecated but we want to preserve
-# their defaults until we completely remove them.
-CONF.set_default('max_over_subscription_ratio', 1)
-CONF.set_default('reserved_percentage', 5)
-
 
 @interface.volumedriver
 class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
                          remotefs_drv.RemoteFSPoolMixin,
+                         remotefs_drv.RemoteFSManageableVolumesMixin,
                          remotefs_drv.RemoteFSSnapDriverDistributed):
     VERSION = VERSION
 
@@ -113,8 +85,13 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
 
     _MINIMUM_QEMU_IMG_VERSION = '1.6'
 
-    _SUPPORTED_IMAGE_FORMATS = [_DISK_FORMAT_VHD, _DISK_FORMAT_VHDX]
-    _VALID_IMAGE_EXTENSIONS = _SUPPORTED_IMAGE_FORMATS
+    _SUPPORTED_IMAGE_FORMATS = [_DISK_FORMAT_VHD,
+                                _DISK_FORMAT_VHD_LEGACY,
+                                _DISK_FORMAT_VHDX]
+    _VALID_IMAGE_EXTENSIONS = [_DISK_FORMAT_VHD, _DISK_FORMAT_VHDX]
+    _MANAGEABLE_IMAGE_RE = re.compile(
+        '.*\.(?:%s)$' % '|'.join(_VALID_IMAGE_EXTENSIONS),
+        re.IGNORECASE)
 
     _always_use_temp_snap_when_cloning = False
     _thin_provisioning_support = True
@@ -142,20 +119,12 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
         self._diskutils = utilsfactory.get_diskutils()
 
         thin_enabled = (
-            CONF.backend_defaults.nas_volume_prov_type ==
-            'thin')
+            self.configuration.nas_volume_prov_type == 'thin')
         self._thin_provisioning_support = thin_enabled
         self._thick_provisioning_support = not thin_enabled
 
     def do_setup(self, context):
         self._check_os_platform()
-
-        if self.configuration.smbfs_oversub_ratio is not None:
-            self.configuration.max_over_subscription_ratio = (
-                self.configuration.smbfs_oversub_ratio)
-        if self.configuration.smbfs_used_ratio is not None:
-            self.configuration.reserved_percentage = (
-                1 - self.configuration.smbfs_used_ratio) * 100
 
         super(WindowsSmbfsDriver, self).do_setup(context)
 
@@ -173,22 +142,6 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
             raise exception.SmbfsException(msg)
         if not os.path.isabs(self.base):
             msg = _("Invalid mount point base: %s") % self.base
-            LOG.error(msg)
-            raise exception.SmbfsException(msg)
-        if not self.configuration.max_over_subscription_ratio > 0:
-            msg = _(
-                "SMBFS config 'max_over_subscription_ratio' invalid. "
-                "Must be > 0: %s"
-            ) % self.configuration.max_over_subscription_ratio
-
-            LOG.error(msg)
-            raise exception.SmbfsException(msg)
-
-        if not 0 <= self.configuration.reserved_percentage <= 100:
-            msg = _(
-                "SMBFS config 'reserved_percentage' invalid. "
-                "Must be > 0 and <= 100: %s"
-            ) % self.configuration.reserved_percentage
             LOG.error(msg)
             raise exception.SmbfsException(msg)
 
@@ -277,7 +230,7 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
         return local_path_template
 
     def _lookup_local_volume_path(self, volume_path_template):
-        for ext in self._SUPPORTED_IMAGE_FORMATS:
+        for ext in self._VALID_IMAGE_EXTENSIONS:
             volume_path = (volume_path_template + '.' + ext
                            if ext else volume_path_template)
             if os.path.exists(volume_path):
@@ -295,7 +248,7 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
 
         if volume_path:
             ext = os.path.splitext(volume_path)[1].strip('.').lower()
-            if ext in self._SUPPORTED_IMAGE_FORMATS:
+            if ext in self._VALID_IMAGE_EXTENSIONS:
                 volume_format = ext
             else:
                 # Hyper-V relies on file extensions so we're enforcing them.
@@ -425,7 +378,7 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
                          backing_file_name)
 
     def _do_create_snapshot(self, snapshot, backing_file, new_snap_path):
-        if snapshot.volume.status == 'in-use':
+        if self._is_volume_attached(snapshot.volume):
             LOG.debug("Snapshot is in-use. Performing Nova "
                       "assisted creation.")
             return
@@ -451,8 +404,7 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
         # NOTE(lpetrut): We're slightly diverging from the super class
         # workflow. The reason is that we cannot query in-use vhd/x images,
         # nor can we add or remove images from a vhd/x chain in this case.
-        volume_status = snapshot.volume.status
-        if volume_status != 'in-use':
+        if not self._is_volume_attached(snapshot.volume):
             return super(WindowsSmbfsDriver, self)._delete_snapshot(snapshot)
 
         info_path = self._local_path_volume_info(snapshot.volume)
@@ -603,7 +555,7 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
         return share
 
     def _get_vhd_type(self, qemu_subformat=False):
-        prov_type = CONF.backend_defaults.nas_volume_prov_type
+        prov_type = self.configuration.nas_volume_prov_type
 
         if qemu_subformat:
             vhd_type = self._vhd_qemu_subformat_mapping[prov_type]
@@ -611,3 +563,13 @@ class WindowsSmbfsDriver(remotefs_drv.RevertToSnapshotMixin,
             vhd_type = self._vhd_type_mapping[prov_type]
 
         return vhd_type
+
+    def _get_managed_vol_expected_path(self, volume, volume_location):
+        fmt = self._vhdutils.get_vhd_format(volume_location['vol_local_path'])
+        return os.path.join(volume_location['mountpoint'],
+                            volume.name + ".%s" % fmt).lower()
+
+    def _set_rw_permissions(self, path):
+        # The SMBFS driver does not manage file permissions. We chose
+        # to let this up to the deployer.
+        pass

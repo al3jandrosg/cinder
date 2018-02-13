@@ -25,10 +25,10 @@ import functools
 import itertools
 import re
 import sys
-import time
 import uuid
 
 from oslo_config import cfg
+from oslo_db import api as oslo_db_api
 from oslo_db import exception as db_exc
 from oslo_db import options
 from oslo_db.sqlalchemy import enginefacade
@@ -52,6 +52,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.sql import sqltypes
 
 from cinder.api import common
+from cinder.common import constants
 from cinder.common import sqlalchemyutils
 from cinder import db
 from cinder.db.sqlalchemy import models
@@ -60,7 +61,6 @@ from cinder.i18n import _
 from cinder.objects import fields
 from cinder import utils
 from cinder.volume import utils as vol_utils
-
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -226,24 +226,6 @@ def require_backup_exists(f):
             raise exception.BackupNotFound(backup_id=backup_id)
         return f(context, backup_id, *args, **kwargs)
     return wrapper
-
-
-def _retry_on_deadlock(f):
-    """Decorator to retry a DB API call if Deadlock was received."""
-    @functools.wraps(f)
-    def wrapped(*args, **kwargs):
-        while True:
-            try:
-                return f(*args, **kwargs)
-            except db_exc.DBDeadlock:
-                LOG.warning("Deadlock detected when running "
-                            "'%(func_name)s': Retrying...",
-                            dict(func_name=f.__name__))
-                # Retry!
-                time.sleep(0.5)
-                continue
-    functools.update_wrapper(wrapped, f)
-    return wrapped
 
 
 def handle_db_data_error(f):
@@ -567,7 +549,7 @@ def service_create(context, values):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def service_update(context, service_id, values):
     if 'disabled' in values:
         values = values.copy()
@@ -644,7 +626,7 @@ def volume_service_uuids_online_data_migration(context, max_count):
     vol_refs = query.limit(max_count).all()
 
     service_refs = model_query(context, models.Service).filter_by(
-        topic="cinder-volume").limit(max_count).all()
+        topic=constants.VOLUME_TOPIC).limit(max_count).all()
 
     # build a map to access the service uuid by host
     svc_map = {}
@@ -662,6 +644,30 @@ def volume_service_uuids_online_data_migration(context, max_count):
             v.save(session)
         updated += 1
     return total, updated
+
+
+@enginefacade.writer
+def attachment_specs_online_data_migration(context, max_count):
+    from cinder.objects import volume_attachment
+    # First figure out how many attachments have specs which need to be
+    # migrated, grouped by the attachment.id from the specs table.
+    session = get_session()
+    total = session.query(models.AttachmentSpecs.attachment_id).filter_by(
+        deleted=False).group_by(models.AttachmentSpecs.attachment_id).count()
+    # Now get the limited distinct set of attachment_ids to start migrating.
+    result = session.query(
+        models.AttachmentSpecs.attachment_id).filter_by(
+        deleted=False).group_by(models.AttachmentSpecs.attachment_id).limit(
+        max_count).all()
+    migrated = 0
+    # result is a list of tuples where the first item is the attachment_id
+    for attachment_id in result:
+        attachment_id = attachment_id[0]
+        # Loading the volume attachment object will migrate it's related
+        # attachment specs and delete those attachment specs.
+        volume_attachment.VolumeAttachment.get_by_id(context, attachment_id)
+        migrated += 1
+    return total, migrated
 
 
 ###################
@@ -796,7 +802,7 @@ def cluster_create(context, values):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def cluster_update(context, id, values):
     """Set the given properties on an cluster and update it.
 
@@ -1214,7 +1220,7 @@ def _get_quota_usages_by_resource(context, session, resource):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def quota_usage_update_resource(context, old_res, new_res):
     session = get_session()
     with session.begin():
@@ -1225,7 +1231,7 @@ def quota_usage_update_resource(context, old_res, new_res):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def quota_reserve(context, resources, quotas, deltas, expire,
                   until_refresh, max_age, project_id=None,
                   is_allocated_reserve=False):
@@ -1419,7 +1425,7 @@ def _dict_with_usage_id(usages):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def reservation_commit(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
@@ -1441,7 +1447,7 @@ def reservation_commit(context, reservations, project_id=None):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def reservation_rollback(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
@@ -1470,7 +1476,7 @@ def quota_destroy_by_project(*args, **kwargs):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def quota_destroy_all_by_project(context, project_id, only_quotas=False):
     """Destroy all quotas associated with a project.
 
@@ -1512,7 +1518,7 @@ def quota_destroy_all_by_project(context, project_id, only_quotas=False):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def reservation_expire(context):
     session = get_session()
     with session.begin():
@@ -1704,7 +1710,7 @@ def volume_data_get_for_project(context, project_id,
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_destroy(context, volume_id):
     session = get_session()
     now = timeutils.utcnow()
@@ -2079,7 +2085,7 @@ def volume_attachment_get_all_by_project(context, project_id, filters=None,
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def attachment_destroy(context, attachment_id):
     """Destroy the specified attachment record."""
     utcnow = timeutils.utcnow()
@@ -2109,7 +2115,7 @@ def _attachment_specs_query(context, attachment_id, session=None):
 
 @require_context
 def attachment_specs_get(context, attachment_id):
-    """Fetch the attachment_specs for the specified attachment record."""
+    """DEPRECATED: Fetch the attachment_specs for the specified attachment."""
     rows = _attachment_specs_query(context, attachment_id).\
         all()
 
@@ -2119,7 +2125,7 @@ def attachment_specs_get(context, attachment_id):
 
 @require_context
 def attachment_specs_delete(context, attachment_id, key):
-    """Delete attachment_specs for the specified attachment record."""
+    """DEPRECATED: Delete attachment_specs for the specified attachment."""
     session = get_session()
     with session.begin():
         _attachment_specs_get_item(context,
@@ -2156,7 +2162,7 @@ def _attachment_specs_get_item(context,
 def attachment_specs_update_or_create(context,
                                       attachment_id,
                                       specs):
-    """Update attachment_specs for the specified attachment record."""
+    """DEPRECATED: Update attachment_specs for the specified attachment."""
     session = get_session()
     with session.begin():
         spec_ref = None
@@ -2915,7 +2921,7 @@ def volume_metadata_get(context, volume_id):
 
 @require_context
 @require_volume_exists
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_metadata_delete(context, volume_id, key, meta_type):
     if meta_type == common.METADATA_TYPES.user:
         (_volume_user_metadata_get_query(context, volume_id).
@@ -2938,7 +2944,7 @@ def volume_metadata_delete(context, volume_id, key, meta_type):
 
 @require_context
 @handle_db_data_error
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_metadata_update(context, volume_id, metadata, delete, meta_type):
     if meta_type == common.METADATA_TYPES.user:
         return _volume_user_metadata_update(context,
@@ -2987,7 +2993,7 @@ def volume_admin_metadata_get(context, volume_id):
 
 @require_admin_context
 @require_volume_exists
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_admin_metadata_delete(context, volume_id, key):
     _volume_admin_metadata_get_query(context, volume_id).\
         filter_by(key=key).\
@@ -2997,7 +3003,7 @@ def volume_admin_metadata_delete(context, volume_id, key):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_admin_metadata_update(context, volume_id, metadata, delete,
                                  add=True, update=True):
     return _volume_admin_metadata_update(context, volume_id, metadata, delete,
@@ -3025,7 +3031,7 @@ def snapshot_create(context, values):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def snapshot_destroy(context, snapshot_id):
     utcnow = timeutils.utcnow()
     session = get_session()
@@ -3376,7 +3382,7 @@ def snapshot_metadata_get(context, snapshot_id):
 
 @require_context
 @require_snapshot_exists
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def snapshot_metadata_delete(context, snapshot_id, key):
     _snapshot_metadata_get_query(context, snapshot_id).\
         filter_by(key=key).\
@@ -3402,7 +3408,7 @@ def _snapshot_metadata_get_item(context, snapshot_id, key, session=None):
 @require_context
 @require_snapshot_exists
 @handle_db_data_error
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def snapshot_metadata_update(context, snapshot_id, metadata, delete):
     session = get_session()
     with session.begin():
@@ -4110,7 +4116,7 @@ def volume_type_qos_specs_get(context, type_id):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_type_destroy(context, id):
     utcnow = timeutils.utcnow()
     session = get_session()
@@ -4148,7 +4154,7 @@ def volume_type_destroy(context, id):
 
 
 @require_admin_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def group_type_destroy(context, id):
     session = get_session()
     with session.begin():
@@ -4565,11 +4571,21 @@ def _qos_specs_get_all_ref(context, qos_specs_id, session=None,
 def _dict_with_children_specs(specs):
     """Convert specs list to a dict."""
     result = {}
+    update_time = None
     for spec in specs:
         # Skip deleted keys
         if not spec['deleted']:
+            # Add update time to specs list, in order to get the keyword
+            # 'updated_at' in specs info when printing logs.
+            if not update_time and spec['updated_at']:
+                update_time = spec['updated_at']
+            elif update_time and spec['updated_at']:
+                if (update_time -
+                        spec['updated_at']).total_seconds() < 0:
+                    update_time = spec['updated_at']
             result.update({spec['key']: spec['value']})
-
+    if update_time:
+        result.update({'updated_at': update_time})
     return result
 
 
@@ -4584,10 +4600,15 @@ def _dict_with_qos_specs(rows):
     result = []
     for row in rows:
         if row['key'] == 'QoS_Specs_Name':
-            member = {'name': row['value'], 'id': row['id']}
+            # Add create time for member, in order to get the keyword
+            # 'created_at' in the specs info when printing logs.
+            member = {'name': row['value'], 'id': row['id'],
+                      'created_at': row['created_at']}
             if row.specs:
                 spec_dict = _dict_with_children_specs(row.specs)
                 member['consumer'] = spec_dict.pop('consumer')
+                if spec_dict.get('updated_at'):
+                    member['updated_at'] = spec_dict.pop('updated_at')
                 member.update(dict(specs=spec_dict))
             result.append(member)
     return result
@@ -4804,7 +4825,6 @@ def qos_specs_update(context, qos_specs_id, updates):
             spec_ref.save(session=session)
 
         return specs
-
 
 ####################
 
@@ -5322,7 +5342,7 @@ def _backup_metadata_get_item(context, backup_id, key, session=None):
 @require_context
 @require_backup_exists
 @handle_db_data_error
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def backup_metadata_update(context, backup_id, metadata, delete):
     session = get_session()
     with session.begin():
@@ -5435,7 +5455,7 @@ def transfer_create(context, values):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def transfer_destroy(context, transfer_id):
     utcnow = timeutils.utcnow()
     session = get_session()
@@ -5471,8 +5491,7 @@ def transfer_accept(context, transfer_id, user_id, project_id):
                     'status': 'awaiting-transfer'}
         update = {'status': 'available',
                   'user_id': user_id,
-                  'project_id': project_id,
-                  'updated_at': models.Volume.updated_at}
+                  'project_id': project_id}
         if not conditional_update(context, models.Volume, update, expected):
             msg = (_('Transfer %(transfer_id)s: Volume id %(volume_id)s '
                      'expected in awaiting-transfer state.')
@@ -7036,7 +7055,7 @@ def _check_is_not_multitable(values, model):
 
 
 @require_context
-@_retry_on_deadlock
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def conditional_update(context, model, values, expected_values, filters=(),
                        include_deleted='no', project_only=False, order=None):
     """Compare-and-swap conditional update SQLAlchemy implementation."""

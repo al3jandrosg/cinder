@@ -23,9 +23,9 @@ from cinder import test
 # NOTE: The hashes in this list should only be changed if they come with a
 # corresponding version bump in the affected objects.
 object_data = {
-    'Backup': '1.5-3ab4b305bd43ec0cff6701fe2a849194',
+    'Backup': '1.6-c7ede487ba6fbcdd2a4711343cd972be',
     'BackupDeviceInfo': '1.0-74b3950676c690538f4bc6796bd0042e',
-    'BackupImport': '1.5-3ab4b305bd43ec0cff6701fe2a849194',
+    'BackupImport': '1.6-c7ede487ba6fbcdd2a4711343cd972be',
     'BackupList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'CleanupRequest': '1.0-e7c688b893e1d5537ccf65cc3eb10a28',
     'Cluster': '1.1-e2c533eb8cdd8d229b6c45c6cf3a9e2c',
@@ -49,7 +49,7 @@ object_data = {
     'SnapshotList': '1.0-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'Volume': '1.8-6cf615b72269cef48702a2a5c2940159',
     'VolumeList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
-    'VolumeAttachment': '1.2-b68b357a1756582b706006ea9de40c9a',
+    'VolumeAttachment': '1.3-e6a3f7c5590d19f1e3ff6f819fbe6593',
     'VolumeAttachmentList': '1.1-15ecf022a68ddbb8c2a6739cfc9f8f5e',
     'VolumeProperties': '1.1-cadac86b2bdc11eb79d1dcea988ff9e8',
     'VolumeType': '1.3-a5d8c3473db9bc3bbcdbab9313acf4d1',

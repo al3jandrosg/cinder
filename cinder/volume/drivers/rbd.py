@@ -14,12 +14,15 @@
 """RADOS Block Device Driver"""
 
 from __future__ import absolute_import
+import binascii
 import json
 import math
 import os
 import tempfile
 
+from castellan import key_manager
 from eventlet import tpool
+from os_brick import encryptors
 from os_brick.initiator import linuxrbd
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -37,7 +40,7 @@ from cinder.objects import fields
 from cinder import utils
 from cinder.volume import configuration
 from cinder.volume import driver
-
+from cinder.volume import utils as volume_utils
 
 try:
     import rados
@@ -681,12 +684,81 @@ class RBDDriver(driver.CloneableImageVD,
             return {'replication_status': fields.ReplicationStatus.DISABLED}
         return None
 
+    def _check_encryption_provider(self, volume, context):
+        """Check that this is a LUKS encryption provider.
+
+        :returns: encryption dict
+        """
+
+        encryption = self.db.volume_encryption_metadata_get(context, volume.id)
+        provider = encryption['provider']
+        if provider in encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP:
+            provider = encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP[provider]
+        if provider != encryptors.LUKS:
+            message = _("Provider %s not supported.") % provider
+            raise exception.VolumeDriverException(message=message)
+
+        if 'cipher' not in encryption or 'key_size' not in encryption:
+            msg = _('encryption spec must contain "cipher" and'
+                    '"key_size"')
+            raise exception.VolumeDriverException(message=msg)
+
+        return encryption
+
+    def _create_encrypted_volume(self, volume, context):
+        """Create an encrypted volume.
+
+        This works by creating an encrypted image locally,
+        and then uploading it to the volume.
+        """
+
+        encryption = self._check_encryption_provider(volume, context)
+
+        # Fetch the key associated with the volume and decode the passphrase
+        keymgr = key_manager.API(CONF)
+        key = keymgr.get(context, encryption['encryption_key_id'])
+        passphrase = binascii.hexlify(key.get_encoded()).decode('utf-8')
+
+        # create a file
+        tmp_dir = self._image_conversion_dir()
+
+        with tempfile.NamedTemporaryFile(dir=tmp_dir) as tmp_image:
+            with tempfile.NamedTemporaryFile(dir=tmp_dir) as tmp_key:
+                with open(tmp_key.name, 'w') as f:
+                    f.write(passphrase)
+
+                cipher_spec = image_utils.decode_cipher(encryption['cipher'],
+                                                        encryption['key_size'])
+
+                create_cmd = (
+                    'qemu-img', 'create', '-f', 'luks',
+                    '-o', 'cipher-alg=%(cipher_alg)s,'
+                    'cipher-mode=%(cipher_mode)s,'
+                    'ivgen-alg=%(ivgen_alg)s' % cipher_spec,
+                    '--object', 'secret,id=luks_sec,'
+                    'format=raw,file=%(passfile)s' % {'passfile':
+                                                      tmp_key.name},
+                    '-o', 'key-secret=luks_sec',
+                    tmp_image.name,
+                    '%sM' % (volume.size * 1024))
+                self._execute(*create_cmd)
+
+            # Copy image into RBD
+            chunk_size = self.configuration.rbd_store_chunk_size * units.Mi
+            order = int(math.log(chunk_size, 2))
+
+            cmd = ['rbd', 'import',
+                   '--pool', self.configuration.rbd_pool,
+                   '--order', order,
+                   tmp_image.name, volume.name]
+            cmd.extend(self._ceph_args())
+            self._execute(*cmd)
+
     def create_volume(self, volume):
         """Creates a logical volume."""
 
         if volume.encryption_key_id:
-            message = _("Encryption is not yet supported.")
-            raise exception.VolumeDriverException(message=message)
+            return self._create_encrypted_volume(volume, volume.obj_context)
 
         size = int(volume.size) * units.Gi
 
@@ -1026,7 +1098,7 @@ class RBDDriver(driver.CloneableImageVD,
     def _failover_volume(self, volume, remote, is_demoted, replication_status):
         """Process failover for a volume.
 
-        There are 3 different cases that will return different update values
+        There are 2 different cases that will return different update values
         for the volume:
 
         - Volume has replication enabled and failover succeeded: Set
@@ -1034,31 +1106,23 @@ class RBDDriver(driver.CloneableImageVD,
         - Volume has replication enabled and failover fails: Set status to
           error, replication status to failover-error, and store previous
           status in previous_status field.
-        - Volume replication is disabled: Set status to error, and store
-          status in previous_status field.
         """
         # Failover is allowed when volume has it enabled or it has already
         # failed over, because we may want to do a second failover.
-        if self._is_replicated_type(volume.volume_type):
-            vol_name = utils.convert_str(volume.name)
-            try:
-                self._exec_on_volume(vol_name, remote,
-                                     'mirror_image_promote', not is_demoted)
+        vol_name = utils.convert_str(volume.name)
+        try:
+            self._exec_on_volume(vol_name, remote,
+                                 'mirror_image_promote', not is_demoted)
 
-                return {'volume_id': volume.id,
-                        'updates': {'replication_status': replication_status}}
-            except Exception as e:
-                replication_status = fields.ReplicationStatus.FAILOVER_ERROR
-                LOG.error('Failed to failover volume %(volume)s with '
-                          'error: %(error)s.',
-                          {'volume': volume.name, 'error': e})
-        else:
-            replication_status = fields.ReplicationStatus.NOT_CAPABLE
-            LOG.debug('Skipping failover for non replicated volume '
-                      '%(volume)s with status: %(status)s',
-                      {'volume': volume.name, 'status': volume.status})
+            return {'volume_id': volume.id,
+                    'updates': {'replication_status': replication_status}}
+        except Exception as e:
+            replication_status = fields.ReplicationStatus.FAILOVER_ERROR
+            LOG.error('Failed to failover volume %(volume)s with '
+                      'error: %(error)s.',
+                      {'volume': volume.name, 'error': e})
 
-        # Failover did not happen
+        # Failover failed
         error_result = {
             'volume_id': volume.id,
             'updates': {
@@ -1076,7 +1140,7 @@ class RBDDriver(driver.CloneableImageVD,
         try_demoting = True
         for volume in volumes:
             demoted = False
-            if try_demoting and self._is_replicated_type(volume.volume_type):
+            if try_demoting:
                 vol_name = utils.convert_str(volume.name)
                 try:
                     self._exec_on_volume(vol_name, self._active_config,
@@ -1262,7 +1326,45 @@ class RBDDriver(driver.CloneableImageVD,
 
         return tmpdir
 
+    def copy_image_to_encrypted_volume(self, context, volume, image_service,
+                                       image_id):
+        self._copy_image_to_volume(context, volume, image_service, image_id,
+                                   encrypted=True)
+
     def copy_image_to_volume(self, context, volume, image_service, image_id):
+        self._copy_image_to_volume(context, volume, image_service, image_id)
+
+    def _encrypt_image(self, context, volume, tmp_dir, src_image_path):
+        encryption = self._check_encryption_provider(volume, context)
+
+        # Fetch the key associated with the volume and decode the passphrase
+        keymgr = key_manager.API(CONF)
+        key = keymgr.get(context, encryption['encryption_key_id'])
+        passphrase = binascii.hexlify(key.get_encoded()).decode('utf-8')
+
+        # Decode the dm-crypt style cipher spec into something qemu-img can use
+        cipher_spec = image_utils.decode_cipher(encryption['cipher'],
+                                                encryption['key_size'])
+
+        tmp_dir = self._image_conversion_dir()
+
+        with tempfile.NamedTemporaryFile(prefix='luks_',
+                                         dir=tmp_dir) as pass_file:
+            with open(pass_file.name, 'w') as f:
+                f.write(passphrase)
+
+            # Convert the raw image to luks
+            dest_image_path = src_image_path + '.luks'
+            image_utils.convert_image(src_image_path, dest_image_path,
+                                      'luks', src_format='raw',
+                                      cipher_spec=cipher_spec,
+                                      passphrase_file=pass_file.name)
+
+            # Replace the original image with the now encrypted image
+            os.rename(dest_image_path, src_image_path)
+
+    def _copy_image_to_volume(self, context, volume, image_service, image_id,
+                              encrypted=False):
 
         tmp_dir = self._image_conversion_dir()
 
@@ -1271,6 +1373,9 @@ class RBDDriver(driver.CloneableImageVD,
                                      tmp.name,
                                      self.configuration.volume_dd_blocksize,
                                      size=volume.size)
+
+            if encrypted:
+                self._encrypt_image(context, volume, tmp_dir, tmp.name)
 
             self.delete_volume(volume)
 
@@ -1388,6 +1493,52 @@ class RBDDriver(driver.CloneableImageVD,
                                         'size': image_size})
                 raise exception.VolumeBackendAPIException(
                     data=exception_message)
+
+    def _get_image_status(self, image_name):
+        args = ['rbd', 'status',
+                '--pool', self.configuration.rbd_pool,
+                '--format=json',
+                image_name]
+        args.extend(self._ceph_args())
+        out, _ = self._execute(*args)
+        return json.loads(out)
+
+    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
+                               sort_keys, sort_dirs):
+        manageable_volumes = []
+        cinder_ids = [resource['id'] for resource in cinder_volumes]
+
+        with RADOSClient(self) as client:
+            for image_name in self.RBDProxy().list(client.ioctx):
+                image_id = volume_utils.extract_id_from_volume_name(image_name)
+                with RBDVolumeProxy(self, image_name, read_only=True) as image:
+                    try:
+                        image_info = {
+                            'reference': {'source-name': image_name},
+                            'size': int(math.ceil(
+                                float(image.size()) / units.Gi)),
+                            'cinder_id': None,
+                            'extra_info': None
+                        }
+                        if image_id in cinder_ids:
+                            image_info['cinder_id'] = image_id
+                            image_info['safe_to_manage'] = False
+                            image_info['reason_not_safe'] = 'already managed'
+                        elif len(self._get_image_status(
+                                image_name)['watchers']) > 0:
+                            # If the num of watchers of image is >= 1, then the
+                            # image is considered to be used by client(s).
+                            image_info['safe_to_manage'] = False
+                            image_info['reason_not_safe'] = 'volume in use'
+                        else:
+                            image_info['safe_to_manage'] = True
+                            image_info['reason_not_safe'] = None
+                        manageable_volumes.append(image_info)
+                    except self.rbd.ImageNotFound:
+                        LOG.debug("Image %s is not found.", image_name)
+
+        return volume_utils.paginate_entries_list(
+            manageable_volumes, marker, limit, offset, sort_keys, sort_dirs)
 
     def unmanage(self, volume):
         pass

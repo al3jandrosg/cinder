@@ -19,8 +19,9 @@ import hashlib
 import math
 import time
 
-from lxml import etree
+from defusedxml import lxml as etree
 from oslo_log import log as logging
+from oslo_utils import strutils
 from oslo_utils import units
 import requests
 import six
@@ -206,8 +207,9 @@ class DotHillClient(object):
         If the status is OK, returns the XML data for further processing.
         """
         url = self._build_request_url(path, *args, **kargs)
-        LOG.debug("Array Request URL: %s (session %s)",
-                  url, self._session_key)
+        # Don't log the created URL since it may contain chap secret
+        LOG.debug("Array Request path: %s, args: %s, kargs: %s (session %s)",
+                  path, args, strutils.mask_password(kargs), self._session_key)
         headers = {'dataType': 'api', 'sessionKey': self._session_key}
         try:
             xml = requests.get(url, headers=headers,
@@ -285,9 +287,12 @@ class DotHillClient(object):
                             " %s", e.msg)
                 return None
 
-    def delete_snapshot(self, snap_name):
+    def delete_snapshot(self, snap_name, backend_type):
         try:
-            self._request("/delete/snapshot", "cleanup", snap_name)
+            if backend_type == 'linear':
+                self._request("/delete/snapshot", "cleanup", snap_name)
+            else:
+                self._request("/delete/snapshot", snap_name)
         except exception.DotHillRequestError as e:
             # -10050 => The volume was not found on this system.
             # This can occur during controller failover.
@@ -332,7 +337,10 @@ class DotHillClient(object):
         return stats
 
     def list_luns_for_host(self, host):
-        tree = self._request("/show/host-maps", host)
+        if self.is_titanium():
+            tree = self._request("/show/host-maps", host)
+        else:
+            tree = self._request("/show/maps/initiator", host)
         return [int(prop.text) for prop in tree.xpath(
                 "//PROPERTY[@name='lun']")]
 

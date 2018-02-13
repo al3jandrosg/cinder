@@ -38,7 +38,7 @@ from cinder import db
 from cinder import exception
 from cinder import objects
 from cinder.objects import fields
-import cinder.policy
+from cinder.policies import volumes as vol_policy
 from cinder import quota
 from cinder.tests import fake_driver
 from cinder.tests.unit import conf_fixture
@@ -54,6 +54,7 @@ from cinder.volume import driver
 from cinder.volume import manager as vol_manager
 from cinder.volume import rpcapi as volume_rpcapi
 import cinder.volume.targets.tgt
+from cinder.volume import volume_types
 
 
 QUOTAS = quota.QUOTAS
@@ -606,6 +607,73 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                    volume_type=db_vol_type)
         self.assertEqual(db_vol_type.get('id'), volume['volume_type_id'])
 
+    def test_create_volume_with_multiattach_volume_type(self):
+        """Test volume creation with multiattach volume type."""
+        elevated = context.get_admin_context()
+        volume_api = cinder.volume.api.API()
+
+        especs = dict(multiattach="<is> True")
+        volume_types.create(elevated,
+                            "multiattach-type",
+                            especs,
+                            description="test-multiattach")
+        foo = objects.VolumeType.get_by_name_or_id(elevated,
+                                                   "multiattach-type")
+
+        vol = volume_api.create(self.context,
+                                1,
+                                'admin-vol',
+                                'description',
+                                volume_type=foo)
+        self.assertEqual(foo['id'], vol['volume_type_id'])
+        self.assertTrue(vol['multiattach'])
+
+    def test_create_volume_with_multiattach_flag(self):
+        """Tests creating a volume with multiattach=True but no special type.
+
+        This tests the pre 3.50 microversion behavior of being able to create
+        a volume with the multiattach request parameter regardless of a
+        multiattach-capable volume type.
+        """
+        volume_api = cinder.volume.api.API()
+        volume = volume_api.create(
+            self.context, 1, 'name', 'description', multiattach=True)
+        self.assertTrue(volume.multiattach)
+
+    def _fail_multiattach_policy_authorize(self, policy):
+        if policy == vol_policy.MULTIATTACH_POLICY:
+            raise exception.PolicyNotAuthorized(action='Test')
+
+    def test_create_volume_with_multiattach_volume_type_not_authorized(self):
+        """Test policy unauthorized create with multiattach volume type."""
+        elevated = context.get_admin_context()
+        volume_api = cinder.volume.api.API()
+
+        especs = dict(multiattach="<is> True")
+        volume_types.create(elevated,
+                            "multiattach-type",
+                            especs,
+                            description="test-multiattach")
+        foo = objects.VolumeType.get_by_name_or_id(elevated,
+                                                   "multiattach-type")
+
+        with mock.patch.object(self.context, 'authorize') as mock_auth:
+            mock_auth.side_effect = self._fail_multiattach_policy_authorize
+            self.assertRaises(exception.PolicyNotAuthorized,
+                              volume_api.create, self.context,
+                              1, 'admin-vol', 'description',
+                              volume_type=foo)
+
+    def test_create_volume_with_multiattach_flag_not_authorized(self):
+        """Test policy unauthorized create with multiattach flag."""
+        volume_api = cinder.volume.api.API()
+
+        with mock.patch.object(self.context, 'authorize') as mock_auth:
+            mock_auth.side_effect = self._fail_multiattach_policy_authorize
+            self.assertRaises(exception.PolicyNotAuthorized,
+                              volume_api.create, self.context, 1, 'name',
+                              'description', multiattach=True)
+
     @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
     def test_create_volume_with_encrypted_volume_type_aes(self):
         ctxt = context.get_admin_context()
@@ -830,6 +898,20 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             self.assertEqual(volume_id, volume_ref.id)
             self.assertEqual("available", volume_ref.status)
             mock_del_vol.assert_called_once_with(volume)
+
+    def test_unmanage_encrypted_volume_fails(self):
+        volume = tests_utils.create_volume(
+            self.context,
+            encryption_key_id=fake.ENCRYPTION_KEY_ID,
+            **self.volume_params)
+        self.volume.create_volume(self.context, volume)
+        manager = vol_manager.VolumeManager()
+        self.assertRaises(exception.Invalid,
+                          manager.delete_volume,
+                          self.context,
+                          volume,
+                          unmanage_only=True)
+        self.volume.delete_volume(self.context, volume)
 
     def test_get_volume_different_tenant(self):
         """Test can't get volume of another tenant when viewable_admin_meta."""
@@ -1517,7 +1599,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                        volume_type=db_vol_type)
 
         db.volume_update(self.context, volume_src['id'],
-                         {'host': 'fake_host@fake_backend'})
+                         {'host': 'fake_host@fake_backend',
+                          'status': 'available'})
         volume_src = objects.Volume.get_by_id(self.context, volume_src['id'])
 
         snapshot_ref = volume_api.create_snapshot_force(self.context,
@@ -1699,6 +1782,21 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           self.context,
                           volume)
         db.volume_destroy(self.context, volume.id)
+
+    def test_attachment_reserve_with_bootable_volume(self):
+        # test the private _attachment_reserve method with a bootable,
+        # in-use, multiattach volume.
+        instance_uuid = fake.UUID1
+        volume = tests_utils.create_volume(self.context, status='in-use')
+        tests_utils.attach_volume(self.context, volume.id, instance_uuid,
+                                  'attached_host', 'mountpoint', mode='rw')
+        volume.multiattach = True
+        volume.bootable = True
+
+        attachment = self.volume_api._attachment_reserve(
+            self.context, volume, instance_uuid)
+
+        self.assertEqual(attachment.attach_status, 'reserved')
 
     def test_unreserve_volume_success_in_use(self):
         UUID = six.text_type(uuid.uuid4())
@@ -2822,7 +2920,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             save_mock.assert_not_called()
 
     def test_volume_attach_attaching(self):
-        """Test volume_attach ."""
+        """Test volume_attach."""
 
         instance_uuid = '12345678-1234-5678-1234-567812345678'
         volume = tests_utils.create_volume(self.context, **self.volume_params)

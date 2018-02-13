@@ -118,16 +118,14 @@ class SnapshotApiTest(test.TestCase):
     def _create_snapshot(self, name=None, metadata=None):
         """Creates test snapshopt with provided metadata"""
         req = fakes.HTTPRequest.blank('/v3/snapshots')
-        snap = {"volume_size": 200,
-                "volume_id": fake.VOLUME_ID,
+        snap = {"volume_id": fake.VOLUME_ID,
                 "display_name": name or "Volume Test Name",
-                "display_description": "Volume Test Desc",
-                "availability_zone": "zone1:host1",
-                "host": "fake-host"}
+                "description": "Volume Test Desc"
+                }
         if metadata:
             snap["metadata"] = metadata
         body = {"snapshot": snap}
-        self.controller.create(req, body)
+        self.controller.create(req, body=body)
 
     @ddt.data(('host', 'test_host1', True), ('cluster_name', 'cluster1', True),
               ('availability_zone', 'nova1', False))
@@ -244,7 +242,8 @@ class SnapshotApiTest(test.TestCase):
         else:
             self.assertNotIn('count', res_dict)
 
-    def test_snapshot_list_with_sort_name(self):
+    @mock.patch('cinder.objects.volume.Volume.refresh')
+    def test_snapshot_list_with_sort_name(self, mock_refresh):
         self._create_snapshot(name='test1')
         self._create_snapshot(name='test2')
 
@@ -260,7 +259,8 @@ class SnapshotApiTest(test.TestCase):
         self.assertEqual('test2', res_dict['snapshots'][0]['name'])
         self.assertEqual('test1', res_dict['snapshots'][1]['name'])
 
-    def test_snapshot_list_with_one_metadata_in_filter(self):
+    @mock.patch('cinder.objects.volume.Volume.refresh')
+    def test_snapshot_list_with_one_metadata_in_filter(self, mock_refresh):
         # Create snapshot with metadata key1: value1
         metadata = {"key1": "val1"}
         self._create_snapshot(metadata=metadata)
@@ -289,7 +289,9 @@ class SnapshotApiTest(test.TestCase):
         # verify no snapshot is returned
         self.assertEqual(0, len(res_dict['snapshots']))
 
-    def test_snapshot_list_with_multiple_metadata_in_filter(self):
+    @mock.patch('cinder.objects.volume.Volume.refresh')
+    def test_snapshot_list_with_multiple_metadata_in_filter(self,
+                                                            mock_refresh):
         # Create snapshot with metadata key1: value1, key11: value11
         metadata = {"key1": "val1", "key11": "val11"}
         self._create_snapshot(metadata=metadata)
@@ -350,7 +352,9 @@ class SnapshotApiTest(test.TestCase):
                                                 mock.ANY, 'snapshot',
                                                 support_like)
 
-    def test_snapshot_list_with_metadata_unsupported_microversion(self):
+    @mock.patch('cinder.objects.volume.Volume.refresh')
+    def test_snapshot_list_with_metadata_unsupported_microversion(
+            self, mock_refresh):
         # Create snapshot with metadata key1: value1
         metadata = {"key1": "val1"}
         self._create_snapshot(metadata=metadata)

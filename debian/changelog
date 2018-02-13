@@ -1,3 +1,13 @@
+cinder (2:12.0.0~rc1-0ubuntu1) bionic; urgency=medium
+
+  * d/control: Add python-defusedxml to (Build-)Depends.
+  * d/cinder-common.install: Drop install of policy.json.
+  * New upstream milestone for OpenStack Queens.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/control: Switch to python3-sphinx.
+
+ -- James Page <james.page@ubuntu.com>  Tue, 13 Feb 2018 10:09:02 +0000
+
 cinder (2:12.0.0~b2-0ubuntu2) bionic; urgency=medium
 
   * d/cinder-common.postinst: Use reserved uid/gid for cinder user/group,

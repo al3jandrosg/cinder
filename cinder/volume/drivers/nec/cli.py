@@ -31,7 +31,7 @@ from cinder import ssh_utils
 
 LOG = logging.getLogger(__name__)
 
-retry_msgids = ['iSM31005', 'iSM31015', 'iSM42408', 'iSM42412']
+retry_msgids = ['iSM31005', 'iSM31015', 'iSM42408', 'iSM42412', 'iSM19411']
 
 
 class MStorageISMCLI(object):
@@ -226,6 +226,41 @@ class MStorageISMCLI(object):
                '-unit gb'
                % {'ldn': ldn, 'capacity': capacity})
         self._execute(cmd)
+
+    def addldset_fc(self, ldsetname, connector):
+        """Create new FC LD Set."""
+        cmd = 'iSMcfg addldset -ldset LX:%s -type fc' % ldsetname
+        out, err, status = self._execute(cmd, [0], False)
+        if status != 0:
+            return False
+        for wwpn in connector['wwpns']:
+            length = len(wwpn)
+            setwwpn = '-'.join([wwpn[i:i + 4]
+                                for i in range(0, length, 4)])
+            setwwpn = setwwpn.upper()
+            cmd = ('iSMcfg addldsetpath -ldset LX:%(name)s -path %(path)s'
+                   % {'name': ldsetname, 'path': setwwpn})
+            out, err, status = self._execute(cmd, [0], False)
+            if status != 0:
+                return False
+
+        return True
+
+    def addldset_iscsi(self, ldsetname, connector):
+        """Create new iSCSI LD Set."""
+        cmd = ('iSMcfg addldset -ldset LX:%s -multitarget on'
+               ' -type iscsi' % ldsetname)
+        out, err, status = self._execute(cmd, [0], False)
+        if status != 0:
+            return False
+        cmd = ('iSMcfg addldsetinitiator'
+               ' -ldset LX:%(name)s -initiatorname %(initiator)s'
+               % {'name': ldsetname, 'initiator': connector['initiator']})
+        out, err, status = self._execute(cmd, [0], False)
+        if status != 0:
+            return False
+
+        return True
 
     def addldsetld(self, ldset, ldname, lun=None):
         """Add an LD to specified LD Set."""
@@ -554,6 +589,17 @@ class MStorageISMCLI(object):
         LOG.debug('snap/state:%s.', query_status)
         return query_status
 
+    def get_bvname(self, svname):
+        cmd = ('iSMsc_query -sv %s -svflg ld -summary | '
+               'while builtin read line;do '
+               'if [[ "$line" =~ "LD Name" ]]; '
+               'then builtin echo "$line";fi;done'
+               % svname[3:])
+        out, err, status = self._execute(cmd)
+
+        query_status = out[15:39].strip()
+        return query_status
+
     def set_io_limit(self, ldname, specs, force_delete=True):
         if specs['upperlimit'] is not None:
             upper = int(specs['upperlimit'], 10)
@@ -611,11 +657,16 @@ class MStorageISMCLI(object):
                % {'lvname': lvname})
         self._execute(cmd)
 
+    def cvbind(self, poolnumber, cvnumber):
+        """Create Control Volume."""
+        cmd = ('iSMcfg ldbind -poolnumber %(poolnumber)d '
+               '-ldattr cv -ldn %(cvnumber)d'
+               % {'poolnumber': poolnumber,
+                  'cvnumber': cvnumber})
+        self._execute(cmd)
+
 
 class UnpairWait(object):
-    error_updates = {'status': 'error',
-                     'progress': '100%',
-                     'migration_status': None}
 
     def __init__(self, volume_properties, cli):
         super(UnpairWait, self).__init__()

@@ -107,11 +107,14 @@ Revert volume to snapshot
 
 .. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
 
-Revert a volume to its latest snapshot, this API only support reverting a detached volume.
+Revert a volume to its latest snapshot, this API only support reverting a detached volume,
+and the volume status must be ``available``.
+
+Available since API microversion ``3.40``.
 
 Normal response codes: 202
 
-Error response codes: 400, 404
+Error response codes: 400(HTTPBadRequest), 403(HTTPForbidden), 404(HTTPNotFound), 409(HTTPConflict)
 
 Request
 -------
@@ -365,6 +368,11 @@ Change type of existing volume. Specify the ``os-retype`` action in the request 
 
 Change the volume type of existing volume, Cinder may migrate the volume to
 proper volume host according to the new volume type.
+
+Retyping an *in-use* volume from a multiattach-capable type to a
+non-multiattach-capable type, or vice-versa, is not supported. It is generally
+not recommended to retype an *in-use* multiattach volume if that volume has
+more than one active read/write attachment.
 
 Policy defaults enable only users with the administrative role or the owner of
 the volume to perform this operation. Cloud providers can change these

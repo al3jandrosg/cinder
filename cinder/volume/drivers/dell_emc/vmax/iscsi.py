@@ -17,6 +17,7 @@ ISCSI Drivers for Dell EMC VMAX arrays based on REST.
 
 """
 from oslo_log import log as logging
+from oslo_utils import strutils
 import six
 
 from cinder import exception
@@ -89,6 +90,11 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
               - Support for Generic Volume Group
         3.1.0 - Support for replication groups (Tiramisu)
               - Deprecate backend xml configuration
+              - Support for async replication (vmax-replication-enhancements)
+              - Support for SRDF/Metro (vmax-replication-enhancements)
+              - Support for manage/unmanage snapshots
+                (vmax-manage-unmanage-snapshot)
+              - Support for revert to volume snapshot
     """
 
     VERSION = "3.1.0"
@@ -236,7 +242,10 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         """
         device_info = self.common.initialize_connection(
             volume, connector)
-        return self.get_iscsi_dict(device_info, volume)
+        if device_info:
+            return self.get_iscsi_dict(device_info, volume)
+        else:
+            return {}
 
     def get_iscsi_dict(self, device_info, volume):
         """Populate iscsi dict to pass to nova.
@@ -245,6 +254,7 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         :param volume: volume object
         :returns: iscsi dict
         """
+        metro_ip_iqn, metro_host_lun = None, None
         try:
             ip_and_iqn = device_info['ip_and_iqn']
             is_multipath = device_info['is_multipath']
@@ -255,17 +265,23 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
                                  % {'e': six.text_type(e)})
             raise exception.VolumeBackendAPIException(data=exception_message)
 
+        if device_info.get('metro_ip_and_iqn'):
+            LOG.debug("Volume is Metro device...")
+            metro_ip_iqn = device_info['metro_ip_and_iqn']
+            metro_host_lun = device_info['metro_hostlunid']
+
         iscsi_properties = self.vmax_get_iscsi_properties(
-            volume, ip_and_iqn, is_multipath, host_lun_id)
+            volume, ip_and_iqn, is_multipath, host_lun_id,
+            metro_ip_iqn, metro_host_lun)
 
         LOG.info("iSCSI properties are: %(props)s",
-                 {'props': iscsi_properties})
+                 {'props': strutils.mask_dict_password(iscsi_properties)})
         return {'driver_volume_type': 'iscsi',
                 'data': iscsi_properties}
 
-    @staticmethod
-    def vmax_get_iscsi_properties(volume, ip_and_iqn,
-                                  is_multipath, host_lun_id):
+    def vmax_get_iscsi_properties(self, volume, ip_and_iqn,
+                                  is_multipath, host_lun_id,
+                                  metro_ip_iqn, metro_host_lun):
         """Gets iscsi configuration.
 
         We ideally get saved information in the volume entity, but fall back
@@ -285,15 +301,32 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         :param ip_and_iqn: list of ip and iqn dicts
         :param is_multipath: flag for multipath
         :param host_lun_id: the host lun id of the device
+        :param metro_ip_iqn: metro remote device ip and iqn, if applicable
+        :param metro_host_lun: metro remote host lun, if applicable
         :returns: properties
         """
         properties = {}
+        populate_plurals = False
         if len(ip_and_iqn) > 1 and is_multipath:
+            populate_plurals = True
+        elif len(ip_and_iqn) == 1 and is_multipath and metro_ip_iqn:
+            populate_plurals = True
+        if populate_plurals:
             properties['target_portals'] = ([t['ip'] + ":3260" for t in
                                              ip_and_iqn])
             properties['target_iqns'] = ([t['iqn'].split(",")[0] for t in
                                           ip_and_iqn])
             properties['target_luns'] = [host_lun_id] * len(ip_and_iqn)
+        if metro_ip_iqn:
+            LOG.info("Volume %(vol)s is metro-enabled - "
+                     "adding additional attachment information",
+                     {'vol': volume.name})
+            properties['target_portals'].extend(([t['ip'] + ":3260" for t in
+                                                 metro_ip_iqn]))
+            properties['target_iqns'].extend(([t['iqn'].split(",")[0] for t in
+                                              metro_ip_iqn]))
+            properties['target_luns'].extend(
+                [metro_host_lun] * len(metro_ip_iqn))
         properties['target_discovered'] = True
         properties['target_iqn'] = ip_and_iqn[0]['iqn'].split(",")[0]
         properties['target_portal'] = ip_and_iqn[0]['ip'] + ":3260"
@@ -304,30 +337,21 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
                  {'properties': properties})
         LOG.info("ISCSI volume is: %(volume)s.", {'volume': volume})
 
-        if hasattr(volume, 'provider_auth'):
-            auth = volume.provider_auth
-
-            if auth is not None:
-                (auth_method, auth_username, auth_secret) = auth.split()
-
-                properties['auth_method'] = auth_method
-                properties['auth_username'] = auth_username
-                properties['auth_password'] = auth_secret
+        if self.configuration.safe_get('use_chap_auth'):
+            LOG.info("Chap authentication enabled.")
+            properties['auth_method'] = 'CHAP'
+            properties['auth_username'] = self.configuration.safe_get(
+                'chap_username')
+            properties['auth_password'] = self.configuration.safe_get(
+                'chap_password')
 
         return properties
 
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector.
 
-        Return empty data if other volumes are in the same zone.
-        The FibreChannel ZoneManager doesn't remove zones
-        if there isn't an initiator_target_map in the
-        return of terminate_connection.
-
         :param volume: the volume object
         :param connector: the connector object
-        :returns: dict -- the target_wwns and initiator_target_map if the
-            zone is to be removed, otherwise empty
         """
         self.common.terminate_connection(volume, connector)
 
@@ -382,6 +406,36 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         Leave the volume intact on the backend array.
         """
         return self.common.unmanage(volume)
+
+    def manage_existing_snapshot(self, snapshot, existing_ref):
+        """Manage an existing VMAX Snapshot (import to Cinder).
+
+        Renames the Snapshot to prefix it with OS- to indicate
+        it is managed by Cinder.
+
+        :param snapshot: the snapshot object
+        :param existing_ref: the snapshot name on the backend VMAX
+        :returns: model_update
+        """
+        return self.common.manage_existing_snapshot(snapshot, existing_ref)
+
+    def manage_existing_snapshot_get_size(self, snapshot, existing_ref):
+        """Return the size of the source volume for manage-existing-snapshot.
+
+        :param snapshot: the snapshot object
+        :param existing_ref: the snapshot name on the backend VMAX
+        :returns: size of the source volume in GB
+        """
+        return self.common.manage_existing_snapshot_get_size(snapshot)
+
+    def unmanage_snapshot(self, snapshot):
+        """Export VMAX Snapshot from Cinder.
+
+        Leaves the snapshot intact on the backend VMAX.
+
+        :param snapshot: the snapshot object
+        """
+        self.common.unmanage_snapshot(snapshot)
 
     def retype(self, ctxt, volume, new_type, diff, host):
         """Migrate volume to another host using retype.
@@ -509,3 +563,12 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         """
         return self.common.failover_replication(
             context, group, volumes, secondary_backend_id)
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert volume to snapshot
+
+        :param context: the context
+        :param volume: the cinder volume object
+        :param snapshot: the cinder snapshot object
+        """
+        self.common.revert_to_snapshot(volume, snapshot)

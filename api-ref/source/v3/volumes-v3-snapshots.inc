@@ -55,6 +55,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -69,7 +70,7 @@ Response Parameters
 
    - status: status_2
    - os-extended-snapshot-attributes:progress: os-extended-snapshot-attributes:progress
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name
    - user_id: user_id_2
@@ -107,7 +108,7 @@ Request
    - snapshot: snapshot_1
    - volume_id: volume_id
    - name: name_12
-   - description: description
+   - description: description_4
    - force: force
    - metadata: metadata_7
 
@@ -123,7 +124,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_2
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name_12
    - snapshot: snapshot_1
@@ -162,6 +163,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -175,7 +177,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_2
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name
    - user_id: user_id_2
@@ -219,7 +221,7 @@ Response Parameters
 
    - status: status_2
    - os-extended-snapshot-attributes:progress: os-extended-snapshot-attributes:progress
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name
    - snapshot: snapshot_1
@@ -346,7 +348,7 @@ Response Parameters
 
    - status: status_2
    - os-extended-snapshot-attributes:progress: os-extended-snapshot-attributes:progress
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name
    - snapshot: snapshot_1
@@ -383,7 +385,7 @@ Request
    - project_id: project_id_path
    - snapshot_id: snapshot_id_path
    - snapshot: snapshot_1
-   - description: description
+   - description: description_4
    - name: name
 
 Request Example
@@ -400,7 +402,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_2
-   - description: description
+   - description: description_8
    - created_at: created_at
    - name: name
    - snapshot: snapshot_1

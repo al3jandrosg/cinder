@@ -66,6 +66,7 @@ from cinder.scheduler.weights import capacity as \
 from cinder.scheduler.weights import volume_number as \
     cinder_scheduler_weights_volumenumber
 from cinder import service as cinder_service
+from cinder import service_auth as cinder_serviceauth
 from cinder import ssh_utils as cinder_sshutils
 from cinder.transfer import api as cinder_transfer_api
 from cinder.volume import api as cinder_volume_api
@@ -154,16 +155,17 @@ from cinder.volume.drivers.san.hp import hpmsa_common as \
 from cinder.volume.drivers.san import san as cinder_volume_drivers_san_san
 from cinder.volume.drivers import sheepdog as cinder_volume_drivers_sheepdog
 from cinder.volume.drivers import solidfire as cinder_volume_drivers_solidfire
+from cinder.volume.drivers import storpool as cinder_volume_drivers_storpool
 from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
 from cinder.volume.drivers import tintri as cinder_volume_drivers_tintri
 from cinder.volume.drivers.vmware import vmdk as \
     cinder_volume_drivers_vmware_vmdk
 from cinder.volume.drivers import vzstorage as cinder_volume_drivers_vzstorage
+from cinder.volume.drivers.windows import iscsi as \
+    cinder_volume_drivers_windows_iscsi
 from cinder.volume.drivers.windows import smbfs as \
     cinder_volume_drivers_windows_smbfs
-from cinder.volume.drivers.windows import windows as \
-    cinder_volume_drivers_windows_windows
 from cinder.volume.drivers import zadara as cinder_volume_drivers_zadara
 from cinder.volume.drivers.zfssa import zfssaiscsi as \
     cinder_volume_drivers_zfssa_zfssaiscsi
@@ -256,6 +258,7 @@ def list_opts():
                 instorage_mcs_opts,
                 cinder_volume_drivers_inspur_instorage_instorageiscsi.
                 instorage_mcs_iscsi_opts,
+                cinder_volume_drivers_storpool.storpool_opts,
                 cinder_volume_manager.volume_manager_opts,
                 cinder_wsgi_eventletserver.socket_opts,
             )),
@@ -268,6 +271,10 @@ def list_opts():
         ('key_manager',
             itertools.chain(
                 cinder_keymgr_confkeymgr.key_mgr_opts,
+            )),
+        ('service_user',
+            itertools.chain(
+                cinder_serviceauth.service_user_opts,
             )),
         ('backend_defaults',
             itertools.chain(
@@ -348,8 +355,8 @@ def list_opts():
                 cinder_volume_drivers_tintri.tintri_opts,
                 cinder_volume_drivers_vmware_vmdk.vmdk_opts,
                 cinder_volume_drivers_vzstorage.vzstorage_opts,
+                cinder_volume_drivers_windows_iscsi.windows_opts,
                 cinder_volume_drivers_windows_smbfs.volume_opts,
-                cinder_volume_drivers_windows_windows.windows_opts,
                 cinder_volume_drivers_zadara.zadara_opts,
                 cinder_volume_drivers_zfssa_zfssaiscsi.ZFSSA_OPTS,
                 cinder_volume_drivers_zfssa_zfssanfs.ZFSSA_OPTS,

@@ -27,6 +27,7 @@ from cinder import exception
 from cinder.objects import fields
 from cinder import test
 from cinder.tests.unit.image import fake as fake_image
+from cinder.tests.unit import utils as test_utils
 from cinder.volume import configuration as conf
 from cinder.volume.drivers import solidfire
 from cinder.volume import qos_specs
@@ -44,11 +45,10 @@ class SolidFireVolumeTestCase(test.TestCase):
         self.configuration.sf_emulate_512 = True
         self.configuration.sf_account_prefix = 'cinder'
         self.configuration.reserved_percentage = 25
-        self.configuration.iscsi_helper = None
+        self.configuration.target_helper = None
         self.configuration.sf_template_account_name = 'openstack-vtemplate'
         self.configuration.sf_allow_template_caching = False
         self.configuration.sf_svip = None
-        self.configuration.sf_enable_volume_mapping = True
         self.configuration.sf_volume_prefix = 'UUID-'
         self.configuration.sf_enable_vag = False
         self.configuration.replication_device = []
@@ -517,31 +517,29 @@ class SolidFireVolumeTestCase(test.TestCase):
 
     def test_delete_volume(self):
         vol_id = 'a720b3c0-d1f0-11e1-9b23-0800200c9a66'
-        testvol = {'project_id': 'testprjid',
-                   'name': 'test_volume',
-                   'size': 1,
-                   'id': vol_id,
-                   'name_id': vol_id,
-                   'created_at': timeutils.utcnow(),
-                   'provider_id': '1 5 None',
-                   'multiattach': True
-                   }
+        testvol = test_utils.create_volume(
+            self.ctxt,
+            id=vol_id,
+            display_name='test_volume',
+            provider_id='1 5 None',
+            multiattach=True)
+
         fake_sfaccounts = [{'accountID': 5,
                             'name': 'testprjid',
                             'targetSecret': 'shhhh',
                             'username': 'john-wayne'}]
 
-        get_vol_result = [{'volumeID': 5,
-                           'name': 'test_volume',
-                           'accountID': 25,
-                           'sliceCount': 1,
-                           'totalSize': 1 * units.Gi,
-                           'enable512e': True,
-                           'access': "readWrite",
-                           'status': "active",
-                           'attributes': {},
-                           'qos': None,
-                           'iqn': 'super_fake_iqn'}]
+        get_vol_result = {'volumeID': 5,
+                          'name': 'test_volume',
+                          'accountID': 25,
+                          'sliceCount': 1,
+                          'totalSize': 1 * units.Gi,
+                          'enable512e': True,
+                          'access': "readWrite",
+                          'status': "active",
+                          'attributes': {},
+                          'qos': None,
+                          'iqn': 'super_fake_iqn'}
 
         mod_conf = self.configuration
         mod_conf.sf_enable_vag = True
@@ -550,7 +548,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                                '_get_sfaccounts_for_tenant',
                                return_value=fake_sfaccounts), \
             mock.patch.object(sfv,
-                              '_get_volumes_for_account',
+                              '_get_sfvol_by_cinder_vref',
                               return_value=get_vol_result), \
             mock.patch.object(sfv,
                               '_issue_api_request'), \
@@ -558,7 +556,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                               '_remove_volume_from_vags') as rem_vol:
 
             sfv.delete_volume(testvol)
-            rem_vol.assert_called_with(get_vol_result[0]['volumeID'])
+            rem_vol.assert_called_with(get_vol_result['volumeID'])
 
     def test_delete_volume_no_volume_on_backend(self):
         fake_sfaccounts = [{'accountID': 5,
@@ -566,13 +564,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                             'targetSecret': 'shhhh',
                             'username': 'john-wayne'}]
         fake_no_volumes = []
-        vol_id = 'a720b3c0-d1f0-11e1-9b23-0800200c9a66'
-        testvol = {'project_id': 'testprjid',
-                   'name': 'no-name',
-                   'size': 1,
-                   'id': vol_id,
-                   'name_id': vol_id,
-                   'created_at': timeutils.utcnow()}
+        testvol = test_utils.create_volume(self.ctxt)
 
         sfv = solidfire.SolidFireDriver(configuration=self.configuration)
         with mock.patch.object(sfv,
@@ -589,14 +581,12 @@ class SolidFireVolumeTestCase(test.TestCase):
                             'targetSecret': 'shhhh',
                             'username': 'john-wayne'}]
         fake_no_volumes = []
-        snap_id = 'a720b3c0-d1f0-11e1-9b23-0800200c9a66'
-        testsnap = {'project_id': 'testprjid',
-                    'name': 'no-name',
-                    'size': 1,
-                    'id': snap_id,
-                    'name_id': snap_id,
-                    'volume_id': 'b831c4d1-d1f0-11e1-9b23-0800200c9a66',
-                    'created_at': timeutils.utcnow()}
+        testvol = test_utils.create_volume(
+            self.ctxt,
+            volume_id='b831c4d1-d1f0-11e1-9b23-0800200c9a66')
+        testsnap = test_utils.create_snapshot(
+            self.ctxt,
+            volume_id=testvol.id)
 
         sfv = solidfire.SolidFireDriver(configuration=self.configuration)
         with mock.patch.object(sfv,
@@ -1113,7 +1103,7 @@ class SolidFireVolumeTestCase(test.TestCase):
             self.assertEqual('1.1.1.1:3260  0', v['provider_location'])
 
             configured_svip = '9.9.9.9:6500'
-            sfv.active_cluster_info['svip'] = configured_svip
+            sfv.active_cluster['svip'] = configured_svip
             v = sfv._get_model_info(sfaccount, 1)
             self.assertEqual('%s  0' % configured_svip, v['provider_location'])
 
@@ -1978,7 +1968,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                               'fake-mvip'}]
         ctxt = None
         type_id = '290edb2a-f5ea-11e5-9ce9-5e5517507c66'
-        fake_type = {'extra_specs': {'replication': 'enabled'}}
+        fake_type = {'extra_specs': {'replication_enabled': '<is> True'}}
         with mock.patch.object(volume_types,
                                'get_volume_type',
                                return_value=fake_type):

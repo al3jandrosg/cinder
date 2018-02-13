@@ -15,6 +15,7 @@
 #    under the License.
 
 import random
+import re
 import traceback
 
 from oslo_log import log as logging
@@ -26,6 +27,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder.volume.drivers.nec import cli
 from cinder.volume.drivers.nec import volume_common
+from cinder.volume import utils as volutils
 
 
 LOG = logging.getLogger(__name__)
@@ -206,8 +208,8 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
             raise exception.NotFound(msg)
         return ldname
 
-    def _validate_iscsildset_exist(self, ldsets, connector, metadata=None):
-        ldset = self.get_ldset(ldsets, metadata)
+    def _validate_iscsildset_exist(self, ldsets, connector):
+        ldset = self.get_ldset(ldsets)
         if ldset is None:
             for tldset in ldsets.values():
                 if 'initiator_list' not in tldset:
@@ -217,16 +219,32 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
                     ldset = tldset
                     break
             if ldset is None:
-                msg = _('Appropriate Logical Disk Set could not be found.')
-                raise exception.NotFound(msg)
+                if self._properties['auto_accesscontrol']:
+                    authname = connector['initiator'].strip()
+                    authname = authname.replace((":"), "")
+                    authname = authname.replace(("."), "")
+                    new_ldsetname = authname[-16:]
+                    ret = self._cli.addldset_iscsi(new_ldsetname, connector)
+                    if ret is False:
+                        msg = _('Appropriate Logical Disk Set'
+                                ' could not be found.')
+                        raise exception.NotFound(msg)
+                    xml = self._cli.view_all(self._properties['ismview_path'])
+                    pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+                        self.configs(xml))
+                    ldset = self._validate_iscsildset_exist(ldsets, connector)
+                else:
+                    msg = _('Appropriate Logical Disk Set could not be found.')
+                    raise exception.NotFound(msg)
+
         if len(ldset['portal_list']) < 1:
             msg = (_('Logical Disk Set `%s` has no portal.') %
                    ldset['ldsetname'])
             raise exception.NotFound(msg)
         return ldset
 
-    def _validate_fcldset_exist(self, ldsets, connector, metadata=None):
-        ldset = self.get_ldset(ldsets, metadata)
+    def _validate_fcldset_exist(self, ldsets, connector):
+        ldset = self.get_ldset(ldsets)
         if ldset is None:
             for conect in connector['wwpns']:
                 length = len(conect)
@@ -240,8 +258,21 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
                 if ldset is not None:
                     break
             if ldset is None:
-                msg = _('Appropriate Logical Disk Set could not be found.')
-                raise exception.NotFound(msg)
+                if self._properties['auto_accesscontrol']:
+                    new_ldsetname = connector['wwpns'][0][:16]
+                    ret = self._cli.addldset_fc(new_ldsetname, connector)
+                    if ret is False:
+                        msg = _('Appropriate Logical Disk Set'
+                                ' could not be found.')
+                        raise exception.NotFound(msg)
+                    xml = self._cli.view_all(self._properties['ismview_path'])
+                    pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+                        self.configs(xml))
+                    ldset = self._validate_fcldset_exist(ldsets, connector)
+                else:
+                    msg = _('Appropriate Logical Disk Set could not be found.')
+                    raise exception.NotFound(msg)
+
         return ldset
 
     def _enumerate_iscsi_portals(self, hostports, ldset, prefered_director=0):
@@ -682,64 +713,33 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
         LOG.debug('_iscsi_do_export'
                   '(Volume ID = %(id)s, connector = %(connector)s) Start.',
                   {'id': volume.id, 'connector': connector})
-        while True:
+
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
+
+        # find LD Set.
+        ldset = self._validate_iscsildset_exist(
+            ldsets, connector)
+        ldname = self.get_ldname(
+            volume.id, self._properties['ld_name_format'])
+
+        # add LD to LD set.
+        if ldname not in lds:
+            msg = _('Logical Disk `%s` could not be found.') % ldname
+            raise exception.NotFound(msg)
+        ld = lds[ldname]
+
+        if ld['ldn'] not in ldset['lds']:
+            # assign the LD to LD Set.
+            self._cli.addldsetld(ldset['ldsetname'], ldname)
+            # update local info.
             xml = self._cli.view_all(self._properties['ismview_path'])
             pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
                 self.configs(xml))
-
-            # find LD Set.
-
-            # get target LD Set name.
-            metadata = {}
-            # image to volume or volume to image.
-            if (volume.status in ['downloading', 'uploading'] and
-                    self._properties['ldset_controller_node_name'] != ''):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('image to volume or volume to image:%s',
-                          volume.status)
-            # migrate.
-            elif (hasattr(volume, 'migration_status') and
-                    volume.migration_status is not None and
-                    self._properties['ldset_controller_node_name'] != ''):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('migrate:%s', volume.migration_status)
-
-            ldset = self._validate_iscsildset_exist(
-                ldsets, connector, metadata)
-
-            ldname = self.get_ldname(
-                volume.id, self._properties['ld_name_format'])
-
-            # add LD to LD set.
-            if ldname not in lds:
-                msg = _('Logical Disk `%s` could not be found.') % ldname
-                raise exception.NotFound(msg)
-            ld = lds[ldname]
-
-            if ld['ldn'] not in ldset['lds']:
-                # Check the LD is remaining on ldset_controller_node.
-                ldset_controller_node_name = (
-                    self._properties['ldset_controller_node_name'])
-                if ldset_controller_node_name != '':
-                    if ldset_controller_node_name != ldset['ldsetname']:
-                        ldset_controller = ldsets[ldset_controller_node_name]
-                        if ld['ldn'] in ldset_controller['lds']:
-                            LOG.debug(
-                                'delete remaining the LD from '
-                                'ldset_controller_node. '
-                                'Ldset Name=%s.',
-                                ldset_controller_node_name)
-                            self._cli.delldsetld(ldset_controller_node_name,
-                                                 ldname)
-                # assign the LD to LD Set.
-                self._cli.addldsetld(ldset['ldsetname'], ldname)
-
-                LOG.debug('Add LD `%(ld)s` to LD Set `%(ldset)s`.',
-                          {'ld': ldname, 'ldset': ldset['ldsetname']})
-            else:
-                break
+            ldset = self._validate_iscsildset_exist(ldsets, connector)
+            LOG.debug('Add LD `%(ld)s` to LD Set `%(ldset)s`.',
+                      {'ld': ldname, 'ldset': ldset['ldsetname']})
 
         # enumerate portals for iscsi multipath.
         prefered_director = ld['pool_num'] % 2
@@ -762,7 +762,8 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
                    % {'id': volume.id,
                       'wwpns': connector['wwpns']})
         try:
-            ret = self._fc_do_export(_ctx, volume, connector, ensure)
+            ret = self._fc_do_export(_ctx, volume, connector, ensure,
+                                     self._properties['diskarray_name'])
             LOG.info('Created FC Export (%s)', msgparm)
             return ret
         except exception.CinderException as e:
@@ -771,79 +772,41 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
                             '(%(msgparm)s) (%(exception)s)',
                             {'msgparm': msgparm, 'exception': e})
 
-    def _fc_do_export(self, _ctx, volume, connector, ensure):
+    @coordination.synchronized('mstorage_bind_execute_{diskarray_name}')
+    def _fc_do_export(self, _ctx, volume, connector, ensure, diskarray_name):
         LOG.debug('_fc_do_export'
                   '(Volume ID = %(id)s, connector = %(connector)s) Start.',
                   {'id': volume.id, 'connector': connector})
-        while True:
-            xml = self._cli.view_all(self._properties['ismview_path'])
-            pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
-                self.configs(xml))
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
 
-            # find LD Set.
+        # get target LD Set.
+        ldset = self._validate_fcldset_exist(ldsets, connector)
+        ldname = self.get_ldname(volume.id, self._properties['ld_name_format'])
 
-            # get target LD Set.
-            metadata = {}
-            # image to volume or volume to image.
-            if (volume.status in ['downloading', 'uploading'] and
-                    self._properties['ldset_controller_node_name'] != ''):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('image to volume or volume to image:%s',
-                          volume.status)
-            # migrate.
-            elif (hasattr(volume, 'migration_status') and
-                    volume.migration_status is not None and
-                    self._properties['ldset_controller_node_name'] != ''
-                  ):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('migrate:%s', volume.migration_status)
-
-            ldset = self._validate_fcldset_exist(ldsets, connector, metadata)
-
-            # get free lun.
-            luns = []
-            ldsetlds = ldset['lds']
-            for ld in ldsetlds.values():
-                luns.append(ld['lun'])
-
-            target_lun = 0
-            for lun in sorted(luns):
-                if target_lun < lun:
-                    break
-                target_lun += 1
-
-            ldname = self.get_ldname(
-                volume.id, self._properties['ld_name_format'])
-
-            # add LD to LD set.
-            if ldname not in lds:
-                msg = _('Logical Disk `%s` could not be found.') % ldname
-                raise exception.NotFound(msg)
-            ld = lds[ldname]
-
-            if ld['ldn'] not in ldset['lds']:
-                # Check the LD is remaining on ldset_controller_node.
-                ldset_controller_node_name = (
-                    self._properties['ldset_controller_node_name'])
-                if ldset_controller_node_name != '':
-                    if ldset_controller_node_name != ldset['ldsetname']:
-                        ldset_controller = ldsets[ldset_controller_node_name]
-                        if ld['ldn'] in ldset_controller['lds']:
-                            LOG.debug(
-                                'delete remaining the LD from '
-                                'ldset_controller_node. '
-                                'Ldset Name=%s.', ldset_controller_node_name)
-                            self._cli.delldsetld(ldset_controller_node_name,
-                                                 ldname)
-                # assign the LD to LD Set.
-                self._cli.addldsetld(ldset['ldsetname'], ldname, target_lun)
-
-                LOG.debug('Add LD `%(ld)s` to LD Set `%(ldset)s`.',
-                          {'ld': ldname, 'ldset': ldset['ldsetname']})
-            else:
+        # get free lun.
+        luns = []
+        ldsetlds = ldset['lds']
+        for ld in ldsetlds.values():
+            luns.append(ld['lun'])
+        target_lun = 0
+        for lun in sorted(luns):
+            if target_lun < lun:
                 break
+            target_lun += 1
+
+        # add LD to LD set.
+        if ldname not in lds:
+            msg = _('Logical Disk `%s` could not be found.') % ldname
+            raise exception.NotFound(msg)
+        ld = lds[ldname]
+
+        if ld['ldn'] not in ldset['lds']:
+            # assign the LD to LD Set.
+            self._cli.addldsetld(ldset['ldsetname'], ldname, target_lun)
+            LOG.debug('Add LD `%(ld)s` to LD Set `%(ldset)s`.',
+                      {'ld': ldname, 'ldset': ldset['ldsetname']})
 
         LOG.debug('%(ensure)sexport LD `%(ld)s`.',
                   {'ensure': 'ensure_' if ensure else '',
@@ -887,6 +850,16 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
         lvldn = self._select_ldnumber(used_ldns, max_ld_count)
 
         LOG.debug('configure backend.')
+        if not ldset['lds']:
+            LOG.debug('create and attach control volume.')
+            used_ldns.append(lvldn)
+            cvldn = self._select_ldnumber(used_ldns, max_ld_count)
+            self._cli.cvbind(lds[bvname]['pool_num'], cvldn)
+            self._cli.changeldname(cvldn,
+                                   self._properties['cv_name_format'] % cvldn)
+            self._cli.addldsetld(ldset['ldsetname'],
+                                 self._properties['cv_name_format'] % cvldn)
+
         self._cli.lvbind(bvname, lvname[3:], lvldn)
         self._cli.lvlink(svname[3:], lvname[3:])
         self._cli.addldsetld(ldset['ldsetname'], lvname)
@@ -950,6 +923,17 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
         lvldn = self._select_ldnumber(used_ldns, max_ld_count)
 
         LOG.debug('configure backend.')
+        lun0 = [ld for (ldn, ld) in ldset['lds'].items() if ld['lun'] == 0]
+        if not lun0:
+            LOG.debug('create and attach control volume.')
+            used_ldns.append(lvldn)
+            cvldn = self._select_ldnumber(used_ldns, max_ld_count)
+            self._cli.cvbind(lds[bvname]['pool_num'], cvldn)
+            self._cli.changeldname(cvldn,
+                                   self._properties['cv_name_format'] % cvldn)
+            self._cli.addldsetld(ldset['ldsetname'],
+                                 self._properties['cv_name_format'] % cvldn, 0)
+
         self._cli.lvbind(bvname, lvname[3:], lvldn)
         self._cli.lvlink(svname[3:], lvname[3:])
 
@@ -957,6 +941,8 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
         ldsetlds = ldset['lds']
         for ld in ldsetlds.values():
             luns.append(ld['lun'])
+        if 0 not in luns:
+            luns.append(0)
         target_lun = 0
         for lun in sorted(luns):
             if target_lun < lun:
@@ -992,24 +978,7 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
                 self.configs(xml))
 
             # get target LD Set.
-            metadata = {}
-            # image to volume or volume to image.
-            if (volume.status in ['downloading', 'uploading'] and
-                    self._properties['ldset_controller_node_name'] != ''):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('image to volume or volume to image:%s',
-                          volume.status)
-            # migrate.
-            elif (hasattr(volume, 'migration_status') and
-                    volume.migration_status is not None and
-                    self._properties['ldset_controller_node_name'] != ''
-                  ):
-                metadata['ldset'] = (
-                    self._properties['ldset_controller_node_name'])
-                LOG.debug('migrate:%s', volume.migration_status)
-
-            ldset = self.get_ldset(ldsets, metadata)
+            ldset = self.get_ldset(ldsets)
             ldname = self.get_ldname(
                 volume.id, self._properties['ld_name_format'])
 
@@ -1531,21 +1500,209 @@ class MStorageDriver(volume_common.MStorageVolumeCommon):
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
-        # Check the LD is remaining on ldset_controller_node.
-        ldset_controller_node_name = (
-            self._properties['ldset_controller_node_name'])
-        if ldset_controller_node_name != '':
-            if ldset_controller_node_name in ldsets:
-                ldset = ldsets[ldset_controller_node_name]
-                if ld['ldn'] in ldset['lds']:
-                    LOG.debug('delete LD from ldset_controller_node. '
-                              'Ldset Name=%s.',
-                              ldset_controller_node_name)
-                    self._cli.delldsetld(ldset_controller_node_name, ldname)
-
         # unbind LD.
         self._cli.unbind(ldname)
         LOG.debug('LD unbound. Name=%s.', ldname)
+
+    def _is_manageable_volume(self, ld):
+        if ld['RPL Attribute'] == '---':
+            return False
+        if ld['Purpose'] != '---' and 'BV' not in ld['RPL Attribute']:
+            return False
+        if ld['pool_num'] not in self._properties['pool_pools']:
+            return False
+        return True
+
+    def _is_manageable_snapshot(self, ld):
+        if ld['RPL Attribute'] == '---':
+            return False
+        if 'SV' not in ld['RPL Attribute']:
+            return False
+        if ld['pool_num'] not in self._properties['pool_backup_pools']:
+            return False
+        return True
+
+    def _reference_to_ldname(self, resource_type, volume, existing_ref):
+        if resource_type == 'volume':
+            ldname_format = self._properties['ld_name_format']
+        else:
+            ldname_format = self._properties['ld_backupname_format']
+
+        id_name = self.get_ldname(volume.id, ldname_format)
+        ref_name = existing_ref['source-name']
+        volid = re.search(
+            r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+            ref_name)
+        if volid:
+            ref_name = self.get_ldname(volid.group(0), ldname_format)
+
+        return id_name, ref_name
+
+    def _get_manageable_resources(self, resource_type, cinder_volumes, marker,
+                                  limit, offset, sort_keys, sort_dirs):
+        entries = []
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
+        cinder_ids = [resource['id'] for resource in cinder_volumes]
+
+        for ld in lds.values():
+            if ((resource_type == 'volume' and
+                 not self._is_manageable_volume(ld)) or
+                (resource_type == 'snapshot' and
+                 not self._is_manageable_snapshot(ld))):
+                continue
+
+            ld_info = {'reference': {'source-name': ld['ldname']},
+                       'size': ld['ld_capacity'],
+                       'cinder_id': None,
+                       'extra_info': None}
+
+            potential_id = volume_common.convert_to_id(ld['ldname'][3:])
+            if potential_id in cinder_ids:
+                ld_info['safe_to_manage'] = False
+                ld_info['reason_not_safe'] = 'already managed'
+                ld_info['cinder_id'] = potential_id
+            elif self.check_accesscontrol(ldsets, ld):
+                ld_info['safe_to_manage'] = False
+                ld_info['reason_not_safe'] = '%s in use' % resource_type
+            else:
+                ld_info['safe_to_manage'] = True
+                ld_info['reason_not_safe'] = None
+
+            if resource_type == 'snapshot':
+                bvname = self._cli.get_bvname(ld['ldname'])
+                bv_id = volume_common.convert_to_id(bvname)
+                ld_info['source_reference'] = {'source-name': bv_id}
+
+            entries.append(ld_info)
+
+        return volutils.paginate_entries_list(entries, marker, limit, offset,
+                                              sort_keys, sort_dirs)
+
+    def _manage_existing_get_size(self, resource_type, volume, existing_ref):
+        if 'source-name' not in existing_ref:
+            reason = _('Reference must contain source-name element.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=reason)
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
+
+        id_name, ref_name = self._reference_to_ldname(resource_type,
+                                                      volume,
+                                                      existing_ref)
+        if ref_name not in lds:
+            reason = _('Specified resource does not exist.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=reason)
+        ld = lds[ref_name]
+        return ld['ld_capacity']
+
+    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
+                               sort_keys, sort_dirs):
+        """List volumes on the backend available for management by Cinder."""
+        LOG.debug('get_manageable_volumes Start.')
+        return self._get_manageable_resources('volume',
+                                              cinder_volumes, marker, limit,
+                                              offset, sort_keys, sort_dirs)
+
+    def manage_existing(self, volume, existing_ref):
+        """Brings an existing backend storage object under Cinder management.
+
+        Rename the backend storage object so that it matches the,
+        volume['name'] which is how drivers traditionally map between a
+        cinder volume and the associated backend storage object.
+        """
+        LOG.debug('manage_existing Start.')
+
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
+
+        newname, oldname = self._reference_to_ldname('volume',
+                                                     volume,
+                                                     existing_ref)
+        if self.check_accesscontrol(ldsets, lds[oldname]):
+            reason = _('Specified resource is already in-use.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=reason)
+
+        if lds[oldname]['pool_num'] not in self._properties['pool_pools']:
+            reason = _('Volume type is unmatched.')
+            raise exception.ManageExistingVolumeTypeMismatch(
+                existing_ref=existing_ref, reason=reason)
+
+        try:
+            self._cli.changeldname(None, newname, oldname)
+        except exception.CinderException as e:
+            LOG.warning('Unable to manage existing volume '
+                        '(reference = %(ref)s), (%(exception)s)',
+                        {'ref': existing_ref['source-name'], 'exception': e})
+        return
+
+    def manage_existing_get_size(self, volume, existing_ref):
+        """Return size of volume to be managed by manage_existing."""
+        LOG.debug('manage_existing_get_size Start.')
+        return self._manage_existing_get_size('volume', volume, existing_ref)
+
+    def unmanage(self, volume):
+        """Removes the specified volume from Cinder management."""
+        pass
+
+    def get_manageable_snapshots(self, cinder_snapshots, marker, limit, offset,
+                                 sort_keys, sort_dirs):
+        """List snapshots on the backend available for management by Cinder."""
+        LOG.debug('get_manageable_snapshots Start.')
+        return self._get_manageable_resources('snapshot',
+                                              cinder_snapshots, marker, limit,
+                                              offset, sort_keys, sort_dirs)
+
+    def manage_existing_snapshot(self, snapshot, existing_ref):
+        """Brings an existing backend storage object under Cinder management.
+
+        Rename the backend storage object so that it matches the
+        snapshot['name'] which is how drivers traditionally map between a
+        cinder snapshot and the associated backend storage object.
+        """
+        LOG.debug('manage_existing_snapshots Start.')
+
+        xml = self._cli.view_all(self._properties['ismview_path'])
+        pools, lds, ldsets, used_ldns, hostports, max_ld_count = (
+            self.configs(xml))
+
+        newname, oldname = self._reference_to_ldname('snapshot',
+                                                     snapshot,
+                                                     existing_ref)
+        param_source = self.get_ldname(snapshot.volume_id,
+                                       self._properties['ld_name_format'])
+        ref_source = self._cli.get_bvname(oldname)
+        if param_source[3:] != ref_source:
+            reason = _('Snapshot source is unmatched.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=reason)
+        if (lds[oldname]['pool_num']
+                not in self._properties['pool_backup_pools']):
+            reason = _('Volume type is unmatched.')
+            raise exception.ManageExistingVolumeTypeMismatch(
+                existing_ref=existing_ref, reason=reason)
+
+        try:
+            self._cli.changeldname(None, newname, oldname)
+        except exception.CinderException as e:
+            LOG.warning('Unable to manage existing snapshot '
+                        '(reference = %(ref)s), (%(exception)s)',
+                        {'ref': existing_ref['source-name'], 'exception': e})
+
+    def manage_existing_snapshot_get_size(self, snapshot, existing_ref):
+        """Return size of snapshot to be managed by manage_existing."""
+        LOG.debug('manage_existing_snapshot_get_size Start.')
+        return self._manage_existing_get_size('snapshot',
+                                              snapshot, existing_ref)
+
+    def unmanage_snapshot(self, snapshot):
+        """Removes the specified snapshot from Cinder management."""
+        pass
 
 
 class MStorageDSVDriver(MStorageDriver):
@@ -1619,7 +1776,7 @@ class MStorageDSVDriver(MStorageDriver):
         ldname = self.get_ldname(snapshot.volume_id,
                                  self._properties['ld_name_format'])
         if ldname not in lds:
-            LOG.debug('LD(MV) `%s` already unbound?', ldname)
+            LOG.debug('LD(BV) `%s` already unbound?', ldname)
             return
 
         # get SV name.

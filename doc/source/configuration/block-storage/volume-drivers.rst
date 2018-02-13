@@ -32,6 +32,7 @@ Driver Configuration Reference
    drivers/nfs-volume-driver
    drivers/sheepdog-driver
    drivers/coprhd-driver
+   drivers/datacore-volume-driver
    drivers/datera-volume-driver
    drivers/dell-equallogic-driver
    drivers/dell-emc-scaleio-driver
@@ -62,11 +63,13 @@ Driver Configuration Reference
    drivers/pure-storage-driver
    drivers/quobyte-driver
    drivers/solidfire-volume-driver
+   drivers/storpool-volume-driver
    drivers/synology-dsm-driver
    drivers/tintri-volume-driver
    drivers/vzstorage-driver
    drivers/vmware-vmdk-driver
    drivers/windows-iscsi-volume-driver
+   drivers/windows-smb-volume-driver
    drivers/zadara-volume-driver
    drivers/zfssa-iscsi-driver
    drivers/zfssa-nfs-driver

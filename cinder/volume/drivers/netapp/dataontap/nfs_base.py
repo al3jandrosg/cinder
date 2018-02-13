@@ -74,6 +74,7 @@ class NetAppNfsDriver(driver.ManageableVD,
         self._execute = None
         self._context = None
         self.app_version = kwargs.pop("app_version", "unknown")
+        kwargs['supports_auto_mosr'] = True
         super(NetAppNfsDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(na_opts.netapp_connection_opts)
         self.configuration.append_config_values(na_opts.netapp_basicauth_opts)
@@ -511,6 +512,14 @@ class NetAppNfsDriver(driver.ManageableVD,
             LOG.warning('Exception during deleting %s', ex)
             return False
 
+    def _copy_from_cache(self, volume, image_id, cache_result):
+        """Try copying image file_name from cached file"""
+        raise NotImplementedError()
+
+    def _copy_from_img_service(self, context, volume, image_service,
+                               image_id):
+        raise NotImplementedError()
+
     def clone_image(self, context, volume,
                     image_location, image_meta,
                     image_service):
@@ -528,14 +537,22 @@ class NetAppNfsDriver(driver.ManageableVD,
         post_clone = False
 
         extra_specs = na_utils.get_volume_extra_specs(volume)
+        major, minor = self.zapi_client.get_ontapi_version()
+        col_path = self.configuration.netapp_copyoffload_tool_path
 
         try:
             cache_result = self._find_image_in_cache(image_id)
             if cache_result:
-                cloned = self._clone_from_cache(volume, image_id, cache_result)
+                cloned = self._copy_from_cache(volume, image_id, cache_result)
             else:
                 cloned = self._direct_nfs_clone(volume, image_location,
                                                 image_id)
+
+            # Try to use the copy offload tool
+            if not cloned and col_path and major == 1 and minor >= 20:
+                cloned = self._copy_from_img_service(context, volume,
+                                                     image_service, image_id)
+
             if cloned:
                 self._do_qos_for_volume(volume, extra_specs)
                 post_clone = self._post_clone_image(volume)
@@ -546,7 +563,8 @@ class NetAppNfsDriver(driver.ManageableVD,
                      {'image_id': image_id, 'msg': msg})
         finally:
             cloned = cloned and post_clone
-            share = volume['provider_location'] if cloned else None
+            share = (volume_utils.extract_host(volume['host'], level='pool')
+                     if cloned else None)
             bootable = True if cloned else False
             return {'provider_location': share, 'bootable': bootable}, cloned
 
@@ -583,7 +601,6 @@ class NetAppNfsDriver(driver.ManageableVD,
             share = self._is_cloneable_share(loc)
             if share and self._is_share_clone_compatible(volume, share):
                 LOG.debug('Share is cloneable %s', share)
-                volume['provider_location'] = share
                 (__, ___, img_file) = loc.rpartition('/')
                 dir_path = self._get_mount_point_for_share(share)
                 img_path = '%s/%s' % (dir_path, img_file)
@@ -619,7 +636,10 @@ class NetAppNfsDriver(driver.ManageableVD,
     def _post_clone_image(self, volume):
         """Do operations post image cloning."""
         LOG.info('Performing post clone for %s', volume['name'])
-        vol_path = self.local_path(volume)
+
+        share = volume_utils.extract_host(volume['host'], level='pool')
+        vol_path = self._get_volume_path(share, volume['name'])
+
         if self._discover_file_till_timeout(vol_path):
             self._set_rw_permissions(vol_path)
             self._resize_image_file(vol_path, volume['size'])
@@ -812,20 +832,6 @@ class NetAppNfsDriver(driver.ManageableVD,
     def _is_share_clone_compatible(self, volume, share):
         """Checks if share is compatible with volume to host its clone."""
         raise NotImplementedError()
-
-    def _share_has_space_for_clone(self, share, size_in_gib, thin=True):
-        """Is there space on the share for a clone given the original size?"""
-        requested_size = size_in_gib * units.Gi
-
-        total_size, total_available = self._get_capacity_info(share)
-
-        reserved_ratio = self.reserved_percentage / 100.0
-        reserved = int(round(total_size * reserved_ratio))
-        available = max(0, total_available - reserved)
-        if thin:
-            available = available * self.max_over_subscription_ratio
-
-        return available >= requested_size
 
     def _check_share_can_hold_size(self, share, size):
         """Checks if volume can hold image with size."""

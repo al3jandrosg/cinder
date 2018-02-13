@@ -100,6 +100,11 @@ class MockResource(object):
         if lun_or_snap.name == 'detach_failure':
             raise ex.DetachIsCalled()
 
+    @staticmethod
+    def detach_from(host):
+        if host is None:
+            raise ex.DetachFromIsCalled()
+
     def get_hlu(self, lun):
         return self.alu_hlu_map.get(lun.get_id(), None)
 
@@ -176,6 +181,12 @@ class MockResource(object):
         if name == 'thin_clone_name_in_use':
             raise ex.UnityLunNameInUseError
         return MockResource(_id=name, name=name)
+
+    def get_snap(self, name):
+        return MockResource(_id=name, name=name)
+
+    def restore(self, delete_backup):
+        return MockResource(_id='snap_1', name="internal_snap")
 
 
 class MockResourceList(object):
@@ -446,6 +457,13 @@ class ClientTest(unittest.TestCase):
 
         self.assertRaises(ex.DetachIsCalled, f)
 
+    def test_detach_all(self):
+        def f():
+            lun = MockResource('lun_44')
+            self.client.detach_all(lun)
+
+        self.assertRaises(ex.DetachFromIsCalled, f)
+
     @mock.patch.object(coordination.Coordinator, 'get_lock')
     def test_create_host(self, fake):
         self.assertEqual('host2', self.client.create_host('host2').name)
@@ -521,3 +539,7 @@ class ClientTest(unittest.TestCase):
 
     def test_get_pool_name(self):
         self.assertEqual('Pool0', self.client.get_pool_name('lun_0'))
+
+    def test_restore_snapshot(self):
+        back_snap = self.client.restore_snapshot('snap1')
+        self.assertEqual("internal_snap", back_snap.name)

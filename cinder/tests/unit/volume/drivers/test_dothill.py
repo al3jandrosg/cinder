@@ -16,8 +16,7 @@
 #
 """Unit tests for OpenStack Cinder DotHill driver."""
 
-
-from lxml import etree
+from defusedxml import lxml as etree
 import mock
 import requests
 
@@ -36,6 +35,9 @@ resp_login = '''<RESPONSE><OBJECT basetype="status" name="status" oid="1">
              <PROPERTY name="response-type-numeric">0</PROPERTY>
              <PROPERTY name="response">12a1626754554a21d85040760c81b</PROPERTY>
              <PROPERTY name="return-code">1</PROPERTY></OBJECT></RESPONSE>'''
+
+resp_fw_ti = '''<RESPONSE><PROPERTY name="sc-fw">T252R07</PROPERTY>
+                       <PROPERTY name="return-code">0</PROPERTY></RESPONSE>'''
 
 resp_fw = '''<RESPONSE><PROPERTY name="sc-fw">GLS220R001</PROPERTY>
                        <PROPERTY name="return-code">0</PROPERTY></RESPONSE>'''
@@ -205,7 +207,7 @@ class TestDotHillClient(test.TestCase):
                                      RequestException("error")]
         mock_requests_get.return_value = m
         ret = self.client._api_request('/path')
-        self.assertTrue(type(ret) == etree._Element)
+        self.assertTrue(type(ret) == etree.RestrictedElement)
         self.assertRaises(exception.DotHillConnectionError,
                           self.client._api_request,
                           '/path')
@@ -291,6 +293,25 @@ class TestDotHillClient(test.TestCase):
         self.assertEqual(portals, ret)
         ret = self.client.get_active_iscsi_target_portals()
         self.assertEqual(portals, ret)
+
+    @mock.patch.object(dothill.DotHillClient, '_request')
+    def test_delete_snapshot(self, mock_request):
+        mock_request.side_effect = [None, None]
+        self.client.delete_snapshot('dummy', 'linear')
+        mock_request.assert_called_with('/delete/snapshot', 'cleanup', 'dummy')
+        self.client.delete_snapshot('dummy', 'paged')
+        mock_request.assert_called_with('/delete/snapshot', 'dummy')
+
+    @mock.patch.object(dothill.DotHillClient, '_request')
+    def test_list_luns_for_host(self, mock_request):
+        mock_request.side_effect = [etree.XML(response_no_lun),
+                                    etree.XML(response_lun)]
+        self.client._fw = 'T100'
+        self.client.list_luns_for_host('dummy')
+        mock_request.assert_called_with('/show/host-maps', 'dummy')
+        self.client._fw = 'G221'
+        self.client.list_luns_for_host('dummy')
+        mock_request.assert_called_with('/show/maps/initiator', 'dummy')
 
 
 class FakeConfiguration1(object):
@@ -524,7 +545,8 @@ class TestFCDotHillCommon(test.TestCase):
         self.assertRaises(exception.Invalid, self.common.delete_snapshot,
                           test_snap)
         self.assertIsNone(self.common.delete_snapshot(test_snap))
-        mock_delete.assert_called_with('sqqqqqqqqqqqqqqqqqqq')
+        mock_delete.assert_called_with('sqqqqqqqqqqqqqqqqqqq',
+                                       self.common.backend_type)
 
     @mock.patch.object(dothill.DotHillClient, 'map_volume')
     def test_map_volume(self, mock_map):

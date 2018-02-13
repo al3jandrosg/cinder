@@ -39,10 +39,10 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 
+from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder import interface
-from cinder import utils
 from cinder.volume import configuration
 from cinder.volume.drivers.ibm.storwize_svc import (
     storwize_svc_common as storwize_common)
@@ -95,9 +95,10 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
         2.2.2 - Add npiv support
         2.2.3 - Add replication group support
         2.2.4 - Add backup snapshots support
+        2.2.5 - Add hyperswap support
     """
 
-    VERSION = "2.2.3"
+    VERSION = "2.2.5"
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "IBM_STORAGE_CI"
@@ -123,10 +124,11 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
         # attach the snapshot will be failed.
         self._check_snapshot_replica_volume_status(snapshot)
 
-        vol_attrs = ['id', 'name', 'display_name']
+        vol_attrs = ['id', 'name', 'volume_type_id', 'display_name']
         Volume = collections.namedtuple('Volume', vol_attrs)
         volume = Volume(id=snapshot.id,
                         name=snapshot.name,
+                        volume_type_id=snapshot.volume_type_id,
                         display_name='backup-snapshot')
 
         return self.initialize_connection(volume, connector)
@@ -134,11 +136,11 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
     @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Perform necessary work to make a FC connection."""
-        @utils.synchronized('storwize-host' + self._state['system_id'] +
-                            connector['host'], external=True)
-        def _do_initialize_connection_locked():
+        @coordination.synchronized('storwize-host-{system_id}-{host}')
+        def _do_initialize_connection_locked(system_id, host):
             return self._do_initialize_connection(volume, connector)
-        return _do_initialize_connection_locked()
+        return _do_initialize_connection_locked(self._state['system_id'],
+                                                connector['host'])
 
     def _do_initialize_connection(self, volume, connector):
         """Perform necessary work to make a FC connection.
@@ -163,12 +165,36 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
         else:
             volume_name, backend_helper, node_state = self._get_vol_sys_info(
                 volume)
+        opts = self._get_vdisk_params(volume.volume_type_id)
+        host_site = opts['host_site']
 
         # Check if a host object is defined for this host name
         host_name = backend_helper.get_host_from_connector(connector)
         if host_name is None:
             # Host does not exist - add a new host to Storwize/SVC
-            host_name = backend_helper.create_host(connector)
+            # The host_site is necessary for hyperswap volume.
+            if backend_helper.is_volume_hyperswap(
+                    volume_name) and host_site is None:
+                msg = (_('There is no host_site configured for a hyperswap'
+                         ' volume %s.') % volume_name)
+                LOG.error(msg)
+                raise exception.VolumeDriverException(message=msg)
+
+            host_name = backend_helper.create_host(connector, site=host_site)
+        else:
+            host_info = backend_helper.ssh.lshost(host=host_name)
+            if 'site_name' in host_info[0]:
+                if not host_info[0]['site_name'] and host_site:
+                    backend_helper.update_host(host_name, host_site)
+                elif host_info[0]['site_name']:
+                    ref_host_site = host_info[0]['site_name']
+                    if host_site and host_site != ref_host_site:
+                        msg = (_('The existing host site is %(ref_host_site)s,'
+                                 ' but the new host site is %(host_site)s.') %
+                               {'ref_host_site': ref_host_site,
+                                'host_site': host_site})
+                        LOG.error(msg)
+                        raise exception.VolumeDriverException(message=msg)
 
         volume_attributes = backend_helper.get_vdisk_attributes(volume_name)
         if volume_attributes is None:
@@ -292,12 +318,11 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
         # so that all the fake connectors to an SVC are serialized
         host = connector['host'] if 'host' in connector else ""
 
-        @utils.synchronized('storwize-host' + self._state['system_id'] + host,
-                            external=True)
-        def _do_terminate_connection_locked():
+        @coordination.synchronized('storwize-host-{system_id}-{host}')
+        def _do_terminate_connection_locked(system_id, host):
             return self._do_terminate_connection(volume, connector,
                                                  **kwargs)
-        return _do_terminate_connection_locked()
+        return _do_terminate_connection_locked(self._state['system_id'], host)
 
     def _do_terminate_connection(self, volume, connector, **kwargs):
         """Cleanup after an FC connection has been terminated.
@@ -311,35 +336,11 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
         """
         LOG.debug('enter: terminate_connection: volume %(vol)s with connector'
                   ' %(conn)s', {'vol': volume.id, 'conn': connector})
-        if volume.display_name == 'backup-snapshot':
-            LOG.debug('It is a virtual volume %(vol)s for detach snapshot.',
-                      {'vol': volume.id})
-            vol_name = volume.name
-            backend_helper = self._helpers
-            node_state = self._state
-        else:
-            vol_name, backend_helper, node_state = self._get_vol_sys_info(
-                volume)
+        (info, host_name, vol_name, backend_helper,
+         node_state) = self._get_map_info_from_connector(volume, connector)
 
-        info = {}
-        if 'host' in connector:
-            # get host according to FC protocol
-            connector = connector.copy()
-
-            connector.pop('initiator', None)
-            info = {'driver_volume_type': 'fibre_channel',
-                    'data': {}}
-
-            host_name = backend_helper.get_host_from_connector(
-                connector, volume_name=vol_name)
-            if host_name is None:
-                msg = (_('terminate_connection: Failed to get host name from'
-                         ' connector.'))
-                LOG.error(msg)
-                raise exception.VolumeDriverException(message=msg)
-        else:
-            # See bug #1244257
-            host_name = None
+        if not backend_helper:
+            return info
 
         # Unmap volumes, if hostname is None, need to get value from vdiskmap
         host_name = backend_helper.unmap_vol_from_host(vol_name, host_name)
@@ -366,6 +367,7 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
                 backend_helper.delete_host(host_name)
 
         LOG.debug('leave: terminate_connection: volume %(vol)s with '
-                  'connector %(conn)s', {'vol': volume.id,
-                                         'conn': connector})
+                  'connector %(conn)s, info %(info)s', {'vol': volume.id,
+                                                        'conn': connector,
+                                                        'info': info})
         return info

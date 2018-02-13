@@ -55,6 +55,14 @@ encryption_id:
   in: path
   required: true
   type: string
+force_5:
+  description: |
+    Indicates whether to force delete a volume even if
+    the volume is in deleting or error_deleting. Default is ``false``.
+  in: path
+  required: false
+  type: boolean
+  min_version: 3.23
 group_id:
   description: |
     The ID of the group.
@@ -161,13 +169,6 @@ transfer_id:
   in: path
   required: true
   type: string
-user_id_1:
-  description: |
-    The user ID. Specify in the URI as
-    ``user_id={user_id}``.
-  in: path
-  required: false
-  type: string
 vol_type_id:
   description: |
     The UUID for an existing volume type.
@@ -185,6 +186,12 @@ volume_type:
     The ID of Volume Type to be accessed by project.
   in: path
   required: false
+  type: string
+volume_type_access:
+  description: |
+    The ID of Volume Type to be accessed by project.
+  in: path
+  required: true
   type: string
 volume_type_id:
   description: |
@@ -499,18 +506,6 @@ availability_zone:
   in: body
   required: false
   type: string
-availability_zone_1:
-  description: |
-    The availability zone.
-  in: body
-  required: false
-  type: string
-availability_zone_2:
-  description: |
-    The availability zone.
-  in: body
-  required: true
-  type: string
 availability_zone_3:
   description: |
     The availability zone name.
@@ -606,6 +601,13 @@ bootable:
     can boot an instance from a bootable volume.
   in: body
   required: true
+  type: boolean
+bootable_1:
+  description: |
+    Enables or disables the bootable attribute. You
+    can boot an instance from a bootable volume.
+  in: body
+  required: false
   type: boolean
 bootable_response:
   description: |
@@ -846,12 +848,6 @@ description:
   in: body
   required: false
   type: string
-description_1:
-  description: |
-    The consistency group snapshot description.
-  in: body
-  required: true
-  type: string
 description_10:
   description: |
     The capabilities description.
@@ -861,12 +857,6 @@ description_10:
 description_11:
   description: |
     The consistency group description.
-  in: body
-  required: false
-  type: string
-description_12:
-  description: |
-    The group type description.
   in: body
   required: false
   type: string
@@ -882,27 +872,9 @@ description_14:
   in: body
   required: false
   type: string
-description_15:
-  description: |
-    The volume type description.
-  in: body
-  required: false
-  type: string
 description_16:
   description: |
     The group snapshot description.
-  in: body
-  required: true
-  type: string
-description_2:
-  description: |
-    The description of the consistency group.
-  in: body
-  required: false
-  type: string
-description_3:
-  description: |
-    The description of the consistency group.
   in: body
   required: true
   type: string
@@ -940,6 +912,54 @@ description_8:
 description_9:
   description: |
     The volume description.
+  in: body
+  required: true
+  type: string
+description_cg_snapshot_false:
+  description: |
+    The consistency group snapshot description.
+  in: body
+  required: false
+  type: string
+description_cg_snapshot_true:
+  description: |
+    The consistency group snapshot description.
+  in: body
+  required: true
+  type: string
+description_group_false:
+  description: |
+    The group description.
+  in: body
+  required: false
+  type: string
+description_group_true:
+  description: |
+    The group description.
+  in: body
+  required: true
+  type: string
+description_group_type_optional:
+  description: |
+    The group type description.
+  in: body
+  required: false
+  type: string
+description_group_type_required:
+  description: |
+    The group type description.
+  in: body
+  required: true
+  type: string
+description_volume_type_optional:
+  description: |
+    The volume type description.
+  in: body
+  required: false
+  type: string
+description_volume_type_required:
+  description: |
+    The volume type description.
   in: body
   required: true
   type: string
@@ -1022,19 +1042,19 @@ extra_info:
   in: body
   required: false
   type: string
-extra_specs:
-  description: |
-    A set of key and value pairs that contains the
-    specifications for a volume type.
-  in: body
-  required: true
-  type: object
-extra_specs_1:
+extra_specs_volume_type_optional:
   description: |
     A key and value pair that contains additional
     specifications that are associated with the volume type. Examples
     include capabilities, capacity, compression, and so on, depending
     on the storage driver in use.
+  in: body
+  required: false
+  type: object
+extra_specs_volume_type_required:
+  description: |
+    A set of key and value pairs that contains the
+    specifications for a volume type.
   in: body
   required: true
   type: object
@@ -1073,14 +1093,6 @@ force_4:
   in: body
   required: false
   type: boolean
-force_5:
-  description: |
-    Indicates whether to force deletes a volume even if
-    the volume is in deleting or error_deleting. Default is ``false``.
-  in: body
-  required: false
-  type: boolean
-  min_version: 3.23
 free_capacity:
   description: |
     The amount of free capacity for the back-end
@@ -1236,7 +1248,7 @@ has_dependent_backups:
 host:
   description: |
     The OpenStack Block Storage host where the
-    existing volume resides.
+    existing volume resides. Host format is ``host@backend``.
   in: body
   required: true
   type: object
@@ -1384,17 +1396,29 @@ is_incremental:
   in: body
   required: false
   type: boolean
-is_public:
-  description:
+is_public_group_type_optional:
+  description: |
+    Whether the group type is publicly visible.
+  in: body
+  required: false
+  type: boolean
+is_public_group_type_required:
+  description: |
+    Whether the group type is publicly visible.
+  in: body
+  required: true
+  type: boolean
+is_public_volume_type_optional:
+  description: |
     Whether the volume type is publicly visible.
   in: body
   required: false
   type: boolean
-is_public_1:
-  description:
-    Whether the group is publicly visible.
+is_public_volume_type_required:
+  description: |
+    Whether the volume type is publicly visible.
   in: body
-  required: false
+  required: true
   type: boolean
 is_up:
   description: |
@@ -1599,6 +1623,13 @@ metadata_1:
   in: body
   required: true
   type: object
+metadata_10:
+  description: |
+    One or more metadata key and value pairs to be associated
+    with the new volume.
+  in: body
+  required: false
+  type: object
 metadata_2:
   description: |
     One or more metadata key and value pairs that are
@@ -1654,6 +1685,9 @@ metadata_9:
   required: false
   type: object
   min_version: 3.43
+# NOTE(mriedem): We can update the migration_policy retype note about encrypted
+# in-use volumes not being supported once
+# https://bugzilla.redhat.com/show_bug.cgi?id=760547 is fixed.
 migration_policy:
   description: |
     Specify if the volume should be migrated when it is re-typed.
@@ -1662,7 +1696,8 @@ migration_policy:
 
     .. note:: If the volume is attached to a server instance and will be
       migrated, then by default policy only users with the administrative role
-      should attempt the retype operation.
+      should attempt the retype operation. A retype which involves a migration
+      to a new host for an *in-use* encrypted volume is not supported.
   in: body
   required: false
   type: string
@@ -1684,14 +1719,16 @@ mountpoint:
   in: body
   required: true
   type: string
-multiattach:
+multiattach_req:
   description: |
     To enable this volume to attach to more than one
     server, set this value to ``true``. Default is ``false``.
+    Note that support for multiattach volumes depends on the volume
+    type being used.
   in: body
   required: false
   type: boolean
-multiattach_1:
+multiattach_resp:
   description: |
     If true, this volume can attach to more than one
     instance.
@@ -1752,7 +1789,7 @@ name_16:
   description: |
     The group type name.
   in: body
-  required: false
+  required: true
   type: string
 name_17:
   description: |
@@ -1802,12 +1839,6 @@ name_6:
   in: body
   required: false
   type: string
-name_7:
-  description: |
-    The name of the volume type.
-  in: body
-  required: true
-  type: string
 name_8:
   description: |
     The volume name.
@@ -1825,6 +1856,18 @@ name_optional:
     The name of the Volume Backup.
   in: body
   required: false
+  type: string
+name_volume_type_optional:
+  description: |
+    The name of the volume type.
+  in: body
+  required: false
+  type: string
+name_volume_type_required:
+  description: |
+    The name of the volume type.
+  in: body
+  required: true
   type: string
 namespace:
   description: |
@@ -1972,6 +2015,7 @@ os-unset_image_metadata:
 os-vol-host-attr:host:
   description: |
     Current back-end of the volume.
+    Host format is ``host@backend#pool``.
   in: body
   required: true
   type: string
@@ -2014,12 +2058,6 @@ os-volume-replication:extended_status_1:
   in: body
   required: false
   type: string
-os-volume-type-access:is_public:
-  description: |
-    Make type accessible to the public.
-  in: body
-  required: false
-  type: boolean
 os-volume_upload_image:
   description: |
     The ``os-volume_upload_image`` action. This
@@ -2338,25 +2376,32 @@ service_status:
   in: body
   required: true
   type: string
+service_uuid:
+  description: |
+    A unique identifier that's used to indicate what node the volume-service
+    for a particular volume is being serviced by.
+  in: body
+  required: true
+  type: string
 services:
   description: |
     A list of service objects.
   in: body
   required: true
   type: array
+shared_targets:
+  description: |
+    An indicator whether the back-end hosting the volume utilizes
+    shared_targets or not. Default=True.
+  in: body
+  required: true
+  type: boolean
 size:
   description: |
     The size of the volume, in gibibytes (GiB).
   in: body
   required: true
   type: integer
-skip_validation:
-  description: |
-    If set to false, the quota value can't be set lower than the in_use quota.
-    Default is True.
-  in: body
-  required: false
-  type: boolean
 snapshot:
   description: |
     A partial representation of a snapshot used in
@@ -2778,6 +2823,12 @@ volume_name:
     The volume name.
   in: body
   required: true
+  type: string
+volume_name_1:
+  description: |
+    The volume name.
+  in: body
+  required: false
   type: string
 volume_type_1:
   description: |

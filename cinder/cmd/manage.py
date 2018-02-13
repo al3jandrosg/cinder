@@ -69,6 +69,7 @@ from oslo_utils import timeutils
 
 # Need to register global_opts
 from cinder.common import config  # noqa
+from cinder.common import constants
 from cinder import context
 from cinder import db
 from cinder.db import migration as db_migration
@@ -92,7 +93,8 @@ def _get_non_shared_target_hosts(ctxt):
     rpc.init(CONF)
     rpcapi = volume_rpcapi.VolumeAPI()
 
-    services = objects.ServiceList.get_all_by_topic(ctxt, 'cinder-volume')
+    services = objects.ServiceList.get_all_by_topic(ctxt,
+                                                    constants.VOLUME_TOPIC)
     for service in services:
         capabilities = rpcapi.get_capabilities(ctxt, service.host, True)
         if not capabilities.get('shared_targets', True):
@@ -250,9 +252,14 @@ class DbCommands(object):
     online_migrations = (
         # Added in Queens
         db.service_uuids_online_data_migration,
+        # Added in Queens
         db.backup_service_online_migration,
+        # Added in Queens
         db.volume_service_uuids_online_data_migration,
+        # Added in Queens
         shared_targets_online_data_migration,
+        # Added in Queens
+        db.attachment_specs_online_data_migration
     )
 
     def __init__(self):
@@ -455,8 +462,15 @@ class ConfigCommands(object):
 class GetLogCommands(object):
     """Get logging information."""
 
+    deprecation_msg = ('DEPRECATED: The log commands are deprecated '
+                       'since Queens and are not maintained. They will be '
+                       'removed in an upcoming release.')
+
     def errors(self):
         """Get all of the errors from the log files."""
+
+        print(self.deprecation_msg)
+
         error_found = 0
         if CONF.log_dir:
             logs = [x for x in os.listdir(CONF.log_dir) if x.endswith('.log')]
@@ -480,6 +494,9 @@ class GetLogCommands(object):
           help='Number of entries to list (default: %(default)d)')
     def syslog(self, num_entries=10):
         """Get <num_entries> of the cinder syslog events."""
+
+        print(self.deprecation_msg)
+
         entries = int(num_entries)
         count = 0
         log_file = ''

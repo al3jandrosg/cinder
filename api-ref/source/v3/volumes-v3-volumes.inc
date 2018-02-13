@@ -82,6 +82,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -112,8 +113,8 @@ Response Parameters
    - metadata: metadata
    - status: status_3
    - volume_image_metadata: volume_image_metadata
-   - description: description
-   - multiattach: multiattach
+   - description: description_9
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - consistencygroup_id: consistencygroup_id
    - os-vol-mig-status-attr:name_id: os-vol-mig-status-attr:name_id
@@ -122,7 +123,7 @@ Response Parameters
    - created_at: created_at
    - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volumes: volumes
-   - volume_type: volume_type
+   - volume_type: volume_type_6
    - count: count
 
 
@@ -185,13 +186,13 @@ Request
    - size: size
    - availability_zone: availability_zone
    - source_volid: source_volid
-   - description: description
-   - multiattach: multiattach
+   - description: description_5
+   - multiattach: multiattach_req
    - snapshot_id: snapshot_id
    - backup_id: backup_id_1
    - name: name_13
    - imageRef: imageRef
-   - volume_type: volume_type
+   - volume_type: volume_type_2
    - metadata: metadata
    - consistencygroup_id: consistencygroup_id
    - OS-SCH-HNT:scheduler_hints: OS-SCH-HNT:scheduler_hints
@@ -222,15 +223,15 @@ Response Parameters
    - user_id: user_id
    - metadata: metadata
    - status: status_3
-   - description: description
-   - multiattach: multiattach
+   - description: description_9
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
    - name: name_13
    - bootable: bootable_response
    - created_at: created_at
-   - volume_type: volume_type
+   - volume_type: volume_type_6
 
 Response Example
 ----------------
@@ -260,6 +261,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -336,8 +338,8 @@ Response Parameters
    - metadata: metadata
    - status: status_3
    - volume_image_metadata: volume_image_metadata
-   - description: description
-   - multiattach: multiattach
+   - description: description_9
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
@@ -346,8 +348,9 @@ Response Parameters
    - bootable: bootable_response
    - created_at: created_at
    - os-volume-replication:driver_data: os-volume-replication:driver_data
-   - volume_type: volume_type
-
+   - volume_type: volume_type_6
+   - service_uuid: service_uuid
+   - shared_targets: shared_targets
 
 
 Response Example
@@ -378,7 +381,7 @@ Request
    - project_id: project_id_path
    - volume_id: volume_id_path
    - volume: volume
-   - description: description
+   - description: description_5
    - name: name_8
    - metadata: metadata
 
@@ -408,15 +411,15 @@ Response Parameters
    - user_id: user_id
    - metadata: metadata
    - status: status_3
-   - description: description
-   - multiattach: multiattach
+   - description: description_9
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
    - name: name_13
    - bootable: bootable_response
    - created_at: created_at
-   - volume_type: volume_type
+   - volume_type: volume_type_6
 
 
 
@@ -473,10 +476,6 @@ Request
    - volume_id: volume_id_path
    - cascade: cascade
    - force: force_5
-
-
-
-
 
 
 Create metadata for volume
@@ -720,7 +719,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
-   - all_tenants: all_tenants
+   - all_tenants: all-tenants
 
 Response Parameters
 -------------------

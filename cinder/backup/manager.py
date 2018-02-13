@@ -32,6 +32,9 @@ Volume backups can be created, restored, deleted and listed.
 """
 
 import os
+
+from castellan import key_manager
+from eventlet import tpool
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_log import versionutils
@@ -81,6 +84,12 @@ CONF.import_opt('use_multipath_for_image_xfer', 'cinder.volume.driver')
 CONF.import_opt('num_volume_device_scan_tries', 'cinder.volume.driver')
 QUOTAS = quota.QUOTAS
 
+
+# TODO(geguileo): Once Eventlet issue #432 gets fixed we can just tpool.execute
+# the whole call to the driver's backup and restore methods instead of proxy
+# wrapping the device_file and having the drivers also proxy wrap their
+# writes/reads and the compression/decompression calls.
+# (https://github.com/eventlet/eventlet/issues/432)
 
 class BackupManager(manager.ThreadPoolManager):
     """Manages backup of block storage devices."""
@@ -227,15 +236,26 @@ class BackupManager(manager.ThreadPoolManager):
             backup.status = fields.BackupStatus.AVAILABLE
             backup.save()
         elif backup['status'] == fields.BackupStatus.DELETING:
-            LOG.info('Resuming delete on backup: %s.', backup['id'])
-            if CONF.backup_service_inithost_offload:
-                # Offload all the pending backup delete operations to the
-                # threadpool to prevent the main backup service thread
-                # from being blocked.
-                self._add_to_threadpool(self.delete_backup, ctxt, backup)
+            # Don't resume deleting the backup of an encrypted volume. The
+            # admin context won't be sufficient to delete the backup's copy
+            # of the encryption key ID (a real user context is required).
+            if backup.encryption_key_id is None:
+                LOG.info('Resuming delete on backup: %s.', backup.id)
+                if CONF.backup_service_inithost_offload:
+                    # Offload all the pending backup delete operations to the
+                    # threadpool to prevent the main backup service thread
+                    # from being blocked.
+                    self._add_to_threadpool(self.delete_backup, ctxt, backup)
+                else:
+                    # Delete backups sequentially
+                    self.delete_backup(ctxt, backup)
             else:
-                # Delete backups sequentially
-                self.delete_backup(ctxt, backup)
+                LOG.info('Unable to resume deleting backup of an encrypted '
+                         'volume, resetting backup %s to error_deleting '
+                         '(was deleting).',
+                         backup.id)
+                backup.status = fields.BackupStatus.ERROR_DELETING
+                backup.save()
 
     def _detach_all_attachments(self, ctxt, volume):
         attachments = volume['volume_attachment'] or []
@@ -358,7 +378,6 @@ class BackupManager(manager.ThreadPoolManager):
                 'actual_status': actual_status,
             }
             self._update_backup_error(backup, err)
-            backup.save()
             raise exception.InvalidBackup(reason=err)
 
         try:
@@ -405,9 +424,22 @@ class BackupManager(manager.ThreadPoolManager):
         self._notify_about_backup_usage(context, backup, "create.end")
 
     def _run_backup(self, context, backup, volume):
+        # Save a copy of the encryption key ID in case the volume is deleted.
+        if (volume.encryption_key_id is not None and
+                backup.encryption_key_id is None):
+            backup.encryption_key_id = volume_utils.clone_encryption_key(
+                context,
+                key_manager.API(CONF),
+                volume.encryption_key_id)
+            backup.save()
+
         backup_service = self.get_backup_driver(context)
 
         properties = utils.brick_get_connector_properties()
+
+        # NOTE(geguileo): Not all I/O disk operations properly do greenthread
+        # context switching and may end up blocking the greenthread, so we go
+        # with native threads proxy-wrapping the device file object.
         try:
             backup_device = self.volume_rpcapi.get_backup_device(context,
                                                                  backup,
@@ -423,16 +455,16 @@ class BackupManager(manager.ThreadPoolManager):
                     if backup_device.secure_enabled:
                         with open(device_path) as device_file:
                             updates = backup_service.backup(
-                                backup, device_file)
+                                backup, tpool.Proxy(device_file))
                     else:
                         with utils.temporary_chown(device_path):
                             with open(device_path) as device_file:
                                 updates = backup_service.backup(
-                                    backup, device_file)
+                                    backup, tpool.Proxy(device_file))
                 # device_path is already file-like so no need to open it
                 else:
-                    updates = backup_service.backup(
-                        backup, device_path)
+                    updates = backup_service.backup(backup,
+                                                    tpool.Proxy(device_path))
 
             finally:
                 self._detach_device(context, attach_info,
@@ -466,6 +498,8 @@ class BackupManager(manager.ThreadPoolManager):
                     'actual_status': actual_status})
             backup.status = fields.BackupStatus.AVAILABLE
             backup.save()
+            self.db.volume_update(context, volume_id,
+                                  {'status': 'error_restoring'})
             raise exception.InvalidVolume(reason=err)
 
         expected_status = fields.BackupStatus.RESTORING
@@ -525,6 +559,7 @@ class BackupManager(manager.ThreadPoolManager):
         self._notify_about_backup_usage(context, backup, "restore.end")
 
     def _run_restore(self, context, backup, volume):
+        orig_key_id = volume.encryption_key_id
         backup_service = self.get_backup_driver(context)
 
         properties = utils.brick_get_connector_properties()
@@ -532,24 +567,72 @@ class BackupManager(manager.ThreadPoolManager):
             self.volume_rpcapi.secure_file_operations_enabled(context,
                                                               volume))
         attach_info = self._attach_device(context, volume, properties)
+
+        # NOTE(geguileo): Not all I/O disk operations properly do greenthread
+        # context switching and may end up blocking the greenthread, so we go
+        # with native threads proxy-wrapping the device file object.
         try:
             device_path = attach_info['device']['path']
             if (isinstance(device_path, six.string_types) and
                     not os.path.isdir(device_path)):
                 if secure_enabled:
                     with open(device_path, 'wb') as device_file:
-                        backup_service.restore(backup, volume.id, device_file)
+                        backup_service.restore(backup, volume.id,
+                                               tpool.Proxy(device_file))
                 else:
                     with utils.temporary_chown(device_path):
                         with open(device_path, 'wb') as device_file:
                             backup_service.restore(backup, volume.id,
-                                                   device_file)
+                                                   tpool.Proxy(device_file))
             # device_path is already file-like so no need to open it
             else:
-                backup_service.restore(backup, volume.id, device_path)
+                backup_service.restore(backup, volume.id,
+                                       tpool.Proxy(device_path))
         finally:
             self._detach_device(context, attach_info, volume, properties,
                                 force=True)
+
+        # Regardless of whether the restore was successful, do some
+        # housekeeping to ensure the restored volume's encryption key ID is
+        # unique, and any previous key ID is deleted. Start by fetching fresh
+        # info on the restored volume.
+        restored_volume = objects.Volume.get_by_id(context, volume.id)
+        restored_key_id = restored_volume.encryption_key_id
+        if restored_key_id != orig_key_id:
+            LOG.info('Updating encryption key ID for volume %(volume_id)s '
+                     'from backup %(backup_id)s.',
+                     {'volume_id': volume.id, 'backup_id': backup.id})
+
+            key_mgr = key_manager.API(CONF)
+            if orig_key_id is not None:
+                LOG.debug('Deleting original volume encryption key ID.')
+                volume_utils.delete_encryption_key(context,
+                                                   key_mgr,
+                                                   orig_key_id)
+
+            if backup.encryption_key_id is None:
+                # This backup predates the current code that stores the cloned
+                # key ID in the backup database. Fortunately, the key ID
+                # restored from the backup data _is_ a clone of the original
+                # volume's key ID, so grab it.
+                LOG.debug('Gleaning backup encryption key ID from metadata.')
+                backup.encryption_key_id = restored_key_id
+                backup.save()
+
+            # Clone the key ID again to ensure every restored volume has
+            # a unique key ID. The volume's key ID should not be the same
+            # as the backup.encryption_key_id (the copy made when the backup
+            # was first created).
+            new_key_id = volume_utils.clone_encryption_key(
+                context,
+                key_mgr,
+                backup.encryption_key_id)
+            restored_volume.encryption_key_id = new_key_id
+            restored_volume.save()
+        else:
+            LOG.debug('Encryption key ID for volume %(volume_id)s already '
+                      'matches encryption key ID in backup %(backup_id)s.',
+                      {'volume_id': volume.id, 'backup_id': backup.id})
 
     def delete_backup(self, context, backup):
         """Delete volume backup from configured backup service."""
@@ -611,6 +694,13 @@ class BackupManager(manager.ThreadPoolManager):
         except Exception:
             reservations = None
             LOG.exception("Failed to update usages deleting backup")
+
+        if backup.encryption_key_id is not None:
+            volume_utils.delete_encryption_key(context,
+                                               key_manager.API(CONF),
+                                               backup.encryption_key_id)
+            backup.encryption_key_id = None
+            backup.save()
 
         backup.destroy()
         # If this backup is incremental backup, handle the

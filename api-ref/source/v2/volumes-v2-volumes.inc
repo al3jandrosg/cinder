@@ -76,6 +76,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -106,7 +107,7 @@ Response Parameters
    - status: status_3
    - volume_image_metadata: volume_image_metadata
    - description: description
-   - multiattach: multiattach
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - consistencygroup_id: consistencygroup_id
    - os-vol-mig-status-attr:name_id: os-vol-mig-status-attr:name_id
@@ -175,7 +176,7 @@ Request
    - size: size
    - description: description_9
    - imageRef: imageRef
-   - multiattach: multiattach
+   - multiattach: multiattach_req
    - availability_zone: availability_zone
    - source_volid: source_volid
    - name: name_13
@@ -215,7 +216,7 @@ Response Parameters
    - metadata: metadata
    - status: status_3
    - description: description
-   - multiattach: multiattach
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
@@ -247,6 +248,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
    - sort: sort
    - limit: limit
    - offset: offset
@@ -322,7 +324,7 @@ Response Parameters
    - status: status_3
    - volume_image_metadata: volume_image_metadata
    - description: description
-   - multiattach: multiattach
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id
@@ -394,7 +396,7 @@ Response Parameters
    - metadata: metadata_3
    - status: status_3
    - description: description
-   - multiattach: multiattach
+   - multiattach: multiattach_resp
    - source_volid: source_volid
    - volume: volume
    - consistencygroup_id: consistencygroup_id

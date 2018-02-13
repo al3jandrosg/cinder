@@ -18,6 +18,7 @@ Common parameter types for validating request Body.
 
 """
 
+import copy
 import re
 import unicodedata
 
@@ -150,3 +151,37 @@ extra_specs = {
     },
     'additionalProperties': False
 }
+
+
+group_snapshot_status = {
+    'type': 'string', 'format': 'group_snapshot_status'
+}
+
+
+extra_specs_with_null = copy.deepcopy(extra_specs)
+extra_specs_with_null['patternProperties'][
+    '^[a-zA-Z0-9-_:. ]{1,255}$']['type'] = ['string', 'null']
+
+
+name_allow_zero_min_length = {
+    'type': ['string', 'null'], 'minLength': 0, 'maxLength': 255
+}
+
+
+uuid_allow_null = {
+    'type': ['string', 'null']
+}
+
+
+metadata_allows_null = copy.deepcopy(extra_specs)
+metadata_allows_null['type'] = ['object', 'null']
+
+
+container = {
+    'type': ['string', 'null'], 'minLength': 0, 'maxLength': 255}
+
+
+backup_url = {'type': 'string', 'minLength': 1, 'format': 'base64'}
+
+
+backup_service = {'type': 'string', 'minLength': 0, 'maxLength': 255}

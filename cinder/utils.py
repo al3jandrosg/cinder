@@ -64,6 +64,9 @@ PERFECT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 VALID_TRACE_FLAGS = {'method', 'api'}
 TRACE_METHOD = False
 TRACE_API = False
+INITIAL_AUTO_MOSR = 20
+INFINITE_UNKNOWN_VALUES = ('infinite', 'unknown')
+
 
 synchronized = lockutils.synchronized_with_prefix('cinder-')
 
@@ -269,6 +272,22 @@ def last_completed_audit_period(unit=None):
         begin = end - datetime.timedelta(hours=1)
 
     return (begin, end)
+
+
+def time_format(at=None):
+    """Format datetime string to date.
+
+    :param at: Type is datetime.datetime (example
+        'datetime.datetime(2017, 12, 24, 22, 11, 32, 6086)')
+    :returns: Format date (example '2017-12-24T22:11:32Z').
+    """
+    if not at:
+        at = timeutils.utcnow()
+    date_string = at.strftime("%Y-%m-%dT%H:%M:%S")
+    tz = at.tzname(None) if at.tzinfo else 'UTC'
+    # Need to handle either iso8601 or python UTC format
+    date_string += ('Z' if tz in ['UTC', 'UTC+00:00'] else tz)
+    return date_string
 
 
 def is_none_string(val):
@@ -1029,6 +1048,65 @@ def calculate_virtual_free_capacity(total_capacity,
     return free
 
 
+def calculate_max_over_subscription_ratio(capability,
+                                          global_max_over_subscription_ratio):
+    # provisioned_capacity_gb is the apparent total capacity of
+    # all the volumes created on a backend, which is greater than
+    # or equal to allocated_capacity_gb, which is the apparent
+    # total capacity of all the volumes created on a backend
+    # in Cinder. Using allocated_capacity_gb as the default of
+    # provisioned_capacity_gb if it is not set.
+    allocated_capacity_gb = capability.get('allocated_capacity_gb', 0)
+    provisioned_capacity_gb = capability.get('provisioned_capacity_gb',
+                                             allocated_capacity_gb)
+    thin_provisioning_support = capability.get('thin_provisioning_support',
+                                               False)
+    total_capacity_gb = capability.get('total_capacity_gb', 0)
+    free_capacity_gb = capability.get('free_capacity_gb', 0)
+    pool_name = capability.get('pool_name',
+                               capability.get('volume_backend_name'))
+
+    # If thin provisioning is not supported the capacity filter will not use
+    # the value we return, no matter what it is.
+    if not thin_provisioning_support:
+        LOG.debug("Trying to retrieve max_over_subscription_ratio from a "
+                  "service that does not support thin provisioning")
+        return 1.0
+
+    # Again, if total or free capacity is infinite or unknown, the capacity
+    # filter will not use the max_over_subscription_ratio at all. So, does
+    # not matter what we return here.
+    if ((total_capacity_gb in INFINITE_UNKNOWN_VALUES) or
+            (free_capacity_gb in INFINITE_UNKNOWN_VALUES)):
+        return 1.0
+
+    max_over_subscription_ratio = (capability.get(
+        'max_over_subscription_ratio') or global_max_over_subscription_ratio)
+
+    # We only calculate the automatic max_over_subscription_ratio (mosr)
+    # when the global or driver conf is set auto and while
+    # provisioned_capacity_gb is not 0. When auto is set and
+    # provisioned_capacity_gb is 0, we use the default value 20.0.
+    if max_over_subscription_ratio == 'auto':
+        if provisioned_capacity_gb != 0:
+            used_capacity = total_capacity_gb - free_capacity_gb
+            LOG.debug("Calculating max_over_subscription_ratio for "
+                      "pool %s: provisioned_capacity_gb=%s, "
+                      "used_capacity=%s",
+                      pool_name, provisioned_capacity_gb, used_capacity)
+            max_over_subscription_ratio = 1 + (
+                float(provisioned_capacity_gb) / (used_capacity + 1))
+        else:
+            max_over_subscription_ratio = INITIAL_AUTO_MOSR
+
+        LOG.info("Auto max_over_subscription_ratio for pool %s is "
+                 "%s", pool_name, max_over_subscription_ratio)
+    else:
+        max_over_subscription_ratio = float(max_over_subscription_ratio)
+
+    return max_over_subscription_ratio
+
+
 def validate_integer(value, name, min_value=None, max_value=None):
     """Make sure that value is a valid integer, potentially within range.
 
@@ -1038,21 +1116,11 @@ def validate_integer(value, name, min_value=None, max_value=None):
     :param max_length: the max_length of the integer
     :returns: integer
     """
-    if not strutils.is_int_like(value):
-        raise webob.exc.HTTPBadRequest(explanation=(
-            _('%s must be an integer.') % name))
-    value = int(value)
-
-    if min_value is not None and value < min_value:
-        raise webob.exc.HTTPBadRequest(
-            explanation=(_('%(value_name)s must be >= %(min_value)d') %
-                         {'value_name': name, 'min_value': min_value}))
-    if max_value is not None and value > max_value:
-        raise webob.exc.HTTPBadRequest(
-            explanation=(_('%(value_name)s must be <= %(max_value)d') %
-                         {'value_name': name, 'max_value': max_value}))
-
-    return value
+    try:
+        value = strutils.validate_integer(value, name, min_value, max_value)
+        return value
+    except ValueError as e:
+        raise webob.exc.HTTPBadRequest(explanation=six.text_type(e))
 
 
 def validate_dictionary_string_length(specs):

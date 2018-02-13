@@ -450,6 +450,7 @@ class SCApi(object):
         self.consisgroups = True
         self.protocol = 'Iscsi'
         self.apiversion = apiversion
+        self.legacyfoldernames = True
         # Nothing other than Replication should care if we are direct connect
         # or not.
         self.is_direct_connect = False
@@ -660,7 +661,7 @@ class SCApi(object):
 
                 elif splitver[1] == '1':
                     self.legacypayloadfilters = True
-            return
+            self.legacyfoldernames = (splitver[0] < '4')
 
         except Exception:
             # Good return but not the login response we were expecting.
@@ -812,12 +813,19 @@ class SCApi(object):
         pf.append('scSerialNumber', ssn)
         basename = os.path.basename(foldername)
         pf.append('Name', basename)
-        # If we have any kind of path we throw it into the filters.
-        folderpath = os.path.dirname(foldername)
+        # save the user from themselves.
+        folderpath = foldername.strip('/')
+        folderpath = os.path.dirname(folderpath)
+        # Put our path into the filters
         if folderpath != '':
+            # Legacy didn't begin with a slash.
+            if not self.legacyfoldernames:
+                folderpath = '/' + folderpath
             # SC convention is to end with a '/' so make sure we do.
             folderpath += '/'
-            pf.append('folderPath', folderpath)
+        elif not self.legacyfoldernames:
+            folderpath = '/'
+        pf.append('folderPath', folderpath)
         folder = None
         r = self.client.post(url, pf.payload)
         if self._check_result(r):
@@ -1618,6 +1626,19 @@ class SCApi(object):
         LOG.debug('_find_controller_port: %s', controllerport)
         return controllerport
 
+    @staticmethod
+    def _get_wwn(controllerport):
+        """Return the WWN value of the controller port.
+
+        Usually the WWN key in the controller port is wwn or WWN, but there
+        are cases where the backend returns wWW, so we have to check all the
+        keys.
+        """
+        for key, value in controllerport.items():
+            if key.lower() == 'wwn':
+                return value
+        return None
+
     def find_wwns(self, scvolume, scserver):
         """Finds the lun and wwns of the mapped volume.
 
@@ -1643,7 +1664,7 @@ class SCApi(object):
             if controllerport is not None:
                 # This changed case at one point or another.
                 # Look for both keys.
-                wwn = controllerport.get('wwn', controllerport.get('WWN'))
+                wwn = self._get_wwn(controllerport)
                 if wwn:
                     serverhba = mapping.get('serverHba')
                     if serverhba:
@@ -1974,10 +1995,51 @@ class SCApi(object):
         return rtn
 
     def unmap_all(self, scvolume):
-        volumeid = self._get_id(scvolume)
-        r = self.client.post('StorageCenter/ScVolume/%s/Unmap' % volumeid,
-                             {}, True)
-        return self._check_result(r)
+        """Unmaps a volume from all connections except SCs.
+
+        :param scvolume: The SC Volume object.
+        :return: Boolean
+        """
+        rtn = True
+        profiles = self._find_mapping_profiles(scvolume)
+        for profile in profiles:
+            # get our server
+            scserver = None
+            r = self.client.get('StorageCenter/ScServer/%s' %
+                                self._get_id(profile.get('server')))
+            if self._check_result(r):
+                scserver = self._get_json(r)
+            # We do not want to whack our replication or live volume
+            # connections. So anything other than a remote storage center
+            # is fair game.
+            if scserver and scserver['type'].upper() != 'REMOTESTORAGECENTER':
+                # we can whack the connection.
+                r = self.client.delete('StorageCenter/ScMappingProfile/%s'
+                                       % self._get_id(profile),
+                                       async_call=True)
+                if self._check_result(r):
+                    # Check our result in the json.
+                    result = self._get_json(r)
+                    # EM 15.1 and 15.2 return a boolean directly.
+                    # 15.3 on up return it in a dict under 'result'.
+                    if result is True or (type(result) is dict and
+                                          result.get('result')):
+                        LOG.info(
+                            'Volume %(vol)s unmapped from %(srv)s',
+                            {'vol': scvolume['name'],
+                             'srv': scserver['instanceName']})
+                        # yay, it is gone, carry on.
+                        continue
+
+                LOG.error('Unable to unmap %(vol)s from %(srv)s',
+                          {'vol': scvolume['name'],
+                           'srv': scserver['instanceName']})
+                # 1 failed unmap is as good as 100.
+                # Fail it and leave
+                rtn = False
+                break
+
+        return rtn
 
     def get_storage_usage(self):
         """Gets the storage usage object from the Dell backend.

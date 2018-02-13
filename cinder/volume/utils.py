@@ -25,9 +25,12 @@ import re
 import time
 import uuid
 
+from castellan.common.credentials import keystone_password
 from castellan.common import exception as castellan_exception
+from castellan import key_manager as castellan_key_manager
 import eventlet
 from eventlet import tpool
+from keystoneauth1 import loading as ks_loading
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -913,6 +916,23 @@ def delete_encryption_key(context, key_manager, encryption_key_id):
         key_manager.delete(context, encryption_key_id)
     except castellan_exception.ManagedObjectNotFoundError:
         pass
+    except castellan_exception.KeyManagerError:
+        LOG.info("First attempt to delete key id %s failed, retrying with "
+                 "cinder's service context.", encryption_key_id)
+        conf = CONF
+        ks_loading.register_auth_conf_options(conf, 'keystone_authtoken')
+        service_context = keystone_password.KeystonePassword(
+            password=conf.keystone_authtoken.password,
+            auth_url=conf.keystone_authtoken.auth_url,
+            username=conf.keystone_authtoken.username,
+            user_domain_name=conf.keystone_authtoken.user_domain_name,
+            project_name=conf.keystone_authtoken.project_name,
+            project_domain_name=conf.keystone_authtoken.project_domain_name)
+        try:
+            castellan_key_manager.API(conf).delete(service_context,
+                                                   encryption_key_id)
+        except castellan_exception.ManagedObjectNotFoundError:
+            pass
 
 
 def clone_encryption_key(context, key_manager, encryption_key_id):
@@ -960,3 +980,35 @@ def is_group_a_type(group, key):
         )
         return spec == "<is> True"
     return False
+
+
+def get_max_over_subscription_ratio(str_value, supports_auto=False):
+    """Get the max_over_subscription_ratio from a string
+
+    As some drivers need to do some calculations with the value and we are now
+    receiving a string value in the conf, this converts the value to float
+    when appropriate.
+
+    :param str_value: Configuration object
+    :param supports_auto: Tell if the calling driver supports auto MOSR.
+    :param drv_msg: Error message from the caller
+    :response: value of mosr
+    """
+
+    if not supports_auto and str_value == "auto":
+        msg = _("This driver does not support automatic "
+                "max_over_subscription_ratio calculation. Please use a "
+                "valid float value.")
+        LOG.error(msg)
+        raise exception.VolumeDriverException(message=msg)
+
+    if str_value == 'auto':
+        return str_value
+
+    mosr = float(str_value)
+    if mosr < 1:
+        msg = _("The value of max_over_subscription_ratio must be "
+                "greater than 1.")
+        LOG.error(msg)
+        raise exception.InvalidParameterValue(message=msg)
+    return mosr

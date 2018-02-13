@@ -61,14 +61,12 @@ class WindowsSmbFsTestCase(test.TestCase):
         self.context = context.get_admin_context()
 
         self._FAKE_SMBFS_CONFIG = mock.MagicMock(
-            smbfs_oversub_ratio = 2,
-            smbfs_used_ratio = 0.5,
-            smbfs_shares_config = mock.sentinel.share_config_file,
-            smbfs_default_volume_format = 'vhdx',
-            smbfs_sparsed_volumes = False)
+            smbfs_shares_config=mock.sentinel.share_config_file,
+            smbfs_default_volume_format='vhdx',
+            nas_volume_prov_type='thin')
 
         self._smbfs_driver = smbfs.WindowsSmbfsDriver(
-            configuration=mock.Mock())
+            configuration=self._FAKE_SMBFS_CONFIG)
         self._smbfs_driver._delete = mock.Mock()
         self._smbfs_driver._local_volume_dir = mock.Mock(
             return_value=self._FAKE_MNT_POINT)
@@ -115,9 +113,7 @@ class WindowsSmbFsTestCase(test.TestCase):
         self._smbfs_driver._setup_pool_mappings = mock.Mock()
         self._smbfs_driver.configuration = config
 
-        if not (config.smbfs_shares_config and share_config_exists and
-                config.smbfs_oversub_ratio > 0 and
-                0 <= config.smbfs_used_ratio <= 1):
+        if not (config.smbfs_shares_config and share_config_exists):
             self.assertRaises(exception.SmbfsException,
                               self._smbfs_driver.do_setup,
                               mock.sentinel.context)
@@ -196,21 +192,6 @@ class WindowsSmbFsTestCase(test.TestCase):
         self._test_setup(config=self._FAKE_SMBFS_CONFIG,
                          share_config_exists=False)
 
-    def test_setup_invlid_oversub_ratio(self):
-        fake_config = copy.copy(self._FAKE_SMBFS_CONFIG)
-        fake_config.smbfs_oversub_ratio = -1
-        self._test_setup(config=fake_config)
-
-    def test_setup_invalid_used_ratio(self):
-        fake_config = copy.copy(self._FAKE_SMBFS_CONFIG)
-        fake_config.smbfs_used_ratio = -1
-        self._test_setup(config=fake_config)
-
-    def test_setup_invalid_used_ratio2(self):
-        fake_config = copy.copy(self._FAKE_SMBFS_CONFIG)
-        fake_config.smbfs_used_ratio = 1.1
-        self._test_setup(config=fake_config)
-
     @mock.patch.object(smbfs, 'context')
     @mock.patch.object(smbfs.WindowsSmbfsDriver,
                        '_get_pool_name_from_share')
@@ -285,7 +266,7 @@ class WindowsSmbFsTestCase(test.TestCase):
 
         extensions = [
             ".%s" % ext
-            for ext in self._smbfs_driver._SUPPORTED_IMAGE_FORMATS]
+            for ext in self._smbfs_driver._VALID_IMAGE_EXTENSIONS]
         possible_paths = [self._FAKE_VOLUME_PATH + ext
                           for ext in extensions]
         mock_exists.assert_has_calls(
@@ -493,10 +474,10 @@ class WindowsSmbFsTestCase(test.TestCase):
     def test_get_snapshot_info(self):
         self._test_get_img_info(self._FAKE_VOLUME_PATH)
 
-    @ddt.data('in-use', 'available')
-    def test_create_snapshot(self, volume_status):
+    @ddt.data('attached', 'detached')
+    def test_create_snapshot(self, attach_status):
         snapshot = self._simple_snapshot()
-        snapshot.volume.status = volume_status
+        snapshot.volume.attach_status = attach_status
 
         self._smbfs_driver._vhdutils.create_differencing_vhd = (
             mock.Mock())
@@ -511,7 +492,7 @@ class WindowsSmbFsTestCase(test.TestCase):
             os.path.basename(self._FAKE_VOLUME_PATH),
             self._FAKE_SNAPSHOT_PATH)
 
-        if volume_status != 'in-use':
+        if attach_status != 'attached':
             fake_create_diff.assert_called_once_with(self._FAKE_SNAPSHOT_PATH,
                                                      self._FAKE_VOLUME_PATH)
         else:
@@ -570,7 +551,7 @@ class WindowsSmbFsTestCase(test.TestCase):
 
     @ddt.data({},
               {'delete_latest': True},
-              {'volume_status': 'available'},
+              {'attach_status': 'detached'},
               {'snap_info_contains_snap_id': False})
     @ddt.unpack
     @mock.patch.object(remotefs.RemoteFSSnapDriverDistributed,
@@ -586,11 +567,11 @@ class WindowsSmbFsTestCase(test.TestCase):
                              mock_local_path_volume_info,
                              mock_get_local_dir,
                              mock_remotefs_snap_delete,
-                             volume_status='in-use',
+                             attach_status='attached',
                              snap_info_contains_snap_id=True,
                              delete_latest=False):
         snapshot = self._simple_snapshot()
-        snapshot.volume.status = volume_status
+        snapshot.volume.attach_status = attach_status
 
         fake_snap_file = 'snap_file'
         fake_snap_parent_path = os.path.join(self._FAKE_MNT_POINT,
@@ -612,7 +593,7 @@ class WindowsSmbFsTestCase(test.TestCase):
 
         self._smbfs_driver._delete_snapshot(snapshot)
 
-        if volume_status != 'in-use':
+        if attach_status != 'attached':
             mock_remotefs_snap_delete.assert_called_once_with(snapshot)
         elif snap_info_contains_snap_id:
             mock_local_path_volume_info.assert_called_once_with(
@@ -639,7 +620,7 @@ class WindowsSmbFsTestCase(test.TestCase):
             mock_write_info_file.assert_called_once_with(mock_info_path,
                                                          snap_info)
 
-        if volume_status != 'in-use' or not snap_info_contains_snap_id:
+        if attach_status != 'attached' or not snap_info_contains_snap_id:
             mock_nova_assisted_snap_del.assert_not_called()
             mock_write_info_file.assert_not_called()
 
@@ -816,3 +797,21 @@ class WindowsSmbFsTestCase(test.TestCase):
 
         mock_type = drv._get_vhd_type(qemu_subformat=False)
         self.assertEqual(mock_type, 3)
+
+        self._smbfs_driver.configuration.nas_volume_prov_type = (
+            'thick')
+
+        mock_type = drv._get_vhd_type(qemu_subformat=True)
+        self.assertEqual(mock_type, 'fixed')
+
+    def test_get_managed_vol_expected_path(self):
+        self._vhdutils.get_vhd_format.return_value = 'vhdx'
+        vol_location = dict(vol_local_path=mock.sentinel.image_path,
+                            mountpoint=self._FAKE_MNT_POINT)
+
+        path = self._smbfs_driver._get_managed_vol_expected_path(
+            self.volume, vol_location)
+        self.assertEqual(self._FAKE_VOLUME_PATH, path)
+
+        self._vhdutils.get_vhd_format.assert_called_once_with(
+            mock.sentinel.image_path)

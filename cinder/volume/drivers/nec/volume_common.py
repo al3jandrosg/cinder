@@ -15,11 +15,11 @@
 #    under the License.
 
 import errno
-from lxml import etree
 import os
 import re
 import traceback
 
+from defusedxml import lxml as etree
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
@@ -69,9 +69,6 @@ mstorage_opts = [
     cfg.StrOpt('nec_ismview_dir',
                default='/tmp/nec/cinder',
                help='Output path of iSMview file.'),
-    cfg.StrOpt('nec_ldset_for_controller_node',
-               default='',
-               help='M-Series Storage LD Set name for Controller Node.'),
     cfg.IntOpt('nec_ssh_pool_port_number',
                default=22,
                help='Port number of ssh pool.'),
@@ -99,6 +96,12 @@ mstorage_opts = [
     cfg.IntOpt('nec_iscsi_portals_per_cont',
                default=1,
                help='Number of iSCSI portals.'),
+    cfg.BoolOpt('nec_auto_accesscontrol',
+                default=True,
+                help='Configure access control automatically.'),
+    cfg.StrOpt('nec_cv_ldname_format',
+               default='LX:__ControlVolume_%xh',
+               help='M-Series Storage Control Volume name format.'),
 ]
 
 FLAGS.register_opts(mstorage_opts, group=configuration.SHARED_CONF_GROUP)
@@ -150,7 +153,7 @@ def convert_to_id(value62):
 class MStorageVolumeCommon(object):
     """M-Series Storage volume common class."""
 
-    VERSION = '1.9.2'
+    VERSION = '1.10.1'
     WIKI_NAME = 'NEC_Cinder_CI'
 
     def do_setup(self, context):
@@ -241,8 +244,6 @@ class MStorageVolumeCommon(object):
             'pool_actual_free_capacity':
                 confobj.safe_get('nec_actual_free_capacity'),
             'ldset_name': confobj.safe_get('nec_ldset'),
-            'ldset_controller_node_name':
-                confobj.safe_get('nec_ldset_for_controller_node'),
             'ld_name_format': confobj.safe_get('nec_ldname_format'),
             'ld_backupname_format':
                 confobj.safe_get('nec_backup_ldname_format'),
@@ -255,7 +256,9 @@ class MStorageVolumeCommon(object):
                 confobj.safe_get('nec_ssh_pool_port_number'),
             'diskarray_name': confobj.safe_get('nec_diskarray_name'),
             'queryconfig_view': confobj.safe_get('nec_queryconfig_view'),
-            'portal_number': confobj.safe_get('nec_iscsi_portals_per_cont')
+            'portal_number': confobj.safe_get('nec_iscsi_portals_per_cont'),
+            'auto_accesscontrol': confobj.safe_get('nec_auto_accesscontrol'),
+            'cv_name_format': confobj.safe_get('nec_cv_ldname_format')
         }
 
     def _set_properties(self):
@@ -316,22 +319,9 @@ class MStorageVolumeCommon(object):
 
         return volformat % ldname
 
-    def get_ldset(self, ldsets, metadata=None):
+    def get_ldset(self, ldsets):
         ldset = None
-        if metadata is not None and 'ldset' in metadata:
-            ldset_meta = metadata['ldset']
-            LOG.debug('ldset(metadata)=%s.', ldset_meta)
-            for tldset in ldsets.values():
-                if tldset['ldsetname'] == ldset_meta:
-                    ldset = ldsets[ldset_meta]
-                    LOG.debug('ldset information(metadata specified)=%s.',
-                              ldset)
-                    break
-            if ldset is None:
-                msg = _('Logical Disk Set could not be found.')
-                LOG.error(msg)
-                raise exception.NotFound(msg)
-        elif self._properties['ldset_name'] == '':
+        if self._properties['ldset_name'] == '':
             nldset = len(ldsets)
             if nldset == 0:
                 msg = _('Logical Disk Set could not be found.')
@@ -893,6 +883,15 @@ class MStorageVolumeCommon(object):
                     specs['upperreport'] = None
             else:
                 specs['upperreport'] = None
+
+    def check_accesscontrol(self, ldsets, ld):
+        """Check Logical disk is in-use or not."""
+        set_accesscontrol = False
+        for ldset in ldsets.values():
+            if ld['ldn'] in ldset['lds']:
+                set_accesscontrol = True
+                break
+        return set_accesscontrol
 
     def validates_number(self, value):
         return re.match(r'^(?![-+]0+$)[-+]?([1-9][0-9]*)?[0-9](\.[0-9]+)?$',

@@ -1,26 +1,303 @@
 CHANGES
 =======
 
+12.0.0.0rc1
+-----------
+
+* Use provider\_id for SolidFire Volume lookups
+* Deprecate Cinder Hosts API/Extension
+* Fix UnicodeDecodeError when decode API input
+* Api-ref: add 'all\_tenants' API query option
+* Make CinderException format errors fatal for tests
+* Revert consumed quota when failed to create group from source group
+* Imported Translations from Zanata
+* Zuul: Remove project name
+* Correct lvm\_type default value in config doc
+* Add missing MV history for 3.50
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Storwize: avoid ascii code error for ssh response stderr
+* Fix DuplicateOptError in fixed\_key migration code
+* Storwize: modify the self.\_helpers to backend\_helper
+* Update document for worker cleanup API
+* 3PAR: fix cloning issue in create group from source
+* Fix link in boot from volume docs
+* docs: Use the encryption provider format constants
+* Remove unused parameters in v2/v3 parameters.yaml
+* Updated from global requirements
+* Add policy check for create volume with multiattach
+* Dell EMC SC: Find volume folder API call fails on root folders
+* Fix the typo in api\_conditional\_updates.rst
+* Fix wrong grammar
+* [VNX] \`initiator\_target\_map\` is None
+* Fix how backups handle encryption key IDs
+* Rename lio job to lio-barbican
+* Update Windows docs
+* 3PAR: Fixed sync period updation in rcg
+* Handle TZ change in iso8601 >=0.1.12
+* Storwize: correct return value for update\_group
+* Fix cinder quota-usage error
+* Remove consistencygroups/api.py
+* Fix: request-id missing in volume action's response header
+* [Trivial] SMBFS: fix provisioning type usage
+
+12.0.0.0b3
+----------
+
+* Support fabric specific Cisco FC Zone Name
+* backup: set default swiftclient log level to WARN
+* Tests: Fix RBD invalid UUID warnings
+* api-ref: add multiattach considerations to retype docs
+* api-ref: update migration\_policy retype note about encrypted volumes
+* fix misspelling of 'password'
+* Netapp Ontap: Adds support for auto-max-over-subscription
+* Overprovisioning Improvements
+* HPE 3PAR: Update Storage Driver docs for Queens release
+* Update the description of quota's project id
+* Fix mis-named context object
+* Add debug logging around multiattach status changes
+* Fix multiattach policy names in release note
+* Add back support for the multiattach flag for volume create
+* Remove logging on Swift backup obj writer
+* Simplify keystone password assertions
+* Add policy check for complete attachment API action
+* [1/2] Fix mock for sleep mocks in volume drivers tests
+* fix wrong url link
+* Add contributor notes on how to use pdb with tests
+* Run doc8 first
+* RBD: Support encrypted volumes
+* INFINIDAT: support force detach
+* Replace Chinese punctuation with English punctuation
+* Add the nova-multiattach job to the check/gate queues
+* Remove extra spaces of the volume creation request body
+* V3 jsonschema validation: volume\_type\_access
+* Move disk space check to run when needed
+* Update Volume Encryption Documentation
+* Avoid use of deprecated commands in lenovo driver
+* Rename 'WindowsDriver' to 'WindowsISCSIDriver'
+* Fix readonly mode for new attachment API calls
+* Enable multiattach capability for lvm driver
+* 3PAR: fix volume migration for "in-use" volume
+* modify volume spelling errors
+* modify http to https
+* Fix api-ref for v3 volume group types
+* Fix combination of parameters for update APIs
+* Add enough notification for QoS
+* Unity: Add revert\_to\_snapshot support
+* Adapt cinder backup swift help test
+* Enable multiattach capability
+* Add multiattach policy
+* Updated from global requirements
+* Fix api-ref for v3 volume types
+* [VNX]Add \`force detach\` support
+* [Unity] Add \`force detach\` support
+* Storwize: fix an incorrect temporary parameter name
+* Update nfs driver doc for snapshot support
+* Storwize: use DLM locks
+* Fix BadRequest for 'ref' as string value
+* Remove leading and trailing spaces from parameters
+* Adds documentation for DataCore volume driver
+* Storwize: Use passed volume names in migrate
+* Fix glance create client unit tests
+* Updated from global requirements
+* Run backup-restore operations on native thread
+* Fix compression related tests
+* INFINIDAT: add missing connection\_info params
+* Update volume's 'updated\_at' when accept transfer
+* Tests: Fix Storpool tests hash randomization failure
+* Fix: Propagate OS global request ID
+* Fix Backup uses latest req-id for all log calls
+* Fix BadRequest for 'null' metadata and group\_specs
+* Fix api-ref for v3 Services
+* Delete duplicated save operation when do backup creating
+* Fix dictionary mistakes in docstring
+* Fix 'volume\_type' for in the api-ref
+* Remove the deprecated "giturl" option
+* Remove unused lib in test-rquirements.txt
+* VMAX driver - retype fix where workload is None
+* VMAX driver - QOS settings incorrectly applied on Default storage group
+* VMAX doc - Queens feature documentation
+* DS8K: block in-use volume to be added to consistency group
+* [Doc] Add replication group support in doc for Storwize
+* Fix version details API does not return 200 OK
+* Dell EMC SC: On None connector terminate\_connection unmaps all
+* Deprecate the allow-multiattach option to create
+* Improve multiattach error message
+* ScaleIO: Enable multiattach for volumes
+* Windows: allow multiple c-vol backends per service
+* Check create from image policy when image not none
+* Validate metadata before reserve quota
+* api-ref: fix the response parameter for multiattach
+* Synology: Rename iSCSI target config option
+* Revert volume consumed capacity when rescheduling
+* 3PAR: fix create group from source functionality
+* Initialize osprofiler in WSGI application
+* VMAX driver - Multiple storage group creation attempts
+* Fix: validation error if the optional parameter's value is None
+* Storwize: correct in-use replication vol status
+* Unity: Attach Unity volume via IPv6
+* Fix v3 api-ref for showing API details url error
+* VMware:Config option to disable lazy volume create
+* VMware: Support volume adapter type change
+* Tests: Fix XIV test failure with hash randomization
+* Block attempts to transfer encrypted volumes
+* Mock FixedIntervalLoopingCall for Huawei unit tests
+* [api-ref] Add missing fields to the API Reference
+* V3 jsonschema validation: Backups
+* Storwize: add hyperswap volume support
+* Handle InvalidVolume when creating a volume attachment
+* RBD: get manageable volumes
+* Fix reserve volume enforcing the wrong policy action
+* Fix api-ref for v3 volume types
+* Add descriptions of base policies
+* Do not explicitly list thin provisioning tools for RPM
+* Add driver-requirements entry for storpool
+* DS8K: correct LSS behavior for CG snapshots
+* V2/V3 json schema validation: snapshot manage
+* V2/V3 jsonschema validation: snapshots
+* VMAX driver - Fix AttributeError of dell emc driver
+* VMAX driver - Errors extending replicated volumes
+* VMAX driver - Fix error handling and checks for generic volume groups
+* VMAX driver - revert a volume to last snapshot
+* VMAX driver - Incorrect stats reporting
+* VMAX driver - support for manage/unmanage snapshot
+* VMAX driver - retypes failing when workload is missing
+* VMAX driver - Implement SRDF Metro feature
+* VMAX driver - Cannot extend volumes in a replication relationship
+* VMAX driver - Enable CHAP authentication for vmax backend
+* VMAX driver - Add async replication support
+* Validate volume status again when snapshot created
+* Use constants for cinder-volume
+* Reintroduce the StorPool driver
+* Report backend state in service list
+* Remove some no-use code about failover
+* Add instructions for the Error response codes
+* Fix incorrect description in api ref
+* V3 jsonschema validation: Volume-types
+* Update 'force' parameter for volume delete API
+* NEC driver: implement manage/unmanage functions
+* Adding all docs into index.rst of administration docs
+* Missing generalized\_filters in cinder administration doc
+* Updated from global requirements
+* Deprecate CG APIs
+* Bump up the API microversion in cinder.rc
+* Add microversion and volume status limit to revert api ref doc
+* HPE 3PAR - Implement Tiramisu feature on 3PAR
+* Enable fail back in SolidFire driver
+* StorageCenter: Fix volume mapping for API v3.1
+* Update tgt iSCSI target on volume extend
+* Follow the new PTI for document build
+* NEC driver: add automatic configuration of SAN access control
+* Remove unused sf\_enable\_volume\_mapping conf option
+* Add admin ctxt to request qos\_specs in SolidFire
+* Remove In-repo cinder tempest plugin
+* V3 jsonschema validation: Group Snapshots
+* VNX: Fix cloning failure when system is busy
+* InStorage: fix problem when doing instance live migration
+* NFS: Fix nas\_secure auto mode permissions failure
+* Add online data migration routine for attachment\_specs
+* NetApp: Fix to support SVM scoped permissions
+* Dell EMC SC: API 4.0 incompatibilities
+* Trivialfix -- Fix spacing in docstring
+* VMAX doc - Queens feature documentation
+* Create group from snapshot-group failure leaves behind the volume
+* SMBFS: fix detecting if a volume is in-use
+* Raise PolicyNotAuthorized exception on consistency Group snapshot
+* Fix some typos in cinder doc
+* Updated from global requirements
+* Fix volume image metadata endpoints returning None
+* NetApp E-Series: Fix broken generic volume groups
+* Fix migration Invalid volume message
+* [api-ref] Fix http method for updating encryption type
+* Fix create encrypted volume from image
+* Storwize: disable creating volume with non cg\_snapshot group\_id
+* Rename iSCSI target config options to more general
+* 3PAR: Update CHAP on host record when volume is migrated to new compute host
+* Use method validate\_integer from oslo.utils
+* Add 'shared\_targets' only when it doesn't exist
+* Use defusedxml for XML parsing
+* Remove deprecated 'pybasedir' config option
+* Remove deprecated 'netapp\_eseries\_host\_type' config option
+* Remove deprecated HP 3PAR config options
+* Remove deprecated 'nas\_ip' config option
+* Fix indentation in docs
+* Fixes creation of mirrored volumes due to wrong type
+* Check for migrated UUID in SolidFire delete
+* Add thin provisioning package to install guide
+* Correct documented service upgrade order
+* VMAX doc - Queens feature documentation
+* Add service\_token for cinder-glance interaction
+* Add service\_token for cinder-nova interaction
+* Switch to oslo\_db retry decorator
+* Don't call driver.terminate\_connection if there is no connector
+* Store host connector in volume\_attachment.connector column
+* qemu-img info --force-share for NFS driver
+* NetApp ONTAP: Copy offload bugfix
+* Cleanup XtremIO IG cleanup note
+* SMBFS: remove deprecated config options
+* Storwize: fix group creation restrict rules
+* Restore\_backup: set error when volume status not matched
+* Keep v3 api-ref error response code 404 for reverting
+* Speed up DataCore unit tests
+* API ref: add host format to description
+* Fix discrepancy in api-ref for volume\_types APIs
+* Fix json formatting eror
+* V3 jsonschema validation: Group type specs
+* Don't raise 'NotAuthorized' inside when soft authorization
+* Change ssh\_utils parameter to correctly sends keepalive packets
+* Modify v3 api-ref error response codes for reverting
+* Removed gb quota decrement in grp snapshot delete
+* Add output of slowest tests to UT runs
+* Fix available space checking for image conversion
+* Deprecate cinder-manage logs commands
+* QNAP: Add support for QES 2.0.0
+* Fix test case in test\_volume\_unicode.py
+* VMAX Doc - clarification and typo fixes
+* Updates Help Text on Quobyte Volume URL Option
+* V3 jsonschema validation: Volume metadata
+* Fix create from snapshot and source volume
+* VMware: Bump driver version
+* Check snapshot flag for test\_snapshot\_create\_volume\_description\_non\_ascii\_code
+* Updated from global requirements
+* Fix discrepancy in api-ref for create volume manage api
+
 12.0.0.0b2
 ----------
 
+* Remove skip\_validation\_flag to False by default
+* XtremIO: optional clean IG with no mappings
+* Fix api-ref for v3 group type specs
+* TrivialFix: Delete word ‘I’ in admin/blockstorage-backup-disks.rst
+* Fix TypeError for workers cleanup api incase of invalid resource\_type value
+* DS8K: don't swap role after failover group
 * Updated from global requirements
+* DS8K: lss\_range\_for\_cg should take csv as well as range
 * Fix for volume from image snapshot free space issue
+* NEC driver: delete an unused configuration parameter
 * INFINIDAT: change CI\_WIKI\_NAME
 * V3 jsonschema validation: Group types
 * Add test for volume create with non-ascii characters
+* Add cg policies and clean up old policy handling
+* Migrate fixed\_key encryption keys to Barbican
 * Add shared\_targets and service\_uuid to volumes
+* Pass in the parameters multipath when migrating volume
+* Discrepancy in api-ref and code for create group type API
 * Imported Translations from Zanata
 * Remove extra test variable assignment
 * Tests: Cleanup utils.create\_volume fields
 * Imported Translations from Zanata
 * Discrepancy in api-ref and code for create group snapshot API
 * Tests: Fix Storwize hash randomization failure
+* added clarification in docs for usage of "volume\_clear\*" options
+* Disallow unmanaging encrypted volumes
 * Disallow managed volume to be managed again
 * Fix project\_domain\_name and user\_domain\_name in doc
+* Add support for enhanced features to the QNAP Cinder driver
 * Mock out CLI execution in NEC driver tests
+* handle no default\_cgsnapshot\_type
 * Add shared\_targets flag to Volumes
 * Allow purging of records less than 1 day old
+* Update the documentation links
 * Support create volume from backup
 * Fix 'KeyError' when 'with\_count' is not specified
 * Consolidate code that manages encryption keys
@@ -30,10 +307,13 @@ CHANGES
 * HPE3PAR: Create FC vlun as host sees
 * Support create a volume from image snapshot
 * Filter valid FC initiator while FC attaching
+* Remove invalid parameters in the file testing.rst
+* SMBFS: manageable volumes
 * Fix retype migrating volume with rep\_status 'not-capable'
 * Adds DataCore Volume Drivers
 * Handle quota in 2 phases when managing resource
 * RBD: support driver-assisted volume migration
+* Update unity tests to use our test base
 * Update access control of show under hostAPI
 * Modify the wrong link in document
 * V3 jsonschema validation: Attachments
@@ -42,7 +322,9 @@ CHANGES
 * Update oslo.context RequestContext args
 * Update bindep.txt for doc builds
 * nimble: handle unicode strings in volume create
+* Handle deprecation of inspect.getargspec
 * Add service\_uuid FK to volumes
+* Fix policy documentation for os-show\_image\_metadata endpoint
 * Fix group\_type\_id in api-ref
 * Imported Translations from Zanata
 * VMware: Backend driver for VStorageObject
@@ -68,10 +350,12 @@ CHANGES
 * Fix 'D005 No newline at end of file' Error
 * Fix controller install document indentation
 * Fix earlier backup records can't be restored
+* Fix several instances of chap secret being output to logs
 * NetApp cDot: Fix manage volumes
 * Fix resource count for os-host show
 * Correct gb,snapshot quota update in group snapshot
 * HPE 3PAR: Handle single path in FC configuration
+* Remove v1 API reference
 * NetApp ONTAP: Remove orphaned 7mode file
 * Prevent leaking encryption key when deleting volume
 * Schedule request to scheduler when create group from resource
@@ -92,6 +376,7 @@ CHANGES
 * Fix VolumeAttachment OVO Volume lazy loading
 * Use oslo\_log instead of logging
 * Remove deprecated keymgr code
+* VMAX doc - add manage and unmanage section
 * HPE 3PAR: Adding driver capability
 * Improve cinder revert-to-snapshot notifications
 * create\_volume: cleanup consistencygroup when driver exception
@@ -107,6 +392,7 @@ CHANGES
 * Unity: Fix duplicate hosts created with same name
 * Update setup instructions
 * Make test logging setup fixture disable future setup
+* XtremIO: extending volume in create\_volume\_from\_snapshot
 * Use total reserved quota value instead of partial
 * Tintri - Updated driver docs with new nfs option
 * Fix imageutils tests on windows

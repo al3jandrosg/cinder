@@ -27,6 +27,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils as json
 from oslo_service import loopingcall
+from oslo_utils import encodeutils
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import units
@@ -125,6 +126,13 @@ storwize_svc_opts = [
                default=None,
                help='Specifies the name of the pool in which mirrored copy '
                     'is stored. Example: "pool2"'),
+    cfg.StrOpt('storwize_peer_pool',
+               default=None,
+               help='Specifies the name of the peer pool for hyperswap '
+                    'volume, the peer pool must exist on the other site.'),
+    cfg.StrOpt('storwize_preferred_host_site',
+               default=None,
+               help='Specifies the preferred host site name.'),
     cfg.IntOpt('cycle_period_seconds',
                default=300,
                min=60, max=86400,
@@ -163,12 +171,14 @@ class StorwizeSSH(object):
         return CLIResponse(raw, ssh_cmd=ssh_cmd, delim=delim,
                            with_header=with_header)
 
-    def run_ssh_assert_no_output(self, ssh_cmd):
+    def run_ssh_assert_no_output(self, ssh_cmd, log_cmd=None):
         """Run an SSH command and assert no output returned."""
         out, err = self._run_ssh(ssh_cmd)
         if len(out.strip()) != 0:
+            if not log_cmd:
+                log_cmd = ' '.join(ssh_cmd)
             msg = (_('Expected no output from CLI command %(cmd)s, '
-                     'got %(out)s.') % {'cmd': ' '.join(ssh_cmd), 'out': out})
+                     'got %(out)s.') % {'cmd': log_cmd, 'out': out})
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
@@ -235,9 +245,11 @@ class StorwizeSSH(object):
         port.append(port_name)
         return port
 
-    def mkhost(self, host_name, port_type, port_name):
+    def mkhost(self, host_name, port_type, port_name, site=None):
         port = self._create_port_arg(port_type, port_name)
         ssh_cmd = ['svctask', 'mkhost', '-force'] + port
+        if site:
+            ssh_cmd += ['-site', '"%s"' % site]
         ssh_cmd += ['-name', '"%s"' % host_name]
         return self.run_ssh_check_created(ssh_cmd)
 
@@ -256,6 +268,11 @@ class StorwizeSSH(object):
 
     def add_chap_secret(self, secret, host):
         ssh_cmd = ['svctask', 'chhost', '-chapsecret', secret, '"%s"' % host]
+        log_cmd = 'svctask chhost -chapsecret *** %s' % host
+        self.run_ssh_assert_no_output(ssh_cmd, log_cmd)
+
+    def chhost(self, host, site):
+        ssh_cmd = ['svctask', 'chhost', '-site', '"%s"' % site, '"%s"' % host]
         self.run_ssh_assert_no_output(ssh_cmd)
 
     def lsiscsiauth(self):
@@ -700,6 +717,29 @@ class StorwizeSSH(object):
                    copy_id, '-vdisk', vdisk]
         self.run_ssh_assert_no_output(ssh_cmd)
 
+    def mkvolume(self, name, size, units, pool, params):
+        ssh_cmd = ['svctask', 'mkvolume', '-name', name, '-pool',
+                   '"%s"' % pool, '-size', size, '-unit', units] + params
+        return self.run_ssh_check_created(ssh_cmd)
+
+    def rmvolume(self, volume, force=True):
+        ssh_cmd = ['svctask', 'rmvolume']
+        if force:
+            ssh_cmd += ['-removehostmappings', '-removefcmaps',
+                        '-removercrelationships']
+        ssh_cmd += ['"%s"' % volume]
+        self.run_ssh_assert_no_output(ssh_cmd)
+
+    def addvolumecopy(self, name, pool, params):
+        ssh_cmd = ['svctask', 'addvolumecopy', '-pool',
+                   '"%s"' % pool] + params + ['"%s"' % name]
+        self.run_ssh_assert_no_output(ssh_cmd)
+
+    def rmvolumecopy(self, name, pool):
+        ssh_cmd = ['svctask', 'rmvolumecopy', '-pool',
+                   '"%s"' % pool, '"%s"' % name]
+        self.run_ssh_assert_no_output(ssh_cmd)
+
 
 class StorwizeHelpers(object):
 
@@ -767,6 +807,7 @@ class StorwizeHelpers(object):
             raise exception.VolumeBackendAPIException(data=msg)
         code_level = match_obj.group().split('.')
         return {'code_level': tuple([int(x) for x in code_level]),
+                'topology': resp['topology'],
                 'system_name': resp['name'],
                 'system_id': resp['id']}
 
@@ -812,7 +853,7 @@ class StorwizeHelpers(object):
                 raise exception.VolumeBackendAPIException(data=msg)
         return res
 
-    def select_io_group(self, state, opts):
+    def select_io_group(self, state, opts, pool):
         selected_iog = 0
         iog_list = StorwizeHelpers._get_valid_requested_io_groups(state, opts)
         if len(iog_list) == 0:
@@ -821,6 +862,25 @@ class StorwizeHelpers(object):
                          'I/O groups are %(avail)s.')
                 % {'iogrp': opts['iogrp'],
                    'avail': state['available_iogrps']})
+
+        site_iogrp = []
+        pool_data = self.get_pool_attrs(pool)
+        if 'site_id' in pool_data and pool_data['site_id']:
+            for node in state['storage_nodes'].values():
+                if pool_data['site_id'] == node['site_id']:
+                    site_iogrp.append(node['IO_group'])
+            site_iogrp = list(map(int, site_iogrp))
+            iog_list = list(set(site_iogrp).intersection(iog_list))
+            if len(iog_list) == 0:
+                raise exception.InvalidInput(
+                    reason=_('The storage system topology is hyperswap or '
+                             'stretched, The site_id of pool %(pool)s is '
+                             '%(site_id)s, the available I/O groups on this '
+                             'site is %(site_iogrp)s, but the given I/O'
+                             ' group(s) is %(iogrp)s.')
+                    % {'pool': pool, 'site_id': pool_data['site_id'],
+                       'site_iogrp': site_iogrp, 'iogrp': opts['iogrp']})
+
         iog_vdc = self.get_vdisk_count_by_io_group()
         LOG.debug("IO group current balance %s", iog_vdc)
         min_vdisk_count = iog_vdc[iog_list[0]]
@@ -861,6 +921,8 @@ class StorwizeHelpers(object):
                 node['ipv6'] = []
                 node['enabled_protocols'] = []
                 nodes[node['id']] = node
+                node['site_id'] = (node_data['site_id']
+                                   if 'site_id' in node_data else None)
             except KeyError:
                 self.handle_keyerror('lsnode', node_data)
         return nodes
@@ -1016,8 +1078,8 @@ class StorwizeHelpers(object):
                     pass
             if iscsi:
                 if 'initiator' in connector:
-                    for iscsi in resp.select('iscsi_name'):
-                        if iscsi == connector['initiator']:
+                    for iscsi_name in resp.select('iscsi_name'):
+                        if iscsi_name == connector['initiator']:
                             host_name = name
                             found = True
                             break
@@ -1034,7 +1096,7 @@ class StorwizeHelpers(object):
         LOG.debug('Leave: get_host_from_connector: host %s.', host_name)
         return host_name
 
-    def create_host(self, connector, iscsi=False):
+    def create_host(self, connector, iscsi=False, site=None):
         """Create a new host on the storage system.
 
         We create a host name and associate it with the given connection
@@ -1088,7 +1150,8 @@ class StorwizeHelpers(object):
 
         # Create a host with one port
         port = ports.pop(0)
-        self.ssh.mkhost(host_name, port[0], port[1])
+        # Host site_id is necessary for hyperswap volume.
+        self.ssh.mkhost(host_name, port[0], port[1], site)
 
         # Add any additional ports to the host
         for port in ports:
@@ -1097,6 +1160,9 @@ class StorwizeHelpers(object):
         LOG.debug('Leave: create_host: host %(host)s - %(host_name)s.',
                   {'host': connector['host'], 'host_name': host_name})
         return host_name
+
+    def update_host(self, host_name, site_name):
+        self.ssh.chhost(host_name, site=site_name)
 
     def delete_host(self, host_name):
         self.ssh.rmhost(host_name)
@@ -1164,6 +1230,13 @@ class StorwizeHelpers(object):
     def check_host_mapped_vols(self, host_name):
         return self.ssh.lshostvdiskmap(host_name)
 
+    def check_vol_mapped_to_host(self, vol_name, host_name):
+        resp = self.ssh.lsvdiskhostmap(vol_name)
+        for mapping_info in resp:
+            if mapping_info['host_name'] == host_name:
+                return True
+        return False
+
     @staticmethod
     def build_default_opts(config):
         # Ignore capitalization
@@ -1181,6 +1254,9 @@ class StorwizeHelpers(object):
                'replication': False,
                'nofmtdisk': config.storwize_svc_vol_nofmtdisk,
                'mirror_pool': config.storwize_svc_mirror_pool,
+               'volume_topology': None,
+               'peer_pool': config.storwize_peer_pool,
+               'host_site': config.storwize_preferred_host_site,
                'cycle_period_seconds': config.cycle_period_seconds}
         return opt
 
@@ -1422,6 +1498,65 @@ class StorwizeHelpers(object):
             opts, add_copies=True if opts['mirror_pool'] else False)
         self.ssh.mkvdisk(name, size, units, mdiskgrp, opts, params)
         LOG.debug('Leave: _create_vdisk: volume %s.', name)
+
+    def _get_hyperswap_volume_create_params(self, opts):
+        # Storwize/svc use cli command mkvolume to create hyperswap volume.
+        # You must specify -thin with grainsize.
+        # You must specify either -thin or -compressed with warning.
+        params = []
+        LOG.debug('The I/O groups of a hyperswap volume will be selected by '
+                  'storage.')
+        if opts['rsize'] != -1:
+            params.extend(['-buffersize', '%s%%' % str(opts['rsize']),
+                           '-warning',
+                           '%s%%' % six.text_type(opts['warning'])])
+            if not opts['autoexpand']:
+                params.append('-noautoexpand')
+            if opts['compression']:
+                params.append('-compressed')
+            else:
+                params.append('-thin')
+                params.extend(['-grainsize', six.text_type(opts['grainsize'])])
+        return params
+
+    def create_hyperswap_volume(self, vol_name, size, units, pool, opts):
+        vol_name = '"%s"' % vol_name
+        params = self._get_hyperswap_volume_create_params(opts)
+        self.ssh.mkvolume(vol_name, six.text_type(size), units, pool, params)
+
+    def convert_volume_to_hyperswap(self, vol_name, opts, state):
+        vol_name = '%s' % vol_name
+        if not self.is_system_topology_hyperswap(state):
+            reason = _('Convert volume to hyperswap failed, the system is '
+                       'below release 7.6.0.0 or it is not hyperswap '
+                       'topology.')
+            raise exception.VolumeDriverException(reason=reason)
+        else:
+            attr = self.get_vdisk_attributes(vol_name)
+            if attr is None:
+                msg = (_('convert_volume_to_hyperswap: Failed to get '
+                         'attributes for volume %s.') % vol_name)
+                LOG.error(msg)
+                raise exception.VolumeDriverException(message=msg)
+            pool = attr['mdisk_grp_name']
+            self.check_hyperswap_pool(pool, opts['peer_pool'])
+            hyper_pool = '%s' % opts['peer_pool']
+            params = self._get_hyperswap_volume_create_params(opts)
+            self.ssh.addvolumecopy(vol_name, hyper_pool, params)
+
+    def convert_hyperswap_volume_to_normal(self, vol_name, peer_pool):
+        vol_name = '%s' % vol_name
+        hyper_pool = '%s' % peer_pool
+        self.ssh.rmvolumecopy(vol_name, hyper_pool)
+
+    def delete_hyperswap_volume(self, volume, force):
+        """Ensures that vdisk is not part of FC mapping and deletes it."""
+        if not self.is_vdisk_defined(volume):
+            LOG.warning('Tried to delete non-existent volume %s.', volume)
+            return
+        self.ensure_vdisk_no_fc_mappings(volume, allow_snaps=True,
+                                         allow_fctgt = True)
+        self.ssh.rmvolume(volume, force=force)
 
     def get_vdisk_attributes(self, vdisk):
         attrs = self.ssh.lsvdisk(vdisk)
@@ -1734,6 +1869,7 @@ class StorwizeHelpers(object):
         for map_id in mapping_ids:
             attrs = self._get_flashcopy_mapping_attributes(map_id)
             # We should ignore GMCV flash copies
+            # Hyperswap flash copies are also ignored.
             if not attrs or 'yes' == attrs['rc_controlled']:
                 continue
             source = attrs['source_vdisk_name']
@@ -1895,6 +2031,15 @@ class StorwizeHelpers(object):
 
     # replication cg
     def chrcrelationship(self, relationship, rccg=None):
+        rels = self.ssh.lsrcrelationship(relationship)[0]
+        if rccg and rels['consistency_group_name'] == rccg:
+            LOG.info('relationship %(rel)s is aleady added to group %(grp)s.',
+                     {'rel': relationship, 'grp': rccg})
+            return
+        if not rccg and rels['consistency_group_name'] == '':
+            LOG.info('relationship %(rel)s is aleady removed from group',
+                     {'rel': relationship})
+            return
         self.ssh.chrcrelationship(relationship, rccg)
 
     def get_rccg(self, rccg):
@@ -2091,15 +2236,16 @@ class StorwizeHelpers(object):
                 self.ssh.chvdisk(vdisk, ['-' + param, value])
 
     def change_vdisk_options(self, vdisk, changes, opts, state):
+        change_value = {'warning': '', 'easytier': '', 'autoexpand': ''}
         if 'warning' in opts:
-            opts['warning'] = '%s%%' % str(opts['warning'])
+            change_value['warning'] = '%s%%' % str(opts['warning'])
         if 'easytier' in opts:
-            opts['easytier'] = 'on' if opts['easytier'] else 'off'
+            change_value['easytier'] = 'on' if opts['easytier'] else 'off'
         if 'autoexpand' in opts:
-            opts['autoexpand'] = 'on' if opts['autoexpand'] else 'off'
+            change_value['autoexpand'] = 'on' if opts['autoexpand'] else 'off'
 
         for key in changes:
-            self.ssh.chvdisk(vdisk, ['-' + key, opts[key]])
+            self.ssh.chvdisk(vdisk, ['-' + key, change_value[key]])
 
     def change_vdisk_iogrp(self, vdisk, state, iogrp):
         if state['code_level'] < (6, 4, 0, 0):
@@ -2146,6 +2292,60 @@ class StorwizeHelpers(object):
 
     def migratevdisk(self, vdisk, dest_pool, copy_id='0'):
         self.ssh.migratevdisk(vdisk, dest_pool, copy_id)
+
+    def is_system_topology_hyperswap(self, state):
+        """Returns True if the system version higher than 7.5 and the system
+
+        topology is hyperswap.
+        """
+        if state['code_level'] < (7, 6, 0, 0):
+            LOG.debug('Hyperswap failure as the storage'
+                      'code_level is %(code_level)s, below '
+                      'the required 7.6.0.0.',
+                      {'code_level': state['code_level']})
+        else:
+            if state['topology'] == 'hyperswap':
+                return True
+            else:
+                LOG.debug('Hyperswap failure as the storage system '
+                          'topology is not hyperswap.')
+        return False
+
+    def check_hyperswap_pool(self, pool, peer_pool):
+        # Check the hyperswap pools.
+        if not peer_pool:
+            raise exception.InvalidInput(
+                reason=_('The peer pool is necessary for hyperswap volume, '
+                         'please configure the peer pool.'))
+        pool_attr = self.get_pool_attrs(pool)
+        peer_pool_attr = self.get_pool_attrs(peer_pool)
+        if not peer_pool_attr:
+            raise exception.InvalidInput(
+                reason=_('The hyperswap peer pool %s '
+                         'is invalid.') % peer_pool)
+
+        if not pool_attr['site_id'] or not peer_pool_attr['site_id']:
+            raise exception.InvalidInput(
+                reason=_('The site_id of pools is necessary for hyperswap '
+                         'volume, but there is no site_id in the pool or '
+                         'peer pool.'))
+
+        if pool_attr['site_id'] == peer_pool_attr['site_id']:
+            raise exception.InvalidInput(
+                reason=_('The hyperswap volume must be configured in two '
+                         'independent sites, the pool %(pool)s is on the '
+                         'same site as peer_pool %(peer_pool)s. ') %
+                {'pool': pool, 'peer_pool': peer_pool})
+
+    def is_volume_hyperswap(self, vol_name):
+        """Returns True if the volume rcrelationship is activeactive."""
+        is_hyper_volume = False
+        vol_attrs = self.get_vdisk_attributes(vol_name)
+        if vol_attrs and vol_attrs['RC_name']:
+            relationship = self.ssh.lsrcrelationship(vol_attrs['RC_name'])
+            if relationship[0]['copy_type'] == 'activeactive':
+                is_hyper_volume = True
+        return is_hyper_volume
 
 
 class CLIResponse(object):
@@ -2543,10 +2743,18 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                         last_exception = e
                         greenthread.sleep(self.DEFAULT_GR_SLEEP)
                     try:
+                        std_err = last_exception.stderr
+                        if std_err is not None and not self._is_ascii(std_err):
+                            std_err = encodeutils.safe_decode(std_err,
+                                                              errors='ignore')
+                            LOG.error("The stderr has non-ascii characters. "
+                                      "Please check the error code.\n"
+                                      "Stderr: %s", std_err)
+                            std_err = std_err.split()[0]
                         raise processutils.ProcessExecutionError(
                             exit_code=last_exception.exit_code,
                             stdout=last_exception.stdout,
-                            stderr=last_exception.stderr,
+                            stderr=std_err,
                             cmd=last_exception.cmd)
                     except AttributeError:
                         raise processutils.ProcessExecutionError(
@@ -2558,6 +2766,12 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.error("Error running SSH command: %s", command)
+
+    def _is_ascii(self, value):
+        try:
+            return all(ord(c) < 128 for c in value)
+        except TypeError:
+            return False
 
     def _toggle_ip(self):
         # Change active_ip if storwize_san_secondary_ip is set.
@@ -2604,8 +2818,20 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                                               volume_type=volume_type,
                                               volume_metadata=volume_metadata)
 
+    def _check_if_group_type_cg_snapshot(self, volume):
+        if (volume.group_id and
+                not utils.is_group_a_cg_snapshot_type(volume.group)):
+            msg = _('Create volume with a replication or hyperswap '
+                    'group_id is not supported. Please add volume to '
+                    'group after volume creation.')
+            LOG.error(msg)
+            raise exception.VolumeDriverException(reason=msg)
+
     def create_volume(self, volume):
         LOG.debug('enter: create_volume: volume %s', volume['name'])
+        # Create a replication or hyperswap volume with group_id is not
+        # allowed.
+        self._check_if_group_type_cg_snapshot(volume)
         opts = self._get_vdisk_params(volume['volume_type_id'],
                                       volume_metadata=
                                       volume.get('volume_metadata'))
@@ -2613,13 +2839,38 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         rep_type = self._get_volume_replicated_type(ctxt, volume)
 
         pool = utils.extract_host(volume['host'], 'pool')
-        if opts['mirror_pool'] and rep_type:
-            reason = _('Create mirror volume with replication enabled is '
-                       'not supported.')
-            raise exception.InvalidInput(reason=reason)
-        opts['iogrp'] = self._helpers.select_io_group(self._state, opts)
-        self._helpers.create_vdisk(volume['name'], str(volume['size']),
-                                   'gb', pool, opts)
+        model_update = None
+
+        if opts['volume_topology'] == 'hyperswap':
+            LOG.debug('Volume %s to be created is a hyperswap volume.',
+                      volume.name)
+            if not self._helpers.is_system_topology_hyperswap(self._state):
+                reason = _('Create hyperswap volume failed, the system is '
+                           'below release 7.6.0.0 or it is not hyperswap '
+                           'topology.')
+                raise exception.InvalidInput(reason=reason)
+            if opts['mirror_pool'] or rep_type:
+                reason = _('Create hyperswap volume with streched cluster or '
+                           'replication enabled is not supported.')
+                raise exception.InvalidInput(reason=reason)
+            if not opts['easytier']:
+                raise exception.InvalidInput(
+                    reason=_('The default easytier of hyperswap volume is '
+                             'on, it does not support easytier off.'))
+            self._helpers.check_hyperswap_pool(pool, opts['peer_pool'])
+            hyperpool = '%s:%s' % (pool, opts['peer_pool'])
+            self._helpers.create_hyperswap_volume(volume.name,
+                                                  volume.size, 'gb',
+                                                  hyperpool, opts)
+        else:
+            if opts['mirror_pool'] and rep_type:
+                reason = _('Create mirror volume with replication enabled is '
+                           'not supported.')
+                raise exception.InvalidInput(reason=reason)
+            opts['iogrp'] = self._helpers.select_io_group(self._state,
+                                                          opts, pool)
+            self._helpers.create_vdisk(volume['name'], str(volume['size']),
+                                       'gb', pool, opts)
         if opts['qos']:
             self._helpers.add_vdisk_qos(volume['name'], opts['qos'])
 
@@ -2641,6 +2892,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
     def delete_volume(self, volume):
         LOG.debug('enter: delete_volume: volume %s', volume['name'])
         ctxt = context.get_admin_context()
+
+        hyper_volume = self._helpers.is_volume_hyperswap(volume.name)
+        if hyper_volume:
+            LOG.debug('Volume %s to be deleted is a hyperswap '
+                      'volume.', volume.name)
+            self._helpers.delete_hyperswap_volume(volume.name, False)
+            return
 
         rep_type = self._get_volume_replicated_type(ctxt, volume)
         if rep_type:
@@ -2699,6 +2957,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
         pool = utils.extract_host(source_vol['host'], 'pool')
         opts = self._get_vdisk_params(source_vol['volume_type_id'])
+
+        if opts['volume_topology'] == 'hyperswap':
+            msg = _('create_snapshot: Create snapshot to a '
+                    'hyperswap volume is not allowed.')
+            LOG.error(msg)
+            raise exception.VolumeDriverException(message=msg)
+
         self._helpers.create_copy(snapshot['volume_name'], snapshot['name'],
                                   snapshot['volume_id'], self.configuration,
                                   opts, False, pool=pool)
@@ -2707,6 +2972,9 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         self._helpers.delete_vdisk(snapshot['name'], False)
 
     def create_volume_from_snapshot(self, volume, snapshot):
+        # Create volume from snapshot with a replication or hyperswap group_id
+        # is not allowed.
+        self._check_if_group_type_cg_snapshot(volume)
         opts = self._get_vdisk_params(volume['volume_type_id'],
                                       volume_metadata=
                                       volume.get('volume_metadata'))
@@ -2743,7 +3011,9 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
     def create_cloned_volume(self, tgt_volume, src_volume):
         """Creates a clone of the specified volume."""
-
+        # Create a cloned volume with a replication or hyperswap group_id is
+        # not allowed.
+        self._check_if_group_type_cg_snapshot(tgt_volume)
         opts = self._get_vdisk_params(tgt_volume['volume_type_id'],
                                       volume_metadata=
                                       tgt_volume.get('volume_metadata'))
@@ -2767,6 +3037,19 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if opts['qos']:
             self._helpers.add_vdisk_qos(tgt_volume['name'], opts['qos'])
 
+        if opts['volume_topology'] == 'hyperswap':
+            LOG.debug('The source volume %s to be cloned is a hyperswap '
+                      'volume.', src_volume.name)
+            # Ensures the vdisk is not part of FC mapping.
+            # Otherwize convert it to hyperswap volume will be failed.
+            self._helpers.ensure_vdisk_no_fc_mappings(tgt_volume['name'],
+                                                      allow_snaps=True,
+                                                      allow_fctgt=False)
+
+            self._helpers.convert_volume_to_hyperswap(tgt_volume['name'],
+                                                      opts,
+                                                      self._state)
+
         ctxt = context.get_admin_context()
         model_update = {'replication_status':
                         fields.ReplicationStatus.NOT_CAPABLE}
@@ -2786,6 +3069,12 @@ class StorwizeSVCCommonDriver(san.SanDriver,
     def _extend_volume_op(self, volume, new_size, old_size=None):
         LOG.debug('enter: _extend_volume_op: volume %s', volume['id'])
         volume_name = self._get_target_vol(volume)
+        if self._helpers.is_volume_hyperswap(volume_name):
+            msg = _('_extend_volume_op: Extending a hyperswap volume is '
+                    'not supported.')
+            LOG.error(msg)
+            raise exception.InvalidInput(message=msg)
+
         ret = self._helpers.ensure_vdisk_no_fc_mappings(volume_name,
                                                         allow_snaps=False)
         if not ret:
@@ -2962,9 +3251,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         LOG.debug("Exit: update volume copy status.")
 
     # #### V2.1 replication methods #### #
+    @cinder_utils.trace
     def failover_host(self, context, volumes, secondary_id=None, groups=None):
-        LOG.debug('enter: failover_host: secondary_id=%(id)s',
-                  {'id': secondary_id})
         if not self._replica_enabled:
             msg = _("Replication is not properly enabled on backend.")
             LOG.error(msg)
@@ -2984,8 +3272,6 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             LOG.error(msg)
             raise exception.InvalidReplicationTarget(reason=msg)
 
-        LOG.debug('leave: failover_host: secondary_id=%(id)s',
-                  {'id': secondary_id})
         return secondary_id, volumes_update, groups_update
 
     def _host_failback(self, ctxt, volumes, groups):
@@ -3061,17 +3347,14 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                        'aux_vol': rep_info['aux_vdisk_name'],
                        'state': rep_info['state'],
                        'primary': rep_info['primary']})
+            if volume.status == 'in-use':
+                LOG.warning('_failback_replica_volumes: failback in-use '
+                            'volume: %(volume)s is not recommended.',
+                            {'volume': volume.name})
             try:
                 replica_obj.replication_failback(volume)
-                vol_status = volume.previous_status or 'available'
-                vol_attach_status = (fields.VolumeAttachStatus.ATTACHED
-                                     if vol_status == 'in-use'
-                                     else fields.VolumeAttachStatus.DETACHED)
                 model_updates = {
-                    'replication_status': fields.ReplicationStatus.ENABLED,
-                    'previous_status': volume.status,
-                    'status': vol_status,
-                    'attach_status': vol_attach_status}
+                    'replication_status': fields.ReplicationStatus.ENABLED}
                 volumes_update.append(
                     {'volume_id': volume['id'],
                      'updates': model_updates})
@@ -3110,56 +3393,33 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         volumes_update = []
         groups_update = []
         for grp in groups:
-            rccg_name = self._get_rccg_name(grp)
-            rccg = self._helpers.get_rccg(rccg_name)
-            if rccg:
-                try:
-                    grp_update = self._rep_grp_failback(ctxt, rccg,
-                                                        grp, sync_grp=False)
-                    grp_rep_status = (grp_update['replication_status']
-                                      if grp_update else None)
-                except Exception as ex:
-                    LOG.error('Fail to failback group %(grp)s during host '
-                              'failback due to error: %(error)s',
-                              {'grp': grp.id, 'error': ex})
-                    grp_rep_status = fields.ReplicationStatus.ERROR
-            else:
+            try:
+                grp_rep_status = self._rep_grp_failback(
+                    ctxt, grp, sync_grp=False)['replication_status']
+            except Exception as ex:
                 LOG.error('Fail to failback group %(grp)s during host '
-                          'failback due to group does not exist on backend',
-                          {'grp': grp.id})
+                          'failback due to error: %(error)s',
+                          {'grp': grp.id, 'error': ex})
                 grp_rep_status = fields.ReplicationStatus.ERROR
 
             # Update all the volumes' status in that group
-            if grp_rep_status:
-                for vol in grp.volumes:
-                    vol_update = {'volume_id': vol.id,
-                                  'updates':
-                                      {'replication_status': grp_rep_status,
-                                       'previous_status': vol.status}}
-                    if grp_rep_status == fields.ReplicationStatus.ENABLED:
-                        vol_update['updates']['status'] = (vol.previous_status
-                                                           or 'available')
-                    else:
-                        vol_update['updates']['status'] = 'error'
-                    vol_update['updates']['attach_status'] = (
-                        fields.VolumeAttachStatus.ATTACHED if
-                        vol_update['updates']['status'] == 'in-use'
-                        else fields.VolumeAttachStatus.DETACHED)
-                    volumes_update.append(vol_update)
-                grp_status = (fields.GroupStatus.AVAILABLE
-                              if grp_rep_status ==
-                              fields.ReplicationStatus.ENABLED
-                              else fields.GroupStatus.ERROR)
-                grp_update = {'group_id': grp.id,
-                              'updates': {'replication_status': grp_rep_status,
-                                          'status': grp_status}}
-                groups_update.append(grp_update)
-            else:
-                grp_update = {'group_id': grp.id,
+            for vol in grp.volumes:
+                vol_update = {'volume_id': vol.id,
                               'updates':
-                                  {'replication_status':
-                                   fields.ReplicationStatus.ENABLED}}
-                groups_update.append(grp_update)
+                                  {'replication_status': grp_rep_status,
+                                   'status': (
+                                       vol.status if grp_rep_status ==
+                                       fields.ReplicationStatus.ENABLED
+                                       else 'error')}}
+                volumes_update.append(vol_update)
+            grp_status = (fields.GroupStatus.AVAILABLE
+                          if grp_rep_status ==
+                          fields.ReplicationStatus.ENABLED
+                          else fields.GroupStatus.ERROR)
+            grp_update = {'group_id': grp.id,
+                          'updates': {'replication_status': grp_rep_status,
+                                      'status': grp_status}}
+            groups_update.append(grp_update)
         return volumes_update, groups_update
 
     def _sync_with_aux(self, ctxt, volumes):
@@ -3338,16 +3598,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                            'aux_vol': rep_info['aux_vdisk_name'],
                            'state': rep_info['state'],
                            'primary': rep_info['primary']})
+                if volume.status == 'in-use':
+                    LOG.warning('_failover_replica_volumes: failover in-use '
+                                'volume: %(volume)s is not recommended.',
+                                {'volume': volume.name})
                 replica_obj.failover_volume_host(ctxt, volume)
-                vol_status = volume.previous_status or 'available'
-                vol_attach_status = (fields.VolumeAttachStatus.ATTACHED
-                                     if vol_status == 'in-use'
-                                     else fields.VolumeAttachStatus.DETACHED)
                 model_updates = {
-                    'replication_status': fields.ReplicationStatus.FAILED_OVER,
-                    'previous_status': volume.status,
-                    'status': vol_status,
-                    'attach_status': vol_attach_status}
+                    'replication_status': fields.ReplicationStatus.FAILED_OVER}
                 volumes_update.append(
                     {'volume_id': volume['id'],
                      'updates': model_updates})
@@ -3368,56 +3625,33 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         volumes_update = []
         groups_update = []
         for grp in groups:
-            rccg_name = self._get_rccg_name(grp)
-            rccg = self._helpers.get_rccg(rccg_name)
-            if rccg:
-                try:
-                    grp_update = self._rep_grp_failover(ctxt, rccg, grp)
-                    grp_rep_status = (grp_update['replication_status']
-                                      if grp_update else None)
-                except Exception as ex:
-                    LOG.error('Fail to failover group %(grp)s during host '
-                              'failover due to error: %(error)s',
-                              {'grp': grp.id, 'error': ex})
-                    grp_rep_status = fields.ReplicationStatus.ERROR
-            else:
+            try:
+                grp_rep_status = self._rep_grp_failover(
+                    ctxt, grp)['replication_status']
+            except Exception as ex:
                 LOG.error('Fail to failover group %(grp)s during host '
-                          'failover due to group does not exist on backend',
-                          {'grp': grp.id})
+                          'failover due to error: %(error)s',
+                          {'grp': grp.id, 'error': ex})
                 grp_rep_status = fields.ReplicationStatus.ERROR
 
             # Update all the volumes' status in that group
-            if grp_rep_status:
-                for vol in grp.volumes:
-                    vol_update = {'volume_id': vol.id,
-                                  'updates':
-                                      {'replication_status': grp_rep_status,
-                                       'previous_status': vol.status}}
-                    if grp_rep_status == fields.ReplicationStatus.FAILED_OVER:
-                        vol_update['updates']['status'] = (vol.previous_status
-                                                           or 'available')
-                    else:
-                        vol_update['updates']['status'] = 'error'
-                    vol_update['updates']['attach_status'] = (
-                        fields.VolumeAttachStatus.ATTACHED if
-                        vol_update['updates']['status'] == 'in-use'
-                        else fields.VolumeAttachStatus.DETACHED)
-                    volumes_update.append(vol_update)
-                grp_status = (fields.GroupStatus.AVAILABLE
-                              if grp_rep_status ==
-                              fields.ReplicationStatus.FAILED_OVER
-                              else fields.GroupStatus.ERROR)
-                grp_update = {'group_id': grp.id,
-                              'updates': {'replication_status': grp_rep_status,
-                                          'status': grp_status}}
-                groups_update.append(grp_update)
-            else:
-                grp_update = {'group_id': grp.id,
+            for vol in grp.volumes:
+                vol_update = {'volume_id': vol.id,
                               'updates':
-                                  {'replication_status':
-                                   fields.ReplicationStatus.FAILED_OVER}}
-                groups_update.append(grp_update)
-
+                                  {'replication_status': grp_rep_status,
+                                   'status': (
+                                       vol.status if grp_rep_status ==
+                                       fields.ReplicationStatus.FAILED_OVER
+                                       else 'error')}}
+                volumes_update.append(vol_update)
+            grp_status = (fields.GroupStatus.AVAILABLE
+                          if grp_rep_status ==
+                          fields.ReplicationStatus.FAILED_OVER
+                          else fields.GroupStatus.ERROR)
+            grp_update = {'group_id': grp.id,
+                          'updates': {'replication_status': grp_rep_status,
+                                      'status': grp_status}}
+            groups_update.append(grp_update)
         return volumes_update, groups_update
 
     def _classify_volume(self, ctxt, volumes):
@@ -3495,7 +3729,14 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
     def _get_storwize_config(self):
         # Update the storwize state
-        self._update_storwize_state(self._master_state, self._helpers)
+        try:
+            self._update_storwize_state(self._master_state, self._helpers)
+        except Exception as err:
+            LOG.warning('Fail to get system %(san_ip)s info. error=%(error)s',
+                        {'san_ip': self.active_ip, 'error': err})
+            if not self._active_backend_id:
+                with excutils.save_and_reraise_exception():
+                    pass
         self._do_replication_setup()
 
         if self._active_backend_id and self._replica_target:
@@ -3637,54 +3878,45 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             LOG.error(msg)
             raise exception.UnableToFailOver(reason=msg)
 
-        rccg_name = self._get_rccg_name(group)
-        rccg = self._helpers.get_rccg(rccg_name)
-        if not rccg:
-            msg = (_("Replication group %s does not exist on "
-                     "backend.") % rccg_name)
-            LOG.error(msg)
-            raise exception.UnableToFailOver(reason=msg)
-
         if storwize_const.FAILBACK_VALUE == secondary_backend_id:
             # In this case the administrator would like to group fail back.
-            model_update = self._rep_grp_failback(context, rccg, group)
+            model_update = self._rep_grp_failback(context, group)
         elif (secondary_backend_id == self._replica_target['backend_id']
                 or secondary_backend_id is None):
             # In this case the administrator would like to group fail over.
-            model_update = self._rep_grp_failover(context, rccg, group)
+            model_update = self._rep_grp_failover(context, group)
         else:
             msg = (_("Invalid secondary id %s.") % secondary_backend_id)
             LOG.error(msg)
             raise exception.InvalidReplicationTarget(reason=msg)
 
-        if not model_update:
-            return None, None
-
         for vol in volumes:
-            vol_status = vol.previous_status or 'available'
-            vol_attach_status = (fields.VolumeAttachStatus.ATTACHED
-                                 if vol_status == 'in-use'
-                                 else fields.VolumeAttachStatus.DETACHED)
             volume_model_update = {'id': vol.id,
                                    'replication_status':
-                                       model_update['replication_status'],
-                                   'previous_status': vol.status,
-                                   'status': vol_status,
-                                   'attach_status': vol_attach_status}
+                                       model_update['replication_status']}
             volumes_model_update.append(volume_model_update)
         return model_update, volumes_model_update
 
-    def _rep_grp_failback(self, ctxt, rccg, group, sync_grp=True):
+    def _rep_grp_failback(self, ctxt, group, sync_grp=True):
         """Fail back all the volume in the replication group."""
         model_update = {
             'replication_status': fields.ReplicationStatus.ENABLED}
+        rccg_name = self._get_rccg_name(group)
 
         try:
             self._master_backend_helpers.get_system_info()
         except Exception as ex:
             msg = (_("Unable to failback group %(rccg)s due to primary is not "
                      "reachable. error=%(error)s"),
-                   {'rccg': rccg['name'], 'error': ex})
+                   {'rccg': rccg_name, 'error': ex})
+            LOG.error(msg)
+            raise exception.UnableToFailOver(reason=msg)
+
+        rccg = self._helpers.get_rccg(rccg_name)
+        if not rccg:
+            msg = (_("Unable to failback group %(rccg)s due to replication "
+                     "group does not exist on backend."),
+                   {'rccg': rccg_name})
             LOG.error(msg)
             raise exception.UnableToFailOver(reason=msg)
 
@@ -3697,7 +3929,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if rccg['primary'] == 'master':
             LOG.info("Do not need to fail back group %(rccg)s again due to "
                      "primary is already master.", {'rccg': rccg['name']})
-            return None
+            return model_update
 
         if sync_grp:
             self._sync_with_aux_grp(ctxt, rccg['name'])
@@ -3726,16 +3958,25 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 raise exception.UnableToFailOver(reason=msg)
         return model_update
 
-    def _rep_grp_failover(self, ctxt, rccg, group):
+    def _rep_grp_failover(self, ctxt, group):
         """Fail over all the volume in the replication group."""
         model_update = {
             'replication_status': fields.ReplicationStatus.FAILED_OVER}
+        rccg_name = self._get_rccg_name(group)
         try:
             self._aux_backend_helpers.get_system_info()
         except Exception as ex:
             msg = (_("Unable to failover group %(rccg)s due to replication "
                      "target is not reachable. error=%(error)s"),
-                   {'rccg': rccg['name'], 'error': ex})
+                   {'rccg': rccg_name, 'error': ex})
+            LOG.error(msg)
+            raise exception.UnableToFailOver(reason=msg)
+
+        rccg = self._aux_backend_helpers.get_rccg(rccg_name)
+        if not rccg:
+            msg = (_("Unable to failover group %(rccg)s due to replication "
+                     "group does not exist on backend."),
+                   {'rccg': rccg_name})
             LOG.error(msg)
             raise exception.UnableToFailOver(reason=msg)
 
@@ -3748,7 +3989,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if rccg['primary'] == 'aux':
             LOG.info("Do not need to fail over group %(rccg)s again due to "
                      "primary is already aux.", {'rccg': rccg['name']})
-            return None
+            return model_update
 
         if rccg['cycling_mode'] == 'multi':
             # This is a gmcv replication group
@@ -3879,6 +4120,76 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
         return tgt_vol, backend_helper, node_state
 
+    def _toggle_rep_vol_info(self, volume, helper):
+        if helper == self._master_backend_helpers:
+            vol_name = storwize_const.REPLICA_AUX_VOL_PREFIX + volume.name
+            backend_helper = self._aux_backend_helpers
+            node_state = self._aux_state
+        else:
+            vol_name = volume.name
+            backend_helper = self._master_backend_helpers
+            node_state = self._master_state
+        return vol_name, backend_helper, node_state
+
+    def _get_map_info_from_connector(self, volume, connector, iscsi=False):
+        if volume.display_name == 'backup-snapshot':
+            LOG.debug('It is a virtual volume %(vol)s for detach snapshot.',
+                      {'vol': volume.id})
+            vol_name = volume.name
+            backend_helper = self._helpers
+            node_state = self._state
+        else:
+            vol_name, backend_helper, node_state = self._get_vol_sys_info(
+                volume)
+
+        info = {}
+        if 'host' in connector:
+            # get host according to FC protocol
+            connector = connector.copy()
+            if not iscsi:
+                connector.pop('initiator', None)
+                info = {'driver_volume_type': 'fibre_channel',
+                        'data': {}}
+            else:
+                info = {'driver_volume_type': 'iscsi',
+                        'data': {}}
+            host_name = backend_helper.get_host_from_connector(
+                connector, volume_name=vol_name, iscsi=iscsi)
+            vol_mapped = backend_helper.check_vol_mapped_to_host(vol_name,
+                                                                 host_name)
+            if host_name is None or not vol_mapped:
+                ctxt = context.get_admin_context()
+                rep_type = self._get_volume_replicated_type(ctxt, volume)
+                if host_name is None and not rep_type:
+                    msg = (_('_get_map_info_from_connector: Failed to get '
+                             'host name from connector.'))
+                    LOG.error(msg)
+                    raise exception.VolumeDriverException(message=msg)
+                if rep_type:
+                    # Try to unmap the volume in the secondary side if it is a
+                    # replication volume.
+                    (vol_name, backend_helper,
+                     node_state) = self._toggle_rep_vol_info(volume,
+                                                             backend_helper)
+                    try:
+                        host_name = backend_helper.get_host_from_connector(
+                            connector, volume_name=vol_name, iscsi=iscsi)
+                    except Exception as ex:
+                        LOG.warning('Failed to get host mapping for volume '
+                                    '%(volume)s in the secondary side. '
+                                    'Exception: %(err)s.',
+                                    {'volume': vol_name, 'err': ex})
+                        return info, None, None, None, None
+                    if host_name is None:
+                        msg = (_('_get_map_info_from_connector: Failed to get '
+                                 'host name from connector.'))
+                        LOG.error(msg)
+                        raise exception.VolumeDriverException(message=msg)
+        else:
+            host_name = None
+
+        return info, host_name, vol_name, backend_helper, node_state
+
     def _check_snapshot_replica_volume_status(self, snapshot):
         ctxt = context.get_admin_context()
         if self._get_volume_replicated_type(ctxt, None,
@@ -3910,6 +4221,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         LOG.debug('enter: migrate_volume: id=%(id)s, host=%(host)s',
                   {'id': volume['id'], 'host': host['host']})
 
+        # hyperswap volume doesn't support migrate
+        if self._helpers.is_volume_hyperswap(volume['name']):
+            msg = _('migrate_volume: Migrating a hyperswap volume is '
+                    'not supported.')
+            LOG.error(msg)
+            raise exception.InvalidInput(message=msg)
+
         false_ret = (False, None)
         dest_pool = self._helpers.can_migrate_to_host(host, self._state)
         if dest_pool is None:
@@ -3928,8 +4246,14 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             self._helpers.migratevdisk(volume.name, dest_pool,
                                        copies['primary']['copy_id'])
         else:
-            self.add_vdisk_copy(volume.name, dest_pool, vol_type,
-                                auto_delete=True)
+            self._check_volume_copy_ops()
+            if self._state['code_level'] < (7, 6, 0, 0):
+                new_op = self.add_vdisk_copy(volume.name, dest_pool,
+                                             vol_type)
+                self._add_vdisk_copy_op(ctxt, volume, new_op)
+            else:
+                self.add_vdisk_copy(volume.name, dest_pool, vol_type,
+                                    auto_delete=True)
 
         LOG.debug('leave: migrate_volume: id=%(id)s, host=%(host)s',
                   {'id': volume.id, 'host': host['host']})
@@ -4001,6 +4325,98 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 self._helpers.change_relationship_cycleperiod(volume.name,
                                                               new_cps)
 
+    def _check_hyperswap_retype_params(self, volume, new_opts, old_opts,
+                                       change_mirror, new_rep_type,
+                                       old_rep_type, old_pool,
+                                       new_pool, old_io_grp):
+        if new_opts['mirror_pool'] or old_opts['mirror_pool']:
+            msg = (_('Unable to retype volume %s: current action needs '
+                     'volume-copy, it is not allowed for hyperswap '
+                     'type.') % volume.name)
+            LOG.error(msg)
+            raise exception.InvalidInput(message=msg)
+        if new_rep_type or old_rep_type:
+            msg = _('Retype between replicated volume and hyperswap volume'
+                    ' is not allowed.')
+            LOG.error(msg)
+            raise exception.InvalidInput(message=msg)
+        if (old_io_grp not in
+                StorwizeHelpers._get_valid_requested_io_groups(
+                    self._state, new_opts)):
+            msg = _('Unable to retype: it is not allowed to change '
+                    'hyperswap type and IO group at the same time.')
+            LOG.error(msg)
+            raise exception.InvalidInput(message=msg)
+        if new_opts['volume_topology'] == 'hyperswap':
+            if old_pool != new_pool:
+                msg = (_('Unable to retype volume %s: current action needs '
+                         'volume pool change, hyperswap volume does not '
+                         'support pool change.') % volume.name)
+                LOG.error(msg)
+                raise exception.InvalidInput(message=msg)
+            if volume.previous_status == 'in-use':
+                msg = _('Retype an in-use volume to a hyperswap '
+                        'volume is not allowed.')
+                LOG.error(msg)
+                raise exception.InvalidInput(message=msg)
+            if not new_opts['easytier']:
+                raise exception.InvalidInput(
+                    reason=_('The default easytier of hyperswap volume is '
+                             'on, it does not support easytier off.'))
+            if (old_opts['volume_topology'] != 'hyperswap' and
+                    self._helpers._get_vdisk_fc_mappings(volume.name)):
+                msg = _('Unable to retype: it is not allowed to change a '
+                        'normal volume with snapshot to a hyperswap '
+                        'volume.')
+                LOG.error(msg)
+                raise exception.InvalidInput(message=msg)
+            if (old_opts['volume_topology'] == 'hyperswap' and
+                    old_opts['peer_pool'] != new_opts['peer_pool']):
+                msg = _('Unable to retype: it is not allowed to change a '
+                        'hyperswap volume peer_pool.')
+                LOG.error(msg)
+                raise exception.InvalidInput(message=msg)
+
+    def _retype_hyperswap_volume(self, volume, host, old_opts, new_opts,
+                                 old_pool, new_pool, vdisk_changes,
+                                 need_copy, new_type):
+        if (old_opts['volume_topology'] != 'hyperswap' and
+                new_opts['volume_topology'] == 'hyperswap'):
+            LOG.debug('retype: Convert a normal volume %s to hyperswap '
+                      'volume.', volume.name)
+            self._helpers.convert_volume_to_hyperswap(volume.name,
+                                                      new_opts,
+                                                      self._state)
+        elif (old_opts['volume_topology'] == 'hyperswap' and
+                new_opts['volume_topology'] != 'hyperswap'):
+            LOG.debug('retype: Convert a hyperswap volume %s to normal '
+                      'volume.', volume.name)
+            if new_pool == old_pool:
+                self._helpers.convert_hyperswap_volume_to_normal(
+                    volume.name,
+                    old_opts['peer_pool'])
+            elif new_pool == old_opts['peer_pool']:
+                self._helpers.convert_hyperswap_volume_to_normal(
+                    volume.name,
+                    old_pool)
+        else:
+            rel_info = self._helpers.get_relationship_info(volume.name)
+            aux_vdisk = rel_info['aux_vdisk_name']
+            if need_copy:
+                self.add_vdisk_copy(aux_vdisk, old_opts['peer_pool'], new_type,
+                                    auto_delete=True)
+            elif vdisk_changes:
+                self._helpers.change_vdisk_options(aux_vdisk,
+                                                   vdisk_changes,
+                                                   new_opts, self._state)
+        if need_copy:
+            self.add_vdisk_copy(volume.name, old_pool, new_type,
+                                auto_delete=True)
+        elif vdisk_changes:
+            self._helpers.change_vdisk_options(volume.name,
+                                               vdisk_changes,
+                                               new_opts, self._state)
+
     def retype(self, ctxt, volume, new_type, diff, host):
         """Convert the volume to be of the new type.
 
@@ -4046,8 +4462,9 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 elif key in no_copy_keys:
                     vdisk_changes.append(key)
 
-        if (utils.extract_host(volume['host'], 'pool') !=
-                utils.extract_host(host['host'], 'pool')):
+        old_pool = utils.extract_host(volume['host'], 'pool')
+        new_pool = utils.extract_host(host['host'], 'pool')
+        if old_pool != new_pool:
             need_copy = True
 
         if old_opts['mirror_pool'] != new_opts['mirror_pool']:
@@ -4058,50 +4475,69 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         new_rep_type = self._get_specs_replicated_type(new_type)
         old_rep_type = self._get_volume_replicated_type(ctxt, volume)
         old_io_grp = self._helpers.get_volume_io_group(volume['name'])
-        new_io_grp = self._helpers.select_io_group(self._state, new_opts)
+        new_io_grp = self._helpers.select_io_group(self._state,
+                                                   new_opts, new_pool)
 
         self._verify_retype_params(volume, new_opts, old_opts, need_copy,
                                    change_mirror, new_rep_type, old_rep_type)
-        if need_copy:
-            self._check_volume_copy_ops()
-            dest_pool = self._helpers.can_migrate_to_host(host, self._state)
-            if dest_pool is None:
-                return False
 
-            retype_iogrp_property(volume,
-                                  new_io_grp, old_io_grp)
-            try:
-                self.add_vdisk_copy(volume['name'], dest_pool, new_type,
-                                    auto_delete=True)
-            except exception.VolumeDriverException:
-                # roll back changing iogrp property
-                retype_iogrp_property(volume, old_io_grp, new_io_grp)
-                msg = (_('Unable to retype:  A copy of volume %s exists. '
-                         'Retyping would exceed the limit of 2 copies.'),
-                       volume['id'])
-                raise exception.VolumeDriverException(message=msg)
+        if old_opts['volume_topology'] or new_opts['volume_topology']:
+            self._check_hyperswap_retype_params(volume, new_opts, old_opts,
+                                                change_mirror, new_rep_type,
+                                                old_rep_type, old_pool,
+                                                new_pool, old_io_grp)
+            self._retype_hyperswap_volume(volume, host, old_opts, new_opts,
+                                          old_pool, new_pool, vdisk_changes,
+                                          need_copy, new_type)
         else:
-            retype_iogrp_property(volume, new_io_grp, old_io_grp)
+            if need_copy:
+                self._check_volume_copy_ops()
+                dest_pool = self._helpers.can_migrate_to_host(host,
+                                                              self._state)
+                if dest_pool is None:
+                    return False
 
-            self._helpers.change_vdisk_options(volume['name'], vdisk_changes,
-                                               new_opts, self._state)
-            if change_mirror:
-                copies = self._helpers.get_vdisk_copies(volume.name)
-                if not old_opts['mirror_pool'] and new_opts['mirror_pool']:
-                    # retype from non mirror vol to mirror vol
-                    self.add_vdisk_copy(volume['name'],
-                                        new_opts['mirror_pool'], new_type)
-                elif old_opts['mirror_pool'] and not new_opts['mirror_pool']:
-                    # retype from mirror vol to non mirror vol
-                    secondary = copies['secondary']
-                    if secondary:
-                        self._helpers.rm_vdisk_copy(
-                            volume.name, secondary['copy_id'])
-                else:
-                    # migrate the second copy to another pool.
-                    self._helpers.migratevdisk(
-                        volume.name, new_opts['mirror_pool'],
-                        copies['secondary']['copy_id'])
+                retype_iogrp_property(volume,
+                                      new_io_grp, old_io_grp)
+                try:
+                    if self._state['code_level'] < (7, 6, 0, 0):
+                        new_op = self.add_vdisk_copy(volume.name, dest_pool,
+                                                     new_type)
+                        self._add_vdisk_copy_op(ctxt, volume, new_op)
+                    else:
+                        self.add_vdisk_copy(volume.name, dest_pool, new_type,
+                                            auto_delete=True)
+                except exception.VolumeDriverException:
+                    # roll back changing iogrp property
+                    retype_iogrp_property(volume, old_io_grp, new_io_grp)
+                    msg = (_('Unable to retype: A copy of volume %s exists. '
+                             'Retyping would exceed the limit of 2 copies.'),
+                           volume['id'])
+                    raise exception.VolumeDriverException(message=msg)
+            else:
+                retype_iogrp_property(volume, new_io_grp, old_io_grp)
+
+                self._helpers.change_vdisk_options(volume['name'],
+                                                   vdisk_changes,
+                                                   new_opts, self._state)
+                if change_mirror:
+                    copies = self._helpers.get_vdisk_copies(volume.name)
+                    if not old_opts['mirror_pool'] and new_opts['mirror_pool']:
+                        # retype from non mirror vol to mirror vol
+                        self.add_vdisk_copy(volume['name'],
+                                            new_opts['mirror_pool'], new_type)
+                    elif (old_opts['mirror_pool'] and
+                            not new_opts['mirror_pool']):
+                        # retype from mirror vol to non mirror vol
+                        secondary = copies['secondary']
+                        if secondary:
+                            self._helpers.rm_vdisk_copy(
+                                volume.name, secondary['copy_id'])
+                    else:
+                        # migrate the second copy to another pool.
+                        self._helpers.migratevdisk(
+                            volume.name, new_opts['mirror_pool'],
+                            copies['secondary']['copy_id'])
         if new_opts['qos']:
             # Add the new QoS setting to the volume. If the volume has an
             # old QoS setting, it will be overwritten.
@@ -4155,8 +4591,10 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         :param original_volume_status: The status of the original volume
         :returns: model_update to update DB with any needed changes
         """
-        current_name = CONF.volume_name_template % new_volume['id']
-        original_volume_name = CONF.volume_name_template % volume['id']
+        current_name = new_volume.name
+        original_volume_name = volume.name
+        LOG.debug("Attempt rename of %(cur)s to original name %(orig)s",
+                  dict(cur=current_name, orig=original_volume_name))
         try:
             self._helpers.rename_vdisk(current_name, original_volume_name)
             rep_type = self._get_volume_replicated_type(ctxt, new_volume)
@@ -4202,7 +4640,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         vol_rep_type = None
         rel_info = self._helpers.get_relationship_info(vdisk['name'])
         copies = self._helpers.get_vdisk_copies(vdisk['name'])
-        if rel_info:
+        if rel_info and rel_info['copy_type'] != 'activeactive':
             vol_rep_type = (
                 storwize_const.GMCV if
                 storwize_const.GMCV_MULTI == rel_info['cycling_mode']
@@ -4244,6 +4682,34 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             opts = self._get_vdisk_params(volume['volume_type_id'],
                                           volume_metadata=
                                           volume.get('volume_metadata'))
+            # Manage hyperswap volume
+            if rel_info and rel_info['copy_type'] == 'activeactive':
+                if opts['volume_topology'] != 'hyperswap':
+                    msg = _("Failed to manage existing volume due to "
+                            "the hyperswap volume to be managed is "
+                            "mismatched with the provided non-hyperswap type.")
+                    raise exception.ManageExistingVolumeTypeMismatch(
+                        reason=msg)
+                aux_vdisk = rel_info['aux_vdisk_name']
+                aux_vol_attr = self._helpers.get_vdisk_attributes(aux_vdisk)
+                peer_pool = aux_vol_attr['mdisk_grp_name']
+                if opts['peer_pool'] != peer_pool:
+                    msg = (_("Failed to manage existing hyperswap volume due "
+                             "to peer pool mismatch. The peer pool of the "
+                             "volume to be managed is %(vol_pool)s, but the "
+                             "peer_pool of the chosen type is %(peer_pool)s.")
+                           % {'vol_pool': peer_pool,
+                              'peer_pool': opts['peer_pool']})
+                    raise exception.ManageExistingVolumeTypeMismatch(
+                        reason=msg)
+            else:
+                if opts['volume_topology'] == 'hyperswap':
+                    msg = _("Failed to manage existing volume, the volume to "
+                            "be managed is not a hyperswap volume, "
+                            "mismatch with the provided hyperswap type.")
+                    raise exception.ManageExistingVolumeTypeMismatch(
+                        reason=msg)
+
             resp = self._helpers.lsvdiskcopy(vdisk['name'])
             expected_copy_num = 2 if opts['mirror_pool'] else 1
             if len(resp) != expected_copy_num:
@@ -4298,7 +4764,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 msg = (_("Failed to manage existing volume due to "
                          "I/O group mismatch. The I/O group of the "
                          "volume to be managed is %(vdisk_iogrp)s. I/O group"
-                         "of the chosen type is %(opt_iogrp)s.") %
+                         " of the chosen type is %(opt_iogrp)s.") %
                        {'vdisk_iogrp': vdisk['IO_group_name'],
                         'opt_iogrp': opts['iogrp']})
                 raise exception.ManageExistingVolumeTypeMismatch(reason=msg)
@@ -4373,9 +4839,11 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         return self._stats
 
     @staticmethod
-    def _get_rccg_name(group, grp_id=None):
+    def _get_rccg_name(group, grp_id=None, hyper_grp=False):
         group_id = group.id if group else grp_id
-        return storwize_const.RCCG_PREFIX + group_id[0:4] + '-' + group_id[-5:]
+        rccg = (storwize_const.HYPERCG_PREFIX
+                if hyper_grp else storwize_const.RCCG_PREFIX)
+        return rccg + group_id[0:4] + '-' + group_id[-5:]
 
     # Add CG capability to generic volume groups
     def create_group(self, context, group):
@@ -4385,20 +4853,33 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         :param group: the group object.
         :returns: model_update
         """
-
         LOG.debug("Creating group.")
 
-        # we'll rely on the generic group implementation if it is
-        # not a consistency group and not a consistency replication
-        # request.
-        if (not utils.is_group_a_cg_snapshot_type(group) and not
-            utils.is_group_a_type(group,
-                                  "consistent_group_replication_enabled")):
-            raise NotImplementedError()
-
         model_update = {'status': fields.GroupStatus.AVAILABLE}
+        group_type = objects.GroupType.get_by_id(context, group.group_type_id)
+        if len(group_type.group_specs) > 1:
+            LOG.error('Unable to create group: create group with mixed specs '
+                      '%s is not supported.', group_type.group_specs)
+            model_update = {'status': fields.GroupStatus.ERROR}
+            return model_update
 
-        if utils.is_group_a_cg_snapshot_type(group):
+        support_grps = ['group_snapshot_enabled',
+                        'consistent_group_snapshot_enabled',
+                        'consistent_group_replication_enabled',
+                        'hyperswap_group_enabled']
+        supported_grp = False
+        for grp_spec in support_grps:
+            if utils.is_group_a_type(group, grp_spec):
+                supported_grp = True
+                break
+        if not supported_grp:
+            LOG.error('Unable to create group: %s is not a supported group '
+                      'type.', group.group_type_id)
+            model_update = {'status': fields.GroupStatus.ERROR}
+            return model_update
+
+        if (utils.is_group_a_cg_snapshot_type(group) or
+                utils.is_group_a_type(group, "group_snapshot_enabled")):
             for vol_type_id in group.volume_type_ids:
                 replication_type = self._get_volume_replicated_type(
                     context, None, vol_type_id)
@@ -4409,9 +4890,23 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                               'not supported.')
                     model_update = {'status': fields.GroupStatus.ERROR}
                     return model_update
+                opts = self._get_vdisk_params(vol_type_id)
+                if opts['volume_topology']:
+                    # An unsupported configuration
+                    LOG.error('Unable to create group: create consistent '
+                              'snapshot group with a hyperswap volume type'
+                              ' is not supported.')
+                    model_update = {'status': fields.GroupStatus.ERROR}
+                    return model_update
+
+        # We'll rely on the generic group implementation if it is
+        # a non-consistent snapshot group.
+        if utils.is_group_a_type(group, "group_snapshot_enabled"):
+            raise NotImplementedError()
 
         if utils.is_group_a_type(group,
                                  "consistent_group_replication_enabled"):
+            rccg_type = None
             for vol_type_id in group.volume_type_ids:
                 replication_type = self._get_volume_replicated_type(
                     context, None, vol_type_id)
@@ -4422,6 +4917,21 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                               ' type is not supported.')
                     model_update = {'status': fields.GroupStatus.ERROR}
                     return model_update
+                if not rccg_type:
+                    rccg_type = replication_type
+                elif rccg_type != replication_type:
+                    # An unsupported configuration
+                    LOG.error('Unable to create group: create consistent '
+                              'replication group with different replication '
+                              'types is not supported.')
+                    model_update = {'status': fields.GroupStatus.ERROR}
+                    return model_update
+            if rccg_type == storwize_const.GMCV:
+                LOG.error('Unable to create group: create consistent '
+                          'replication group with GMCV replication '
+                          'volume type is not supported.')
+                model_update = {'status': fields.GroupStatus.ERROR}
+                return model_update
 
             rccg_name = self._get_rccg_name(group)
             try:
@@ -4434,6 +4944,33 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 LOG.error("Failed to create rccg  %(rccg)s. "
                           "Exception: %(exception)s.",
                           {'rccg': rccg_name, 'exception': err})
+                model_update = {'status': fields.GroupStatus.ERROR}
+            return model_update
+
+        if utils.is_group_a_type(group, "hyperswap_group_enabled"):
+            if not self._helpers.is_system_topology_hyperswap(self._state):
+                LOG.error('Unable to create group: create group on '
+                          'a system that does not support hyperswap.')
+                model_update = {'status': fields.GroupStatus.ERROR}
+
+            for vol_type_id in group.volume_type_ids:
+                opts = self._get_vdisk_params(vol_type_id)
+                if not opts['volume_topology']:
+                    # An unsupported configuration
+                    LOG.error('Unable to create group: create consistent '
+                              'hyperswap group with non-hyperswap volume'
+                              ' type is not supported.')
+                    model_update = {'status': fields.GroupStatus.ERROR}
+                    return model_update
+
+            rccg_name = self._get_rccg_name(group, hyper_grp=True)
+            try:
+                self._helpers.create_rccg(
+                    rccg_name, self._state['system_name'])
+            except exception.VolumeBackendAPIException as err:
+                LOG.error("Failed to create rccg  %(rccg)s. "
+                          "Exception: %(exception)s.",
+                          {'rccg': group.name, 'exception': err})
                 model_update = {'status': fields.GroupStatus.ERROR}
         return model_update
 
@@ -4449,10 +4986,12 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
         # we'll rely on the generic group implementation if it is
         # not a consistency group and not a consistency replication
-        # request.
+        # request and not a hyperswap group request.
         if (not utils.is_group_a_cg_snapshot_type(group) and not
-            utils.is_group_a_type(group,
-                                  "consistent_group_replication_enabled")):
+                utils.is_group_a_type(group,
+                                      "consistent_group_replication_enabled")
+                and not utils.is_group_a_type(group,
+                                              "hyperswap_group_enabled")):
             raise NotImplementedError()
 
         model_update = {'status': fields.GroupStatus.DELETED}
@@ -4461,6 +5000,11 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                                  "consistent_group_replication_enabled"):
             model_update, volumes_model_update = self._delete_replication_grp(
                 group, volumes)
+
+        if utils.is_group_a_type(group, "hyperswap_group_enabled"):
+            model_update, volumes_model_update = self._delete_hyperswap_grp(
+                group, volumes)
+
         else:
             for volume in volumes:
                 try:
@@ -4493,16 +5037,23 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         LOG.debug("Updating group.")
 
         # we'll rely on the generic group implementation if it is not a
-        # consistency group request and not consistency replication request.
+        # consistency group request and not consistency replication request
+        # and not a hyperswap group request.
         if (not utils.is_group_a_cg_snapshot_type(group) and not
-            utils.is_group_a_type(group,
-                                  "consistent_group_replication_enabled")):
+                utils.is_group_a_type(group,
+                                      "consistent_group_replication_enabled")
+                and not utils.is_group_a_type(group,
+                                              "hyperswap_group_enabled")):
             raise NotImplementedError()
 
         if utils.is_group_a_type(group,
                                  "consistent_group_replication_enabled"):
             return self._update_replication_grp(context, group, add_volumes,
                                                 remove_volumes)
+
+        if utils.is_group_a_type(group, "hyperswap_group_enabled"):
+            return self._update_hyperswap_group(context, group,
+                                                add_volumes, remove_volumes)
 
         if utils.is_group_a_cg_snapshot_type(group):
             return None, None, None
@@ -4528,6 +5079,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             # An unsupported configuration
             msg = _('Unable to create replication group: create replication '
                     'group from a replication group is not supported.')
+            LOG.exception(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        if utils.is_group_a_type(group, "hyperswap_group_enabled"):
+            # An unsupported configuration
+            msg = _('Unable to create hyperswap group: create hyperswap '
+                    'group from a hyperswap group is not supported.')
             LOG.exception(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
@@ -4804,9 +5362,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             return model_update, None, None
 
         # Add remote copy relationship to rccg
+        added_vols = []
         for volume in add_volumes:
             try:
-                rcrel = self._helpers.get_relationship_info(volume.name)
+                vol_name = (volume.name if not self._active_backend_id else
+                            storwize_const.REPLICA_AUX_VOL_PREFIX +
+                            volume.name)
+                rcrel = self._helpers.get_relationship_info(vol_name)
                 if not rcrel:
                     LOG.error("Failed to update group: remote copy "
                               "relationship of %(vol)s does not exist in "
@@ -4815,6 +5377,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 elif (rccg['copy_type'] != 'empty_group' and
                       (rccg['copy_type'] != rcrel['copy_type'] or
                       rccg['state'] != rcrel['state'] or
+                      rccg['primary'] != rcrel['primary'] or
                       rccg['cycling_mode'] != rcrel['cycling_mode'] or
                       (rccg['cycle_period_seconds'] !=
                        rcrel['cycle_period_seconds']))):
@@ -4822,6 +5385,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                               "type of %(vol)s is %(vol_rc_type)s, the rccg "
                               "type is %(rccg_type)s. rcrel state is "
                               "%(rcrel_state)s, rccg state is %(rccg_state)s. "
+                              "rcrel primary is %(rcrel_primary)s, rccg "
+                              "primary is %(rccg_primary)s. "
                               "rcrel cycling mode is %(rcrel_cmode)s, rccg "
                               "cycling mode is %(rccg_cmode)s. rcrel cycling "
                               "period is %(rcrel_period)s, rccg cycling "
@@ -4832,6 +5397,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                                'rccg_type': rccg['copy_type'],
                                'rcrel_state': rcrel['state'],
                                'rccg_state': rccg['state'],
+                               'rcrel_primary': rcrel['primary'],
+                               'rccg_primary': rccg['primary'],
                                'rcrel_cmode': rcrel['cycling_mode'],
                                'rccg_cmode': rccg['cycling_mode'],
                                'rcrel_period': rcrel['cycle_period_seconds'],
@@ -4839,6 +5406,10 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                     model_update['status'] = fields.GroupStatus.ERROR
                 else:
                     self._helpers.chrcrelationship(rcrel['name'], rccg_name)
+                    if rccg['copy_type'] == 'empty_group':
+                        rccg = self._helpers.get_rccg(rccg_name)
+                    added_vols.append({'id': volume.id,
+                                       'group_id': group.id})
             except exception.VolumeBackendAPIException as err:
                 model_update['status'] = fields.GroupStatus.ERROR
                 LOG.error("Failed to add the remote copy of volume %(vol)s to "
@@ -4846,9 +5417,13 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                           {'vol': volume.name, 'exception': err})
 
         # Remove remote copy relationship from rccg
+        removed_vols = []
         for volume in remove_volumes:
             try:
-                rcrel = self._helpers.get_relationship_info(volume.name)
+                vol_name = (volume.name if not self._active_backend_id else
+                            storwize_const.REPLICA_AUX_VOL_PREFIX +
+                            volume.name)
+                rcrel = self._helpers.get_relationship_info(vol_name)
                 if not rcrel:
                     LOG.error("Failed to update group: remote copy "
                               "relationship of %(vol)s does not exist in "
@@ -4856,9 +5431,96 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                     model_update['status'] = fields.GroupStatus.ERROR
                 else:
                     self._helpers.chrcrelationship(rcrel['name'])
+                    removed_vols.append({'id': volume.id,
+                                         'group_id': None})
             except exception.VolumeBackendAPIException as err:
                 model_update['status'] = fields.GroupStatus.ERROR
                 LOG.error("Failed to remove the remote copy of volume %(vol)s "
                           "from group. Exception: %(exception)s.",
                           {'vol': volume.name, 'exception': err})
-        return model_update, None, None
+        return model_update, added_vols, removed_vols
+
+    def _delete_hyperswap_grp(self, group, volumes):
+        model_update = {'status': fields.GroupStatus.DELETED}
+        volumes_model_update = []
+        try:
+            rccg_name = self._get_rccg_name(group, hyper_grp=True)
+            self._helpers.delete_rccg(rccg_name)
+        except exception.VolumeBackendAPIException as err:
+            LOG.error("Failed to delete rccg  %(rccg)s. "
+                      "Exception: %(exception)s.",
+                      {'rccg': group.name, 'exception': err})
+            model_update = {'status': fields.GroupStatus.ERROR_DELETING}
+
+        for volume in volumes:
+            try:
+                self._helpers.delete_hyperswap_volume(volume.name, True)
+                volumes_model_update.append(
+                    {'id': volume.id, 'status': 'deleted'})
+            except exception.VolumeDriverException as err:
+                LOG.error("Failed to delete the volume %(vol)s of CG. "
+                          "Exception: %(exception)s.",
+                          {'vol': volume.name, 'exception': err})
+                volumes_model_update.append(
+                    {'id': volume.id,
+                     'status': 'error_deleting'})
+        return model_update, volumes_model_update
+
+    def _update_hyperswap_group(self, context, group,
+                                add_volumes=None, remove_volumes=None):
+        LOG.info("Update hyperswap group: %(group)s. ", {'group': group.id})
+        model_update = {'status': fields.GroupStatus.AVAILABLE}
+        rccg_name = self._get_rccg_name(group, hyper_grp=True)
+        if not self._helpers.get_rccg(rccg_name):
+            LOG.error("Failed to update rccg: %(grp)s does not exist in "
+                      "backend.", {'grp': group.id})
+            model_update['status'] = fields.GroupStatus.ERROR
+            return model_update, None, None
+
+        # Add remote copy relationship to rccg
+        added_vols = []
+        for volume in add_volumes:
+            hyper_volume = self._helpers.is_volume_hyperswap(volume.name)
+            if not hyper_volume:
+                LOG.error("Failed to update rccg: the non hyperswap volume"
+                          " of %(vol)s can't be added to hyperswap group.",
+                          {'vol': volume.id})
+                model_update['status'] = fields.GroupStatus.ERROR
+                continue
+            try:
+                rcrel = self._helpers.get_relationship_info(volume.name)
+                if not rcrel:
+                    LOG.error("Failed to update rccg: remote copy relationship"
+                              " of %(vol)s does not exist in backend.",
+                              {'vol': volume.id})
+                    model_update['status'] = fields.GroupStatus.ERROR
+                else:
+                    self._helpers.chrcrelationship(rcrel['name'], rccg_name)
+                    added_vols.append({'id': volume.id,
+                                       'group_id': group.id})
+            except exception.VolumeBackendAPIException as err:
+                model_update['status'] = fields.GroupStatus.ERROR
+                LOG.error("Failed to add the remote copy of volume %(vol)s to "
+                          "rccg. Exception: %(exception)s.",
+                          {'vol': volume.name, 'exception': err})
+
+        # Remove remote copy relationship from rccg
+        removed_vols = []
+        for volume in remove_volumes:
+            try:
+                rcrel = self._helpers.get_relationship_info(volume.name)
+                if not rcrel:
+                    LOG.error("Failed to update rccg: remote copy relationship"
+                              " of %(vol)s does not exit in backend.",
+                              {'vol': volume.id})
+                    model_update['status'] = fields.GroupStatus.ERROR
+                else:
+                    self._helpers.chrcrelationship(rcrel['name'])
+                    removed_vols.append({'id': volume.id,
+                                         'group_id': None})
+            except exception.VolumeBackendAPIException as err:
+                model_update['status'] = fields.GroupStatus.ERROR
+                LOG.error("Failed to remove the remote copy of volume %(vol)s "
+                          "from rccg. Exception: %(exception)s.",
+                          {'vol': volume.name, 'exception': err})
+        return model_update, added_vols, removed_vols

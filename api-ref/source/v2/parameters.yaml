@@ -31,25 +31,12 @@ cgsnapshot_id_1:
   in: path
   required: false
   type: string
-consistencygroup_id_2:
-  description: |
-    The ID of the consistency group.
-  in: path
-  required: false
-  type: string
 encryption_id:
   description: |
     The ID of the encryption type.
   in: path
   required: true
   type: string
-force_3:
-  description: |
-    To delete a QoS specification even if it is in-
-    use, set to ``true``. Default is ``false``.
-  in: path
-  required: false
-  type: boolean
 hostname:
   description: |
     The name of the host that hosts the storage back
@@ -108,13 +95,6 @@ transfer_id:
   in: path
   required: false
   type: string
-user_id_1:
-  description: |
-    The user ID. Specify in the URI as
-    ``user_id={user_id}``.
-  in: path
-  required: false
-  type: string
 vol_type_id:
   description: |
     The UUID for an existing volume type.
@@ -132,6 +112,12 @@ volume_type:
     The ID of Volume Type to be accessed by project.
   in: path
   required: false
+  type: string
+volume_type_access:
+  description: |
+    The ID of Volume Type to be accessed by project.
+  in: path
+  required: true
   type: string
 volume_type_id:
   description: |
@@ -294,18 +280,6 @@ availability_zone:
     The name of the availability zone.
   in: body
   required: false
-  type: string
-availability_zone_1:
-  description: |
-    The availability zone.
-  in: body
-  required: false
-  type: string
-availability_zone_2:
-  description: |
-    The availability zone.
-  in: body
-  required: true
   type: string
 availability_zone_3:
   description: |
@@ -592,15 +566,6 @@ extra_specs:
   in: body
   required: true
   type: object
-extra_specs_1:
-  description: |
-    A key and value pair that contains additional
-    specifications that are associated with the volume type. Examples
-    include capabilities, capacity, compression, and so on, depending
-    on the storage driver in use.
-  in: body
-  required: true
-  type: object
 fail_reason:
   description: |
     If the backup failed, the reason for the failure.
@@ -662,7 +627,7 @@ has_dependent_backups:
 host:
   description: |
     The OpenStack Block Storage host where the
-    existing volume resides.
+    existing volume resides. Host format is ``host@backend``.
   in: body
   required: true
   type: string
@@ -1002,6 +967,9 @@ metadata_items:
   in: body
   required: true
   type: integer
+# NOTE(mriedem): We can update the migration_policy retype note about encrypted
+# in-use volumes not being supported once
+# https://bugzilla.redhat.com/show_bug.cgi?id=760547 is fixed.
 migration_policy:
   description: |
     Specify if the volume should be migrated when it is re-typed.
@@ -1010,7 +978,8 @@ migration_policy:
 
     .. note:: If the volume is attached to a server instance and will be
       migrated, then by default policy only users with the administrative role
-      should attempt the retype operation.
+      should attempt the retype operation. A retype which involves a migration
+      to a new host for an *in-use* encrypted volume is not supported.
   in: body
   required: false
   type: string
@@ -1032,14 +1001,16 @@ mountpoint:
   in: body
   required: true
   type: string
-multiattach:
+multiattach_req:
   description: |
     To enable this volume to attach to more than one
     server, set this value to ``true``. Default is ``false``.
+    Note that support for multiattach volumes depends on the volume
+    type being used.
   in: body
   required: false
   type: boolean
-multiattach_1:
+multiattach_resp:
   description: |
     If true, this volume can attach to more than one
     instance.
@@ -1270,6 +1241,7 @@ os-unset_image_metadata:
 os-vol-host-attr:host:
   description: |
     Current back-end of the volume.
+    Host format is ``host@backend#pool``.
   in: body
   required: true
   type: string

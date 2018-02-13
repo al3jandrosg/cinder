@@ -65,6 +65,7 @@ from cinder.i18n import _
 from cinder.image import cache as image_cache
 from cinder.image import glance
 from cinder.image import image_utils
+from cinder.keymgr import migration as key_migration
 from cinder import manager
 from cinder.message import api as message_api
 from cinder.message import message_field
@@ -173,6 +174,8 @@ MAPPING = {
     'DellStorageCenterFCDriver':
     'cinder.volume.drivers.dell_emc.sc.storagecenter_fc.'
     'SCFCDriver',
+    'cinder.volume.drivers.windows.windows.WindowsDriver':
+    'cinder.volume.drivers.windows.iscsi.WindowsISCSIDriver',
 }
 
 
@@ -495,6 +498,10 @@ class VolumeManager(manager.CleanableManager,
         backend_name = vol_utils.extract_host(self.service_topic_queue)
         image_utils.cleanup_temporary_file(backend_name)
 
+        # Migrate any ConfKeyManager keys based on fixed_key to the currently
+        # configured key manager.
+        self._add_to_threadpool(key_migration.migrate_fixed_key, volumes)
+
         # collect and publish service capabilities
         self.publish_service_capabilities(ctxt)
         LOG.info("Driver initialization completed successfully.",
@@ -716,6 +723,10 @@ class VolumeManager(manager.CleanableManager,
         2. Delete a migration volume
            If deleting the volume in a migration, we want to skip
            quotas but we need database updates for the volume.
+
+        3. Delete a temp volume for backup
+           If deleting the temp volume for backup, we want to skip
+           quotas but we need database updates for the volume.
       """
 
         context = context.elevated()
@@ -738,12 +749,25 @@ class VolumeManager(manager.CleanableManager,
             raise exception.VolumeAttached(volume_id=volume.id)
         self._check_is_our_resource(volume)
 
+        if unmanage_only and volume.encryption_key_id is not None:
+            raise exception.Invalid(
+                reason=_("Unmanaging encrypted volumes is not "
+                         "supported."))
+
         if unmanage_only and cascade:
             # This could be done, but is ruled out for now just
             # for simplicity.
             raise exception.Invalid(
                 reason=_("Unmanage and cascade delete options "
                          "are mutually exclusive."))
+
+        # To backup a snapshot or a 'in-use' volume, create a temp volume
+        # from the snapshot or in-use volume, and back it up.
+        # Get admin_metadata to detect temporary volume.
+        is_temp_vol = False
+        if volume.admin_metadata.get('temporary', 'False') == 'True':
+            is_temp_vol = True
+            LOG.info("Trying to delete temp volume: %s", volume.id)
 
         # The status 'deleting' is not included, because it only applies to
         # the source volume to be deleted after a migration. No quota
@@ -756,7 +780,8 @@ class VolumeManager(manager.CleanableManager,
         notification = "delete.start"
         if unmanage_only:
             notification = "unmanage.start"
-        self._notify_about_volume_usage(context, volume, notification)
+        if not is_temp_vol:
+            self._notify_about_volume_usage(context, volume, notification)
         try:
             # NOTE(flaper87): Verify the driver is enabled
             # before going forward. The exception will be caught
@@ -806,9 +831,10 @@ class VolumeManager(manager.CleanableManager,
                 self._clear_db(context, is_migrating_dest, volume,
                                new_status)
 
-        # If deleting source/destination volume in a migration, we should
-        # skip quotas.
-        if not is_migrating:
+        # If deleting source/destination volume in a migration or a temp
+        # volume for backup, we should skip quotas.
+        skip_quota = is_migrating or is_temp_vol
+        if not skip_quota:
             # Get reservations
             try:
                 reservations = None
@@ -830,9 +856,9 @@ class VolumeManager(manager.CleanableManager,
 
         volume.destroy()
 
-        # If deleting source/destination volume in a migration, we should
-        # skip quotas.
-        if not is_migrating:
+        # If deleting source/destination volume in a migration or a temp
+        # volume for backup, we should skip quotas.
+        if not skip_quota:
             notification = "delete.end"
             if unmanage_only:
                 notification = "unmanage.end"
@@ -1197,7 +1223,8 @@ class VolumeManager(manager.CleanableManager,
         if (volume.status == 'in-use' and not volume.multiattach
            and not volume.migration_status):
             raise exception.InvalidVolume(
-                reason=_("volume is already attached"))
+                reason=_("volume is already attached and multiple attachments "
+                         "are not enabled"))
 
         self._notify_about_volume_usage(context, volume,
                                         "attach.start")
@@ -1979,7 +2006,10 @@ class VolumeManager(manager.CleanableManager,
                 src_vol.volume_type_id,
                 dest_vol.volume_type_id):
             attach_encryptor = True
-        properties = utils.brick_get_connector_properties()
+        use_multipath = self.configuration.use_multipath_for_image_xfer
+        enforce_multipath = self.configuration.enforce_multipath_for_image_xfer
+        properties = utils.brick_get_connector_properties(use_multipath,
+                                                          enforce_multipath)
 
         dest_remote = remote in ['dest', 'both']
         dest_attach_info = self._attach_volume(
@@ -2578,6 +2608,9 @@ class VolumeManager(manager.CleanableManager,
         self._notify_about_volume_usage(context, volume, "resize.start")
         try:
             self.driver.extend_volume(volume, new_size)
+        except exception.TargetUpdateFailed:
+            # We just want to log this but continue on with quota commit
+            LOG.warning('Volume extended but failed to update target.')
         except Exception:
             LOG.exception("Extend volume failed.",
                           resource=volume)
@@ -2903,8 +2936,8 @@ class VolumeManager(manager.CleanableManager,
             try:
                 model_update = self.driver.create_group(context, group)
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group.group_type_id):
                     model_update = self._create_group_generic(context, group)
                 else:
                     cg, __ = self._convert_group_to_cg(group, [])
@@ -3032,8 +3065,8 @@ class VolumeManager(manager.CleanableManager,
                         context, group, volumes, group_snapshot,
                         sorted_snapshots, source_group, sorted_source_vols))
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group.group_type_id):
                     model_update, volumes_model_update = (
                         self._create_group_from_src_generic(
                             context, group, volumes, group_snapshot,
@@ -3303,8 +3336,8 @@ class VolumeManager(manager.CleanableManager,
                 model_update, volumes_model_update = (
                     self.driver.delete_group(context, group, volumes))
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group.group_type_id):
                     model_update, volumes_model_update = (
                         self._delete_group_generic(context, group, volumes))
                 else:
@@ -3544,8 +3577,8 @@ class VolumeManager(manager.CleanableManager,
                         add_volumes=add_volumes_ref,
                         remove_volumes=remove_volumes_ref))
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group.group_type_id):
                     model_update, add_volumes_update, remove_volumes_update = (
                         self._update_group_generic(
                             context, group,
@@ -3647,8 +3680,8 @@ class VolumeManager(manager.CleanableManager,
                     self.driver.create_group_snapshot(context, group_snapshot,
                                                       snapshots))
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group_snapshot.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group_snapshot.group_type_id):
                     model_update, snapshots_model_update = (
                         self._create_group_snapshot_generic(
                             context, group_snapshot, snapshots))
@@ -3814,8 +3847,8 @@ class VolumeManager(manager.CleanableManager,
                     self.driver.delete_group_snapshot(context, group_snapshot,
                                                       snapshots))
             except NotImplementedError:
-                cgsnap_type = group_types.get_default_cgsnapshot_type()
-                if group_snapshot.group_type_id != cgsnap_type['id']:
+                if not group_types.is_default_cgsnapshot_type(
+                        group_snapshot.group_type_id):
                     model_update, snapshots_model_update = (
                         self._delete_group_snapshot_generic(
                             context, group_snapshot, snapshots))
@@ -3871,13 +3904,7 @@ class VolumeManager(manager.CleanableManager,
         for snapshot in snapshots:
             # Get reservations
             try:
-                if CONF.no_snapshot_gb_quota:
-                    reserve_opts = {'snapshots': -1}
-                else:
-                    reserve_opts = {
-                        'snapshots': -1,
-                        'gigabytes': -snapshot.volume_size,
-                    }
+                reserve_opts = {'snapshots': -1}
                 volume_ref = objects.Volume.get_by_id(context,
                                                       snapshot.volume_id)
                 QUOTAS.add_volume_type_opts(context,
@@ -4335,13 +4362,11 @@ class VolumeManager(manager.CleanableManager,
         connection_info = conn_data.copy()
         connection_info.update(conn_info)
         values = {'volume_id': volume.id,
-                  'attach_status': 'attaching', }
+                  'attach_status': 'attaching',
+                  'connector': jsonutils.dumps(connector)}
 
+        # TODO(mriedem): Use VolumeAttachment.save() here.
         self.db.volume_attachment_update(ctxt, attachment.id, values)
-        self.db.attachment_specs_update_or_create(
-            ctxt,
-            attachment.id,
-            connector)
 
         connection_info['attachment_id'] = attachment.id
         return connection_info
@@ -4378,6 +4403,13 @@ class VolumeManager(manager.CleanableManager,
             context.elevated(),
             attachment_ref.volume_id,
             {'attached_mode': mode}, False)
+
+        # The prior seting of mode in the attachment_ref overrides any
+        # settings within the connector when dealing with read only
+        # attachment options
+        if mode != 'ro' and attachment_ref.attach_mode == 'ro':
+            connector['mode'] = 'ro'
+            mode = 'ro'
 
         try:
             if volume_metadata.get('readonly') == 'True' and mode != 'ro':
@@ -4416,14 +4448,24 @@ class VolumeManager(manager.CleanableManager,
 
     def _connection_terminate(self, context, volume,
                               attachment, force=False):
-        """Remove a volume connection, but leave attachment."""
+        """Remove a volume connection, but leave attachment.
+
+        Exits early if the attachment does not have a connector and returns
+        None to indicate shared connections are irrelevant.
+        """
         utils.require_driver_initialized(self.driver)
-
-        # TODO(jdg): Add an object method to cover this
-        connector = self.db.attachment_specs_get(
-            context,
-            attachment.id)
-
+        connector = attachment.connector
+        if not connector and not force:
+            # It's possible to attach a volume to a shelved offloaded server
+            # in nova, and a shelved offloaded server is not on a compute host,
+            # which means the attachment was made without a host connector,
+            # so if we don't have a connector we can't terminate a connection
+            # that was never actually made to the storage backend, so just
+            # log a message and exit.
+            LOG.debug('No connector for attachment %s; skipping storage '
+                      'backend terminate_connection call.', attachment.id)
+            # None indicates we don't know and don't care.
+            return None
         try:
             shared_connections = self.driver.terminate_connection(volume,
                                                                   connector,
@@ -4476,7 +4518,7 @@ class VolumeManager(manager.CleanableManager,
                       {'attachment_id': attachment.id},
                       resource=vref)
             self.driver.detach_volume(context, vref, attachment)
-            if not has_shared_connection:
+            if has_shared_connection is not None and not has_shared_connection:
                 self.driver.remove_export(context.elevated(), vref)
         except Exception:
             # FIXME(jdg): Obviously our volume object is going to need some

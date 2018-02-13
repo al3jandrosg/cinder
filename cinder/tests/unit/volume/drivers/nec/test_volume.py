@@ -187,8 +187,8 @@ xml_out = '''
      <UNIT name="LD Name">4T7JpyqI3UuPlKeT9D3VQF</UNIT>
      <UNIT name="LD Capacity">6442450944</UNIT>
      <UNIT name="Pool No.(h)">0001</UNIT>
-     <UNIT name="Purpose">RPL</UNIT>
-     <UNIT name="RPL Attribute">IV</UNIT>
+     <UNIT name="Purpose">(invalid attribute)</UNIT>
+     <UNIT name="RPL Attribute">SV</UNIT>
     </SECTION>
    </OBJECT>
    <OBJECT name="Logical Disk">
@@ -302,30 +302,6 @@ xml_out = '''
     </SECTION>
     <SECTION name="Path List">
      <UNIT name="Path">1000-0090-FAA0-786A</UNIT>
-    </SECTION>
-   </OBJECT>
-   <OBJECT name="LD Set(FC)">
-    <SECTION name="LD Set(FC) Information">
-     <UNIT name="Platform">WN</UNIT>
-     <UNIT name="LD Set Name">TNES120250</UNIT>
-    </SECTION>
-    <SECTION name="Path List">
-     <UNIT name="Path">1000-0090-FA76-9605</UNIT>
-    </SECTION>
-    <SECTION name="Path List">
-     <UNIT name="Path">1000-0090-FA76-9604</UNIT>
-    </SECTION>
-   </OBJECT>
-   <OBJECT name="LD Set(FC)">
-    <SECTION name="LD Set(FC) Information">
-     <UNIT name="Platform">WN</UNIT>
-     <UNIT name="LD Set Name">TNES140098</UNIT>
-    </SECTION>
-    <SECTION name="Path List">
-     <UNIT name="Path">1000-0090-FA53-302C</UNIT>
-    </SECTION>
-    <SECTION name="Path List">
-     <UNIT name="Path">1000-0090-FA53-302D</UNIT>
     </SECTION>
     <SECTION name="LUN/LD List">
      <UNIT name="LUN(h)">0000</UNIT>
@@ -605,6 +581,39 @@ class NominatePoolLDTest(volume_helper.MStorageDSVDriver, test.TestCase):
                                                   999999999999)
 
 
+class GetInformationTest(volume_helper.MStorageDSVDriver, test.TestCase):
+
+    def setUp(self):
+        super(GetInformationTest, self).setUp()
+        self._set_config(conf.Configuration(None), 'dummy', 'dummy')
+        self.do_setup(None)
+
+    @mock.patch('cinder.volume.drivers.nec.volume_common.MStorageVolumeCommon.'
+                '_create_ismview_dir', new=mock.Mock())
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_get_ldset(self):
+        self.xml = self._cli.view_all()
+        (self.pools,
+         self.lds,
+         self.ldsets,
+         self.used_ldns,
+         self.hostports,
+         self.max_ld_count) = self.configs(self.xml)
+        self._properties['ldset_name'] = ''
+        ldset = self.get_ldset(self.ldsets)
+        self.assertIsNone(ldset)
+        self._properties['ldset_name'] = 'LX:OpenStack1'
+        ldset = self.get_ldset(self.ldsets)
+        self.assertEqual('LX:OpenStack1', ldset['ldsetname'])
+        self._properties['ldset_name'] = 'LX:OpenStackX'
+        with self.assertRaisesRegexp(exception.NotFound,
+                                     'Logical Disk Set'
+                                     ' `LX:OpenStackX`'
+                                     ' could not be found.'):
+            self.get_ldset(self.ldsets)
+
+
 class VolumeCreateTest(volume_helper.MStorageDSVDriver, test.TestCase):
 
     @mock.patch('cinder.volume.drivers.nec.volume_common.MStorageVolumeCommon.'
@@ -800,9 +809,6 @@ class ExportTest(volume_helper.MStorageDSVDriver, test.TestCase):
          self.used_ldns,
          self.hostports,
          self.max_ld_count) = self.configs(self.xml)
-        mock_getldset = mock.Mock()
-        self.get_ldset = mock_getldset
-        self.get_ldset.return_value = self.ldsets["LX:OpenStack0"]
 
     @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI._execute',
                 patch_execute)
@@ -951,6 +957,34 @@ class ExportTest(volume_helper.MStorageDSVDriver, test.TestCase):
         self.assertEqual('fibre_channel', info['driver_volume_type'])
         self.assertEqual({}, info['data'])
 
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI._execute',
+                patch_execute)
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.view_all',
+                patch_view_all)
+    def test_iscsi_portal_with_controller_node_name(self):
+        self.vol.id = "46045673-41e7-44a7-9333-02f07feab04b"
+        self.vol.status = 'downloading'
+        connector = {'initiator': "iqn.1994-05.com.redhat:d1d8e8f23255"}
+        self._properties['ldset_controller_node_name'] = 'LX:OpenStack1'
+        self._properties['portal_number'] = 2
+        location = self.iscsi_do_export(None, self.vol, connector)
+        self.assertEqual('192.168.1.90:3260;192.168.1.91:3260;'
+                         '192.168.2.92:3260;192.168.2.93:3260'
+                         ',1 iqn.2001-03.target0000 0',
+                         location['provider_location'])
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI._execute',
+                patch_execute)
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.view_all',
+                patch_view_all)
+    def test_fc_do_export_with_controller_node_name(self):
+        self.vol.id = "46045673-41e7-44a7-9333-02f07feab04b"
+        self.vol.status = 'downloading'
+        connector = {'wwpns': ["10000090FAA0786A", "10000090FAA0786B"]}
+        self._properties['ldset_controller_node_name'] = 'LX:OpenStack0'
+        location = self.fc_do_export(None, self.vol, connector)
+        self.assertIsNone(location)
+
 
 class DeleteDSVVolume_test(volume_helper.MStorageDSVDriver,
                            test.TestCase):
@@ -1022,25 +1056,54 @@ class NonDisruptiveBackup_test(volume_helper.MStorageDSVDriver,
             self._validate_ld_exist(
                 self.lds, self.vol.id, self._properties['ld_name_format'])
 
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI._execute',
+                patch_execute)
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', new=mock.Mock())
     def test_validate_iscsildset_exist(self):
         connector = {'initiator': "iqn.1994-05.com.redhat:d1d8e8f23255"}
         ldset = self._validate_iscsildset_exist(self.ldsets, connector)
         self.assertEqual('LX:OpenStack0', ldset['ldsetname'])
-        connector = {'initiator': "iqn.1994-05.com.redhat:d1d8e8f23255XX"}
-        with self.assertRaisesRegexp(exception.NotFound,
-                                     'Appropriate Logical Disk Set'
-                                     ' could not be found.'):
-            self._validate_iscsildset_exist(self.ldsets, connector)
+        connector = {'initiator': "iqn.1994-05.com.redhat:d1d8e8f232XX"}
+        mock_data = {'ldsetname': 'LX:redhatd1d8e8f23',
+                     'protocol': 'iSCSI',
+                     'portal_list': ['1.1.1.1:3260', '2.2.2.2:3260'],
+                     'lds': {},
+                     'initiator_list':
+                         ['iqn.1994-05.com.redhat:d1d8e8f232XX']}
+        mock_ldset = {}
+        mock_ldset['LX:redhatd1d8e8f23'] = mock_data
+        mock_configs = mock.Mock()
+        self.configs = mock_configs
+        self.configs.return_value = None, None, mock_ldset, None, None, None
+        ldset = self._validate_iscsildset_exist(self.ldsets, connector)
+        self.assertEqual('LX:redhatd1d8e8f23', ldset['ldsetname'])
+        self.assertEqual('iqn.1994-05.com.redhat:d1d8e8f232XX',
+                         ldset['initiator_list'][0])
 
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI._execute',
+                patch_execute)
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', new=mock.Mock())
     def test_validate_fcldset_exist(self):
         connector = {'wwpns': ["10000090FAA0786A", "10000090FAA0786B"]}
         ldset = self._validate_fcldset_exist(self.ldsets, connector)
         self.assertEqual('LX:OpenStack1', ldset['ldsetname'])
         connector = {'wwpns': ["10000090FAA0786X", "10000090FAA0786Y"]}
-        with self.assertRaisesRegexp(exception.NotFound,
-                                     'Appropriate Logical Disk Set'
-                                     ' could not be found.'):
-            self._validate_fcldset_exist(self.ldsets, connector)
+        mock_data = {'ldsetname': 'LX:10000090FAA0786X',
+                     'lds': {},
+                     'protocol': 'FC',
+                     'wwpn': ["1000-0090-FAA0-786X", "1000-0090-FAA0-786Y"],
+                     'port': []}
+        mock_ldset = {}
+        mock_ldset['LX:10000090FAA0786X'] = mock_data
+        mock_configs = mock.Mock()
+        self.configs = mock_configs
+        self.configs.return_value = None, None, mock_ldset, None, None, None
+        ldset = self._validate_fcldset_exist(self.ldsets, connector)
+        self.assertEqual('LX:10000090FAA0786X', ldset['ldsetname'])
+        self.assertEqual('1000-0090-FAA0-786X', ldset['wwpn'][0])
+        self.assertEqual('1000-0090-FAA0-786Y', ldset['wwpn'][1])
 
     def test_enumerate_iscsi_portals(self):
         connector = {'initiator': "iqn.1994-05.com.redhat:d1d8e8f23255"}
@@ -1137,3 +1200,182 @@ class Migrate_test(volume_helper.MStorageDSVDriver, test.TestCase):
                                                   self.newvol, 'available')
         self.assertIsNone(update_data['_name_id'])
         self.assertIsNone(update_data['provider_location'])
+
+
+class ManageUnmanage_test(volume_helper.MStorageDSVDriver, test.TestCase):
+
+    @mock.patch('cinder.volume.drivers.nec.volume_common.MStorageVolumeCommon.'
+                '_create_ismview_dir', new=mock.Mock())
+    def setUp(self):
+        super(ManageUnmanage_test, self).setUp()
+        self._set_config(conf.Configuration(None), 'dummy', 'dummy')
+        self.do_setup(None)
+        self._properties['pool_pools'] = {0}
+        self._properties['pool_backup_pools'] = {1}
+
+    def test_is_manageable_volume(self):
+        ld_ok_iv = {'pool_num': 0, 'RPL Attribute': 'IV', 'Purpose': '---'}
+        ld_ok_bv = {'pool_num': 0, 'RPL Attribute': 'BV', 'Purpose': 'INV'}
+        ld_ng_pool = {'pool_num': 1, 'RPL Attribute': 'IV', 'Purpose': '---'}
+        ld_ng_rpl1 = {'pool_num': 0, 'RPL Attribute': 'MV', 'Purpose': 'INV'}
+        ld_ng_rpl2 = {'pool_num': 0, 'RPL Attribute': 'RV', 'Purpose': 'INV'}
+        ld_ng_rpl3 = {'pool_num': 0, 'RPL Attribute': 'SV', 'Purpose': 'INV'}
+        ld_ng_purp = {'pool_num': 0, 'RPL Attribute': 'IV', 'Purpose': 'INV'}
+        self.assertTrue(self._is_manageable_volume(ld_ok_iv))
+        self.assertTrue(self._is_manageable_volume(ld_ok_bv))
+        self.assertFalse(self._is_manageable_volume(ld_ng_pool))
+        self.assertFalse(self._is_manageable_volume(ld_ng_rpl1))
+        self.assertFalse(self._is_manageable_volume(ld_ng_rpl2))
+        self.assertFalse(self._is_manageable_volume(ld_ng_rpl3))
+        self.assertFalse(self._is_manageable_volume(ld_ng_purp))
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_get_manageable_volumes(self):
+        current_volumes = []
+        volumes = self.get_manageable_volumes(current_volumes, None,
+                                              100, 0, ['reference'], ['dec'])
+        self.assertEqual('LX:287RbQoP7VdwR1WsPC2fZT',
+                         volumes[2]['reference']['source-name'])
+        current_volumes = []
+        volumes = self.get_manageable_volumes(current_volumes, None,
+                                              100, 0, ['reference'], ['asc'])
+        self.assertEqual('  :2000000991020012000A',
+                         volumes[0]['reference']['source-name'])
+        self.assertEqual(10, len(volumes))
+
+        volume = {'id': '46045673-41e7-44a7-9333-02f07feab04b'}
+        current_volumes = []
+        current_volumes.append(volume)
+        volumes = self.get_manageable_volumes(current_volumes, None,
+                                              100, 0, ['reference'], ['dec'])
+        self.assertFalse(volumes[2]['safe_to_manage'])
+        self.assertFalse(volumes[3]['safe_to_manage'])
+        self.assertTrue(volumes[4]['safe_to_manage'])
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_manage_existing(self):
+        mock_rename = mock.Mock()
+        self._cli.changeldname = mock_rename
+        self.newvol = DummyVolume()
+        self.newvol.id = "46045673-41e7-44a7-9333-02f07feab04b"
+
+        current_volumes = []
+        volumes = self.get_manageable_volumes(current_volumes, None,
+                                              100, 0, ['reference'], ['dec'])
+        self.manage_existing(self.newvol, volumes[4]['reference'])
+        self._cli.changeldname.assert_called_once_with(
+            None,
+            'LX:287RbQoP7VdwR1WsPC2fZT',
+            '  :20000009910200140009')
+        with self.assertRaisesRegex(exception.ManageExistingInvalidReference,
+                                    'Specified resource is already in-use.'):
+            self.manage_existing(self.newvol, volumes[3]['reference'])
+        volume = {'source-name': 'LX:yEUHrXa5AHMjOZZLb93eP'}
+        with self.assertRaisesRegex(exception.ManageExistingVolumeTypeMismatch,
+                                    'Volume type is unmatched.'):
+            self.manage_existing(self.newvol, volume)
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_manage_existing_get_size(self):
+        self.newvol = DummyVolume()
+        self.newvol.id = "46045673-41e7-44a7-9333-02f07feab04b"
+
+        current_volumes = []
+        volumes = self.get_manageable_volumes(current_volumes, None,
+                                              100, 0, ['reference'], ['dec'])
+        size_in_gb = self.manage_existing_get_size(self.newvol,
+                                                   volumes[3]['reference'])
+        self.assertEqual(10, size_in_gb)
+
+
+class ManageUnmanage_Snap_test(volume_helper.MStorageDSVDriver, test.TestCase):
+
+    @mock.patch('cinder.volume.drivers.nec.volume_common.MStorageVolumeCommon.'
+                '_create_ismview_dir', new=mock.Mock())
+    def setUp(self):
+        super(ManageUnmanage_Snap_test, self).setUp()
+        self._set_config(conf.Configuration(None), 'dummy', 'dummy')
+        self.do_setup(None)
+        self._properties['pool_pools'] = {0}
+        self._properties['pool_backup_pools'] = {1}
+
+    def test_is_manageable_snapshot(self):
+        ld_ok_sv1 = {'pool_num': 1, 'RPL Attribute': 'SV', 'Purpose': 'INV'}
+        ld_ok_sv2 = {'pool_num': 1, 'RPL Attribute': 'SV', 'Purpose': '---'}
+        ld_ng_pool = {'pool_num': 0, 'RPL Attribute': 'SV', 'Purpose': 'INV'}
+        ld_ng_rpl1 = {'pool_num': 1, 'RPL Attribute': 'MV', 'Purpose': 'INV'}
+        ld_ng_rpl2 = {'pool_num': 1, 'RPL Attribute': 'RV', 'Purpose': 'INV'}
+        ld_ng_rpl3 = {'pool_num': 1, 'RPL Attribute': 'IV', 'Purpose': '---'}
+        ld_ng_rpl4 = {'pool_num': 1, 'RPL Attribute': 'BV', 'Purpose': 'INV'}
+        self.assertTrue(self._is_manageable_snapshot(ld_ok_sv1))
+        self.assertTrue(self._is_manageable_snapshot(ld_ok_sv2))
+        self.assertFalse(self._is_manageable_snapshot(ld_ng_pool))
+        self.assertFalse(self._is_manageable_snapshot(ld_ng_rpl1))
+        self.assertFalse(self._is_manageable_snapshot(ld_ng_rpl2))
+        self.assertFalse(self._is_manageable_snapshot(ld_ng_rpl3))
+        self.assertFalse(self._is_manageable_snapshot(ld_ng_rpl4))
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_get_manageable_snapshots(self):
+        mock_getbvname = mock.Mock()
+        self._cli.get_bvname = mock_getbvname
+        self._cli.get_bvname.return_value = "yEUHrXa5AHMjOZZLb93eP"
+        current_snapshots = []
+        volumes = self.get_manageable_snapshots(current_snapshots, None,
+                                                100, 0, ['reference'], ['asc'])
+        self.assertEqual('LX:4T7JpyqI3UuPlKeT9D3VQF',
+                         volumes[0]['reference']['source-name'])
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_manage_existing_snapshot(self):
+        mock_rename = mock.Mock()
+        self._cli.changeldname = mock_rename
+        self.newsnap = DummyVolume()
+        self.newsnap.id = "46045673-41e7-44a7-9333-02f07feab04b"
+        self.newsnap.volume_id = "1febb976-86d0-42ed-9bc0-4aa3e158f27d"
+        mock_getbvname = mock.Mock()
+        self._cli.get_bvname = mock_getbvname
+
+        self._cli.get_bvname.return_value = "yEUHrXa5AHMjOZZLb93eP"
+        current_snapshots = []
+        snaps = self.get_manageable_snapshots(current_snapshots, None,
+                                              100, 0, ['reference'], ['asc'])
+        self.manage_existing_snapshot(self.newsnap, snaps[0]['reference'])
+        self._cli.changeldname.assert_called_once_with(
+            None,
+            'LX:287RbQoP7VdwR1WsPC2fZT',
+            'LX:4T7JpyqI3UuPlKeT9D3VQF')
+
+        self.newsnap.volume_id = "AAAAAAAA"
+        with self.assertRaisesRegex(exception.ManageExistingInvalidReference,
+                                    'Snapshot source is unmatch.'):
+            self.manage_existing_snapshot(self.newsnap, snaps[0]['reference'])
+
+        self._cli.get_bvname.return_value = "2000000991020012000C"
+        self.newsnap.volume_id = "00046058-d38e-7f60-67b7-59ed6422520c"
+        snap = {'source-name': '  :2000000991020012000B'}
+        with self.assertRaisesRegex(exception.ManageExistingVolumeTypeMismatch,
+                                    'Volume type is unmatched.'):
+            self.manage_existing_snapshot(self.newsnap, snap)
+
+    @mock.patch('cinder.volume.drivers.nec.cli.MStorageISMCLI.'
+                'view_all', patch_view_all)
+    def test_manage_existing_snapshot_get_size(self):
+        self.newsnap = DummyVolume()
+        self.newsnap.id = "46045673-41e7-44a7-9333-02f07feab04b"
+        mock_getbvname = mock.Mock()
+        self._cli.get_bvname = mock_getbvname
+        self._cli.get_bvname.return_value = "yEUHrXa5AHMjOZZLb93eP"
+
+        current_snapshots = []
+        snaps = self.get_manageable_snapshots(current_snapshots, None,
+                                              100, 0, ['reference'], ['asc'])
+        size_in_gb = self.manage_existing_snapshot_get_size(
+            self.newsnap,
+            snaps[0]['reference'])
+        self.assertEqual(6, size_in_gb)

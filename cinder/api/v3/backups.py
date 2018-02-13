@@ -16,14 +16,13 @@
 """The backups V3 API."""
 
 from oslo_log import log as logging
-from webob import exc
 
 from cinder.api.contrib import backups as backups_v2
 from cinder.api import microversions as mv
 from cinder.api.openstack import wsgi
+from cinder.api.schemas import backups as backup
 from cinder.api.v3.views import backups as backup_views
-from cinder import exception
-from cinder.i18n import _
+from cinder.api import validation
 from cinder.policies import backups as policy
 
 
@@ -36,15 +35,16 @@ class BackupsController(backups_v2.BackupsController):
     _view_builder_class = backup_views.ViewBuilder
 
     @wsgi.Controller.api_version(mv.BACKUP_UPDATE)
+    @validation.schema(backup.update, '3.9', '3.42')
+    @validation.schema(backup.update_backup_v343, '3.43')
     def update(self, req, id, body):
         """Update a backup."""
         context = req.environ['cinder.context']
-        self.assert_valid_body(body, 'backup')
         req_version = req.api_version_request
 
         backup_update = body['backup']
 
-        self.validate_name_and_description(backup_update)
+        self.validate_name_and_description(backup_update, check_length=False)
         update_dict = {}
         if 'name' in backup_update:
             update_dict['display_name'] = backup_update.pop('name')
@@ -54,10 +54,6 @@ class BackupsController(backups_v2.BackupsController):
         if (req_version.matches(
                 mv.BACKUP_METADATA) and 'metadata' in backup_update):
             update_dict['metadata'] = backup_update.pop('metadata')
-        # Check no unsupported fields.
-        if backup_update:
-            msg = _("Unsupported fields %s.") % (", ".join(backup_update))
-            raise exc.HTTPBadRequest(explanation=msg)
 
         new_backup = self.backup_api.update(context, id, update_dict)
 
@@ -80,11 +76,8 @@ class BackupsController(backups_v2.BackupsController):
 
         resp_backup = self._view_builder.detail(req, backup)
         if req_version.matches(mv.BACKUP_PROJECT):
-            try:
-                context.authorize(policy.BACKUP_ATTRIBUTES_POLICY)
+            if context.authorize(policy.BACKUP_ATTRIBUTES_POLICY, fatal=False):
                 self._add_backup_project_attribute(req, resp_backup['backup'])
-            except exception.PolicyNotAuthorized:
-                pass
         return resp_backup
 
     def detail(self, req):
@@ -93,12 +86,9 @@ class BackupsController(backups_v2.BackupsController):
         req_version = req.api_version_request
 
         if req_version.matches(mv.BACKUP_PROJECT):
-            try:
-                context.authorize(policy.BACKUP_ATTRIBUTES_POLICY)
+            if context.authorize(policy.BACKUP_ATTRIBUTES_POLICY, fatal=False):
                 for bak in resp_backup['backups']:
                     self._add_backup_project_attribute(req, bak)
-            except exception.PolicyNotAuthorized:
-                pass
         return resp_backup
 
     def _convert_sort_name(self, req_version, sort_keys):

@@ -6,5 +6,4 @@ usr/bin/cinder-rootwrap
 usr/bin/cinder-rtstool
 usr/bin/cinder-wsgi
 usr/etc/cinder/api-paste.ini etc/cinder
-usr/etc/cinder/policy.json etc/cinder
 usr/etc/cinder/rootwrap.conf etc/cinder

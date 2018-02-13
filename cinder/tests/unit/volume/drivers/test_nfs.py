@@ -33,6 +33,7 @@ from cinder.tests.unit import fake_volume
 from cinder.volume import configuration as conf
 from cinder.volume.drivers import nfs
 from cinder.volume.drivers import remotefs
+from cinder.volume import utils as vutils
 
 
 class RemoteFsDriverTestCase(test.TestCase):
@@ -413,6 +414,9 @@ class NfsDriverTestCase(test.TestCase):
         self.configuration.nas_share_path = None
         self.configuration.nas_mount_options = None
         self.configuration.volume_dd_blocksize = '1M'
+
+        self.mock_object(vutils, 'get_max_over_subscription_ratio',
+                         return_value=1)
 
         self.context = context.get_admin_context()
 
@@ -1195,7 +1199,9 @@ class NfsDriverTestCase(test.TestCase):
         drv._copy_volume_from_snapshot(fake_snap, dest_volume, size)
 
         mock_read_info_file.assert_called_once_with(info_path)
-        mock_img_info.assert_called_once_with(snap_path, run_as_root=True)
+        mock_img_info.assert_called_once_with(snap_path,
+                                              force_share=True,
+                                              run_as_root=True)
         used_qcow = nfs_conf['nfs_qcow2_volumes']
         mock_convert_image.assert_called_once_with(
             src_vol_path, dest_vol_path, 'qcow2' if used_qcow else 'raw',
@@ -1308,7 +1314,9 @@ class NfsDriverTestCase(test.TestCase):
 
         conn_info = drv.initialize_connection(volume, None)
 
-        mock_img_utils.assert_called_once_with(vol_path, run_as_root=True)
+        mock_img_utils.assert_called_once_with(vol_path,
+                                               force_share=True,
+                                               run_as_root=True)
         self.assertEqual('nfs', conn_info['driver_volume_type'])
         self.assertEqual(volume.name, conn_info['data']['name'])
         self.assertEqual(self.TEST_MNT_POINT_BASE,

@@ -21,6 +21,7 @@ from six.moves import http_client
 from six.moves.urllib.parse import urlencode
 import webob
 
+from cinder.common import constants
 from cinder import context
 from cinder import exception
 from cinder import objects
@@ -120,14 +121,17 @@ class SnapshotManageTest(test.TestCase):
         """
         mock_db.return_value = fake_service.fake_service_obj(
             self._admin_ctxt,
-            binary='cinder-volume')
-        body = {'snapshot': {'volume_id': fake.VOLUME_ID, 'ref': 'fake_ref'}}
+            binary=constants.VOLUME_BINARY)
+
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': {'fake_key': 'fake_ref'}}}
+
         res = self._get_resp_post(body)
         self.assertEqual(http_client.ACCEPTED, res.status_int, res)
 
         # Check the db.service_get was called with correct arguments.
         mock_db.assert_called_once_with(
-            mock.ANY, None, host='fake_host', binary='cinder-volume',
+            mock.ANY, None, host='fake_host', binary=constants.VOLUME_BINARY,
             cluster_name=None)
 
         # Check the create_snapshot_in_db was called with correct arguments.
@@ -141,7 +145,50 @@ class SnapshotManageTest(test.TestCase):
         # correct arguments.
         self.assertEqual(1, mock_rpcapi.call_count)
         args = mock_rpcapi.call_args[0]
-        self.assertEqual('fake_ref', args[2])
+        self.assertEqual({u'fake_key': u'fake_ref'}, args[2])
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.manage_existing_snapshot')
+    @mock.patch('cinder.volume.api.API.create_snapshot_in_db')
+    @mock.patch('cinder.objects.service.Service.get_by_id')
+    def test_manage_snapshot_ok_with_metadata_null(
+            self, mock_db, mock_create_snapshot, mock_rpcapi):
+        mock_db.return_value = fake_service.fake_service_obj(
+            self._admin_ctxt,
+            binary=constants.VOLUME_BINARY)
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': {'fake_key': 'fake_ref'},
+                             'name': 'test',
+                             'description': 'test',
+                             'metadata': None}}
+
+        res = self._get_resp_post(body)
+        self.assertEqual(http_client.ACCEPTED, res.status_int)
+        args = mock_create_snapshot.call_args[0]
+        # 5th argument of args is metadata.
+        self.assertIsNone(args[5])
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.manage_existing_snapshot')
+    @mock.patch('cinder.volume.api.API.create_snapshot_in_db')
+    @mock.patch('cinder.db.sqlalchemy.api.service_get')
+    def test_manage_snapshot_ok_ref_as_string(self, mock_db,
+                                              mock_create_snapshot,
+                                              mock_rpcapi):
+
+        mock_db.return_value = fake_service.fake_service_obj(
+            self._admin_ctxt,
+            binary=constants.VOLUME_BINARY)
+
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': "string"}}
+
+        res = self._get_resp_post(body)
+        self.assertEqual(http_client.ACCEPTED, res.status_int, res)
+
+        # Check the volume_rpcapi.manage_existing_snapshot was called with
+        # correct arguments.
+        self.assertEqual(1, mock_rpcapi.call_count)
+        args = mock_rpcapi.call_args[0]
+        self.assertEqual(body['snapshot']['ref'], args[2])
 
     @mock.patch('cinder.objects.service.Service.is_up',
                 return_value=True,
@@ -154,7 +201,8 @@ class SnapshotManageTest(test.TestCase):
         """Test manage snapshot failure due to disabled service."""
         mock_db.return_value = fake_service.fake_service_obj(self._admin_ctxt,
                                                              disabled=True)
-        body = {'snapshot': {'volume_id': fake.VOLUME_ID, 'ref': 'fake_ref'}}
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID, 'ref': {
+            'fake_key': 'fake_ref'}}}
         res = self._get_resp_post(body)
         self.assertEqual(http_client.BAD_REQUEST, res.status_int, res)
         self.assertEqual(exception.ServiceUnavailable.message,
@@ -172,7 +220,8 @@ class SnapshotManageTest(test.TestCase):
                                      mock_rpcapi, mock_is_up):
         """Test manage snapshot failure due to down service."""
         mock_db.return_value = fake_service.fake_service_obj(self._admin_ctxt)
-        body = {'snapshot': {'volume_id': fake.VOLUME_ID, 'ref': 'fake_ref'}}
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': {'fake_key': 'fake_ref'}}}
         res = self._get_resp_post(body)
         self.assertEqual(http_client.BAD_REQUEST, res.status_int, res)
         self.assertEqual(exception.ServiceUnavailable.message,
@@ -201,10 +250,9 @@ class SnapshotManageTest(test.TestCase):
 
     def test_manage_snapshot_error_volume_id(self):
         """Test correct failure when volume can't be found."""
-        body = {'snapshot': {'volume_id': 'error_volume_id',
-                             'ref': 'fake_ref'}}
+        body = {'snapshot': {'volume_id': 'error_volume_id', 'ref': {}}}
         res = self._get_resp_post(body)
-        self.assertEqual(http_client.NOT_FOUND, res.status_int)
+        self.assertEqual(http_client.BAD_REQUEST, res.status_int)
 
     def _get_resp_get(self, host, detailed, paging, admin=True):
         """Helper to execute a GET os-snapshot-manage API call."""
@@ -317,3 +365,20 @@ class SnapshotManageTest(test.TestCase):
         self.assertEqual(exception.ServiceUnavailable.message,
                          res.json['badRequest']['message'])
         self.assertTrue(mock_is_up.called)
+
+    @mock.patch('cinder.volume.rpcapi.VolumeAPI.manage_existing_snapshot')
+    @mock.patch('cinder.volume.api.API.create_snapshot_in_db')
+    @mock.patch('cinder.objects.service.Service.get_by_id')
+    def test_manage_snapshot_with_null_validate(
+            self, mock_db, mock_create_snapshot, mock_rpcapi):
+        mock_db.return_value = fake_service.fake_service_obj(
+            self._admin_ctxt,
+            binary=constants.VOLUME_BINARY)
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': {'fake_key': 'fake_ref'},
+                             'name': None,
+                             'description': None}}
+
+        res = self._get_resp_post(body)
+        self.assertEqual(http_client.ACCEPTED, res.status_int, res)
+        self.assertIn('snapshot', jsonutils.loads(res.body))

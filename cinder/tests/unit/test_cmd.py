@@ -37,6 +37,7 @@ from cinder.cmd import rtstool as cinder_rtstool
 from cinder.cmd import scheduler as cinder_scheduler
 from cinder.cmd import volume as cinder_volume
 from cinder.cmd import volume_usage_audit
+from cinder.common import constants
 from cinder import context
 from cinder.db.sqlalchemy import api as sqlalchemy_api
 from cinder import exception
@@ -139,11 +140,13 @@ class TestCinderSchedulerCmd(test.TestCase):
         service_wait.assert_called_once_with()
 
 
-class TestCinderVolumeCmd(test.TestCase):
+class TestCinderVolumeCmdPosix(test.TestCase):
 
     def setUp(self):
-        super(TestCinderVolumeCmd, self).setUp()
+        super(TestCinderVolumeCmdPosix, self).setUp()
         sys.argv = ['cinder-volume']
+
+        self.patch('os.name', 'posix')
 
     @mock.patch('cinder.service.get_launcher')
     @mock.patch('cinder.service.Service.create')
@@ -173,15 +176,142 @@ class TestCinderVolumeCmd(test.TestCase):
         log_setup.assert_called_once_with(CONF, "cinder")
         monkey_patch.assert_called_once_with()
         get_launcher.assert_called_once_with()
-        c1 = mock.call(binary='cinder-volume', host='host@backend1',
+        c1 = mock.call(binary=constants.VOLUME_BINARY, host='host@backend1',
                        service_name='backend1', coordination=True,
                        cluster=None)
-        c2 = mock.call(binary='cinder-volume', host='host@backend2',
+        c2 = mock.call(binary=constants.VOLUME_BINARY, host='host@backend2',
                        service_name='backend2', coordination=True,
                        cluster=None)
         service_create.assert_has_calls([c1, c2])
         self.assertEqual(2, launcher.launch_service.call_count)
         launcher.wait.assert_called_once_with()
+
+
+@ddt.ddt
+class TestCinderVolumeCmdWin32(test.TestCase):
+
+    def setUp(self):
+        super(TestCinderVolumeCmdWin32, self).setUp()
+        sys.argv = ['cinder-volume']
+
+        self._mock_win32_proc_launcher = mock.Mock()
+
+        self.patch('os.name', 'nt')
+        self.patch('cinder.service.WindowsProcessLauncher',
+                   lambda *args, **kwargs: self._mock_win32_proc_launcher)
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main(self, log_setup, monkey_patch, service_create,
+                  get_launcher):
+        CONF.set_override('enabled_backends', None)
+        self.assertRaises(SystemExit, cinder_volume.main)
+        self.assertFalse(service_create.called)
+        self.assertFalse(self._mock_win32_proc_launcher.called)
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main_invalid_backend(self, log_setup, monkey_patch,
+                                  service_create, get_launcher):
+        CONF.set_override('enabled_backends', 'backend1')
+        CONF.set_override('backend_name', 'backend2')
+        self.assertRaises(exception.InvalidInput, cinder_volume.main)
+        self.assertFalse(service_create.called)
+        self.assertFalse(self._mock_win32_proc_launcher.called)
+
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    @ddt.data({},
+              {'binary_path': 'cinder-volume-script.py',
+               'exp_py_executable': True})
+    @ddt.unpack
+    def test_main_with_multiple_backends(self, log_setup, monkey_patch,
+                                         binary_path='cinder-volume',
+                                         exp_py_executable=False):
+        # If multiple backends are used, we expect the Windows process
+        # launcher to be used in order to create the child processes.
+        backends = ['', 'backend1', 'backend2', '']
+        CONF.set_override('enabled_backends', backends)
+        CONF.set_override('host', 'host')
+        launcher = self._mock_win32_proc_launcher
+
+        # Depending on the setuptools version, '-script.py' and '.exe'
+        # binary path extensions may be trimmed. We need to take this
+        # into consideration when building the command that will be
+        # used to spawn child subprocesses.
+        sys.argv = [binary_path]
+
+        cinder_volume.main()
+
+        self.assertEqual('cinder', CONF.project)
+        self.assertEqual(CONF.version, version.version_string())
+        log_setup.assert_called_once_with(CONF, "cinder")
+        monkey_patch.assert_called_once_with()
+
+        exp_cmd_prefix = [sys.executable] if exp_py_executable else []
+        exp_cmds = [
+            exp_cmd_prefix + sys.argv + ['--backend_name=%s' % backend_name]
+            for backend_name in ['backend1', 'backend2']]
+        launcher.add_process.assert_has_calls(
+            [mock.call(exp_cmd) for exp_cmd in exp_cmds])
+        launcher.wait.assert_called_once_with()
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main_with_multiple_backends_child(
+            self, log_setup, monkey_patch, service_create, get_launcher):
+        # We're testing the code expected to be run within child processes.
+        backends = ['', 'backend1', 'backend2', '']
+        CONF.set_override('enabled_backends', backends)
+        CONF.set_override('host', 'host')
+        launcher = get_launcher.return_value
+
+        sys.argv += ['--backend_name', 'backend2']
+
+        cinder_volume.main()
+
+        self.assertEqual('cinder', CONF.project)
+        self.assertEqual(CONF.version, version.version_string())
+        log_setup.assert_called_once_with(CONF, "cinder")
+        monkey_patch.assert_called_once_with()
+
+        service_create.assert_called_once_with(
+            binary=constants.VOLUME_BINARY, host='host@backend2',
+            service_name='backend2', coordination=True,
+            cluster=None)
+        launcher.launch_service.assert_called_once_with(
+            service_create.return_value)
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main_with_single_backend(
+            self, log_setup, monkey_patch, service_create, get_launcher):
+        # We're expecting the service to be run within the same process.
+        CONF.set_override('enabled_backends', ['backend2'])
+        CONF.set_override('host', 'host')
+        launcher = get_launcher.return_value
+
+        cinder_volume.main()
+
+        self.assertEqual('cinder', CONF.project)
+        self.assertEqual(CONF.version, version.version_string())
+        log_setup.assert_called_once_with(CONF, "cinder")
+        monkey_patch.assert_called_once_with()
+
+        service_create.assert_called_once_with(
+            binary=constants.VOLUME_BINARY, host='host@backend2',
+            service_name='backend2', coordination=True,
+            cluster=None)
+        launcher.launch_service.assert_called_once_with(
+            service_create.return_value)
 
 
 @ddt.ddt
@@ -493,7 +623,10 @@ class TestCinderManageCmd(test.TestCase):
             get_log_cmds = cinder_manage.GetLogCommands()
             get_log_cmds.errors()
 
-            self.assertEqual(expected_out, fake_out.getvalue())
+            out_lines = fake_out.getvalue().splitlines(True)
+
+            self.assertTrue(out_lines[0].startswith('DEPRECATED'))
+            self.assertEqual(expected_out, out_lines[1])
 
     @mock.patch('six.moves.builtins.open')
     @mock.patch('os.listdir')
@@ -504,13 +637,18 @@ class TestCinderManageCmd(test.TestCase):
         with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
             open.return_value = six.StringIO(
                 '[ ERROR ] fake-error-message')
-            expected_out = ('fake-dir/fake-error.log:-\n'
-                            'Line 1 : [ ERROR ] fake-error-message\n')
+            expected_out = ['fake-dir/fake-error.log:-\n',
+                            'Line 1 : [ ERROR ] fake-error-message\n']
 
             get_log_cmds = cinder_manage.GetLogCommands()
             get_log_cmds.errors()
 
-            self.assertEqual(expected_out, fake_out.getvalue())
+            out_lines = fake_out.getvalue().splitlines(True)
+
+            self.assertTrue(out_lines[0].startswith('DEPRECATED'))
+            self.assertEqual(expected_out[0], out_lines[1])
+            self.assertEqual(expected_out[1], out_lines[2])
+
             open.assert_called_once_with('fake-dir/fake-error.log', 'r')
             listdir.assert_called_once_with(CONF.log_dir)
 
@@ -2044,8 +2182,8 @@ class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
         # Need a service to query
         values = {
             'host': 'host1@lvm-driver1',
-            'binary': 'cinder-volume',
-            'topic': 'cinder-volume',
+            'binary': constants.VOLUME_BINARY,
+            'topic': constants.VOLUME_TOPIC,
             'uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'}
         utils.create_service(ctxt, values)
 
@@ -2082,8 +2220,8 @@ class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
 
         values = {
             'host': 'host1@lvm-driver1',
-            'binary': 'cinder-volume',
-            'topic': 'cinder-volume',
+            'binary': constants.VOLUME_BINARY,
+            'topic': constants.VOLUME_TOPIC,
             'uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'}
         utils.create_service(ctxt, values)
 

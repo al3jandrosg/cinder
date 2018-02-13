@@ -253,6 +253,15 @@ class UnityClient(object):
         lun_or_snap.update()
         host.detach(lun_or_snap)
 
+    @staticmethod
+    def detach_all(lun):
+        """Detaches a `UnityLun` from all hosts.
+
+        :param lun: `UnityLun` object
+        """
+        lun.update()
+        lun.detach_from(host=None)
+
     def get_ethernet_ports(self):
         return self.system.get_ethernet_port()
 
@@ -315,3 +324,7 @@ class UnityClient(object):
     def get_pool_name(self, lun_name):
         lun = self.system.get_lun(name=lun_name)
         return lun.pool_name
+
+    def restore_snapshot(self, snap_name):
+        snap = self.get_snap(snap_name)
+        return snap.restore(delete_backup=True)

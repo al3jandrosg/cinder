@@ -33,6 +33,7 @@ from cinder import interface
 from cinder import utils
 from cinder.volume import configuration
 from cinder.volume.drivers import remotefs
+from cinder.volume import utils as vutils
 
 VERSION = '1.4.0'
 
@@ -113,10 +114,13 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             nfs_mount_point_base=self.base,
             nfs_mount_options=opts)
 
+        supports_auto_mosr = kwargs.get('supports_auto_mosr', False)
         self._sparse_copy_volume_data = True
         self.reserved_percentage = self.configuration.reserved_percentage
         self.max_over_subscription_ratio = (
-            self.configuration.max_over_subscription_ratio)
+            vutils.get_max_over_subscription_ratio(
+                self.configuration.max_over_subscription_ratio,
+                supports_auto=supports_auto_mosr))
 
     def initialize_connection(self, volume, connector):
 
@@ -126,7 +130,8 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         active_vol = self.get_active_image_from_info(volume)
         volume_dir = self._local_volume_dir(volume)
         path_to_vol = os.path.join(volume_dir, active_vol)
-        info = self._qemu_img_info(path_to_vol, volume['name'])
+        info = self._qemu_img_info(path_to_vol,
+                                   volume['name'])
 
         data = {'export': volume.provider_location,
                 'name': active_vol}
@@ -533,6 +538,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             path,
             volume_name,
             self.configuration.nfs_mount_point_base,
+            force_share=True,
             run_as_root=True)
 
     def _check_snapshot_support(self, setup_checking=False):

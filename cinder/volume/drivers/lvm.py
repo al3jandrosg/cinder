@@ -108,7 +108,7 @@ class LVMVolumeDriver(driver.VolumeDriver):
         # the driver (control path), this way
         # different target drivers can be added (iscsi, FC etc)
         target_driver = \
-            self.target_mapping[self.configuration.safe_get('iscsi_helper')]
+            self.target_mapping[self.configuration.safe_get('target_helper')]
 
         LOG.debug('Attempting to initialize LVM driver with the '
                   'following target_driver: %s',
@@ -276,7 +276,8 @@ class LVMVolumeDriver(driver.VolumeDriver):
             total_volumes=total_volumes,
             filter_function=self.get_filter_function(),
             goodness_function=self.get_goodness_function(),
-            multiattach=False
+            multiattach=True,
+            backend_state='up'
         ))
         data["pools"].append(single_pool)
         data["shared_targets"] = False
@@ -589,6 +590,11 @@ class LVMVolumeDriver(driver.VolumeDriver):
         """Extend an existing volume's size."""
         self.vg.extend_volume(volume['name'],
                               self._sizestr(new_size))
+        try:
+            self.target_driver.extend_target(volume)
+        except Exception:
+            LOG.exception('Error extending target after volume resize.')
+            raise exception.TargetUpdateFailed(volume_id=volume.id)
 
     def manage_existing(self, volume, existing_ref):
         """Manages an existing LV.

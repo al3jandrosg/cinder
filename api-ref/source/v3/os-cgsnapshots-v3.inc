@@ -1,7 +1,7 @@
 .. -*- rst -*-
 
-Consistency group snapshots
-===========================
+Consistency group snapshots (DEPRECATED)
+========================================
 
 Lists all, lists all with details, shows details for, creates, and
 deletes consistency group snapshots.
@@ -53,7 +53,7 @@ Response Parameters
 
    - cgsnapshot: cgsnapshot
    - status: status
-   - description: description
+   - description: description_cg_snapshot_true
    - created_at: created_at
    - consistencygroup_id: consistencygroup_id
    - id: id
@@ -82,6 +82,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
 
 
 Response Parameters
@@ -91,7 +92,7 @@ Response Parameters
 
    - cgsnapshots: cgsnapshots
    - status: status
-   - description: description
+   - description: description_cg_snapshot_true
    - created_at: created_at
    - consistencygroup_id: consistencygroup_id
    - id: id
@@ -120,6 +121,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
+   - all_tenants: all-tenants
 
 
 Response Parameters
@@ -160,7 +162,7 @@ Request
    - cgsnapshot: cgsnapshot
    - name: name_5
    - consistencygroup_id: consistencygroup_id
-   - description: description
+   - description: description_cg_snapshot_false
 
 Request Example
 ---------------
@@ -174,7 +176,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status
-   - description: description
+   - description: description_cg_snapshot_true
    - created_at: created_at
    - consistencygroup_id: consistencygroup_id
    - id: id

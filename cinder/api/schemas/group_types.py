@@ -31,7 +31,7 @@ create = {
                 'name': parameter_types.name,
                 'description': parameter_types.description,
                 'is_public': parameter_types.boolean,
-                'group_specs': parameter_types.extra_specs,
+                'group_specs': parameter_types.metadata_allows_null,
             },
             'required': ['name'],
             'additionalProperties': False,
@@ -48,16 +48,11 @@ update = {
         'group_type': {
             'type': 'object',
             'properties': {
-                'name': parameter_types.name,
+                'name': parameter_types.name_allow_zero_min_length,
                 'description': parameter_types.description,
                 'is_public': parameter_types.boolean,
             },
             'additionalProperties': False,
-            'anyOf': [
-                {'required': ['name']},
-                {'required': ['description']},
-                {'required': ['is_public']},
-            ]
         },
     },
     'required': ['group_type'],

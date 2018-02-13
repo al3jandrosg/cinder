@@ -22,6 +22,7 @@ import webob
 
 from cinder.api import microversions as mv
 from cinder.api.v3 import router as router_v3
+from cinder.common import constants
 from cinder import context
 from cinder import objects
 from cinder import test
@@ -77,9 +78,10 @@ class SnapshotManageTest(test.TestCase):
         """
         mock_service_get.return_value = fake_service.fake_service_obj(
             self._admin_ctxt,
-            binary='cinder-volume')
+            binary=constants.VOLUME_BINARY)
 
-        body = {'snapshot': {'volume_id': fake.VOLUME_ID, 'ref': 'fake_ref'}}
+        body = {'snapshot': {'volume_id': fake.VOLUME_ID,
+                             'ref': {'fake_ref': "fake_val"}}}
         res = self._get_resp_post(body)
         self.assertEqual(http_client.ACCEPTED, res.status_int, res)
 
@@ -187,7 +189,7 @@ class SnapshotManageTest(test.TestCase):
             sort_dirs=['desc'], want_objects=True)
         detail_view_mock.assert_called_once_with(mock.ANY, snaps, len(snaps))
         get_service_mock.assert_called_once_with(
-            mock.ANY, None, host=host, binary='cinder-volume',
+            mock.ANY, None, host=host, binary=constants.VOLUME_BINARY,
             cluster_name=cluster_name)
 
     @ddt.data(mv.MANAGE_EXISTING_LIST, mv.MANAGE_EXISTING_CLUSTER)

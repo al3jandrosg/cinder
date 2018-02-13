@@ -15,8 +15,10 @@
 
 """The backups V3 api."""
 
+import copy
 import ddt
 import mock
+from oslo_serialization import jsonutils
 from oslo_utils import strutils
 import webob
 
@@ -45,6 +47,8 @@ class BackupsControllerAPITestCase(test.TestCase):
                                            auth_token=True,
                                            is_admin=True)
         self.controller = backups.BackupsController()
+        self.user_context = context.RequestContext(
+            fake.USER_ID, fake.PROJECT_ID, auth_token=True)
 
     def _fake_update_request(self, backup_id, version=mv.BACKUP_UPDATE):
         req = fakes.HTTPRequest.blank('/v3/%s/backups/%s/update' %
@@ -66,17 +70,17 @@ class BackupsControllerAPITestCase(test.TestCase):
     def test_backup_update_with_no_body(self):
         # omit body from the request
         req = self._fake_update_request(fake.BACKUP_ID)
-        self.assertRaises(webob.exc.HTTPBadRequest,
+        self.assertRaises(exception.ValidationError,
                           self.controller.update,
-                          req, fake.BACKUP_ID, None)
+                          req, fake.BACKUP_ID, body=None)
 
     def test_backup_update_with_unsupported_field(self):
         req = self._fake_update_request(fake.BACKUP_ID)
         body = {"backup": {"id": fake.BACKUP2_ID,
                            "description": "", }}
-        self.assertRaises(webob.exc.HTTPBadRequest,
+        self.assertRaises(exception.ValidationError,
                           self.controller.update,
-                          req, fake.BACKUP_ID, body)
+                          req, fake.BACKUP_ID, body=body)
 
     def test_backup_update_with_backup_not_found(self):
         req = self._fake_update_request(fake.BACKUP_ID)
@@ -87,7 +91,7 @@ class BackupsControllerAPITestCase(test.TestCase):
         body = {"backup": updates}
         self.assertRaises(exception.NotFound,
                           self.controller.update,
-                          req, fake.BACKUP_ID, body)
+                          req, fake.BACKUP_ID, body=body)
 
     def _create_multiple_backups_with_different_project(self):
         test_utils.create_backup(
@@ -225,12 +229,46 @@ class BackupsControllerAPITestCase(test.TestCase):
         body = {"backup": updates}
         self.controller.update(req,
                                backup.id,
-                               body)
+                               body=body)
 
         backup.refresh()
         self.assertEqual(new_name, backup.display_name)
         self.assertEqual(new_description,
                          backup.display_description)
+
+    @ddt.data({"backup": {"description": "   sample description",
+                          "name": "   test name"}},
+              {"backup": {"description": "sample description   ",
+                          "name": "test  "}},
+              {"backup": {"description": " sample description ",
+                          "name": "  test  "}})
+    def test_backup_update_name_description_with_leading_trailing_spaces(
+            self, body):
+        backup = test_utils.create_backup(
+            self.ctxt,
+            status=fields.BackupStatus.AVAILABLE)
+        req = self._fake_update_request(fake.BACKUP_ID)
+
+        expected_body = copy.deepcopy(body)
+        self.controller.update(req,
+                               backup.id,
+                               body=body)
+        backup.refresh()
+
+        # backup update call doesn't return 'description' in response so get
+        # the updated backup to assert name and description
+        req = webob.Request.blank('/v2/%s/backups/%s' % (
+                                  fake.PROJECT_ID, backup.id))
+        req.method = 'GET'
+        req.headers['Content-Type'] = 'application/json'
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+        res_dict = jsonutils.loads(res.body)
+
+        self.assertEqual(expected_body['backup']['name'].strip(),
+                         res_dict['backup']['name'])
+        self.assertEqual(expected_body['backup']['description'].strip(),
+                         res_dict['backup']['description'])
 
     @ddt.data(mv.get_prior_version(mv.BACKUP_METADATA),
               mv.BACKUP_METADATA)
@@ -246,3 +284,20 @@ class BackupsControllerAPITestCase(test.TestCase):
             self.assertNotIn('metadata', backup_get)
         else:
             self.assertIn('metadata', backup_get)
+
+    def test_backup_update_with_null_validate(self):
+        backup = test_utils.create_backup(
+            self.ctxt,
+            status=fields.BackupStatus.AVAILABLE)
+        req = self._fake_update_request(fake.BACKUP_ID)
+
+        updates = {
+            "name": None,
+        }
+        body = {"backup": updates}
+        self.controller.update(req,
+                               backup.id,
+                               body=body)
+
+        backup.refresh()
+        self.assertEqual(fields.BackupStatus.AVAILABLE, backup.status)

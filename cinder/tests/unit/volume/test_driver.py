@@ -222,6 +222,7 @@ class GenericVolumeDriverTestCase(BaseDriverTestCase):
         (backup_device, is_snapshot) = self.volume.driver.get_backup_device(
             self.context, backup_obj)
         volume = objects.Volume.get_by_id(self.context, vol.id)
+        self.assertNotIn('temporary', backup_device.admin_metadata.keys())
         self.assertEqual(volume, backup_device)
         self.assertFalse(is_snapshot)
         backup_obj.refresh()
@@ -231,7 +232,9 @@ class GenericVolumeDriverTestCase(BaseDriverTestCase):
         vol = tests_utils.create_volume(self.context,
                                         status='backing-up',
                                         previous_status='in-use')
-        temp_vol = tests_utils.create_volume(self.context)
+        admin_meta = {'temporary': 'True'}
+        temp_vol = tests_utils.create_volume(self.context,
+                                             admin_metadata=admin_meta)
         self.context.user_id = fake.USER_ID
         self.context.project_id = fake.PROJECT_ID
         backup_obj = tests_utils.create_backup(self.context,
@@ -248,7 +251,7 @@ class GenericVolumeDriverTestCase(BaseDriverTestCase):
             backup_obj.refresh()
             self.assertEqual(temp_vol.id, backup_obj.temp_volume_id)
 
-    def test__create_temp_volume_from_snapshot(self):
+    def test_create_temp_volume_from_snapshot(self):
         volume_dict = {'id': fake.SNAPSHOT_ID,
                        'host': 'fakehost',
                        'cluster_name': 'fakecluster',
@@ -342,6 +345,46 @@ class GenericVolumeDriverTestCase(BaseDriverTestCase):
         # cleanup resource
         db.volume_destroy(self.context, src_vol['id'])
         db.volume_destroy(self.context, dest_vol['id'])
+
+    @mock.patch(driver_name + '.initialize_connection')
+    @mock.patch(driver_name + '.create_export', return_value=None)
+    @mock.patch(driver_name + '._connect_device')
+    def test_attach_volume_encrypted(self, connect_mock, export_mock,
+                                     initialize_mock):
+        properties = {'host': 'myhost', 'ip': '192.168.1.43',
+                      'initiator': u'iqn.1994-05.com.redhat:d9be887375',
+                      'multipath': False, 'os_type': 'linux2',
+                      'platform': 'x86_64'}
+
+        data = {'target_discovered': True,
+                'target_iqn': 'iqn.2010-10.org.openstack:volume-00000001',
+                'target_portal': '127.0.0.0.1:3260',
+                'volume_id': 1,
+                'discard': False}
+
+        passed_conn = {'driver_volume_type': 'iscsi', 'data': data.copy()}
+        initialize_mock.return_value = passed_conn
+
+        # _attach_volume adds the encrypted value based on the volume
+        expected_conn = {'driver_volume_type': 'iscsi', 'data': data.copy()}
+        expected_conn['data']['encrypted'] = True
+
+        volume = tests_utils.create_volume(
+            self.context, status='available',
+            size=2,
+            encryption_key_id=fake.ENCRYPTION_KEY_ID)
+
+        attach_info, vol = self.volume.driver._attach_volume(self.context,
+                                                             volume,
+                                                             properties)
+
+        export_mock.assert_called_once_with(self.context, volume, properties)
+        initialize_mock.assert_called_once_with(volume, properties)
+
+        connect_mock.assert_called_once_with(expected_conn)
+
+        self.assertEqual(connect_mock.return_value, attach_info)
+        self.assertEqual(volume, vol)
 
     @mock.patch.object(os_brick.initiator.connector,
                        'get_connector_properties')
@@ -521,6 +564,34 @@ class GenericVolumeDriverTestCase(BaseDriverTestCase):
         self.assertTrue(remove_mock.called)
         self.assertTrue(terminate_mock.called)
         self.assertEqual(3, exc.context.call_count)
+
+    @ddt.data({'cfg_value': '10', 'valid': True},
+              {'cfg_value': 'auto', 'valid': True},
+              {'cfg_value': '1', 'valid': True},
+              {'cfg_value': '1.2', 'valid': True},
+              {'cfg_value': '100', 'valid': True},
+              {'cfg_value': '20.15', 'valid': True},
+              {'cfg_value': 'True', 'valid': False},
+              {'cfg_value': 'False', 'valid': False},
+              {'cfg_value': '10.0.0', 'valid': False},
+              {'cfg_value': '0.00', 'valid': True},
+              {'cfg_value': 'anything', 'valid': False},)
+    @ddt.unpack
+    def test_auto_max_subscription_ratio_options(self, cfg_value, valid):
+        # This tests the max_over_subscription_ratio option as it is now
+        # checked by a regex
+        def _set_conf(config, value):
+            config.set_override('max_over_subscription_ratio', value)
+
+        config = conf.Configuration(None)
+        config.append_config_values(driver.volume_opts)
+
+        if valid:
+            _set_conf(config, cfg_value)
+            self.assertEqual(cfg_value, config.safe_get(
+                'max_over_subscription_ratio'))
+        else:
+            self.assertRaises(ValueError, _set_conf, config, cfg_value)
 
 
 class FibreChannelTestCase(BaseDriverTestCase):

@@ -18,6 +18,7 @@ Internal implementation of request Body validating middleware.
 
 """
 
+import base64
 import re
 
 import jsonschema
@@ -28,6 +29,7 @@ import six
 
 from cinder import exception
 from cinder.i18n import _
+from cinder.objects import fields as c_fields
 
 
 def _soft_validate_additional_properties(
@@ -96,10 +98,10 @@ def _validate_datetime_format(param_value):
 @jsonschema.FormatChecker.cls_checks('name', exception.InvalidName)
 def _validate_name(param_value):
     if not param_value:
-        msg = "The 'name' can not be None."
+        msg = _("The 'name' can not be None.")
         raise exception.InvalidName(reason=msg)
     elif len(param_value.strip()) == 0:
-        msg = "The 'name' can not be empty."
+        msg = _("The 'name' can not be empty.")
         raise exception.InvalidName(reason=msg)
     return True
 
@@ -107,6 +109,36 @@ def _validate_name(param_value):
 @jsonschema.FormatChecker.cls_checks('uuid')
 def _validate_uuid_format(instance):
     return uuidutils.is_uuid_like(instance)
+
+
+@jsonschema.FormatChecker.cls_checks('group_snapshot_status')
+def _validate_status(param_value):
+    if len(param_value.strip()) == 0:
+        msg = _("The 'status' can not be empty.")
+        raise exception.InvalidGroupSnapshotStatus(reason=msg)
+    elif param_value.lower() not in c_fields.GroupSnapshotStatus.ALL:
+            msg = _("Group snapshot status: %(status)s is invalid, "
+                    "valid statuses are: "
+                    "%(valid)s.") % {'status': param_value,
+                                     'valid': c_fields.GroupSnapshotStatus.ALL}
+            raise exception.InvalidGroupSnapshotStatus(reason=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('base64')
+def _validate_base64_format(instance):
+    try:
+        if isinstance(instance, six.text_type):
+            instance = instance.encode('utf-8')
+        base64.decodestring(instance)
+    except base64.binascii.Error:
+        return False
+    except TypeError:
+        # The name must be string type. If instance isn't string type, the
+        # TypeError will be raised at here.
+        return False
+
+    return True
 
 
 class FormatChecker(jsonschema.FormatChecker):

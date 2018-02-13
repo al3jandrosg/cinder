@@ -373,6 +373,8 @@ class VolumeAttachment(BASE, CinderBase):
     attach_status = Column(String(255))
     attach_mode = Column(String(255))
     connection_info = Column(Text)
+    # Stores a serialized json dict of host connector information from brick.
+    connector = Column(Text)
 
 
 class VolumeTypes(BASE, CinderBase):
@@ -773,6 +775,7 @@ class Backup(BASE, CinderBase):
     snapshot_id = Column(String(36))
     data_timestamp = Column(DateTime)
     restore_volume_id = Column(String(36))
+    encryption_key_id = Column(String(36))
 
     @validates('fail_reason')
     def validate_fail_reason(self, key, fail_reason):
@@ -924,7 +927,12 @@ class Worker(BASE, CinderBase):
 
 
 class AttachmentSpecs(BASE, CinderBase):
-    """Represents attachment specs as k/v pairs for a volume_attachment."""
+    """Represents attachment specs as k/v pairs for a volume_attachment.
+
+    DO NOT USE - NOTHING SHOULD WRITE NEW DATA TO THIS TABLE
+
+    The volume_attachment.connector column should be used instead.
+    """
 
     __tablename__ = 'attachment_specs'
     id = Column(Integer, primary_key=True)

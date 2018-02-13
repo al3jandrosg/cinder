@@ -39,6 +39,8 @@ from cinder import flow_utils
 from cinder.i18n import _
 from cinder.image import cache as image_cache
 from cinder.image import glance
+from cinder.message import api as message_api
+from cinder.message import message_field
 from cinder import objects
 from cinder.objects import base as objects_base
 from cinder.objects import fields
@@ -107,6 +109,7 @@ class API(base.Base):
         self.availability_zones = []
         self.availability_zones_last_fetched = None
         self.key_manager = key_manager.API(CONF)
+        self.message = message_api.API()
         super(API, self).__init__(db_driver)
 
     def list_availability_zones(self, enable_cache=False, refresh_cache=False):
@@ -190,6 +193,10 @@ class API(base.Base):
         return (volume['migration_status'] not in
                 self.AVAILABLE_MIGRATION_STATUS)
 
+    def _is_multiattach(self, volume_type):
+        specs = getattr(volume_type, 'extra_specs', {})
+        return specs.get('multiattach', 'False') == '<is> True'
+
     def create(self, context, size, name, description, snapshot=None,
                image_id=None, volume_type=None, metadata=None,
                availability_zone=None, source_volume=None,
@@ -199,7 +206,10 @@ class API(base.Base):
                group=None, group_snapshot=None, source_group=None,
                backup=None):
 
-        context.authorize(vol_policy.CREATE_FROM_IMAGE_POLICY)
+        if image_id:
+            context.authorize(vol_policy.CREATE_FROM_IMAGE_POLICY)
+        else:
+            context.authorize(vol_policy.CREATE_POLICY)
 
         # Check up front for legacy replication parameters to quick fail
         if source_replica:
@@ -279,6 +289,9 @@ class API(base.Base):
 
         utils.check_metadata_properties(metadata)
 
+        if (volume_type and self._is_multiattach(volume_type)) or multiattach:
+            context.authorize(vol_policy.MULTIATTACH_POLICY)
+
         create_what = {
             'context': context,
             'raw_size': size,
@@ -336,6 +349,9 @@ class API(base.Base):
                 # Refresh the object here, otherwise things ain't right
                 vref = objects.Volume.get_by_id(
                     context, vref['id'])
+                vref.multiattach = (self._is_multiattach(volume_type) or
+                                    multiattach)
+                vref.save()
                 LOG.info("Create volume request issued successfully.",
                          resource=vref)
                 return vref
@@ -408,6 +424,17 @@ class API(base.Base):
 
         if not unmanage_only:
             volume.assert_not_frozen()
+
+        if unmanage_only and volume.encryption_key_id is not None:
+            msg = _("Unmanaging encrypted volumes is not supported.")
+            e = exception.Invalid(reason=msg)
+            self.message.create(
+                context,
+                message_field.Action.UNMANAGE_VOLUME,
+                resource_uuid=volume.id,
+                detail=message_field.Detail.UNMANAGE_ENC_NOT_SUPPORTED,
+                exception=e)
+            raise e
 
         # Build required conditions for conditional update
         expected = {
@@ -656,7 +683,7 @@ class API(base.Base):
         return snapshots
 
     def reserve_volume(self, context, volume):
-        context.authorize(vol_action_policy.RETYPE_POLICY, target_obj=volume)
+        context.authorize(vol_action_policy.RESERVE_POLICY, target_obj=volume)
         expected = {'multiattach': volume.multiattach,
                     'status': (('available', 'in-use') if volume.multiattach
                                else 'available')}
@@ -838,6 +865,7 @@ class API(base.Base):
                               group_snapshot_id=None):
         context.authorize(snapshot_policy.CREATE_POLICY)
 
+        utils.check_metadata_properties(metadata)
         if not volume.host:
             msg = _("The snapshot cannot be created because volume has "
                     "not been scheduled to any host.")
@@ -859,10 +887,13 @@ class API(base.Base):
             msg = _("Snapshot of secondary replica is not allowed.")
             raise exception.InvalidVolume(reason=msg)
 
-        if ((not force) and (volume['status'] != "available")):
-            msg = _("Volume %(vol_id)s status must be available, "
+        valid_status = ["available", "in-use"] if force else ["available"]
+
+        if volume['status'] not in valid_status:
+            msg = _("Volume %(vol_id)s status must be %(status)s, "
                     "but current status is: "
                     "%(vol_status)s.") % {'vol_id': volume['id'],
+                                          'status': ', '.join(valid_status),
                                           'vol_status': volume['status']}
             raise exception.InvalidVolume(reason=msg)
 
@@ -882,7 +913,6 @@ class API(base.Base):
                     context, e,
                     resource='snapshots',
                     size=volume.size)
-        utils.check_metadata_properties(metadata)
 
         snapshot = None
         try:
@@ -903,7 +933,17 @@ class API(base.Base):
             }
             snapshot = objects.Snapshot(context=context, **kwargs)
             snapshot.create()
+            volume.refresh()
 
+            if volume['status'] not in valid_status:
+                msg = _("Volume %(vol_id)s status must be %(status)s , "
+                        "but current status is: "
+                        "%(vol_status)s.") % {'vol_id': volume['id'],
+                                              'status':
+                                                  ', '.join(valid_status),
+                                              'vol_status':
+                                                  volume['status']}
+                raise exception.InvalidVolume(reason=msg)
             if commit_quota:
                 QUOTAS.commit(context, reservations)
         except Exception:
@@ -976,10 +1016,12 @@ class API(base.Base):
         reserve_opts_list = []
         total_reserve_opts = {}
         try:
-            reserve_opts_list.append({'snapshots': 1})
             for volume in volume_list:
-                if not CONF.no_snapshot_gb_quota:
-                    reserve_opts = {'gigabytes': volume['size']}
+                if CONF.no_snapshot_gb_quota:
+                    reserve_opts = {'snapshots': 1}
+                else:
+                    reserve_opts = {'snapshots': 1,
+                                    'gigabytes': volume['size']}
                 QUOTAS.add_volume_type_opts(context,
                                             reserve_opts,
                                             volume.get('volume_type_id'))
@@ -1494,7 +1536,7 @@ class API(base.Base):
             msg = _('Volume %s status must be available or in-use, must not '
                     'be migrating, have snapshots, be replicated, be part of '
                     'a group and destination host/cluster must be different '
-                    'than the current one') % {'vol_id': volume.id}
+                    'than the current one') % volume.id
             LOG.error(msg)
             raise exception.InvalidVolume(reason=msg)
 
@@ -1581,20 +1623,43 @@ class API(base.Base):
 
         # Support specifying volume type by ID or name
         try:
-            vol_type = (
+            new_type = (
                 volume_types.get_by_name_or_id(context.elevated(), new_type))
         except exception.InvalidVolumeType:
             msg = _('Invalid volume_type passed: %s.') % new_type
             LOG.error(msg)
             raise exception.InvalidInput(reason=msg)
 
-        vol_type_id = vol_type['id']
+        new_type_id = new_type['id']
+
+        # NOTE(jdg): We check here if multiattach is involved in either side
+        # of the retype, we can't change multiattach on an in-use volume
+        # because there's things the hypervisor needs when attaching, so
+        # we just disallow retype of in-use volumes in this case.  You still
+        # have to get through scheduling if all the conditions are met, we
+        # should consider an up front capabilities check to give fast feedback
+        # rather than "No hosts found" and error status
+        src_is_multiattach = volume.multiattach
+        tgt_is_multiattach = False
+
+        if new_type:
+            tgt_is_multiattach = self._is_multiattach(new_type)
+
+        if src_is_multiattach != tgt_is_multiattach:
+            if volume.status != "available":
+                msg = _('Invalid volume_type passed, retypes affecting '
+                        'multiattach are only allowed on available volumes, '
+                        'the specified volume however currently has a status '
+                        'of: %s.') % volume.status
+                LOG.info(msg)
+                raise exception.InvalidInput(reason=msg)
+            context.authorize(vol_policy.MULTIATTACH_POLICY)
 
         # We're checking here in so that we can report any quota issues as
         # early as possible, but won't commit until we change the type. We
         # pass the reservations onward in case we need to roll back.
         reservations = quota_utils.get_volume_type_reservation(
-            context, volume, vol_type_id, reserve_vol_type_only=True)
+            context, volume, new_type_id, reserve_vol_type_only=True)
 
         # Get old reservations
         try:
@@ -1622,12 +1687,12 @@ class API(base.Base):
                     'migration_status': self.AVAILABLE_MIGRATION_STATUS,
                     'consistencygroup_id': (None, ''),
                     'group_id': (None, ''),
-                    'volume_type_id': db.Not(vol_type_id)}
+                    'volume_type_id': db.Not(new_type_id)}
 
         # We don't support changing QoS at the front-end yet for in-use volumes
         # TODO(avishay): Call Nova to change QoS setting (libvirt has support
         # - virDomainSetBlockIoTune() - Nova does not have support yet).
-        filters = [db.volume_qos_allows_retype(vol_type_id)]
+        filters = [db.volume_qos_allows_retype(new_type_id)]
 
         updates = {'status': 'retyping',
                    'previous_status': objects.Volume.model.status}
@@ -1645,7 +1710,7 @@ class API(base.Base):
 
         request_spec = {'volume_properties': volume,
                         'volume_id': volume.id,
-                        'volume_type': vol_type,
+                        'volume_type': new_type,
                         'migration_policy': migration_policy,
                         'quota_reservations': reservations,
                         'old_reservations': old_reservations}
@@ -1653,6 +1718,8 @@ class API(base.Base):
         self.scheduler_rpcapi.retype(context, volume,
                                      request_spec=request_spec,
                                      filter_properties={})
+        volume.multiattach = tgt_is_multiattach
+        volume.save()
         LOG.info("Retype volume request issued successfully.",
                  resource=volume)
 
@@ -1670,7 +1737,7 @@ class API(base.Base):
         # cluster itself is also up.
         try:
             service = objects.Service.get_by_id(elevated, None, host=svc_host,
-                                                binary='cinder-volume',
+                                                binary=constants.VOLUME_BINARY,
                                                 cluster_name=svc_cluster)
         except exception.ServiceNotFound:
             with excutils.save_and_reraise_exception():
@@ -1989,6 +2056,14 @@ class API(base.Base):
         # creation of other new reserves/attachments while in this state
         # so we avoid contention issues with shared connections
 
+        # Multiattach of bootable volumes is a special case with it's own
+        # policy, check that here right off the bat
+        if (vref.get('multiattach', False) and
+                vref.status == 'in-use' and
+                vref.bootable):
+            ctxt.authorize(
+                attachment_policy.MULTIATTACH_BOOTABLE_VOLUME_POLICY)
+
         # FIXME(JDG):  We want to be able to do things here like reserve a
         # volume for Nova to do BFV WHILE the volume may be in the process of
         # downloading image, we add downloading here; that's easy enough but
@@ -2000,6 +2075,7 @@ class API(base.Base):
                     'status': (('available', 'in-use', 'downloading')
                                if vref.multiattach
                                else ('available', 'downloading'))}
+
         result = vref.conditional_update({'status': 'reserved'}, expected)
 
         if not result:
@@ -2044,6 +2120,10 @@ class API(base.Base):
                                                      connector,
                                                      attachment_ref.id))
         attachment_ref.connection_info = connection_info
+        if self.db.volume_admin_metadata_get(
+                ctxt.elevated(),
+                volume_ref['id']).get('readonly', False):
+            attachment_ref.attach_mode = 'ro'
         attachment_ref.save()
         return attachment_ref
 
@@ -2088,12 +2168,21 @@ class API(base.Base):
         status_updates = {'status': 'available',
                           'attach_status': 'detached'}
         remaining_attachments = AO_LIST.get_all_by_volume_id(ctxt, volume.id)
+        LOG.debug("Remaining volume attachments: %s", remaining_attachments,
+                  resource=volume)
 
         # NOTE(jdg) Try and figure out the > state we have left and set that
         # attached > attaching > > detaching > reserved
         pending_status_list = []
         for attachment in remaining_attachments:
             pending_status_list.append(attachment.attach_status)
+            LOG.debug("Adding status of: %s to pending status list "
+                      "for volume.", attachment.attach_status,
+                      resource=volume)
+
+        LOG.debug("Pending status list for volume during "
+                  "attachment-delete: %s",
+                  pending_status_list, resource=volume)
         if 'attached' in pending_status_list:
             status_updates['status'] = 'in-use'
             status_updates['attach_status'] = 'attached'

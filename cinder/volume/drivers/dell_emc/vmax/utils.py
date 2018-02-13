@@ -58,6 +58,19 @@ VOL_NAME = 'volume_name'
 EXTRA_SPECS = 'extra_specs'
 IS_RE = 'replication_enabled'
 DISABLECOMPRESSION = 'storagetype:disablecompression'
+REP_SYNC = 'Synchronous'
+REP_ASYNC = 'Asynchronous'
+REP_METRO = 'Metro'
+REP_MODE = 'rep_mode'
+RDF_SYNC_STATE = 'synchronized'
+RDF_SYNCINPROG_STATE = 'syncinprog'
+RDF_CONSISTENT_STATE = 'consistent'
+RDF_SUSPENDED_STATE = 'suspended'
+RDF_FAILEDOVER_STATE = 'failed over'
+RDF_ACTIVE = 'active'
+RDF_ACTIVEACTIVE = 'activeactive'
+RDF_ACTIVEBIAS = 'activebias'
+METROBIAS = 'metro_bias'
 
 # Cinder.conf vmax configuration
 VMAX_SERVER_IP = 'san_ip'
@@ -160,10 +173,9 @@ class VMAXUtils(object):
         delta = end_time - start_time
         return six.text_type(datetime.timedelta(seconds=int(delta)))
 
-    @staticmethod
     def get_default_storage_group_name(
-            srp_name, slo, workload, is_compression_disabled=False,
-            is_re=False):
+            self, srp_name, slo, workload, is_compression_disabled=False,
+            is_re=False, rep_mode=None):
         """Determine default storage group from extra_specs.
 
         :param srp_name: the name of the srp on the array
@@ -171,6 +183,7 @@ class VMAXUtils(object):
         :param workload: the workload string e.g DSS
         :param is_compression_disabled:  flag for disabling compression
         :param is_re: flag for replication
+        :param rep_mode: flag to indicate replication mode
         :returns: storage_group_name
         """
         if slo and workload:
@@ -184,7 +197,7 @@ class VMAXUtils(object):
         else:
             prefix = "OS-no_SLO"
         if is_re:
-            prefix += "-RE"
+            prefix += self.get_replication_prefix(rep_mode)
 
         storage_group_name = ("%(prefix)s-SG" % {'prefix': prefix})
         return storage_group_name
@@ -210,6 +223,31 @@ class VMAXUtils(object):
                 "get_volume_element_name elementName:  %(elementName)s.",
                 {'elementName': element_name})
         return element_name
+
+    @staticmethod
+    def modify_snapshot_prefix(snapshot_name, manage=False, unmanage=False):
+        """Modify a Snapshot prefix on VMAX backend.
+
+        Prepare a snapshot name for manage/unmanage snapshot process either
+        by adding or removing 'OS-' prefix.
+
+        :param snapshot_name: the old snapshot backend display name
+        :param manage: (bool) if the operation is managing a snapshot
+        :param unmanage: (bool) if the operation is unmanaging a snapshot
+        :return: snapshot name ready for backend VMAX assignment
+        """
+        new_snap_name = None
+        if manage:
+            new_snap_name = ("%(prefix)s%(snapshot_name)s"
+                             % {'prefix': 'OS-',
+                                'snapshot_name': snapshot_name})
+
+        if unmanage:
+            snap_split = snapshot_name.split("-", 1)
+            if snap_split[0] == 'OS':
+                new_snap_name = snap_split[1]
+
+        return new_snap_name
 
     def generate_unique_trunc_host(self, host_name):
         """Create a unique short host name under 16 characters.
@@ -469,7 +507,8 @@ class VMAXUtils(object):
             replication_enabled = True
         return replication_enabled
 
-    def get_replication_config(self, rep_device_list):
+    @staticmethod
+    def get_replication_config(rep_device_list):
         """Gather necessary replication configuration info.
 
         :param rep_device_list: the replication device list from cinder.conf
@@ -493,14 +532,29 @@ class VMAXUtils(object):
                 LOG.exception(error_message)
                 raise exception.VolumeBackendAPIException(data=error_message)
 
-            try:
-                allow_extend = target['allow_extend']
-                if strutils.bool_from_string(allow_extend):
-                    rep_config['allow_extend'] = True
-                else:
-                    rep_config['allow_extend'] = False
-            except KeyError:
+            allow_extend = target.get('allow_extend', 'false')
+            if strutils.bool_from_string(allow_extend):
+                rep_config['allow_extend'] = True
+            else:
                 rep_config['allow_extend'] = False
+
+            rep_mode = target.get('mode', '')
+            if rep_mode.lower() in ['async', 'asynchronous']:
+                rep_config['mode'] = REP_ASYNC
+            elif rep_mode.lower() == 'metro':
+                rep_config['mode'] = REP_METRO
+                metro_bias = target.get('metro_use_bias', 'false')
+                if strutils.bool_from_string(metro_bias):
+                    rep_config[METROBIAS] = True
+                else:
+                    rep_config[METROBIAS] = False
+                allow_delete_metro = target.get('allow_delete_metro', 'false')
+                if strutils.bool_from_string(allow_delete_metro):
+                    rep_config['allow_delete_metro'] = True
+                else:
+                    rep_config['allow_delete_metro'] = False
+            else:
+                rep_config['mode'] = REP_SYNC
 
         return rep_config
 
@@ -529,17 +583,28 @@ class VMAXUtils(object):
         :param status: string value reflects the status of the member volume
         :returns: volume_model_updates - updated volumes
         """
-        LOG.info(
-            "Updating status for group: %(id)s.",
-            {'id': group_id})
+        LOG.info("Updating status for group: %(id)s.", {'id': group_id})
         if volumes:
             for volume in volumes:
                 volume_model_updates.append({'id': volume.id,
                                              'status': status})
         else:
-            LOG.info("No volume found for group: %(cg)s.",
-                     {'cg': group_id})
+            LOG.info("No volume found for group: %(cg)s.", {'cg': group_id})
         return volume_model_updates
+
+    @staticmethod
+    def get_grp_volume_model_update(volume, volume_dict, group_id):
+        """Create and return the volume model update on creation.
+
+        :param volume: volume object
+        :param volume_dict: the volume dict
+        :param group_id: consistency group id
+        :returns: model_update
+        """
+        LOG.info("Updating status for group: %(id)s.", {'id': group_id})
+        model_update = ({'id': volume.id, 'status': 'available',
+                         'provider_location': six.text_type(volume_dict)})
+        return model_update
 
     @staticmethod
     def update_extra_specs(extraspecs):
@@ -565,39 +630,21 @@ class VMAXUtils(object):
                       " the provided extra_specs.")
         return extraspecs
 
-    @staticmethod
-    def get_intervals_retries_dict(interval, retries):
-        """Get the default intervals and retries.
-
-        :param interval: Interval in seconds between retries
-        :param retries: Retry count
-        :returns: default_dict
-        """
-        default_dict = {}
-        default_dict[INTERVAL] = interval
-        default_dict[RETRIES] = retries
-        return default_dict
-
     def get_volume_group_utils(self, group, interval, retries):
         """Standard utility for generic volume groups.
 
         :param group: the generic volume group object to be created
         :param interval: Interval in seconds between retries
         :param retries: Retry count
-        :returns: array, extra specs dict list
+        :returns: array, intervals_retries_dict
         :raises: VolumeBackendAPIException
         """
         arrays = set()
-        extraspecs_dict_list = []
         # Check if it is a generic volume group instance
         if isinstance(group, Group):
             for volume_type in group.volume_types:
-                extraspecs_dict = (
-                    self._update_extra_specs_list(
-                        volume_type.extra_specs,
-                        volume_type.id, interval, retries))
-                extraspecs_dict_list.append(extraspecs_dict)
-                arrays.add(extraspecs_dict[EXTRA_SPECS][ARRAY])
+                extra_specs = self.update_extra_specs(volume_type.extra_specs)
+                arrays.add(extra_specs[ARRAY])
         else:
             msg = (_("Unable to get volume type ids."))
             LOG.error(msg)
@@ -615,25 +662,8 @@ class VMAXUtils(object):
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
         array = arrays.pop()
-        return array, extraspecs_dict_list
-
-    def _update_extra_specs_list(self, extraspecs, volumetype_id,
-                                 interval, retries):
-        """Update the extra specs list.
-
-        :param extraspecs: extraspecs
-        :param volumetype_Id: volume type identifier
-        :param interval: Interval in seconds between retries
-        :param retries: Retry count
-        :returns: extraspecs_dict_list
-        """
-        extraspecs_dict = {}
-        extraspecs = self.update_extra_specs(extraspecs)
-        extraspecs = self._update_intervals_and_retries(
-            extraspecs, interval, retries)
-        extraspecs_dict["volumeTypeId"] = volumetype_id
-        extraspecs_dict[EXTRA_SPECS] = extraspecs
-        return extraspecs_dict
+        intervals_retries_dict = {INTERVAL: interval, RETRIES: retries}
+        return array, intervals_retries_dict
 
     def update_volume_group_name(self, group):
         """Format id and name consistency group.
@@ -649,23 +679,6 @@ class VMAXUtils(object):
 
         group_name += group.id
         return group_name
-
-    @staticmethod
-    def _update_intervals_and_retries(extra_specs, interval, retries):
-        """Updates the extraSpecs with intervals and retries values.
-
-        :param extra_specs:
-        :param interval: Interval in seconds between retries
-        :param retries: Retry count
-        :returns: Updated extra_specs
-        """
-        extra_specs[INTERVAL] = interval
-        LOG.debug("The interval is set at: %(intervalInSecs)s.",
-                  {'intervalInSecs': interval})
-        extra_specs[RETRIES] = retries
-        LOG.debug("Retries are set at: %(retries)s.",
-                  {'retries': retries})
-        return extra_specs
 
     @staticmethod
     def add_legacy_pools(pools):
@@ -693,6 +706,7 @@ class VMAXUtils(object):
         """Check volume type and group type.
 
         This will make sure they do not conflict with each other.
+
         :param volume: volume to be checked
         :param extra_specs: the extra specifications
         :raises: InvalidInput
@@ -717,6 +731,7 @@ class VMAXUtils(object):
 
         Group status must be enabled before proceeding with certain
         operations.
+
         :param group: the group object
         :raises: InvalidInput
         """
@@ -725,7 +740,64 @@ class VMAXUtils(object):
                 msg = (_('Replication status should be %s for '
                          'replication-enabled group.')
                        % fields.ReplicationStatus.ENABLED)
+                LOG.error(msg)
                 raise exception.InvalidInput(reason=msg)
         else:
             LOG.debug('Replication is not enabled on group %s, '
                       'skip status check.', group.id)
+
+    @staticmethod
+    def get_replication_prefix(rep_mode):
+        """Get the replication prefix.
+
+        Replication prefix for storage group naming is based on whether it is
+        synchronous, asynchronous, or metro replication mode.
+
+        :param rep_mode: flag to indicate if replication is async
+        :return: prefix
+        """
+        if rep_mode == REP_ASYNC:
+            prefix = "-RA"
+        elif rep_mode == REP_METRO:
+            prefix = "-RM"
+        else:
+            prefix = "-RE"
+        return prefix
+
+    @staticmethod
+    def get_async_rdf_managed_grp_name(rep_config):
+        """Get the name of the group used for async replication management.
+
+        :param rep_config: the replication configuration
+        :return: group name
+        """
+        async_grp_name = ("OS-%(rdf)s-%(mode)s-rdf-sg"
+                          % {'rdf': rep_config['rdf_group_label'],
+                             'mode': rep_config['mode']})
+        LOG.debug("The async/ metro rdf managed group name is %(name)s",
+                  {'name': async_grp_name})
+        return async_grp_name
+
+    def is_metro_device(self, rep_config, extra_specs):
+        """Determine if a volume is a Metro enabled device.
+
+        :param rep_config: the replication configuration
+        :param extra_specs: the extra specifications
+        :return: bool
+        """
+        is_metro = (True if self.is_replication_enabled(extra_specs)
+                    and rep_config is not None
+                    and rep_config['mode'] == REP_METRO else False)
+        return is_metro
+
+    def does_vol_need_rdf_management_group(self, extra_specs):
+        """Determine if a volume is a Metro or Async.
+
+        :param extra_specs: the extra specifications
+        :return: bool
+        """
+        if (self.is_replication_enabled(extra_specs) and
+                extra_specs.get(REP_MODE, None) in
+                [REP_ASYNC, REP_METRO]):
+            return True
+        return False

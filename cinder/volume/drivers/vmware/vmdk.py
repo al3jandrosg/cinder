@@ -144,6 +144,12 @@ vmdk_opts = [
                choices=['template', 'COW'],
                default='template',
                help='Volume snapshot format in vCenter server.'),
+    cfg.BoolOpt('vmware_lazy_create',
+                default=True,
+                help='If true, the backend volume in vCenter server is created'
+                     ' lazily when the volume is created without any source. '
+                     'The backend volume is created when the volume is '
+                     'attached, uploaded to image service or during backup.'),
 ]
 
 CONF = cfg.CONF
@@ -240,7 +246,19 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     # 2.0.0 - performance enhancements
     #       - new config option 'vmware_adapter_type'
     #       - new extra-spec option 'vmware:adapter_type'
-    VERSION = '2.0.0'
+    # 3.0.0 - vCenter storage profile ID caching
+    #         support for cloning attached volume
+    #         optimize volume creation from image for vCenter datastore based
+    #         glance backend
+    #         add 'managed by OpenStack Cinder' info to volumes in the backend
+    #         support for vSphere template as volume snapshot format
+    #         support for snapshot of attached volumes
+    #         add storage profile ID to connection info
+    #         support for revert-to-snapshot
+    #         improve scalability of querying volumes in backend (bug 1600754)
+    # 3.1.0 - support adapter type change using retype
+    # 3.2.0 - config option to disable lazy creation of backend volume
+    VERSION = '3.2.0'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "VMware_CI"
@@ -344,7 +362,10 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         :param volume: Volume object
         """
-        self._verify_volume_creation(volume)
+        if self.configuration.vmware_lazy_create:
+            self._verify_volume_creation(volume)
+        else:
+            self._create_backing(volume)
 
     def _delete_volume(self, volume):
         """Delete the volume backing if it is present.
@@ -1544,6 +1565,20 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                                             {'backing': backing,
                                              'new_name': tmp_name,
                                              'old_name': volume['name']})
+
+        adapter_type = self._get_adapter_type(volume)
+        new_adapter_type = self._get_extra_spec_adapter_type(new_type['id'])
+        if new_adapter_type != adapter_type:
+            LOG.debug("Changing volume: %(name)s adapter type from "
+                      "%(adapter_type)s to %(new_adapter_type)s.",
+                      {'name': volume['name'],
+                       'adapter_type': adapter_type,
+                       'new_adapter_type': new_adapter_type})
+            disk_device = self.volumeops._get_disk_device(backing)
+            self.volumeops.detach_disk_from_backing(backing, disk_device)
+            self.volumeops.attach_disk_to_backing(
+                backing, disk_device.capacityInKB, new_disk_type,
+                new_adapter_type, None, disk_device.backing.fileName)
 
         # Update the backing's storage profile if needed.
         if need_profile_change:

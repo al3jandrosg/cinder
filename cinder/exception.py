@@ -22,8 +22,6 @@ SHOULD include dedicated exception logging.
 
 """
 
-import sys
-
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_versionedobjects import exception as obj_exc
@@ -37,10 +35,14 @@ from cinder.i18n import _
 
 LOG = logging.getLogger(__name__)
 
+# TODO(smcginnis) Remove in Rocky
 exc_log_opts = [
     cfg.BoolOpt('fatal_exception_format_errors',
                 default=False,
-                help='Make exception message format errors fatal.'),
+                help='Make exception message format errors fatal.',
+                deprecated_for_removal=True,
+                deprecated_since='12.0.0',
+                deprecated_reason='This is only used for internal testing.'),
 ]
 
 CONF = cfg.CONF
@@ -108,16 +110,9 @@ class CinderException(Exception):
                 message = self.message % kwargs
 
             except Exception:
-                exc_info = sys.exc_info()
-                # kwargs doesn't match a variable in the message
-                # log the issue and the kwargs
-                LOG.exception('Exception in string format operation')
-                for name, value in kwargs.items():
-                    LOG.error("%(name)s: %(value)s",
-                              {'name': name, 'value': value})
-                if CONF.fatal_exception_format_errors:
-                    six.reraise(*exc_info)
-                # at least get the core message out if something happened
+                # NOTE(melwitt): This is done in a separate method so it can be
+                # monkey-patched during testing to make it a hard failure.
+                self._log_exception()
                 message = self.message
         elif isinstance(message, Exception):
             # NOTE(tommylikehu): If this is a cinder exception it will
@@ -130,6 +125,14 @@ class CinderException(Exception):
         # overshadowed by the class' message attribute
         self.msg = message
         super(CinderException, self).__init__(message)
+
+    def _log_exception(self):
+        # kwargs doesn't match a variable in the message
+        # log the issue and the kwargs
+        LOG.exception('Exception in string format operation:')
+        for name, value in self.kwargs.items():
+            LOG.error("%(name)s: %(value)s",
+                      {'name': name, 'value': value})
 
     def _should_format(self):
         return self.kwargs['message'] is None or '%(message)' in self.message
@@ -1001,6 +1004,10 @@ class RemoteFSNoSuitableShareFound(RemoteFSException):
     message = _("There is no share which can host %(volume_size)sG")
 
 
+class RemoteFSInvalidBackingFile(VolumeDriverException):
+    message = _("File %(path)s has invalid backing file %(backing_file)s.")
+
+
 # NFS driver
 class NfsException(RemoteFSException):
     message = _("Unknown NFS exception")
@@ -1150,6 +1157,10 @@ class ISCSITargetDetachFailed(CinderException):
     message = _("Failed to detach iSCSI target for volume %(volume_id)s.")
 
 
+class TargetUpdateFailed(CinderException):
+    message = _("Failed to update target for volume %(volume_id)s.")
+
+
 class ISCSITargetHelperCommandFailed(CinderException):
     message = "%(error_message)s"
 
@@ -1205,6 +1216,12 @@ class XtremIOArrayBusy(VolumeDriverException):
 
 class XtremIOSnapshotsLimitExceeded(VolumeDriverException):
     message = _("Exceeded the limit of snapshots per volume")
+
+
+# StorPool driver
+class StorPoolConfigurationInvalid(CinderException):
+    message = _("Invalid parameter %(param)s in the %(section)s section "
+                "of the /etc/storpool.conf file: %(error)s")
 
 
 # DOTHILL drivers
@@ -1340,3 +1357,9 @@ class GPFSDriverUnsupportedOperation(VolumeBackendAPIException):
 
 class InvalidName(Invalid):
     message = _("An invalid 'name' value was provided. %(reason)s")
+
+
+class ServiceUserTokenNoAuth(CinderException):
+    message = _("The [service_user] send_service_user_token option was "
+                "requested, but no service auth could be loaded. Please check "
+                "the [service_user] configuration section.")

@@ -27,6 +27,9 @@ operations:
 -  Manage an existing volume.
 -  Failover-host for replicated back ends.
 -  Failback-host for replicated back ends.
+-  Create, list, and delete replication group.
+-  Enable, disable replication group.
+-  Failover, failback replication group.
 
 Configure the Storwize family and SVC system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -315,6 +318,9 @@ driver:
 - multipath
 - iogrp
 - mirror_pool
+- volume_topology
+- peer_pool
+- host_site
 
 These keys have the same semantics as their counterparts in the
 configuration file. They are set similarly; for example, ``rsize=2`` or
@@ -452,6 +458,12 @@ modify volume types, you can also change these extra specs properties:
 
 -  mirror_pool
 
+-  volume_topology
+
+-  peer_pool
+
+-  host_site
+
 .. note::
 
    When you change the ``rsize``, ``grainsize`` or ``compression``
@@ -465,6 +477,9 @@ modify volume types, you can also change these extra specs properties:
 
 Replication operation
 ---------------------
+
+Configure replication in volume type
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 A volume is only replicated if the volume is created with a volume-type
 that has the extra spec ``replication_enabled`` set to ``<is> True``. Three
@@ -491,6 +506,9 @@ mode. Default value is 300. Example syntax:
    storage manually on the storage back end before replication
    volume creation.
 
+Failover host
+<<<<<<<<<<<<<
+
 The ``failover-host`` command is designed for the case where the primary
 storage is down.
 
@@ -515,3 +533,69 @@ default as the ``backend_id``:
    If the synchronization is not done manually, Storwize Block Storage
    service driver will perform the synchronization and do the failback
    after the synchronization is finished.
+
+Replication group
+<<<<<<<<<<<<<<<<<
+
+Before creating replication group, a group-spec which key
+``consistent_group_replication_enabled`` set to ``<is> True`` should be
+set in group type. Volume type used to create group must be replication
+enabled, and its ``replication_type`` should be set either ``<in> global``
+or ``<in> metro``. The "failover_group" api allows group to be failed over
+and back without failing over the entire host. Example syntax:
+
+- Create replication group
+
+.. code-block:: console
+
+   $ cinder group-type-create rep-group-type-example
+   $ cinder group-type-key rep-group-type-example set consistent_group_replication_enabled='<is> True'
+   $ cinder type-create type-global
+   $ cinder type-key type-global set replication_enabled='<is> True' replication_type='<in> global'
+   $ cinder group-create rep-group-type-example type-global --name global-group
+
+- Failover replication group
+
+.. code-block:: console
+
+   $ cinder group-failover-replication --secondary-backend-id target_svc_id group_id
+
+- Failback replication group
+
+.. code-block:: console
+
+   $ cinder group-failover-replication --secondary-backend-id default group_id
+
+.. note::
+
+   Option allow-attached-volume can be used to failover the in-use volume, but
+   fail over/back an in-use volume is not recommended. If the user does failover
+   operation to an in-use volume, the volume status remains in-use after
+   failover. But the in-use replication volume would change to read-only since
+   the primary volume is changed to auxiliary side and the instance is still
+   attached to the master volume. As a result please detach the replication
+   volume first and attach again if user want to reuse the in-use replication
+   volume as read-write.
+
+Hyperswap Volumes
+-----------------
+
+A hyperswap volume is created with a volume-type that has the extra spec
+``drivers:volume_topology`` set to ``hyperswap``.
+To support hyperswap volumes, IBM Storwize/SVC firmware version 7.6.0 or
+later is required.
+
+.. code-block:: console
+
+   $ cinder type-create hyper_type
+   $ cinder type-key hyper_type set drivers:volume_topology=hyperswap \
+     drivers:peer_pool=Pool_site2 drivers:host_site=site1
+
+.. note::
+
+   The property ``rsize`` is considered as ``buffersize`` for hyperswap
+   volume.
+   The hyperswap property ``iogrp`` is selected by storage.
+
+A group is created as a hyperswap group with a group-type that has the
+group spec ``hyperswap_group_enabled`` set to ``<is> True``.

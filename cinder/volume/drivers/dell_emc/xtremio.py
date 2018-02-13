@@ -28,6 +28,8 @@ supported XtremIO version 2.4 and up
           R/O snapshots, CHAP discovery authentication
   1.0.7 - cache glance images on the array
   1.0.8 - support for volume retype, CG fixes
+  1.0.9 - performance improvements, support force detach, support for X2
+  1.0.10 - option to clean unused IGs
 """
 
 import json
@@ -52,6 +54,7 @@ from cinder import utils
 from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
+from cinder.volume import utils as vutils
 from cinder.zonemanager import utils as fczm_utils
 
 
@@ -71,7 +74,16 @@ XTREMIO_OPTS = [
                help='Interval between retries in case array is busy'),
     cfg.IntOpt('xtremio_volumes_per_glance_cache',
                default=100,
-               help='Number of volumes created from each cached glance image')]
+               help='Number of volumes created from each cached glance image'),
+    cfg.BoolOpt('xtremio_clean_unused_ig',
+                default=False,
+                help='Should the driver remove initiator groups with no '
+                     'volumes after the last connection was terminated. '
+                     'Since the behavior till now was to leave '
+                     'the IG be, we default to False (not deleting IGs '
+                     'without connected volumes); setting this parameter '
+                     'to True will remove any IG after terminating its '
+                     'connection to the last volume.')]
 
 CONF.register_opts(XTREMIO_OPTS, group=configuration.SHARED_CONF_GROUP)
 
@@ -134,7 +146,8 @@ class XtremIOClient(object):
                 self.update_url(params, self.cluster_id)
             if method != 'GET':
                 self.update_data(data, self.cluster_id)
-                LOG.debug('data: %s', data)
+                # data may include chap password
+                LOG.debug('data: %s', strutils.mask_password(data))
             LOG.debug('%(type)s %(url)s', {'type': method, 'url': url})
             try:
                 response = requests.request(
@@ -396,7 +409,7 @@ class XtremIOClient42(XtremIOClient4):
 class XtremIOVolumeDriver(san.SanDriver):
     """Executes commands relating to Volumes."""
 
-    VERSION = '1.0.9'
+    VERSION = '1.0.10'
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_XIO_CI"
@@ -412,9 +425,12 @@ class XtremIOVolumeDriver(san.SanDriver):
                              or self.driver_name)
         self.cluster_id = (self.configuration.safe_get('xtremio_cluster_name')
                            or '')
-        self.provisioning_factor = (self.configuration.
-                                    safe_get('max_over_subscription_ratio')
-                                    or DEFAULT_PROVISIONING_FACTOR)
+        self.provisioning_factor = vutils.get_max_over_subscription_ratio(
+            self.configuration.max_over_subscription_ratio,
+            supports_auto=False)
+
+        self.clean_ig = (self.configuration.safe_get('xtremio_clean_unused_ig')
+                         or False)
         self._stats = {}
         self.client = XtremIOClient3(self.configuration, self.cluster_id)
 
@@ -488,7 +504,22 @@ class XtremIOVolumeDriver(san.SanDriver):
         else:
             snapshot_id = snapshot['id']
 
-        self.client.create_snapshot(snapshot_id, volume['id'])
+        try:
+            self.client.create_snapshot(snapshot_id, volume['id'])
+        except exception.XtremIOSnapshotsLimitExceeded as e:
+            raise exception.CinderException(e.message)
+
+        # extend the snapped volume if requested size is larger then original
+        if volume['size'] > snapshot['volume_size']:
+            try:
+                self.extend_volume(volume, volume['size'])
+            except Exception:
+                LOG.error('failed to extend volume %s, '
+                          'reverting volume from snapshot operation',
+                          volume['id'])
+                # remove the volume in case resize failed
+                self.delete_volume(volume)
+                raise
 
         # add new volume to consistency group
         if (volume.get('consistencygroup_id') and
@@ -516,7 +547,7 @@ class XtremIOVolumeDriver(san.SanDriver):
             try:
                 self.extend_volume(volume, volume['size'])
             except Exception:
-                LOG.error('failes to extend volume %s, '
+                LOG.error('failed to extend volume %s, '
                           'reverting clone operation', volume['id'])
                 # remove the volume in case resize failed
                 self.delete_volume(volume)
@@ -708,6 +739,18 @@ class XtremIOVolumeDriver(san.SanDriver):
             except exception.NotFound:
                 LOG.warning("terminate_connection: lun map not found")
 
+        if self.clean_ig:
+            for idx in ig_indexes:
+                try:
+                    ig = self.client.req('initiator-groups', 'GET',
+                                         {'prop': 'num-of-vols'},
+                                         idx=idx)['content']
+                    if ig['num-of-vols'] == 0:
+                        self.client.req('initiator-groups', 'DELETE', idx=idx)
+                except (exception.NotFound,
+                        exception.VolumeBackendAPIException):
+                    LOG.warning('Failed to clean IG %d without mappings', idx)
+
     def _get_password(self):
         return ''.join(RANDOM.choice
                        (string.ascii_uppercase + string.digits)
@@ -807,7 +850,10 @@ class XtremIOVolumeDriver(san.SanDriver):
             snap_by_anc = self._get_snapset_ancestors(snap_name)
             for volume, snapshot in zip(volumes, snapshots):
                 real_snap = snap_by_anc[snapshot['volume_id']]
-                self.create_volume_from_snapshot(volume, {'id': real_snap})
+                self.create_volume_from_snapshot(
+                    volume,
+                    {'id': real_snap,
+                     'volume_size': snapshot['volume_size']})
 
         elif source_cg:
             data = {'consistency-group-id': source_cg['id'],
