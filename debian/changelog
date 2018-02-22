@@ -1,3 +1,9 @@
+cinder (2:12.0.0~rc2-0ubuntu1) bionic; urgency=medium
+
+  * New upstream release candidate for OpenStack Queens.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 22 Feb 2018 16:06:49 -0500
+
 cinder (2:12.0.0~rc1-0ubuntu1) bionic; urgency=medium
 
   * d/control: Add python-defusedxml to (Build-)Depends.

@@ -1,6 +1,19 @@
 CHANGES
 =======
 
+12.0.0.0rc2
+-----------
+
+* Cinder logs rabbitmq password on connection log
+* Add multiattach reporting to SolidFire
+* Only enforce multiattach policy for retype target
+* Use oslo\_db.sqlalchemy.test\_fixtures
+* Admin guide documentation for volume multiattach
+* Enable multiattach capability for the zfssa driver
+* Improve logs on scheduler
+* Update UPPER\_CONSTRAINTS\_FILE for stable/queens
+* Update .gitreview for stable/queens
+
 12.0.0.0rc1
 -----------
 
