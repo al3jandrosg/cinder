@@ -1,0 +1,46 @@
+From 7d278042c5280e40d5ed68f504f45ef023f05e18 Mon Sep 17 00:00:00 2001
+From: Eric Harney <eharney@redhat.com>
+Date: Wed, 21 Feb 2018 14:27:11 -0500
+Subject: [PATCH] Log config options with oslo.config
+
+This removes some custom Cinder code which
+handles filtering secret config options in a flaky way.
+
+Filtering will now be based on the "secret=True" option
+flag.
+
+Related-Bug: #1750074
+Change-Id: I1c404b057d1471c85bd7eaf5c096f5912293460a
+---
+ cinder/service.py | 15 ++-------------
+ 1 file changed, 2 insertions(+), 13 deletions(-)
+
+diff --git a/cinder/service.py b/cinder/service.py
+index eee8ff3be..903688edf 100644
+--- a/cinder/service.py
++++ b/cinder/service.py
+@@ -623,19 +623,8 @@ def serve(server, workers=None):
+ 
+ 
+ def wait():
+-    LOG.debug('Full set of CONF:')
+-    for flag in CONF:
+-        flag_get = CONF.get(flag, None)
+-        # hide flag contents from log if contains a password
+-        # should use secret flag when switch over to openstack-common
+-        if ("_password" in flag or "_key" in flag or
+-                (flag == "transport_url" and "rabbit:" in flag_get) or
+-                (flag == "sql_connection" and
+-                    ("mysql:" in flag_get or "postgresql:" in flag_get))):
+-            LOG.debug('%s : FLAG SET ', flag)
+-        else:
+-            LOG.debug('%(flag)s : %(flag_get)s',
+-                      {'flag': flag, 'flag_get': flag_get})
++    CONF.log_opt_values(LOG, logging.DEBUG)
++
+     try:
+         _launcher.wait()
+     except KeyboardInterrupt:
+-- 
+2.15.1
+
