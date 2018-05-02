@@ -233,7 +233,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         # NOTE(dulek): Volume should be rescheduled as we passed request_spec
         # and filter_properties, assert that it wasn't counted in
         # allocated_capacity tracking.
-        self.assertEqual({}, self.volume.stats['pools'])
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 0}},
+                         self.volume.stats['pools'])
 
         # NOTE(dulek): As we've rescheduled, make sure delete_volume was
         # called.
@@ -260,7 +261,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         # NOTE(dulek): Volume should be rescheduled as we passed request_spec
         # and filter_properties, assert that it wasn't counted in
         # allocated_capacity tracking.
-        self.assertEqual({}, self.volume.stats['pools'])
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 0}},
+                         self.volume.stats['pools'])
 
         db.volume_destroy(context.get_admin_context(), volume_id)
 
@@ -317,6 +319,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.assert_notify_called(mock_notify,
                                   (['INFO', 'volume.create.start'],
                                    ['INFO', 'volume.create.end']))
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 1}},
+                         self.volume.stats['pools'])
 
         self.volume.delete_volume(self.context, volume)
         vol = db.volume_get(context.get_admin_context(read_deleted='yes'),
@@ -328,6 +332,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                    ['INFO', 'volume.create.end'],
                                    ['INFO', 'volume.delete.start'],
                                    ['INFO', 'volume.delete.end']))
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 0}},
+                         self.volume.stats['pools'])
 
         self.assertRaises(exception.NotFound,
                           db.volume_get,
@@ -2757,6 +2763,10 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         self.assertTrue(mock_reschedule.called)
         volume = db.volume_get(context.get_admin_context(), test_vol_id)
         self.assertEqual('creating', volume['status'])
+        # We increase the stats on entering the create method, but we must
+        # have cleared them on reschedule.
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 0}},
+                         self.volume.stats['pools'])
 
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.execute')
@@ -2774,6 +2784,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           {'retry': {'num_attempts': 1, 'host': []}})
         volume = db.volume_get(context.get_admin_context(), test_vol_id)
         self.assertEqual('error', volume['status'])
+        self.assertEqual({'_pool0': {'allocated_capacity_gb': 1}},
+                         self.volume.stats['pools'])
 
     def test_cascade_delete_volume_with_snapshots(self):
         """Test volume deletion with dependent snapshots."""
@@ -2974,6 +2986,29 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         manager = vol_manager.VolumeManager()
         self.assertRaises(exception.ProgrammingError,
                           manager._append_volume_stats, {'pools': 'bad_data'})
+
+    def test_default_tpool_size(self):
+        """Test we can set custom tpool size."""
+        eventlet.tpool._nthreads = 10
+        self.assertListEqual([], eventlet.tpool._threads)
+
+        vol_manager.VolumeManager()
+
+        self.assertEqual(20, eventlet.tpool._nthreads)
+        self.assertListEqual([], eventlet.tpool._threads)
+
+    def test_tpool_size(self):
+        """Test we can set custom tpool size."""
+        self.assertNotEqual(100, eventlet.tpool._nthreads)
+        self.assertListEqual([], eventlet.tpool._threads)
+
+        self.override_config('backend_native_threads_pool_size', 100,
+                             group='backend_defaults')
+        vol_manager.VolumeManager()
+
+        self.assertEqual(100, eventlet.tpool._nthreads)
+        self.assertListEqual([], eventlet.tpool._threads)
+        eventlet.tpool._nthreads = 20
 
 
 class VolumeTestCaseLocks(base.BaseVolumeTestCase):

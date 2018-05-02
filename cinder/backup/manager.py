@@ -50,6 +50,7 @@ from cinder.backup import rpcapi as backup_rpcapi
 from cinder import context
 from cinder import exception
 from cinder.i18n import _
+from cinder.keymgr import migration as key_migration
 from cinder import manager
 from cinder import objects
 from cinder.objects import fields
@@ -71,6 +72,12 @@ backup_manager_opts = [
                      'backup service startup. If false, the backup service '
                      'will remain down until all pending backups are '
                      'deleted.',),
+    cfg.IntOpt('backup_native_threads_pool_size',
+               default=60,
+               min=20,
+               help='Size of the native threads pool for the backups.  '
+                    'Most backup drivers rely heavily on this, it can be '
+                    'decreased for specific drivers that don\'t.'),
 ]
 
 # This map doesn't need to be extended in the future since it's only
@@ -104,6 +111,7 @@ class BackupManager(manager.ThreadPoolManager):
         self.volume_rpcapi = volume_rpcapi.VolumeAPI()
         super(BackupManager, self).__init__(*args, **kwargs)
         self.is_initialized = False
+        self._set_tpool_size(CONF.backup_native_threads_pool_size)
 
     @property
     def driver_name(self):
@@ -156,6 +164,12 @@ class BackupManager(manager.ThreadPoolManager):
         except Exception:
             # Don't block startup of the backup service.
             LOG.exception("Problem cleaning incomplete backup operations.")
+
+        # Migrate any ConfKeyManager keys based on fixed_key to the currently
+        # configured key manager.
+        backups = objects.BackupList.get_all_by_host(ctxt, self.host)
+        self._add_to_threadpool(key_migration.migrate_fixed_key,
+                                backups=backups)
 
     def _setup_backup_driver(self, ctxt):
         backup_service = self.get_backup_driver(ctxt)
@@ -406,21 +420,29 @@ class BackupManager(manager.ThreadPoolManager):
             self.db.volume_update(context, volume_id,
                                   {'status': previous_status,
                                    'previous_status': 'backing-up'})
-        backup.status = fields.BackupStatus.AVAILABLE
-        backup.size = volume['size']
 
-        if updates:
-            backup.update(updates)
-        backup.save()
+        # _run_backup method above updated the status for the backup, so it
+        # will reflect latest status, even if it is deleted
+        completion_msg = 'finished'
+        if backup.status in (fields.BackupStatus.DELETING,
+                             fields.BackupStatus.DELETED):
+            completion_msg = 'aborted'
+        else:
+            backup.status = fields.BackupStatus.AVAILABLE
+            backup.size = volume['size']
 
-        # Handle the num_dependent_backups of parent backup when child backup
-        # has created successfully.
-        if backup.parent_id:
-            parent_backup = objects.Backup.get_by_id(context,
-                                                     backup.parent_id)
-            parent_backup.num_dependent_backups += 1
-            parent_backup.save()
-        LOG.info('Create backup finished. backup: %s.', backup.id)
+            if updates:
+                backup.update(updates)
+            backup.save()
+
+            # Handle the num_dependent_backups of parent backup when child
+            # backup has created successfully.
+            if backup.parent_id:
+                parent_backup = objects.Backup.get_by_id(context,
+                                                         backup.parent_id)
+                parent_backup.num_dependent_backups += 1
+                parent_backup.save()
+        LOG.info('Create backup %s. backup: %s.', completion_msg, backup.id)
         self._notify_about_backup_usage(context, backup, "create.end")
 
     def _run_backup(self, context, backup, volume):
@@ -472,7 +494,8 @@ class BackupManager(manager.ThreadPoolManager):
                                     backup_device.is_snapshot, force=True,
                                     ignore_errors=True)
         finally:
-            backup = objects.Backup.get_by_id(context, backup.id)
+            with backup.as_read_deleted():
+                backup.refresh()
             self._cleanup_temp_volumes_snapshots_when_backup_created(
                 context, backup)
         return updates

@@ -1606,10 +1606,10 @@ doc/source/configuration/block-storage/drivers/datacore-volume-driver.rst
 doc/source/configuration/block-storage/drivers/datera-volume-driver.rst
 doc/source/configuration/block-storage/drivers/dell-emc-scaleio-driver.rst
 doc/source/configuration/block-storage/drivers/dell-emc-unity-driver.rst
+doc/source/configuration/block-storage/drivers/dell-emc-vnx-driver.rst
 doc/source/configuration/block-storage/drivers/dell-equallogic-driver.rst
 doc/source/configuration/block-storage/drivers/dell-storagecenter-driver.rst
 doc/source/configuration/block-storage/drivers/emc-vmax-driver.rst
-doc/source/configuration/block-storage/drivers/emc-vnx-driver.rst
 doc/source/configuration/block-storage/drivers/emc-xtremio-driver.rst
 doc/source/configuration/block-storage/drivers/fujitsu-eternus-dx-driver.rst
 doc/source/configuration/block-storage/drivers/hp-msa-driver.rst
@@ -1916,6 +1916,7 @@ releasenotes/notes/bug-1660927-netapp-no-copyoffload-77fc3cf4f2cf2335.yaml
 releasenotes/notes/bug-1667071-dc6407f40a1f7d15.yaml
 releasenotes/notes/bug-1670260-fix-boolean-is_public-d16e1957c0f09d65.yaml
 releasenotes/notes/bug-1671220-4d521be71d0b8aa4.yaml
+releasenotes/notes/bug-1686745-e8f1569455f998ba.yaml
 releasenotes/notes/bug-1691771-fix-netapp-manage-volumes-62bec192a08b3ceb.yaml
 releasenotes/notes/bug-1693084-fix-az-cache-invalid-6td4q74q28uxcd68.yaml
 releasenotes/notes/bug-1699936-fix-host-show-incorrect-fg8698gu7y6r7d15.yaml
@@ -1954,6 +1955,7 @@ releasenotes/notes/del_volume_with_fc-f024b9f2d6eaca0f.yaml
 releasenotes/notes/delete-volume-metadata-keys-3e19694401e13d00.yaml
 releasenotes/notes/delete-volume-with-snapshots-0b104e212d5d36b1.yaml
 releasenotes/notes/delete_parameters-6f44fece22a7787d.yaml
+releasenotes/notes/dell-emc-sc-bugfix-1756914-ffca3133273040f6.yaml
 releasenotes/notes/dell-emc-sc-support-generic-groups-98c7452d705b36f9.yaml
 releasenotes/notes/dell-emc-unity-driver-72cb901467b23b22.yaml
 releasenotes/notes/deprecate-api-v2-9f4543ab2e14b018.yaml
@@ -1981,7 +1983,9 @@ releasenotes/notes/enforce_min_vmware-a080055111b04692.yaml
 releasenotes/notes/eqlx-volume-manage-unmanage-a24ec7f0d9989df3.yaml
 releasenotes/notes/falconstor-cinder-driver-dcb61441cd7601c5.yaml
 releasenotes/notes/falconstor-extend-driver-to-utilize-multiple-fss-pools-dc6f2bc84432a672.yaml
+releasenotes/notes/fix-abort-backup-df196e9dcb992586.yaml
 releasenotes/notes/fix-backup-handling-of-encryption-key-id-f2fa56cadd80d582.yaml
+releasenotes/notes/fix-cross-az-migration-ce97eff61280e1c7.yaml
 releasenotes/notes/fix-extend-volume-in-thin-pools-57a3d53be4d47704.yaml
 releasenotes/notes/fix-hnas-clone-with-different-volume-type-b969897cba2610cc.yaml
 releasenotes/notes/fix-hnas-stats-reporting-1335e582e46ff440.yaml
@@ -2071,6 +2075,7 @@ releasenotes/notes/mark-violin-unsupported-fdf6b34cf9847359.yaml
 releasenotes/notes/mark-xio-deprecated-18c914e15695d793.yaml
 releasenotes/notes/mark-zte-unsupported-3c048e419264eca2.yaml
 releasenotes/notes/metadata-for-volume-summary-729ba648db4e4e54.yaml
+releasenotes/notes/migrate-backup-encryption-keys-to-barbican-6f07fd48d4937b2a.yaml
 releasenotes/notes/migrate-cg-to-generic-volume-groups-f82ad3658f3e567c.yaml
 releasenotes/notes/migrate-fixed-key-to-barbican-91dfcb829efd4bb6.yaml
 releasenotes/notes/move-eqlx-driver-to-dell-emc-fe5d2b484c47b7a6.yaml
@@ -2246,6 +2251,7 @@ releasenotes/notes/synology-volume-driver-c5e0f655b04390ce.yaml
 releasenotes/notes/tintri_image_direct_clone-f73e561985aad867.yaml
 releasenotes/notes/tooz-coordination-heartbeat-cfac1064fd7878be.yaml
 releasenotes/notes/tooz-locks-0f9f2cc15f8dad5a.yaml
+releasenotes/notes/tpool-size-11121f78df24db39.yaml
 releasenotes/notes/type-extra-spec-policies-b7742b0ac2732864.yaml
 releasenotes/notes/unity-backup-via-snapshot-81a2d5a118c97042.yaml
 releasenotes/notes/unity-fast-clone-02ae88ba8fdef145.yaml
@@ -2339,7 +2345,6 @@ releasenotes/source/pike.rst
 releasenotes/source/unreleased.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
-releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po
 tools/check_exec.py
 tools/colorizer.py
 tools/enable-pre-commit-hook.sh

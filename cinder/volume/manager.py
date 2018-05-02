@@ -143,6 +143,12 @@ volume_backend_opts = [
     cfg.BoolOpt('suppress_requests_ssl_warnings',
                 default=False,
                 help='Suppress requests library SSL certificate warnings.'),
+    cfg.IntOpt('backend_native_threads_pool_size',
+               default=20,
+               min=20,
+               help='Size of the native threads pool for the backend.  '
+                    'Increase for backends that heavily rely on this, like '
+                    'the RBD driver.'),
 ]
 
 CONF = cfg.CONF
@@ -198,6 +204,12 @@ class VolumeManager(manager.CleanableManager,
         'attach_status', 'migration_status', 'volume_type',
         'consistencygroup', 'volume_attachment', 'group'}
 
+    def _get_service(self, host=None, binary=constants.VOLUME_BINARY):
+        host = host or self.host
+        ctxt = context.get_admin_context()
+        svc_host = vol_utils.extract_host(host, 'backend')
+        return objects.Service.get_by_args(ctxt, svc_host, binary)
+
     def __init__(self, volume_driver=None, service_name=None,
                  *args, **kwargs):
         """Load the driver from the one specified in args, or from flags."""
@@ -208,6 +220,8 @@ class VolumeManager(manager.CleanableManager,
         service_name = service_name or 'backend_defaults'
         self.configuration = config.Configuration(volume_backend_opts,
                                                   config_group=service_name)
+        self._set_tpool_size(
+            self.configuration.backend_native_threads_pool_size)
         self.stats = {}
         self.service_uuid = None
 
@@ -227,12 +241,8 @@ class VolumeManager(manager.CleanableManager,
         # We pass the current setting for service.active_backend_id to
         # the driver on init, in case there was a restart or something
         curr_active_backend_id = None
-        svc_host = vol_utils.extract_host(self.host, 'backend')
         try:
-            service = objects.Service.get_by_args(
-                context.get_admin_context(),
-                svc_host,
-                constants.VOLUME_BINARY)
+            service = self._get_service()
         except exception.ServiceNotFound:
             # NOTE(jdg): This is to solve problems with unit tests
             LOG.info("Service not found for updating "
@@ -500,7 +510,8 @@ class VolumeManager(manager.CleanableManager,
 
         # Migrate any ConfKeyManager keys based on fixed_key to the currently
         # configured key manager.
-        self._add_to_threadpool(key_migration.migrate_fixed_key, volumes)
+        self._add_to_threadpool(key_migration.migrate_fixed_key,
+                                volumes=volumes)
 
         # collect and publish service capabilities
         self.publish_service_capabilities(ctxt)
@@ -530,12 +541,8 @@ class VolumeManager(manager.CleanableManager,
             return
 
         stats = self.driver.get_volume_stats(refresh=True)
-        svc_host = vol_utils.extract_host(self.host, 'backend')
         try:
-            service = objects.Service.get_by_args(
-                context.get_admin_context(),
-                svc_host,
-                constants.VOLUME_BINARY)
+            service = self._get_service()
         except exception.ServiceNotFound:
             with excutils.save_and_reraise_exception():
                 LOG.error("Service not found for updating replication_status.")
@@ -610,6 +617,12 @@ class VolumeManager(manager.CleanableManager,
         # Make sure the host in the DB matches our own when clustered
         self._set_resource_host(volume)
 
+        # Update our allocated capacity counter early to minimize race
+        # conditions with the scheduler.
+        self._update_allocated_capacity(volume)
+        # We lose the host value if we reschedule, so keep it here
+        original_host = volume.host
+
         context_elevated = context.elevated()
         if filter_properties is None:
             filter_properties = {}
@@ -682,10 +695,12 @@ class VolumeManager(manager.CleanableManager,
                 except tfe.NotFound:
                     pass
 
-            if not rescheduled:
-                # NOTE(dulek): Volume wasn't rescheduled so we need to update
-                # volume stats as these are decremented on delete.
-                self._update_allocated_capacity(volume)
+            if rescheduled:
+                # NOTE(geguileo): Volume was rescheduled so we need to update
+                # volume stats because the volume wasn't created here.
+                # Volume.host is None now, so we pass the original host value.
+                self._update_allocated_capacity(volume, decrement=True,
+                                                host=original_host)
 
         shared_targets = (
             1
@@ -868,20 +883,7 @@ class VolumeManager(manager.CleanableManager,
             if reservations:
                 QUOTAS.commit(context, reservations, project_id=project_id)
 
-            pool = vol_utils.extract_host(volume.host, 'pool')
-            if pool is None:
-                # Legacy volume, put them into default pool
-                pool = self.driver.configuration.safe_get(
-                    'volume_backend_name') or vol_utils.extract_host(
-                        volume.host, 'pool', True)
-            size = volume.size
-
-            try:
-                self.stats['pools'][pool]['allocated_capacity_gb'] -= size
-            except KeyError:
-                self.stats['pools'][pool] = dict(
-                    allocated_capacity_gb=-size)
-
+            self._update_allocated_capacity(volume, decrement=True)
             self.publish_service_capabilities(context)
 
         msg = "Deleted volume successfully."
@@ -1104,6 +1106,10 @@ class VolumeManager(manager.CleanableManager,
 
         snapshot.status = fields.SnapshotStatus.AVAILABLE
         snapshot.progress = '100%'
+        # Resync with the volume's DB value. This addresses the case where
+        # the snapshot creation was in flight just prior to when the volume's
+        # fixed_key encryption key ID was migrated to Barbican.
+        snapshot.encryption_key_id = vol_ref.encryption_key_id
         snapshot.save()
 
         self._notify_about_snapshot_usage(context, snapshot, "create.end")
@@ -2068,8 +2074,10 @@ class VolumeManager(manager.CleanableManager,
 
         # Create new volume on remote host
         tmp_skip = {'snapshot_id', 'source_volid'}
-        skip = self._VOLUME_CLONE_SKIP_PROPERTIES | tmp_skip | {'host',
-                                                                'cluster_name'}
+        skip = {'host', 'cluster_name', 'availability_zone'}
+        skip.update(tmp_skip)
+        skip.update(self._VOLUME_CLONE_SKIP_PROPERTIES)
+
         new_vol_values = {k: volume[k] for k in set(volume.keys()) - skip}
         if new_type_id:
             new_vol_values['volume_type_id'] = new_type_id
@@ -2079,9 +2087,11 @@ class VolumeManager(manager.CleanableManager,
                     ctxt, self.key_manager, new_type_id)
                 new_vol_values['encryption_key_id'] = encryption_key_id
 
+        dst_service = self._get_service(backend['host'])
         new_volume = objects.Volume(
             context=ctxt,
             host=backend['host'],
+            availability_zone=dst_service.availability_zone,
             cluster_name=backend.get('cluster_name'),
             status='creating',
             attach_status=fields.VolumeAttachStatus.DETACHED,
@@ -2368,10 +2378,14 @@ class VolumeManager(manager.CleanableManager,
                                                                  volume,
                                                                  host)
                 if moved:
-                    updates = {'host': host['host'],
-                               'cluster_name': host.get('cluster_name'),
-                               'migration_status': 'success',
-                               'previous_status': volume.status}
+                    dst_service = self._get_service(host['host'])
+                    updates = {
+                        'host': host['host'],
+                        'cluster_name': host.get('cluster_name'),
+                        'migration_status': 'success',
+                        'availability_zone': dst_service.availability_zone,
+                        'previous_status': volume.status,
+                    }
                     if status_update:
                         updates.update(status_update)
                     if model_update:
@@ -2398,19 +2412,14 @@ class VolumeManager(manager.CleanableManager,
         LOG.info("Migrate volume completed successfully.",
                  resource=volume)
 
-    @periodic_task.periodic_task
     def _report_driver_status(self, context):
         # It's possible during live db migration that the self.service_uuid
         # value isn't set (we didn't restart services), so we'll go ahead
         # and make this a part of the service periodic
         if not self.service_uuid:
-            svc_host = vol_utils.extract_host(self.host, 'backend')
             # We hack this with a try/except for unit tests temporarily
             try:
-                service = objects.Service.get_by_args(
-                    context,
-                    svc_host,
-                    constants.VOLUME_BINARY)
+                service = self._get_service()
                 self.service_uuid = service.uuid
             except exception.ServiceNotFound:
                 LOG.warning("Attempt to update service_uuid "
@@ -2531,6 +2540,7 @@ class VolumeManager(manager.CleanableManager,
 
         return volume_stats
 
+    @periodic_task.periodic_task
     def publish_service_capabilities(self, context):
         """Collect driver status and then publish."""
         self._report_driver_status(context)
@@ -3289,21 +3299,22 @@ class VolumeManager(manager.CleanableManager,
 
         self.db.volume_update(context, vol['id'], update)
 
-    def _update_allocated_capacity(self, vol):
+    def _update_allocated_capacity(self, vol, decrement=False, host=None):
         # Update allocated capacity in volume stats
-        pool = vol_utils.extract_host(vol['host'], 'pool')
+        host = host or vol['host']
+        pool = vol_utils.extract_host(host, 'pool')
         if pool is None:
             # Legacy volume, put them into default pool
             pool = self.driver.configuration.safe_get(
-                'volume_backend_name') or vol_utils.extract_host(
-                    vol['host'], 'pool', True)
+                'volume_backend_name') or vol_utils.extract_host(host, 'pool',
+                                                                 True)
 
+        vol_size = -vol['size'] if decrement else vol['size']
         try:
-            self.stats['pools'][pool]['allocated_capacity_gb'] += (
-                vol['size'])
+            self.stats['pools'][pool]['allocated_capacity_gb'] += vol_size
         except KeyError:
             self.stats['pools'][pool] = dict(
-                allocated_capacity_gb=vol['size'])
+                allocated_capacity_gb=max(vol_size, 0))
 
     def delete_group(self, context, group):
         """Deletes group and the volumes in the group."""
@@ -3994,9 +4005,7 @@ class VolumeManager(manager.CleanableManager,
         updates = {}
         repl_status = fields.ReplicationStatus
 
-        svc_host = vol_utils.extract_host(self.host, 'backend')
-        service = objects.Service.get_by_args(context, svc_host,
-                                              constants.VOLUME_BINARY)
+        service = self._get_service()
 
         # TODO(geguileo): We should optimize these updates by doing them
         # directly on the DB with just 3 queries, one to change the volumes
@@ -4168,9 +4177,7 @@ class VolumeManager(manager.CleanableManager,
         doing the failover of the volumes after finished processing the
         volumes.
         """
-        svc_host = vol_utils.extract_host(self.host, 'backend')
-        service = objects.Service.get_by_args(context, svc_host,
-                                              constants.VOLUME_BINARY)
+        service = self._get_service()
         service.update(updates)
         try:
             self.driver.failover_completed(context, service.active_backend_id)
@@ -4206,12 +4213,8 @@ class VolumeManager(manager.CleanableManager,
             LOG.warning('Error encountered on Cinder backend during '
                         'freeze operation, service is frozen, however '
                         'notification to driver has failed.')
-        svc_host = vol_utils.extract_host(self.host, 'backend')
 
-        service = objects.Service.get_by_args(
-            context,
-            svc_host,
-            constants.VOLUME_BINARY)
+        service = self._get_service()
         service.disabled = True
         service.disabled_reason = "frozen"
         service.save()
@@ -4239,12 +4242,8 @@ class VolumeManager(manager.CleanableManager,
             LOG.error('Error encountered on Cinder backend during '
                       'thaw operation, service will remain frozen.')
             return False
-        svc_host = vol_utils.extract_host(self.host, 'backend')
 
-        service = objects.Service.get_by_args(
-            context,
-            svc_host,
-            constants.VOLUME_BINARY)
+        service = self._get_service()
         service.disabled = False
         service.disabled_reason = ""
         service.save()

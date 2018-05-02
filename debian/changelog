@@ -1,3 +1,12 @@
+cinder (2:12.0.1-0ubuntu2) cosmic; urgency=medium
+
+  * New upstream version.
+  * d/p/log-config-options-with-oslo.config.patch: Dropped. Fixed in
+    new upstream version.
+  * New stable point release for OpenStack Queens (LP: #1767128).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 02 May 2018 15:12:35 -0400
+
 cinder (2:12.0.0-0ubuntu1) bionic; urgency=medium
 
   * New upstream release for OpenStack Queens.

@@ -19,6 +19,7 @@ import ddt
 import os
 import uuid
 
+from eventlet import tpool
 import mock
 from os_brick.initiator.connectors import fake as fake_connectors
 from oslo_config import cfg
@@ -312,7 +313,21 @@ class BackupTestCase(BaseBackupTest):
         calls = [mock.call(self.backup_mgr.delete_backup, mock.ANY, backup1),
                  mock.call(self.backup_mgr.delete_backup, mock.ANY, backup2)]
         mock_add_threadpool.assert_has_calls(calls, any_order=True)
-        self.assertEqual(2, mock_add_threadpool.call_count)
+        # 3 calls because 1 is always made to handle encryption key migration.
+        self.assertEqual(3, mock_add_threadpool.call_count)
+
+    @mock.patch('cinder.keymgr.migration.migrate_fixed_key')
+    @mock.patch('cinder.objects.BackupList.get_all_by_host')
+    @mock.patch('cinder.manager.ThreadPoolManager._add_to_threadpool')
+    def test_init_host_key_migration(self,
+                                     mock_add_threadpool,
+                                     mock_get_all_by_host,
+                                     mock_migrate_fixed_key):
+
+        self.backup_mgr.init_host()
+        mock_add_threadpool.assert_called_once_with(
+            mock_migrate_fixed_key,
+            backups=mock_get_all_by_host())
 
     @mock.patch('cinder.objects.service.Service.get_minimum_rpc_version')
     @mock.patch('cinder.objects.service.Service.get_minimum_obj_version')
@@ -586,6 +601,31 @@ class BackupTestCase(BaseBackupTest):
         backup = db.backup_get(self.ctxt, backup.id)
         self.assertEqual(fields.BackupStatus.ERROR, backup['status'])
         self.assertTrue(mock_run_backup.called)
+
+    @mock.patch('cinder.backup.manager.BackupManager._run_backup')
+    def test_create_backup_aborted(self, run_backup_mock):
+        """Test error handling when abort occurs during backup creation."""
+        def my_run_backup(*args, **kwargs):
+            backup.destroy()
+            with backup.as_read_deleted():
+                original_refresh()
+
+        run_backup_mock.side_effect = my_run_backup
+        vol_id = self._create_volume_db_entry(size=1)
+        backup = self._create_backup_db_entry(volume_id=vol_id)
+        original_refresh = backup.refresh
+
+        self.backup_mgr.create_backup(self.ctxt, backup)
+
+        self.assertTrue(run_backup_mock.called)
+
+        vol = objects.Volume.get_by_id(self.ctxt, vol_id)
+        self.assertEqual('available', vol.status)
+        self.assertEqual('backing-up', vol['previous_status'])
+        # Make sure we didn't set the backup to available after it was deleted
+        with backup.as_read_deleted():
+            backup.refresh()
+        self.assertEqual(fields.BackupStatus.DELETED, backup.status)
 
     @mock.patch('cinder.backup.manager.BackupManager._run_backup',
                 side_effect=FakeBackupException(str(uuid.uuid4())))
@@ -1643,6 +1683,27 @@ class BackupTestCase(BaseBackupTest):
         vol_id = self._create_volume_db_entry(size=vol_size)
         backup = self._create_backup_db_entry(volume_id=vol_id)
         self.assertFalse(backup.has_dependent_backups)
+
+    def test_default_tpool_size(self):
+        """Test we can set custom tpool size."""
+        tpool._nthreads = 20
+        self.assertListEqual([], tpool._threads)
+
+        self.backup_mgr = importutils.import_object(CONF.backup_manager)
+
+        self.assertEqual(60, tpool._nthreads)
+        self.assertListEqual([], tpool._threads)
+
+    def test_tpool_size(self):
+        """Test we can set custom tpool size."""
+        self.assertNotEqual(100, tpool._nthreads)
+        self.assertListEqual([], tpool._threads)
+
+        self.override_config('backup_native_threads_pool_size', 100)
+        self.backup_mgr = importutils.import_object(CONF.backup_manager)
+
+        self.assertEqual(100, tpool._nthreads)
+        self.assertListEqual([], tpool._threads)
 
 
 class BackupTestCaseWithVerify(BaseBackupTest):

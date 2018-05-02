@@ -11,19 +11,6 @@ external storage, but at a fraction of the cost and complexity. Using the
 driver, Block Storage hosts can connect to a ScaleIO Storage
 cluster.
 
-Support matrix
-~~~~~~~~~~~~~~
-
-.. list-table::
-   :widths: 10 25
-   :header-rows: 1
-
-   * - ScaleIO version
-     - Supported Linux operating systems
-   * - 2.0
-     - CentOS 6.x, CentOS 7.x, SLES 11 SP3, SLES 12, Ubuntu 14.04, Ubuntu 16.04
-
-
 .. _scale_io_docs:
 
 Official ScaleIO documentation
@@ -35,6 +22,17 @@ To find the ScaleIO documentation:
 
 #. From the left-side panel, select the relevant ScaleIO version.
 
+Supported ScaleIO Versions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Dell EMC ScaleIO Block Storage driver has been tested against the
+following versions of ScaleIO and found to be compatible:
+
+* ScaleIO 2.0.x
+* ScaleIO 2.5.x
+
+Please consult the :ref:`scale_io_docs`
+to determine supported operating systems for each version of ScaleIO.
 
 Deployment prerequisites
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -285,3 +283,116 @@ and the relevant calculated value of ``maxIOPSperGB`` or ``maxBWSperGB``.
 
 Since the limits are per SDC, they will be applied after the volume
 is attached to an instance, and thus to a compute node/SDC.
+
+Using ScaleIO Storage with a containerized overcloud
+----------------------------------------------------
+
+When using a containerized overcloud, such as one deployed via TripleO or RedHat
+Openstack version 12 and above, there is an additional step that must be
+performed.
+
+Before deploying the overcloud
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After ensuring that the ScaleIO Data Client (SDC) is installed on all nodes and
+before deploying the overcloud,
+modify the TripleO Heat Template for the nova-compute and cinder-volume
+containers to add volume mappings for directories containing the SDC
+components. These files can normally
+be found at
+``/usr/share/openstack-tripleo-heat-templates/docker/services/nova-compute.yaml``
+and
+``/usr/share/openstack-tripleo-heat-templates/docker/services/cinder-volume.yaml``
+
+Two lines need to be inserted into the list of mapped volumes in each container.
+
+.. code-block:: yaml
+
+  /opt/emc/scaleio:/opt/emc/scaleio
+  /bin/emc/scaleio:/bin/emc/scaleio
+
+.. end
+
+The changes to the two heat templates are identical, as an example
+the original nova-compute file should have section that resembles the following:
+
+.. code-block:: yaml
+
+  ...
+  docker_config:
+    step_4:
+      nova_compute:
+        image: &nova_compute_image {get_param: DockerNovaComputeImage}
+        ipc: host
+        net: host
+        privileged: true
+        user: nova
+        restart: always
+        volumes:
+          list_concat:
+            - {get_attr: [ContainersCommon, volumes]}
+            -
+              - /var/lib/kolla/config_files/nova_compute.json:/var/lib/kolla/config_files/config.json:ro
+              - /var/lib/config-data/puppet-generated/nova_libvirt/:/var/lib/kolla/config_files/src:ro
+              - /etc/ceph:/var/lib/kolla/config_files/src-ceph:ro
+              - /dev:/dev
+              - /lib/modules:/lib/modules:ro
+              - /etc/iscsi:/etc/iscsi
+              - /run:/run
+              - /var/lib/nova:/var/lib/nova:shared
+              - /var/lib/libvirt:/var/lib/libvirt
+              - /var/log/containers/nova:/var/log/nova
+              - /sys/class/net:/sys/class/net
+              - /sys/bus/pci:/sys/bus/pci
+        environment:
+         - KOLLA_CONFIG_STRATEGY=COPY_ALWAYS
+  ...
+
+.. end
+
+After modifying the nova-compute file, the section should resemble:
+
+.. code-block:: yaml
+
+  ...
+  docker_config:
+    step_4:
+      nova_compute:
+        image: &nova_compute_image {get_param: DockerNovaComputeImage}
+        ipc: host
+        net: host
+        privileged: true
+        user: nova
+        restart: always
+        volumes:
+          list_concat:
+            - {get_attr: [ContainersCommon, volumes]}
+            -
+              - /var/lib/kolla/config_files/nova_compute.json:/var/lib/kolla/config_files/config.json:ro
+              - /var/lib/config-data/puppet-generated/nova_libvirt/:/var/lib/kolla/config_files/src:ro
+              - /etc/ceph:/var/lib/kolla/config_files/src-ceph:ro
+              - /dev:/dev
+              - /lib/modules:/lib/modules:ro
+              - /etc/iscsi:/etc/iscsi
+              - /run:/run
+              - /var/lib/nova:/var/lib/nova:shared
+              - /var/lib/libvirt:/var/lib/libvirt
+              - /var/log/containers/nova:/var/log/nova
+              - /sys/class/net:/sys/class/net
+              - /sys/bus/pci:/sys/bus/pci
+              - /opt/emc/scaleio:/opt/emc/scaleio
+              - /bin/emc/scaleio:/bin/emc/scaleio
+        environment:
+         - KOLLA_CONFIG_STRATEGY=COPY_ALWAYS
+  ...
+
+.. end
+
+Once the nova-compute file is modified, make an identical change to the
+cinder-volume file.
+
+
+Deploy the overcloud
+~~~~~~~~~~~~~~~~~~~~
+
+Once the above changes have been made, deploy the overcloud as usual.

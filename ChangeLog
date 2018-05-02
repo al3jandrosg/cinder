@@ -1,6 +1,31 @@
 CHANGES
 =======
 
+12.0.1
+------
+
+* Handle migrating encryption key IDs in Backup table
+* Reduce scope of the lock for image volume cache
+* Sync snapshot's encryption\_key\_id with volume's value
+* Fix vhd image conversion regression
+* Use soft authorize for 'extended\_snapshot\_attributes' policy
+* Dell EMC SC: ISCSI initialize\_connection fixes
+* ScaleIO: Add documentation for containerized overcloud
+* Update doc name and path for dell emc vnx driver
+* Dell EMC SC: Error Deleting Consistency Group
+* Allow configuring tpool size
+* Fix leftovers after backup abort
+* 3PAR: Add \`force detach\` support
+* Fix AZ not matching backend after migration
+* Fix allocated\_capacity\_gb race on create volume
+* Fix reporting old stats
+* VMAX driver - Concurrency issues involving replicated volumes
+* 3PAR: Monitor task of promoting a virtual copy
+* ScaleIO Driver: Document support for ScaleIO 2.5
+* Imported Translations from Zanata
+* Log config options with oslo.config
+* Solving permission errors due to directory ownership on NFS
+
 12.0.0
 ------
 
