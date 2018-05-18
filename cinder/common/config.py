@@ -45,6 +45,7 @@ CONF.register_cli_opts(core_opts)
 
 global_opts = [
     cfg.HostAddressOpt('my_ip',
+                       sample_default='<HOST_IP_ADDRESS>',
                        default=netutils.get_my_ipv4(),
                        help='IP address of this host'),
     cfg.ListOpt('glance_api_servers',
@@ -103,6 +104,7 @@ global_opts = [
                default='cinder.scheduler.manager.SchedulerManager',
                help='Full class name for the Manager for scheduler'),
     cfg.HostAddressOpt('host',
+                       sample_default='localhost',
                        default=socket.gethostname(),
                        help='Name of this node.  This can be an opaque '
                             'identifier. It is not necessarily a host name, '

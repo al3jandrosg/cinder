@@ -30,7 +30,6 @@ from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
 import oslo_messaging as messaging
-from oslo_service import loopingcall
 from oslo_service import service
 from oslo_service import wsgi
 from oslo_utils import importutils
@@ -193,19 +192,17 @@ class Service(service.Service):
             service_ref.save()
             Service.service_id = service_ref.id
         except exception.NotFound:
-            # We don't want to include cluster information on the service or
-            # create the cluster entry if we are upgrading.
             self._create_service_ref(ctxt, manager_class.RPC_API_VERSION)
-            # We don't want to include resources in the cluster during the
-            # start while we are still doing the rolling upgrade.
-            self.added_to_cluster = True
+            # Service entry Entry didn't exist because it was manually removed
+            # or it's the first time running, to be on the safe side we say we
+            # were added if we are clustered.
+            self.added_to_cluster = bool(cluster)
 
         self.report_interval = report_interval
         self.periodic_interval = periodic_interval
         self.periodic_fuzzy_delay = periodic_fuzzy_delay
         self.basic_config_check()
         self.saved_args, self.saved_kwargs = args, kwargs
-        self.timers = []
 
         setup_profiler(binary, host)
         self.rpcserver = None
@@ -267,23 +264,16 @@ class Service(service.Service):
         self.manager.init_host_with_rpc()
 
         if self.report_interval:
-            pulse = loopingcall.FixedIntervalLoopingCall(
-                self.report_state)
-            pulse.start(interval=self.report_interval,
-                        initial_delay=self.report_interval)
-            self.timers.append(pulse)
+            self.tg.add_timer(self.report_interval, self.report_state,
+                              initial_delay=self.report_interval)
 
         if self.periodic_interval:
             if self.periodic_fuzzy_delay:
                 initial_delay = random.randint(0, self.periodic_fuzzy_delay)
             else:
                 initial_delay = None
-
-            periodic = loopingcall.FixedIntervalLoopingCall(
-                self.periodic_tasks)
-            periodic.start(interval=self.periodic_interval,
-                           initial_delay=initial_delay)
-            self.timers.append(periodic)
+            self.tg.add_timer(self.periodic_interval, self.periodic_tasks,
+                              initial_delay=initial_delay)
 
     def basic_config_check(self):
         """Perform basic config checks before starting service."""
@@ -348,7 +338,6 @@ class Service(service.Service):
             'rpc_current_version': rpc_version or self.manager.RPC_API_VERSION,
             'object_current_version': objects_base.OBJ_VERSIONS.get_current(),
         }
-        # If we are upgrading we have to ignore the cluster value
         kwargs['cluster_name'] = self.cluster
         service_ref = objects.Service(context=context, **kwargs)
         service_ref.create()
@@ -366,7 +355,7 @@ class Service(service.Service):
     def create(cls, host=None, binary=None, topic=None, manager=None,
                report_interval=None, periodic_interval=None,
                periodic_fuzzy_delay=None, service_name=None,
-               coordination=False, cluster=None):
+               coordination=False, cluster=None, **kwargs):
         """Instantiates class and passes back application object.
 
         :param host: defaults to CONF.host
@@ -400,7 +389,7 @@ class Service(service.Service):
                           periodic_fuzzy_delay=periodic_fuzzy_delay,
                           service_name=service_name,
                           coordination=coordination,
-                          cluster=cluster)
+                          cluster=cluster, **kwargs)
 
         return service_obj
 
@@ -416,13 +405,6 @@ class Service(service.Service):
         except Exception:
             pass
 
-        self.timers_skip = []
-        for x in self.timers:
-            try:
-                x.stop()
-            except Exception:
-                self.timers_skip.append(x)
-
         if self.coordination:
             try:
                 coordination.COORDINATOR.stop()
@@ -431,13 +413,6 @@ class Service(service.Service):
         super(Service, self).stop(graceful=True)
 
     def wait(self):
-        skip = getattr(self, 'timers_skip', [])
-        for x in self.timers:
-            if x not in skip:
-                try:
-                    x.wait()
-                except Exception:
-                    pass
         if self.rpcserver:
             self.rpcserver.wait()
         if self.backend_rpcserver:
@@ -534,7 +509,7 @@ class WSGIService(service.ServiceBase):
                      "must be greater than 0.") %
                    {'worker_name': worker_name,
                     'workers': self.workers})
-            raise exception.InvalidInput(msg)
+            raise exception.InvalidConfigurationValue(msg)
         setup_profiler(name, self.host)
 
         self.server = wsgi.Server(CONF,

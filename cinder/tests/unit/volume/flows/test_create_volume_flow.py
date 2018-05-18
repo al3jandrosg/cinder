@@ -1549,12 +1549,13 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             image_volume_cache=self.mock_cache
         )
 
-        manager._create_from_image(self.ctxt,
-                                   volume,
-                                   image_location,
-                                   image_id,
-                                   image_meta,
-                                   self.mock_image_service)
+        with mock.patch('os.path.exists', return_value=True):
+            manager._create_from_image(self.ctxt,
+                                       volume,
+                                       image_location,
+                                       image_id,
+                                       image_meta,
+                                       self.mock_image_service)
 
         # Make sure clone_image is always called
         self.assertTrue(self.mock_driver.clone_image.called)
@@ -1618,16 +1619,17 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             image_volume_cache=self.mock_cache
         )
 
-        self.assertRaises(
-            exception.CinderException,
-            manager._create_from_image,
-            self.ctxt,
-            volume,
-            image_location,
-            image_id,
-            image_meta,
-            self.mock_image_service
-        )
+        with mock.patch('os.path.exists', return_value=True):
+            self.assertRaises(
+                exception.CinderException,
+                manager._create_from_image,
+                self.ctxt,
+                volume,
+                image_location,
+                image_id,
+                image_meta,
+                self.mock_image_service
+            )
 
         # Make sure clone_image is always called
         self.assertTrue(self.mock_driver.clone_image.called)
@@ -1749,16 +1751,17 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
             image_volume_cache=self.mock_cache
         )
 
-        self.assertRaises(
-            exception.ImageUnacceptable,
-            manager._create_from_image,
-            self.ctxt,
-            volume,
-            image_location,
-            image_id,
-            image_meta,
-            self.mock_image_service
-        )
+        with mock.patch('os.path.exists', return_value=True):
+            self.assertRaises(
+                exception.ImageUnacceptable,
+                manager._create_from_image,
+                self.ctxt,
+                volume,
+                image_location,
+                image_id,
+                image_meta,
+                self.mock_image_service
+            )
 
         self.assertTrue(mock_cleanup_cg.called)
         # The volume size should NOT be changed when in this case

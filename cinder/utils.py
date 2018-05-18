@@ -19,12 +19,14 @@
 
 
 import abc
+from collections import OrderedDict
 import contextlib
 import datetime
 import functools
 import inspect
 import logging as py_logging
 import math
+import operator
 import os
 import pyclbr
 import random
@@ -377,15 +379,6 @@ def sanitize_hostname(hostname):
     return hostname
 
 
-def read_file_as_root(file_path):
-    """Secure helper to read file as root."""
-    try:
-        out, _err = execute('cat', file_path, run_as_root=True)
-        return out
-    except processutils.ProcessExecutionError:
-        raise exception.FileNotFound(file_path=file_path)
-
-
 def robust_file_write(directory, filename, data):
     """Robust file write.
 
@@ -435,6 +428,13 @@ def temporary_chown(path, owner_uid=None):
 
     :params owner_uid: UID of temporary owner (defaults to current user)
     """
+
+    if os.name == 'nt':
+        LOG.debug("Skipping chown for %s as this operation is "
+                  "not available on Windows.", path)
+        yield
+        return
+
     if owner_uid is None:
         owner_uid = os.getuid()
 
@@ -1205,3 +1205,9 @@ def get_log_levels(prefix):
 
 def paths_normcase_equal(path_a, path_b):
     return os.path.normcase(path_a) == os.path.normcase(path_b)
+
+
+def create_ordereddict(adict):
+    """Given a dict, return a sorted OrderedDict."""
+    return OrderedDict(sorted(adict.items(),
+                              key=operator.itemgetter(0)))

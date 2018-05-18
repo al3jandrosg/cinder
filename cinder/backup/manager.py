@@ -112,24 +112,13 @@ class BackupManager(manager.ThreadPoolManager):
         super(BackupManager, self).__init__(*args, **kwargs)
         self.is_initialized = False
         self._set_tpool_size(CONF.backup_native_threads_pool_size)
+        self._process_number = kwargs.get('process_number', 1)
 
     @property
     def driver_name(self):
         """This function maps old backup services to backup drivers."""
 
-        return self._map_service_to_driver(CONF.backup_driver)
-
-    def _map_service_to_driver(self, service):
-        """Maps services to drivers."""
-
-        if service in mapper:
-            msg = ("Using legacy backup service configuration like "
-                   "cinder.backup.services.* is deprecated and "
-                   "will be removed in the 'R' release. Please use "
-                   "the cinder.backup.drivers.* method instead.")
-            versionutils.report_deprecated_feature(LOG, msg)
-            return mapper[service]
-        return service
+        return CONF.backup_driver
 
     def get_backup_driver(self, context):
         driver = None
@@ -194,7 +183,17 @@ class BackupManager(manager.ThreadPoolManager):
         self.backup_rpcapi = backup_rpcapi.BackupAPI()
         self.volume_rpcapi = volume_rpcapi.VolumeAPI()
 
+    @utils.synchronized('backup-pgid-%s' % os.getpgrp(),
+                        external=True, delay=0.1)
     def _cleanup_incomplete_backup_operations(self, ctxt):
+        # Only the first launched process should do the cleanup, the others
+        # have waited on the lock for the first one to finish the cleanup and
+        # can now continue with the start process.
+        if self._process_number != 1:
+            LOG.debug("Process #%s (pgid=%s) skips cleanup.",
+                      self._process_number, os.getpgrp())
+            return
+
         LOG.info("Cleaning up incomplete backup operations.")
 
         # TODO(smulcahy) implement full resume of backup and restore
@@ -301,6 +300,10 @@ class BackupManager(manager.ThreadPoolManager):
         try:
             temp_snapshot = objects.Snapshot.get_by_id(
                 ctxt, backup.temp_snapshot_id)
+            # We may want to consider routing those calls through the
+            # cinder API.
+            temp_snapshot.status = fields.SnapshotStatus.DELETING
+            temp_snapshot.save()
             self.volume_rpcapi.delete_snapshot(ctxt, temp_snapshot)
         except exception.SnapshotNotFound:
             LOG.debug("Could not find temp snapshot %(snap)s to clean "
@@ -475,12 +478,12 @@ class BackupManager(manager.ThreadPoolManager):
                 if (isinstance(device_path, six.string_types) and
                         not os.path.isdir(device_path)):
                     if backup_device.secure_enabled:
-                        with open(device_path) as device_file:
+                        with open(device_path, 'rb') as device_file:
                             updates = backup_service.backup(
                                 backup, tpool.Proxy(device_file))
                     else:
                         with utils.temporary_chown(device_path):
-                            with open(device_path) as device_file:
+                            with open(device_path, 'rb') as device_file:
                                 updates = backup_service.backup(
                                     backup, tpool.Proxy(device_file))
                 # device_path is already file-like so no need to open it
@@ -545,7 +548,7 @@ class BackupManager(manager.ThreadPoolManager):
                       'backup_id': backup['id'],
                       'backup_size': backup['size']})
 
-        backup_service = self._map_service_to_driver(backup['service'])
+        backup_service = backup['service']
         configured_service = self.driver_name
         # TODO(tommylikehu): We upgraded the 'driver_name' from module
         # to class name, so we use 'in' here to match two namings,
@@ -565,7 +568,10 @@ class BackupManager(manager.ThreadPoolManager):
             raise exception.InvalidBackup(reason=err)
 
         try:
+            canceled = False
             self._run_restore(context, backup, volume)
+        except exception.BackupRestoreCancel:
+            canceled = True
         except Exception:
             with excutils.save_and_reraise_exception():
                 self.db.volume_update(context, volume_id,
@@ -573,12 +579,15 @@ class BackupManager(manager.ThreadPoolManager):
                 backup.status = fields.BackupStatus.AVAILABLE
                 backup.save()
 
-        self.db.volume_update(context, volume_id, {'status': 'available'})
+        volume.status = 'error' if canceled else 'available'
+        volume.save()
         backup.status = fields.BackupStatus.AVAILABLE
         backup.save()
-        LOG.info('Restore backup finished, backup %(backup_id)s restored'
-                 ' to volume %(volume_id)s.',
-                 {'backup_id': backup.id, 'volume_id': volume_id})
+        LOG.info('%(result)s restoring backup %(backup_id)s to volume '
+                 '%(volume_id)s.',
+                 {'result': 'Canceled' if canceled else 'Finished',
+                  'backup_id': backup.id,
+                  'volume_id': volume_id})
         self._notify_about_backup_usage(context, backup, "restore.end")
 
     def _run_restore(self, context, backup, volume):
@@ -596,15 +605,16 @@ class BackupManager(manager.ThreadPoolManager):
         # with native threads proxy-wrapping the device file object.
         try:
             device_path = attach_info['device']['path']
+            open_mode = 'rb+' if os.name == 'nt' else 'wb'
             if (isinstance(device_path, six.string_types) and
                     not os.path.isdir(device_path)):
                 if secure_enabled:
-                    with open(device_path, 'wb') as device_file:
+                    with open(device_path, open_mode) as device_file:
                         backup_service.restore(backup, volume.id,
                                                tpool.Proxy(device_file))
                 else:
                     with utils.temporary_chown(device_path):
-                        with open(device_path, 'wb') as device_file:
+                        with open(device_path, open_mode) as device_file:
                             backup_service.restore(backup, volume.id,
                                                    tpool.Proxy(device_file))
             # device_path is already file-like so no need to open it
@@ -681,7 +691,7 @@ class BackupManager(manager.ThreadPoolManager):
             self._update_backup_error(backup, err, status)
             raise exception.InvalidBackup(reason=err)
 
-        backup_service = self._map_service_to_driver(backup['service'])
+        backup_service = backup['service']
         if backup_service is not None:
             configured_service = self.driver_name
             # TODO(tommylikehu): We upgraded the 'driver_name' from module
@@ -777,7 +787,7 @@ class BackupManager(manager.ThreadPoolManager):
             raise exception.InvalidBackup(reason=err)
 
         backup_record = {'backup_service': backup.service}
-        backup_service = self._map_service_to_driver(backup.service)
+        backup_service = backup.service
         configured_service = self.driver_name
         # TODO(tommylikehu): We upgraded the 'driver_name' from module
         # to class name, so we use 'in' here to match two namings,
@@ -936,7 +946,7 @@ class BackupManager(manager.ThreadPoolManager):
                  {'backup_id': backup.id,
                   'status': status})
 
-        backup_service_name = self._map_service_to_driver(backup.service)
+        backup_service_name = backup.service
         LOG.info('Backup service: %s.', backup_service_name)
         if backup_service_name is not None:
             configured_service = self.driver_name
@@ -1081,7 +1091,8 @@ class BackupManager(manager.ThreadPoolManager):
             protocol,
             use_multipath=use_multipath,
             device_scan_attempts=device_scan_attempts,
-            conn=conn)
+            conn=conn,
+            expect_raw_disk=True)
         vol_handle = connector.connect_volume(conn['data'])
 
         return {'conn': conn, 'device': vol_handle, 'connector': connector}

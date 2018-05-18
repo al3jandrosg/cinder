@@ -122,7 +122,6 @@ class UnityDriver(driver.ManageableVD,
         """Make sure volume is exported."""
         pass
 
-    @zm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -136,6 +135,9 @@ class UnityDriver(driver.ManageableVD,
         and a list of wwns which are visible to the remote wwn(s).
         Example return values:
         FC:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'fibre_channel'
                 'data': {
@@ -148,7 +150,11 @@ class UnityDriver(driver.ManageableVD,
                     }
                 }
             }
+
         iSCSI:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'iscsi'
                 'data': {
@@ -159,13 +165,17 @@ class UnityDriver(driver.ManageableVD,
                     'target_luns': [1, 1],
                 }
             }
-        """
-        return self.adapter.initialize_connection(volume, connector)
 
-    @zm_utils.remove_fc_zone
+        """
+        conn_info = self.adapter.initialize_connection(volume, connector)
+        zm_utils.add_fc_zone(conn_info)
+        return conn_info
+
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector."""
-        return self.adapter.terminate_connection(volume, connector)
+        conn_info = self.adapter.terminate_connection(volume, connector)
+        zm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
     def get_volume_stats(self, refresh=False):
         """Get volume stats.

@@ -552,7 +552,7 @@ class StorwizeSVCManagementSimulator(object):
                      '1', '0', '3573412790272', '256',
                      '3529432325160', '1693247906775', '26843545600',
                      '38203734097', '47', '80', 'auto', 'inactive', ''])
-        rows.append([str(pool_num + 2), 'openstack3', 'online',
+        rows.append([str(pool_num + 2), 'openstack3', 'offline',
                      '1', '0', '3573412790272', '128',
                      '3529432325160', '1693247906775', '26843545600',
                      '38203734097', '47', '80', 'auto', 'inactive', ''])
@@ -579,7 +579,7 @@ class StorwizeSVCManagementSimulator(object):
             elif pool_name == 'openstack2':
                 row = rows[-4]
             elif pool_name == 'openstack3':
-                row = rows[-4]
+                row = rows[-3]
             elif pool_name == 'hyperswap1':
                 row = rows[-2]
             elif pool_name == 'hyperswap2':
@@ -758,13 +758,13 @@ port_speed!N/A
                 value1 = filter1.split('=')[1]
                 value2 = filter2.split('=')[1]
                 for v in ports:
-                    if(six.text_type(v[4]) == value1 and six.text_type(
+                    if(six.text_type(v[5]) == value1 and six.text_type(
                             v[7]) == value2):
                         rows.append(v)
             else:
                 value = kwargs['filtervalue'].split('=')[1]
                 for v in ports:
-                    if six.text_type(v[4]) == value:
+                    if six.text_type(v[5]) == value:
                         rows.append(v)
         else:
             rows = ports
@@ -3038,6 +3038,7 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
         if self.USESIM:
             self.iscsi_driver = StorwizeSVCISCSIFakeDriver(
                 configuration=conf.Configuration([], conf.SHARED_CONF_GROUP))
+            self.host_site = {'site1': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
             self._def_flags = {'san_ip': 'hostname',
                                'san_login': 'user',
                                'san_password': 'pass',
@@ -3045,7 +3046,8 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
                                'storwize_svc_flashcopy_timeout': 20,
                                'storwize_svc_flashcopy_rate': 49,
                                'storwize_svc_multipath_enabled': False,
-                               'storwize_svc_allow_tenant_qos': True}
+                               'storwize_svc_allow_tenant_qos': True,
+                               'storwize_preferred_host_site': self.host_site}
             wwpns = [
                 six.text_type(random.randint(0, 9999999999999999)).zfill(16),
                 six.text_type(random.randint(0, 9999999999999999)).zfill(16)]
@@ -3210,73 +3212,37 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
                      'wwpns': ['ff00000000000000', 'ff00000000000001'],
                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
 
-        # host_site is None
-        volume0_iSCSI = self._create_volume()
-        vol_type_iSCSI_0 = volume_types.create(self.ctxt, 'iSCSI0', None)
-        volume0_iSCSI['volume_type_id'] = vol_type_iSCSI_0['id']
-        self.iscsi_driver.initialize_connection(volume0_iSCSI, connector)
-
-        # host_site is site1
+        volume_iSCSI_1 = self._create_volume()
         volume_iSCSI = self._create_volume()
         extra_spec = {'drivers:volume_topology': 'hyperswap',
-                      'peer_pool': 'openstack1',
-                      'host_site': 'site1'}
+                      'peer_pool': 'openstack1'}
         vol_type_iSCSI = volume_types.create(self.ctxt, 'iSCSI', extra_spec)
         volume_iSCSI['volume_type_id'] = vol_type_iSCSI['id']
+        volume_iSCSI_2 = self._create_volume()
+        volume_iSCSI_2['volume_type_id'] = vol_type_iSCSI['id']
         self.iscsi_driver.initialize_connection(volume_iSCSI, connector)
-
-        # host_site is site2, different with site1.
-        volume1_iSCSI = self._create_volume()
-        extra_spec_1 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1',
-                        'host_site': 'site2'}
-        vol_type_iSCSI_1 = volume_types.create(self.ctxt, 'iSCSI1',
-                                               extra_spec_1)
-        volume1_iSCSI['volume_type_id'] = vol_type_iSCSI_1['id']
-        self.assertRaises(exception.VolumeDriverException,
-                          self.iscsi_driver.initialize_connection,
-                          volume1_iSCSI,
-                          connector)
-
-        # host_site is None.
-        volume2_iSCSI = self._create_volume()
-        vol_type_iSCSI_2 = volume_types.create(self.ctxt, 'iSCSI2', None)
-        volume2_iSCSI['volume_type_id'] = vol_type_iSCSI_2['id']
-        self.iscsi_driver.initialize_connection(volume2_iSCSI, connector)
-
-        # create new host with host_site, the host site should be update
-        connector2 = {'host': 'STORWIZE-SVC-HOST',
-                      'wwnns': ['30000090fa17311e', '30000090fa17311f'],
-                      'wwpns': ['ffff000000000000', 'ffff000000000001'],
-                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1bbb'}
-        # attach hyperswap volume without host_site
-        volume3_iSCSI = self._create_volume()
-        extra_spec_3 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1'}
-        vol_type_iSCSI_3 = volume_types.create(self.ctxt, 'iSCSI3',
-                                               extra_spec_3)
-        volume3_iSCSI['volume_type_id'] = vol_type_iSCSI_3['id']
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                               'is_volume_hyperswap') as hyperswap:
-            hyperswap.return_value = True
-            self.assertRaises(exception.VolumeDriverException,
-                              self.iscsi_driver.initialize_connection,
-                              volume3_iSCSI,
-                              connector2)
+                               'is_volume_hyperswap') as is_volume_hyperswap:
+            is_volume_hyperswap.return_value = True
+            self.iscsi_driver.initialize_connection(volume_iSCSI, connector)
+            host_name = self.iscsi_driver._helpers.get_host_from_connector(
+                connector, iscsi=True)
+            host_info = self.iscsi_driver._helpers.ssh.lshost(host=host_name)
+            self.assertEqual('site1', host_info[0]['site_name'])
+            self.iscsi_driver.terminate_connection(volume_iSCSI, connector)
+        self.iscsi_driver.initialize_connection(volume_iSCSI_1, connector)
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'is_volume_hyperswap') as is_volume_hyperswap:
+            is_volume_hyperswap.return_value = True
+            self.iscsi_driver.initialize_connection(volume_iSCSI, connector)
 
-        # attach hyperswap volume with host_site
-        volume4_iSCSI = self._create_volume()
-        extra_spec_4 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1',
-                        'host_site': 'site2'}
-        vol_type_iSCSI_4 = volume_types.create(self.ctxt, 'iSCSI4',
-                                               extra_spec_4)
-        volume4_iSCSI['volume_type_id'] = vol_type_iSCSI_4['id']
-        self.iscsi_driver.initialize_connection(volume4_iSCSI, connector2)
-        host_name = self.iscsi_driver._helpers.get_host_from_connector(
-            connector2, iscsi=True)
-        host_info = self.iscsi_driver._helpers.ssh.lshost(host=host_name)
-        self.assertEqual('site2', host_info[0]['site_name'])
+            host_site = {'site1': 'iqn.1993-08.org.debian:01:eac5ccc1aaa',
+                         'site2': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
+            self._set_flag('storwize_preferred_host_site', host_site)
+            self.assertRaises(exception.InvalidConfigurationValue,
+                              self.iscsi_driver.initialize_connection,
+                              volume_iSCSI_2,
+                              connector)
 
     @mock.patch.object(storwize_svc_iscsi.StorwizeSVCISCSIDriver,
                        '_do_terminate_connection')
@@ -4035,78 +4001,91 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
 
         self.fc_driver.initialize_connection(volume_fc, connector)
+        self.fc_driver.initialize_connection(volume_fc, connector)
         self.fc_driver.terminate_connection(volume_fc, connector)
+        with mock.patch.object(
+                storwize_svc_common.StorwizeSSH,
+                'mkvdiskhostmap') as mkvdiskhostmap:
+            ex = exception.VolumeBackendAPIException(data='CMMVC5879E')
+            mkvdiskhostmap.side_effect = [ex, ex, mock.MagicMock()]
+            self.fc_driver.initialize_connection(volume_fc, connector)
+            self.fc_driver.terminate_connection(volume_fc, connector)
+            mkvdiskhostmap.side_effect = ex
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.fc_driver.initialize_connection,
+                              volume_fc,
+                              connector)
+            ex1 = exception.VolumeBackendAPIException(data='CMMVC6071E')
+            mkvdiskhostmap.side_effect = ex1
+            self._set_flag('storwize_svc_multihostmap_enabled', False)
+            self.assertRaises(exception.VolumeDriverException,
+                              self.fc_driver.initialize_connection,
+                              volume_fc,
+                              connector)
+            ex2 = exception.VolumeBackendAPIException(data='CMMVC5707E')
+            mkvdiskhostmap.side_effect = ex2
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.fc_driver.initialize_connection,
+                              volume_fc,
+                              connector)
 
     def test_storwize_initialize_fc_connection_with_host_site(self):
         connector = {'host': 'storwize-svc-host',
                      'wwnns': ['20000090fa17311e', '20000090fa17311f'],
-                     'wwpns': ['ff00000000000000', 'ff00000000000001'],
+                     'wwpns': ['ffff000000000000', 'ffff000000000001'],
                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
-
-        # host_site is None
-        volume0_fc = self._create_volume()
-        vol_type_fc_0 = volume_types.create(self.ctxt, 'FC0', None)
-        volume0_fc['volume_type_id'] = vol_type_fc_0['id']
-        self.fc_driver.initialize_connection(volume0_fc, connector)
-
-        # host_site is site1
+        # attach hyperswap volume without host_site
         volume_fc = self._create_volume()
         extra_spec = {'drivers:volume_topology': 'hyperswap',
-                      'peer_pool': 'openstack1',
-                      'host_site': 'site1'}
+                      'peer_pool': 'openstack1'}
         vol_type_fc = volume_types.create(self.ctxt, 'FC', extra_spec)
         volume_fc['volume_type_id'] = vol_type_fc['id']
-        self.fc_driver.initialize_connection(volume_fc, connector)
-        host_name = self.fc_driver._helpers.get_host_from_connector(
-            connector, iscsi=True)
-        host_info = self.fc_driver._helpers.ssh.lshost(host=host_name)
-        self.assertEqual('site1', host_info[0]['site_name'])
-
-        # host_site is site2, different with site1.
-        volume1_fc = self._create_volume()
-        extra_spec_1 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1',
-                        'host_site': 'site2'}
-        vol_type_fc_1 = volume_types.create(self.ctxt, 'FC1', extra_spec_1)
-        volume1_fc['volume_type_id'] = vol_type_fc_1['id']
-        self.assertRaises(exception.VolumeDriverException,
-                          self.fc_driver.initialize_connection,
-                          volume1_fc,
-                          connector)
-
-        # host_site is None.
-        volume2_fc = self._create_volume()
-        vol_type_fc_2 = volume_types.create(self.ctxt, 'FC2', None)
-        volume2_fc['volume_type_id'] = vol_type_fc_2['id']
-        self.fc_driver.initialize_connection(volume2_fc, connector)
-
-        # create new host with host_site
-        connector2 = {'host': 'STORWIZE-SVC-HOST',
-                      'wwnns': ['30000090fa17311e', '30000090fa17311f'],
-                      'wwpns': ['ffff000000000000', 'ffff000000000001'],
-                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1bbb'}
-        # attach hyperswap volume without host_site
-        volume3_fc = self._create_volume()
-        extra_spec_3 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1'}
-        vol_type_fc_3 = volume_types.create(self.ctxt, 'FC3', extra_spec_3)
-        volume3_fc['volume_type_id'] = vol_type_fc_3['id']
+        volume_fc_2 = self._create_volume()
+        volume_fc_2['volume_type_id'] = vol_type_fc['id']
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
                                'is_volume_hyperswap') as is_volume_hyperswap:
             is_volume_hyperswap.return_value = True
             self.assertRaises(exception.VolumeDriverException,
                               self.fc_driver.initialize_connection,
-                              volume3_fc,
-                              connector2)
+                              volume_fc,
+                              connector)
+            # the wwpns of 1 host config to 2 different sites
+            host_site = {'site1': 'ffff000000000000',
+                         'site2': 'ffff000000000001'}
+            self.fc_driver.configuration.set_override(
+                'storwize_preferred_host_site', host_site)
+            self.assertRaises(exception.InvalidConfigurationValue,
+                              self.fc_driver.initialize_connection,
+                              volume_fc,
+                              connector)
+            # All the wwpns of this host are not configured.
+            host_site_2 = {'site1': 'ff00000000000000',
+                           'site1': 'ff00000000000001'}
+            self.fc_driver.configuration.set_override(
+                'storwize_preferred_host_site', host_site_2)
+            self.assertRaises(exception.VolumeDriverException,
+                              self.fc_driver.initialize_connection,
+                              volume_fc,
+                              connector)
 
-        # attach hyperswap volume with host_site
-        volume4_fc = self._create_volume()
-        extra_spec_4 = {'drivers:volume_topology': 'hyperswap',
-                        'peer_pool': 'openstack1',
-                        'host_site': 'site2'}
-        vol_type_fc_4 = volume_types.create(self.ctxt, 'FC4', extra_spec_4)
-        volume4_fc['volume_type_id'] = vol_type_fc_4['id']
-        self.fc_driver.initialize_connection(volume4_fc, connector2)
+            host_site_3 = {'site1': 'ffff000000000000',
+                           'site1': 'ffff000000000001'}
+            self.fc_driver.configuration.set_override(
+                'storwize_preferred_host_site', host_site_3)
+            self.fc_driver.initialize_connection(volume_fc, connector)
+            host_name = self.fc_driver._helpers.get_host_from_connector(
+                connector, iscsi=True)
+            host_info = self.fc_driver._helpers.ssh.lshost(host=host_name)
+            self.assertEqual('site1', host_info[0]['site_name'])
+
+            host_site_4 = {'site2': 'ffff000000000000',
+                           'site2': 'ffff000000000001'}
+            self.fc_driver.configuration.set_override(
+                'storwize_preferred_host_site', host_site_4)
+            self.assertRaises(exception.InvalidConfigurationValue,
+                              self.fc_driver.initialize_connection,
+                              volume_fc_2,
+                              connector)
 
     @mock.patch.object(storwize_svc_fc.StorwizeSVCFCDriver,
                        '_do_terminate_connection')
@@ -4294,12 +4273,8 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                      'initiator': 'iqn.1993-08.org.debian:01:eac5ccc1aaa'}
         conn_info = self.fc_driver.initialize_connection(volume_fc, connector)
         expected_target_wwn = ['5005076801A91806',
-                               '5005076801B96CFE',
                                '5005076801A96CFE',
-                               '5005076801B91806',
-                               '5005076801C96CFE',
                                '5005076801996CFE',
-                               '5005076801C91806',
                                '5005076801991806']
         self.assertItemsEqual(expected_target_wwn, conn_info[
             'data']['target_wwn'])
@@ -4313,21 +4288,13 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
 
         # Check that the initiator_target_map is as expected
         expected_term_data = ['5005076801A96CFE',
-                              '5005076801B96CFE',
-                              '5005076801C96CFE',
-                              '5005076801406CFE',
                               '5005076801A91806',
-                              '5005076801301806',
-                              '5005076801C91806',
-                              '5005076801B91806',
                               '5005076801201806',
-                              '5005076801401806',
                               '5005076801991806',
                               '5005076801101806',
                               '5005076801996CFE',
                               '5005076801206CFE',
-                              '5005076801106CFE',
-                              '5005076801306CFE']
+                              '5005076801106CFE']
         self.assertItemsEqual(expected_term_data, target_wwn1)
         self.assertItemsEqual(expected_term_data, target_wwn2)
 
@@ -4824,8 +4791,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
     def _create_hyperswap_type(self, type_name):
         spec = {'drivers:volume_topology': 'hyperswap',
-                'peer_pool': 'hyperswap2',
-                'host_site': 'site1'}
+                'peer_pool': 'hyperswap2'}
         hyper_type = self._create_volume_type(spec, type_name)
         return hyper_type
 
@@ -4947,10 +4913,10 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                'replication': False,
                'stretched_cluster': None,
                'nofmtdisk': False,
+               'flashcopy_rate': 49,
                'mirror_pool': None,
                'volume_topology': None,
                'peer_pool': None,
-               'host_site': None,
                'cycle_period_seconds': 300,
                }
         return opt
@@ -4990,6 +4956,23 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                           self.driver.create_snapshot, snap1)
         self._assert_vol_exists(snap1['name'], False)
         self._reset_flags()
+
+        # Test falshcopy_rate > 100 on 7.2.0.0
+        self._set_flag('storwize_svc_flashcopy_rate', 149)
+        self.assertRaises(exception.VolumeDriverException,
+                          self.driver.create_snapshot, snap1)
+        self._assert_vol_exists(snap1['name'], False)
+        self._reset_flags()
+
+        # Test falshcopy_rate out of range
+        spec = {'flashcopy_rate': 151}
+        type_ref = volume_types.create(self.ctxt, "fccopy_rate", spec)
+        vol2 = self._generate_vol_info(type_ref)
+        self.driver.create_volume(vol2)
+        snap2 = self._generate_snap_info(vol2.id)
+        self.assertRaises(exception.InvalidInput,
+                          self.driver.create_snapshot, snap2)
+        self._assert_vol_exists(snap2['name'], False)
 
         # Test prestartfcmap failing
         with mock.patch.object(
@@ -5061,6 +5044,38 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self._assert_vol_exists(vol2['name'], False)
         self.driver.delete_volume(vol1)
         self._assert_vol_exists(vol1['name'], False)
+
+        # retype the flashcopy_rate
+        ctxt = context.get_admin_context()
+        key_specs_old = {'flashcopy_rate': 49}
+        key_specs_new = {'flashcopy_rate': 149}
+        old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
+        new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
+        host = {'host': 'openstack@svc#openstack'}
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
+
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
+        volume = self._generate_vol_info(old_type)
+        volume['host'] = host['host']
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
+
+        self.driver.create_volume(volume)
+        volume2 = testutils.create_volume(self.ctxt)
+        self.driver.create_cloned_volume(volume2, volume)
+        if self.USESIM:
+            # Validate copyrate was set on the flash copy
+            for i, fcmap in self.sim._fcmappings_list.items():
+                if fcmap['target'] == vol1['name']:
+                    self.assertEqual('49', fcmap['copyrate'])
+        self.driver.retype(ctxt, volume, new_type, diff, host)
+        if self.USESIM:
+            # Validate copyrate was set on the flash copy
+            for i, fcmap in self.sim._fcmappings_list.items():
+                if fcmap['target'] == vol1['name']:
+                    self.assertEqual('149', fcmap['copyrate'])
 
     def test_storwize_svc_create_volume_from_snapshot(self):
         vol1 = self._create_volume()
@@ -5481,6 +5496,22 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                 if is_thin_provisioning_enabled:
                     self.assertAlmostEqual(
                         1576.96, each_pool['provisioned_capacity_gb'])
+
+    def test_storwize_svc_get_volume_stats_backend_state(self):
+        self._set_flag('storwize_svc_volpool_name', ['openstack', 'openstack1',
+                                                     'openstack2'])
+
+        stats = self.driver.get_volume_stats()
+        for each_pool in stats['pools']:
+            self.assertEqual('up', each_pool['backend_state'])
+
+        self._reset_flags()
+        self._set_flag('storwize_svc_volpool_name', ['openstack3',
+                                                     'openstack4',
+                                                     'openstack5'])
+        stats = self.driver.get_volume_stats(True)
+        for each_pool in stats['pools']:
+            self.assertEqual('down', each_pool['backend_state'])
 
     def test_get_pool(self):
         ctxt = testutils.get_test_admin_context()
@@ -7914,33 +7945,19 @@ class StorwizeSSHTestCase(test.TestCase):
 
     def test_mkvdiskhostmap(self):
         # mkvdiskhostmap should not be returning anything
-        self.fake_driver.fake_storage._volumes_list['9999'] = {
-            'name': ' 9999', 'id': '0', 'uid': '0',
-            'IO_group_id': '0', 'IO_group_name': 'fakepool'}
-        self.fake_driver.fake_storage._hosts_list['HOST1'] = {
-            'name': 'HOST1', 'id': '0', 'host_name': 'HOST1'}
-        self.fake_driver.fake_storage._hosts_list['HOST2'] = {
-            'name': 'HOST2', 'id': '1', 'host_name': 'HOST2'}
-        self.fake_driver.fake_storage._hosts_list['HOST3'] = {
-            'name': 'HOST3', 'id': '2', 'host_name': 'HOST3'}
-
-        ret = self.storwize_ssh.mkvdiskhostmap('HOST1', '9999', '511', False)
-        self.assertEqual('511', ret)
-
-        ret = self.storwize_ssh.mkvdiskhostmap('HOST2', '9999', '512', True)
-        self.assertEqual('512', ret)
-
-        ret = self.storwize_ssh.mkvdiskhostmap('HOST3', '9999', None, True)
-        self.assertIsNotNone(ret)
-
         with mock.patch.object(
                 storwize_svc_common.StorwizeSSH,
                 'run_ssh_check_created') as run_ssh_check_created:
+            run_ssh_check_created.return_value = None
+            ret = self.storwize_ssh.mkvdiskhostmap('HOST1', 9999, 511, False)
+            self.assertIsNone(ret)
+            ret = self.storwize_ssh.mkvdiskhostmap('HOST2', 9999, 511, True)
+            self.assertIsNone(ret)
             ex = exception.VolumeBackendAPIException(data='CMMVC6071E')
             run_ssh_check_created.side_effect = ex
             self.assertRaises(exception.VolumeBackendAPIException,
                               self.storwize_ssh.mkvdiskhostmap,
-                              'HOST3', '9999', 511, True)
+                              'HOST3', 9999, 511, True)
 
     @ddt.data((exception.VolumeBackendAPIException(data='CMMVC6372W'), None),
               (exception.VolumeBackendAPIException(data='CMMVC6372W'),

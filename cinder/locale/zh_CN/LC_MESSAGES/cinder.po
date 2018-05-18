@@ -19,7 +19,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-27 16:11+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -163,10 +163,6 @@ msgid ""
 msgstr "%(workers)d 的 %(worker_name)s 值无效，必须大于 0。"
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "结果中没有 %s “数据”。"
 
@@ -261,9 +257,6 @@ msgstr "必须指定“consistencygroup_id”"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "'qemu-img info'解析失败"
-
-msgid "'status' must be specified."
-msgstr "必须指定“status”。"
 
 #, python-format
 msgid ""
@@ -3602,14 +3595,6 @@ msgid "Invalid disk type: %s."
 msgstr "无效磁盘类型：%s。"
 
 #, python-format
-msgid ""
-"Invalid disk-format '%(disk_format)s' is specified. Allowed disk-formats are "
-"%(allowed_disk_formats)s."
-msgstr ""
-"指定的磁盘格式\"%(disk_format)s\"无效。允许的磁盘格式"
-"为%(allowed_disk_formats)s。"
-
-#, python-format
 msgid "Invalid filter keys: %s"
 msgstr "无效的筛选键:%s"
 
@@ -3694,14 +3679,6 @@ msgstr "配置了无效预取类型“%s”。PrefetchType 必须为 0、1、2 �
 msgid "Invalid qos specs: %(reason)s"
 msgstr "qos 规范无效：%(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "关于将卷连接至无效目标的请求无效"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr "以无效方式连接卷的请求无效。连接方式应该为“rw”或“ro”"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "预留到期 %(expire)s 无效。"
@@ -3757,18 +3734,6 @@ msgstr "删除卷标志的值\"%s\"无效。"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "值“%s”对于 force 无效。"
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "“bootable”的值无效：“%s”"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "“force”的值无效：“%s”"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "“readonly”的值无效：“%s”"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "值对于“scheduler_max_attempts”无效，必须 >= 1"
@@ -3858,11 +3823,6 @@ msgstr "Kaminario可重试异常:%(reason)s"
 msgid "KaminarioCinderDriver failure: %(reason)s"
 msgstr "Kaminario Cinder 驱动程序故障:%(reason)s"
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr "键名只能包含字母数字字符、下划线、句点、冒号和连字符。"
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError：%s"
@@ -3878,19 +3838,11 @@ msgstr "无法通过UUID:%(uuid)s找到LUN。"
 msgid "LUN not found with given ref %s."
 msgstr "找不到具有给定引用 %s 的 LUN。"
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "以下是最后 %s 个 cinder 系统日志条目：-"
-
 msgid "LeftHand cluster not found"
 msgstr "找不到 LeftHand 集群"
 
 msgid "License is unavailable."
 msgstr "许可证不可用。"
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "行 %(dis)d：%(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -4118,9 +4070,6 @@ msgstr ""
 "必须以云管理员身份使用 Keystone policy.json（它允许云管理员列示和获取任何项"
 "目）运行此命令。"
 
-msgid "Must specify 'connector'"
-msgstr "必须指定“connector”"
-
 msgid "Must specify 'new_volume'"
 msgstr "必须指定“new_volume”"
 
@@ -4153,16 +4102,10 @@ msgstr "必须指定有效状态"
 msgid "Must specify an ExtensionManager class"
 msgstr "必须明确一个ExtensionManager类"
 
-msgid "Must specify bootable in request."
-msgstr "必须在请求中指定 bootable。"
-
 msgid ""
 "Must specify one or more of the following keys to update: name, description, "
 "add_volumes, remove_volumes."
 msgstr "更新时必须指定如下的一个或多个键:名称，描述，添加卷，删除卷。"
-
-msgid "Must specify readonly in request."
-msgstr "必须在请求中指定 readonly。"
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "必须指定快照 source-name 或 source-id。"
@@ -4224,12 +4167,6 @@ msgstr ""
 "新大小应该大于后端存储器中的实际大小。realsize：%(oldsize)s，newsize："
 "%(newsize)s。"
 
-msgid "New volume size must be specified as an integer."
-msgstr "新卷的大小必须指定为整数。"
-
-msgid "New volume type must be specified."
-msgstr "必须指定新的卷类型。"
-
 msgid "New volume type not specified in request_spec."
 msgstr "在 request_spec 中，未指定新的卷类型。"
 
@@ -4251,9 +4188,6 @@ msgstr "不存在具有所提供 iSCSI IP 的活动 iSCSI 门户网站"
 msgid "No backups available to do an incremental backup."
 msgstr "没有任何备份可用于执行增量备份。"
 
-msgid "No cinder entries in syslog!"
-msgstr "系统日志中没有任何 cinder 条目！"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "在文件管理器上，找不到名为 %s 的已克隆 LUN"
@@ -4264,9 +4198,6 @@ msgstr "找不到配置节点。"
 #, python-format
 msgid "No element by given name %s."
 msgstr "没有具备给定名称 %s 的元素。"
-
-msgid "No errors in logfiles!"
-msgstr "日志文件中没有任何错误！"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -4292,9 +4223,6 @@ msgstr "不存在任何具有标识 %s 的组快照"
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "目标阵列上没有可支持 iSCSI 的端口。"
-
-msgid "No image_name was specified in request."
-msgstr "未在请求中指定任何 image_name。"
 
 msgid "No initiator connected to fabric."
 msgstr "没有任何启动程序连接至光纤网络。"
@@ -4476,9 +4404,6 @@ msgstr "必须指定 REST 服务器的证书的路径。"
 #, python-format
 msgid "Please provide at least one volume for parameter %s"
 msgstr "请为参数 %s 提供至少一个卷"
-
-msgid "Please specify a name for QoS specs."
-msgstr "请为 QoS 规范指定名称。"
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4734,9 +4659,6 @@ msgstr "请求主体包含太多items"
 
 msgid "Request body contains too many items."
 msgstr "请求主体包含太多项。"
-
-msgid "Request body empty"
-msgstr "请求主体是空的"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -5324,9 +5246,6 @@ msgid ""
 "and resume replication on the LeftHand backends."
 msgstr "主机未准备好故障返回。请重新同步卷并在 LeftHand 后端上继续进行复制。"
 
-msgid "The key cannot be None."
-msgstr "键不能为“无”。"
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "未实现方法 update_migrated_volume。"
 
@@ -5470,10 +5389,6 @@ msgstr "不存在任何可主管 %(volume_size)sG 的共享项"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "不存在任何可托管 %(volume_size)sG 的共享项。"
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "没有该动作：%s"
 
 msgid "There is no virtual disk device."
 msgstr "不存在任何虚拟盘设备。"
@@ -5726,9 +5641,6 @@ msgstr "无法找到发起者为 %(name)s 的服务器对象。"
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "找不到 ssh_hosts_key_file：%s"
-
-msgid "Unable to find system log file!"
-msgstr "不能发现系统日志文件"
 
 #, python-format
 msgid ""
@@ -7499,10 +7411,6 @@ msgstr "没有找到标记： %s"
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "Mdisk 组缺少引号 %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy 必须为“on-demand”或“never”，已传递：%s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

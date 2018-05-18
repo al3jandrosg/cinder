@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-03 01:53+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Language: it\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Italian\n"
 
 #, python-format
@@ -122,10 +122,6 @@ msgstr ""
 "a 0."
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "\"data\" %s  non presente nel risultato."
 
@@ -216,9 +212,6 @@ msgstr "è necessario specificare 'consistencygroup_id'"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "analisi di 'qemu-img info' non riuscita."
-
-msgid "'status' must be specified."
-msgstr "È necessario specificare 'status'."
 
 #, python-format
 msgid ""
@@ -3519,17 +3512,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Specifiche qos non valide: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr ""
-"Richiesta non valida per collegare il volume a una destinazione non valida"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Richiesta non valida per collegare il volume con una modalità non valida. La "
-"modalità di collegamento deve essere 'rw' o 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Scadenza prenotazione non valida %(expire)s."
@@ -3574,18 +3556,6 @@ msgstr "Impostazione di aggiornamento non valida: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Valore non valido '%s' per force."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Valore non valido per 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Valore non valido per 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Valore non valido per 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "Valore non valido per 'scheduler_max_attempts', deve essere >= 1"
@@ -3670,13 +3640,6 @@ msgstr ""
 "Esecuzione del failover non riuscita perché la replica non è configurata "
 "correttamente."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"I nomi delle chiavi possono contenere solo caratteri alfanumerici, di "
-"sottolineatura, punti, due punti e trattini."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -3690,19 +3653,11 @@ msgstr ""
 msgid "LUN not found with given ref %s."
 msgstr "LUN non trovata con il riferimento fornito %s."
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "Ultime %s voci del syslog cinder:-"
-
 msgid "LeftHand cluster not found"
 msgstr "Cluster LeftHand non trovato"
 
 msgid "License is unavailable."
 msgstr "La licenza non è disponibile."
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "Riga %(dis)d : %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3915,9 +3870,6 @@ msgstr ""
 "Eseguire questo comando come admin cloud utilizzando un Keystone policy.json "
 "che consenta all'admin cloud di visualizzare e ottenere qualsiasi progetto."
 
-msgid "Must specify 'connector'"
-msgstr "È necessario  specificare 'connector'"
-
 msgid "Must specify 'new_volume'"
 msgstr "È necessario specificare 'new_volume'"
 
@@ -3955,12 +3907,6 @@ msgstr "È necessario specificare uno stato valido"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "È necessario specificare una classe ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "È necessario specificare bootable nella richiesta."
-
-msgid "Must specify readonly in request."
-msgstr "È necessario specificare readonly nella richiesta."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "È necessario specificare source-name o source-id dell'istantanea."
@@ -4029,13 +3975,6 @@ msgstr ""
 "dell'archiviazione di backend. dimensione reale: %(oldsize)s, nuova "
 "dimensione: %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr ""
-"La nuova dimensione di volume deve essere specificata come numero intero."
-
-msgid "New volume type must be specified."
-msgstr "È necessario specificare il tipo del nuovo volume."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Nuovo tipo di volume non specificato in request_spec."
 
@@ -4057,9 +3996,6 @@ msgstr "Nessun portale iSCSI attivo con gli IP iSCSI forniti "
 msgid "No backups available to do an incremental backup."
 msgstr "Nessun backup disponibile per eseguire un backup incrementale."
 
-msgid "No cinder entries in syslog!"
-msgstr "Nessuna voce cinder nel syslog!"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "Nessuna LUN clonata chiamata %s è stata trovata nel filer"
@@ -4070,9 +4006,6 @@ msgstr "Nessun nodo config trovato. "
 #, python-format
 msgid "No element by given name %s."
 msgstr "Nessun elemento dal nome specificato %s."
-
-msgid "No errors in logfiles!"
-msgstr "Nessun errore nei file di log!"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -4096,9 +4029,6 @@ msgstr "Nessun portale iscsi valido trovato in %s."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "Nessuna porta abilitata a iSCSI nell'array di destinazione."
-
-msgid "No image_name was specified in request."
-msgstr "Nessun image_name specificato nella richiesta."
 
 msgid "No initiator connected to fabric."
 msgstr "Nessun iniziatore collegato a fabric."
@@ -4280,9 +4210,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "È necessario specificare il percorso al certificato server REST. "
-
-msgid "Please specify a name for QoS specs."
-msgstr "Specificare un nome per le specifiche (specs) QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4542,9 +4469,6 @@ msgstr "Il corpo della richiesta contiene troppi elementi"
 msgid "Request body contains too many items."
 msgstr ""
 "Il corpo della richiesta contiene un numero troppo elevato di elementi."
-
-msgid "Request body empty"
-msgstr "Corpo della richiesta vuoto"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -5035,9 +4959,6 @@ msgstr ""
 "L'host non è pronto per essere sottoposto a failback. Risincronizzare i "
 "volumi e riprendere la replica sui backend LeftHand."
 
-msgid "The key cannot be None."
-msgstr "La chiave non può essere Nessuno."
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "Il metodo update_migrated_volume non è implementato."
 
@@ -5172,10 +5093,6 @@ msgstr "Non esiste alcuna condivisione che può ospitare %(volume_size)sG"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "Non esiste nessuna condivisione che possa ospitare %(volume_size)sG."
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "Non esiste alcuna azione simile: %s"
 
 msgid "There is no virtual disk device."
 msgstr "Non esistono unità del disco virtuale."
@@ -5445,9 +5362,6 @@ msgstr "Impossibile trovare associazioni iSCSI. "
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "Impossibile trovare ssh_hosts_key_file: %s"
-
-msgid "Unable to find system log file!"
-msgstr "Impossibile trovare il file di log di sistema."
 
 #, python-format
 msgid ""
@@ -7141,11 +7055,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "apici mancanti per mdiskgrp %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr ""
-"migration_policy deve essere 'on-demand' o 'never', è stato passato: %s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

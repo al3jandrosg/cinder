@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 12.0.1
+Version: 13.0.0.0b1
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -10,8 +10,8 @@ Description: ========================
         Team and repository tags
         ========================
         
-        .. image:: https://governance.openstack.org/badges/cinder.svg
-            :target: https://governance.openstack.org/reference/tags/index.html
+        .. image:: https://governance.openstack.org/tc/badges/cinder.svg
+            :target: https://governance.openstack.org/tc/reference/tags/index.html
         
         .. Change things from this point on
         
@@ -51,3 +51,5 @@ Classifier: Operating System :: POSIX :: Linux
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 2
 Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5

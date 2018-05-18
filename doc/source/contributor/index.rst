@@ -29,10 +29,9 @@ Programming HowTos and Tutorials
     :maxdepth: 3
 
     development.environment
+    testing
     api_microversion_dev
     api_conditional_updates
-    api_microversion_history
-    testing
     addmethod.openstackapi
     drivers
     gmr
@@ -72,26 +71,7 @@ Other Resources
    jenkins
    releasenotes
 
-API Reference
--------------
-.. toctree::
-   :maxdepth: 3
-
-   ./api/autoindex
-
-Module Reference
-----------------
-.. toctree::
-   :maxdepth: 3
-
-   services
-   database
-   volume
-   auth
-   api
-   scheduler
-   fakes
-   cinder
+   Module Reference <api/modules>
 
 Indices and tables
 ------------------

@@ -1,77 +1,265 @@
 CHANGES
 =======
 
-12.0.1
-------
+13.0.0.0b1
+----------
 
+* Clarify sizing when creating vol from source
+* Improve API method logging
+* Imported Translations from Zanata
+* FC: refactor fczm utils decorators to functions
+* Set sample\_default for 'host' option
+* ZFSSA implement "Enhance iSCSI multipath support"
+* Rephrase for multiattach support
+* NetApp ONTAP: Fix export path used as volume name
+* Use InvalidConfigurationValue instead of InvalidInput
+* NEC docs: add new features and improve description
+* ZFSSA accept pool stats when cluster node stripped
+* Refresh volume when checking for conflicting attachments
+* nimble: update documentation for supportability
+* Doc: Add driver security notes to contributor doc
+* Move MV history under API Microversion contrib docs
+* V3 jsonschema validation: snapshot\_actions
+* Storwize: Report backend state in service list
+* Add doc to pep8 check\_exec
+* VMAX docs - miscellaneous clarifications
+* [Optimise] Use ThreadGroup to manage periodic tasks
+* Update auth\_uri option to www\_authenticate\_uri
+* add lower-constraints job
+* Unignore .stestr.conf
+* VNX: fix performance in create/delete\_volume
+* Move testing info higher in contrib docs
+* Clean up doc configuration
+* Use sphinxcontrib.apidoc for module docs
+* Remove exec flag from doc files
+* V3 jsonschema validation: volume actions
+* fixs grammar problems and unify format in api-ref
+* Clarify volume migration CLI reference
 * Handle migrating encryption key IDs in Backup table
+* Dell EMC SC: dell-storagecenter-driver docs updated
+* Doc: Add inspur driver doc to toctree
+* Avoid second restart on offline upgrades
+* [Optimize] Validate configured scheduler filters when initialize
+* Remove extended attribute 'os-volume-replication' in Doc
+* Cleanup volume management CLI reference
+* Unity: fail to detach lun when auto zone enabled
+* Implementation of Cinder driver over FC for Inspur InStorage
+* Dell EMC SC: volume model update return missing vol id
+* Adding image membership check to \_is\_image\_available
+* OVO: support query for disabled services
+* Imported Translations from Zanata
+* Fix doc format errors in module docstrings
+* Remove unused doc extensions
+* 3PAR: Report backend state in service list
+* Storwize: self assign the SCSI lun id for volume attaching
+* ScaleIO: Prevent usage of unsafe volumes
+* Move openstackdocstheme to extensions in api-ref
+* Unity: Enable ssl verification
+* Storwize: check flashcopy\_rate before mkfcmap
 * Reduce scope of the lock for image volume cache
-* Sync snapshot's encryption\_key\_id with volume's value
+* Don't use custom password generating code
+* api-ref: Fix microversion for volume.backup\_id
+* Remove driver-specific notes from extend api-ref
+* Document more review processes
+* fix a typo: s/clent/client/
+* Updated from global requirements
+* [sytle] use http code constant instead of int
+* V3 jsonschema validation: Clusters
+* VNX: fix options incorrect behavior
+* Storwize: modify hyperswap host\_site configuration
+* Support Qemu >= 2.10.0 in Quobyte driver
+* fix a typo in remotefs.py
+* Fix get\_max\_over\_subscription\_ratio docstring
+* Fix: Incorrect replication status on clusters
+* Fix: Including resources in None cluster
+* Follow the new PTI for document build [Updated]
+* Imported Translations from Zanata
+* NEC driver: Disallow access from the source node after live-migration
+* Fix parameter error in image\_utils
+* Remove inappropriate directory space check
+* Add max MV for Queens and fix formatting
+* INFINIDAT: set REST API client parameters
+* Mock local directory testing for image conversion
+* Imported Translations from Zanata
 * Fix vhd image conversion regression
-* Use soft authorize for 'extended\_snapshot\_attributes' policy
+* Sync snapshot's encryption\_key\_id with volume's value
+* V3 jsonschema validation: types\_extra\_specs
+* DS8K: correct in-use replication vol status
 * Dell EMC SC: ISCSI initialize\_connection fixes
-* ScaleIO: Add documentation for containerized overcloud
+* nimble: update documentation for supportability
+* Fix incorrect usage of assertEqual() method in RBD unit tests
+* Add missing 'target\_obj' when perform policy check
+* Fix policy in code docs for extended\_snapshot\_attributes
+* Updated from global requirements
+* Imported Translations from Zanata
+* Revert "Stop unnecessarily querying storage for stats"
+* Storwize: filter active wwpns for NPIV
+* Use soft authorize for 'extended\_snapshot\_attributes' policy
+* Add ISCSI driver for Veritas Access
+* Adding Glance method for listing image members and unit test
+* Updated from global requirements
+* QNAP Drivers - Move from httplib to requests
+* Support multiple processes on Cinder Backup
+* V3 jsonschema validation: volume\_image\_metadata
+* Updated from global requirements
+* Fix missing print format error
+* Fix api-ref response code title levels
+* Clean out config deprecation information
+* Fix API reference attach\_mode parameter default for attachments API
+* VMAX docs - prefix emc-vmax-driver.rst with 'dell-'
+* Enable slow tests for lvm-barbican job
+* VMAX driver - Replication failover performance improvement
+* V3 jsonschema validation: qos-specs
+* Updated from global requirements
+* fix spelling error with  errormessage
+* [sytle] use http code constant instead of int
+* Remove ExceptionInParsingArguments
+* Avoid build system IP going into sample config
+* VMAX driver - Retype replicated volumes
+* use defusedxml to avoid XML attack
+* [VNX] Restore snapshot to volume
+* Update links in README
+* Updated from global requirements
+* Add documentation for capacity based quality of service
+* Make the LVM Barbican job vote
+* Fix typo errors
+* INFINIDAT: add support for multi-attach
 * Update doc name and path for dell emc vnx driver
-* Dell EMC SC: Error Deleting Consistency Group
+* Use rest\_status\_code for api-ref response codes
+* Add support for unmanaging snapshot of rbd driver
+* Stop unnecessarily querying storage for stats
 * Allow configuring tpool size
-* Fix leftovers after backup abort
+* Add backup restoration cancellation support
+* Imported Translations from Zanata
+* NetApp: Add use-exact-size parameter when creating a LUN on ONTAP iSCSI
+* Storwize: update flashcopy\_rate range and add it to volume type
+* Add 'list\_volume' in Group show&list API Doc
+* Dell EMC SC: Added timeout options for SC driver
+* VMware: Option to specify datastore name regex
+* [api-ref] Fix 'volume\_id' for in the v3/volumes-v3-volumes-actions.inc
+* Updated from global requirements
+* Imported Translations from Zanata
+* Dell EMC SC: Error Deleting Consistency Group
+* Remove utils.read\_file\_as\_root()
 * 3PAR: Add \`force detach\` support
-* Fix AZ not matching backend after migration
+* ScaleIO Driver: Document support for ScaleIO 2.5
+* Move release note put in wrong location
+* Fix the testcase of test\_cmd
+* RBD: Add comment about multiattach support
+* Imported Translations from Zanata
+* RBD: Improve connection debug statement
+* Delete redundant code
+* Parse endpoint arguments in SolidFire
+* Api-ref:Add target volume preconditions for backup restore
+* Add functional-py35 gate job
+* Support cross AZ backups
+* Reserve 5 migrations for DB backports
+* Improve ChunkedBackupDriver hashlib calls
 * Fix allocated\_capacity\_gb race on create volume
 * Fix reporting old stats
-* VMAX driver - Concurrency issues involving replicated volumes
-* 3PAR: Monitor task of promoting a virtual copy
-* ScaleIO Driver: Document support for ScaleIO 2.5
-* Imported Translations from Zanata
+* Change order of installation to match previous
 * Log config options with oslo.config
-* Solving permission errors due to directory ownership on NFS
-
-12.0.0
-------
-
-* Cinder logs rabbitmq password on connection log
+* RBD: Don't query Ceph on stats for exclusive pools
+* Imported Translations from Zanata
+* Enable hash randomization in unit tests
+* Tests: Fix backup validation with hash randomization
 * Add multiattach reporting to SolidFire
-* Only enforce multiattach policy for retype target
+* Tests: Fix 3par tests with hash randomization
+* Tests: Disable 2 netapp unit tests
+* Tests: Fix NetApp tests with hash randomization
+* Tests: Fix VMAX tests with hash randomization
+* Tests: Fix inspur tests with hash randomization
+* Fix find -delete race in tox
 * Use oslo\_db.sqlalchemy.test\_fixtures
+* Adds a Cache for Volumes Created from Snapshots with Quobyte
+* Add unit test coverage for backup chunkeddriver class
+* Add throughput limits that scale per-GB
+* Change 'hpe3par\_snap\_cpg' to 'hpe3par\_cpg\_snap'
+* Imported Translations from Zanata
+* Updated from global requirements
+* Imported Translations from Zanata
+* Cinder logs rabbitmq password on connection log
+* docs: Fix volume encryption link
+* Tests: Fix python version check
+* QNAP: Pass unit tests with hash randomization enabled
+* Provide a hint when performing a volume action can't find the method
+* Expand on mv 3.50 description
+* Only enforce multiattach policy for retype target
+* 3PAR: Monitor task of promoting a virtual copy
+* Correct attachment create success response code
+* api-ref: note that force detach is admin-only by default
+* Imported Translations from Zanata
+* Stop a connections leak when freeing an SSHPool
+* Remove deprecated fatal\_exception\_format\_errors option
+* VMAX driver - Concurrency issues involving replicated volumes
+* Remove legacy driver name mappings
+* Modify broken link
 * Admin guide documentation for volume multiattach
-* Enable multiattach capability for the zfssa driver
+* Remove deprecated service-to-driver mapping for backups
+* ScaleIO: Add documentation for containerized overcloud
+* Solving permission errors due to directory ownership on NFS
+* Imported Translations from Zanata
 * Improve logs on scheduler
-* Update UPPER\_CONSTRAINTS\_FILE for stable/queens
-* Update .gitreview for stable/queens
+* Fix the note of API version in admin doc
+* Fix grammar error
+* Remove "cinder-manage logs" commands
+* Remove some unused parameters in parameters.yaml
+* Fix typos
+* Fix link error in 'Boot from volume' doc
+* Imported Translations from Zanata
+* fix misspelling of 'return'
+* Fix spelling mistakes
+* Fix typos in cinder
+* Enable multiattach capability for the zfssa driver
+* Update reno for stable/queens
+* Fix AZ not matching backend after migration
 
 12.0.0.0rc1
 -----------
 
 * Use provider\_id for SolidFire Volume lookups
 * Deprecate Cinder Hosts API/Extension
+* Add Windows volume backup support
+* Fix json data format
 * Fix UnicodeDecodeError when decode API input
 * Api-ref: add 'all\_tenants' API query option
 * Make CinderException format errors fatal for tests
+* VMAX doc - Queens feature documentation
 * Revert consumed quota when failed to create group from source group
 * Imported Translations from Zanata
 * Zuul: Remove project name
+* Add python 3.5 in classifier
 * Correct lvm\_type default value in config doc
+* modify the http link to the https link
 * Add missing MV history for 3.50
+* Move doc of report backend state to cli
 * Imported Translations from Zanata
+* Fix pylint error in DotHill drivers
 * Imported Translations from Zanata
 * Storwize: avoid ascii code error for ssh response stderr
 * Fix DuplicateOptError in fixed\_key migration code
 * Storwize: modify the self.\_helpers to backend\_helper
 * Update document for worker cleanup API
+* Add backup cancellation admin doc
 * 3PAR: fix cloning issue in create group from source
 * Fix link in boot from volume docs
 * docs: Use the encryption provider format constants
 * Remove unused parameters in v2/v3 parameters.yaml
+* Fix leftovers after backup abort
 * Updated from global requirements
 * Add policy check for create volume with multiattach
 * Dell EMC SC: Find volume folder API call fails on root folders
+* SMBFS: allow snapshot ro attach
+* SMBFS: fix creating volume from snapshot
 * Fix the typo in api\_conditional\_updates.rst
 * Fix wrong grammar
 * [VNX] \`initiator\_target\_map\` is None
+* Schedule request to scheduler when manage existing snapshot
 * Fix how backups handle encryption key IDs
 * Rename lio job to lio-barbican
 * Update Windows docs
 * 3PAR: Fixed sync period updation in rcg
+* Add 'metadata' in backup detail&show API document
 * Handle TZ change in iso8601 >=0.1.12
 * Storwize: correct return value for update\_group
 * Fix cinder quota-usage error
@@ -83,6 +271,7 @@ CHANGES
 ----------
 
 * Support fabric specific Cisco FC Zone Name
+* DS8K: Correct create volume behavior for CG
 * backup: set default swiftclient log level to WARN
 * Tests: Fix RBD invalid UUID warnings
 * api-ref: add multiattach considerations to retype docs
@@ -101,11 +290,13 @@ CHANGES
 * Add policy check for complete attachment API action
 * [1/2] Fix mock for sleep mocks in volume drivers tests
 * fix wrong url link
+* Fix typo in test\_qnap
 * Add contributor notes on how to use pdb with tests
 * Run doc8 first
 * RBD: Support encrypted volumes
 * INFINIDAT: support force detach
 * Replace Chinese punctuation with English punctuation
+* nimble: update config doc to add missing extra-specs support
 * Add the nova-multiattach job to the check/gate queues
 * Remove extra spaces of the volume creation request body
 * V3 jsonschema validation: volume\_type\_access

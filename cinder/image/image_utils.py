@@ -60,8 +60,6 @@ QEMU_IMG_LIMITS = processutils.ProcessLimits(
     cpu_time=8,
     address_space=1 * units.Gi)
 
-VALID_DISK_FORMATS = ('raw', 'vmdk', 'vdi', 'qcow2',
-                      'vhd', 'vhdx', 'ploop')
 
 QEMU_IMG_FORMAT_MAP = {
     # Convert formats of Glance images to how they are processed with qemu-img.
@@ -74,10 +72,6 @@ QEMU_IMG_FORMAT_MAP_INV = {v: k for k, v in QEMU_IMG_FORMAT_MAP.items()}
 QEMU_IMG_VERSION = None
 QEMU_IMG_MIN_FORCE_SHARE_VERSION = [2, 10, 0]
 QEMU_IMG_MIN_CONVERT_LUKS_VERSION = '2.10'
-
-
-def validate_disk_format(disk_format):
-    return disk_format in VALID_DISK_FORMATS
 
 
 def fixup_disk_format(disk_format):
@@ -406,10 +400,11 @@ def fetch_verify_image(context, image_service, image_id, dest,
 
 
 def fetch_to_vhd(context, image_service,
-                 image_id, dest, blocksize,
+                 image_id, dest, blocksize, volume_subformat=None,
                  user_id=None, project_id=None, run_as_root=True):
     fetch_to_volume_format(context, image_service, image_id, dest, 'vpc',
-                           blocksize, user_id, project_id,
+                           blocksize, volume_subformat=volume_subformat,
+                           user_id=user_id, project_id=project_id,
                            run_as_root=run_as_root)
 
 
@@ -417,8 +412,8 @@ def fetch_to_raw(context, image_service,
                  image_id, dest, blocksize,
                  user_id=None, project_id=None, size=None, run_as_root=True):
     fetch_to_volume_format(context, image_service, image_id, dest, 'raw',
-                           blocksize, user_id, project_id, size,
-                           run_as_root=run_as_root)
+                           blocksize, user_id=user_id, project_id=project_id,
+                           size=size, run_as_root=run_as_root)
 
 
 def fetch_to_volume_format(context, image_service,
@@ -488,10 +483,6 @@ def fetch_to_volume_format(context, image_service,
                 image_id=image_id,
                 reason=_("fmt=%(fmt)s backed by:%(backing_file)s")
                 % {'fmt': fmt, 'backing_file': backing_file, })
-
-        # NOTE(e0ne): check for free space in destination directory before
-        # image conversion.
-        check_available_space(dest, data.virtual_size, image_id)
 
         # NOTE(jdg): I'm using qemu-img convert to write
         # to the volume regardless if it *needs* conversion or not

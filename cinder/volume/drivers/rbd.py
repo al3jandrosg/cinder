@@ -103,6 +103,13 @@ RBD_OPTS = [
                      'dynamic value -used + current free- and to False to '
                      'report a static value -quota max bytes if defined and '
                      'global size of cluster if not-.'),
+    cfg.BoolOpt('rbd_exclusive_cinder_pool', default=False,
+                help="Set to True if the pool is used exclusively by Cinder. "
+                     "On exclusive use driver won't query images' provisioned "
+                     "size as they will match the value calculated by the "
+                     "Cinder core code for allocated_capacity_gb. This "
+                     "reduces the load on the Ceph cluster as well as on the "
+                     "volume service."),
 ]
 
 CONF = cfg.CONF
@@ -183,8 +190,9 @@ class RADOSClient(object):
 
 
 @interface.volumedriver
-class RBDDriver(driver.CloneableImageVD,
-                driver.MigrateVD, driver.ManageableVD, driver.BaseVD):
+class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
+                driver.ManageableVD, driver.ManageableSnapshotsVD,
+                driver.BaseVD):
     """Implements RADOS block device (RBD) volume commands."""
 
     VERSION = '1.2.0'
@@ -319,8 +327,10 @@ class RBDDriver(driver.CloneableImageVD,
             if timeout is None:
                 timeout = self.configuration.rados_connect_timeout
 
-            LOG.debug("connecting to %(name)s (timeout=%(timeout)s).",
-                      {'name': name, 'timeout': timeout})
+            LOG.debug("connecting to %(user)s@%(name)s (conf=%(conf)s, "
+                      "timeout=%(timeout)s).",
+                      {'user': user, 'name': name, 'conf': conf,
+                       'timeout': timeout})
 
             client = self.rados.Rados(rados_id=user,
                                       clustername=name,
@@ -470,9 +480,15 @@ class RBDDriver(driver.CloneableImageVD,
             'storage_protocol': 'ceph',
             'total_capacity_gb': 'unknown',
             'free_capacity_gb': 'unknown',
-            'provisioned_capacity_gb': 0,
             'reserved_percentage': (
                 self.configuration.safe_get('reserved_percentage')),
+            # NOTE(eharney): Do not enable multiattach for this driver.
+            # For multiattach to work correctly, the exclusive-lock
+            # feature required by ceph journaling must be disabled.
+            # This has implications for replication and other Cinder
+            # operations.
+            # Multiattach support for this driver will be investigated
+            # as multi-attach support in Cinder matures.
             'multiattach': False,
             'thin_provisioning_support': True,
             'max_over_subscription_ratio': (
@@ -492,10 +508,14 @@ class RBDDriver(driver.CloneableImageVD,
             stats['free_capacity_gb'] = free_capacity
             stats['total_capacity_gb'] = total_capacity
 
-            total_gbi = self._get_usage_info()
-            stats['provisioned_capacity_gb'] = total_gbi
+            # For exclusive pools let scheduler set provisioned_capacity_gb to
+            # allocated_capacity_gb, and for non exclusive query the value.
+            if not self.configuration.safe_get('rbd_exclusive_cinder_pool'):
+                total_gbi = self._get_usage_info()
+                stats['provisioned_capacity_gb'] = total_gbi
         except self.rados.Error:
-            # just log and return unknown capacities
+            # just log and return unknown capacities and let scheduler set
+            # provisioned_capacity_gb = allocated_capacity_gb
             LOG.exception('error refreshing volume stats')
         self._stats = stats
 
@@ -1711,3 +1731,7 @@ class RBDDriver(driver.CloneableImageVD,
             snapshot_name = existing_ref['source-name']
             volume.rename_snap(utils.convert_str(snapshot_name),
                                utils.convert_str(snapshot.name))
+
+    def unmanage_snapshot(self, snapshot):
+        """Removes the specified snapshot from Cinder management."""
+        pass

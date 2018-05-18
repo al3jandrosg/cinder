@@ -645,8 +645,8 @@ class API(base.Base):
         return volumes
 
     def get_snapshot(self, context, snapshot_id):
-        context.authorize(snapshot_policy.GET_POLICY)
         snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
+        context.authorize(snapshot_policy.GET_POLICY, target_obj=snapshot)
 
         # FIXME(jdg): The objects don't have the db name entries
         # so build the resource tag manually for now.
@@ -656,8 +656,8 @@ class API(base.Base):
         return snapshot
 
     def get_volume(self, context, volume_id):
-        context.authorize(vol_policy.GET_POLICY)
         volume = objects.Volume.get_by_id(context, volume_id)
+        context.authorize(vol_policy.GET_POLICY, target_obj=volume)
         LOG.info("Volume retrieved successfully.", resource=volume)
         return volume
 
@@ -863,7 +863,7 @@ class API(base.Base):
                               cgsnapshot_id,
                               commit_quota=True,
                               group_snapshot_id=None):
-        context.authorize(snapshot_policy.CREATE_POLICY)
+        context.authorize(snapshot_policy.CREATE_POLICY, target_obj=volume)
 
         utils.check_metadata_properties(metadata)
         if not volume.host:
@@ -1156,7 +1156,6 @@ class API(base.Base):
                     '%s status.') % volume['status']
             LOG.info(msg, resource=volume)
             raise exception.InvalidVolume(reason=msg)
-        utils.check_metadata_properties(metadata)
         return self.db.volume_metadata_update(context, volume['id'],
                                               metadata, delete, meta_type)
 
@@ -1615,11 +1614,6 @@ class API(base.Base):
     def retype(self, context, volume, new_type, migration_policy=None):
         """Attempt to modify the type associated with an existing volume."""
         context.authorize(vol_action_policy.RETYPE_POLICY, target_obj=volume)
-        if migration_policy and migration_policy not in ('on-demand', 'never'):
-            msg = _('migration_policy must be \'on-demand\' or \'never\', '
-                    'passed: %s') % new_type
-            LOG.error(msg)
-            raise exception.InvalidInput(reason=msg)
 
         # Support specifying volume type by ID or name
         try:
@@ -1657,7 +1651,8 @@ class API(base.Base):
             # If they are retyping to a multiattach capable, make sure they
             # are allowed to do so.
             if tgt_is_multiattach:
-                context.authorize(vol_policy.MULTIATTACH_POLICY)
+                context.authorize(vol_policy.MULTIATTACH_POLICY,
+                                  target_obj=volume)
 
         # We're checking here in so that we can report any quota issues as
         # early as possible, but won't commit until we change the type. We
@@ -1839,16 +1834,21 @@ class API(base.Base):
     def manage_existing_snapshot(self, context, ref, volume,
                                  name=None, description=None,
                                  metadata=None):
-        service = self._get_service_by_host_cluster(context, volume.host,
-                                                    volume.cluster_name,
-                                                    'snapshot')
+        # Ensure the service is up and not disabled.
+        self._get_service_by_host_cluster(context, volume.host,
+                                          volume.cluster_name,
+                                          'snapshot')
 
         snapshot_object = self.create_snapshot_in_db(context, volume, name,
                                                      description, True,
                                                      metadata, None,
                                                      commit_quota=True)
-        self.volume_rpcapi.manage_existing_snapshot(
-            context, snapshot_object, ref, service.service_topic_queue)
+        kwargs = {'snapshot_id': snapshot_object.id,
+                  'volume_properties':
+                      objects.VolumeProperties(size=volume.size)}
+        self.scheduler_rpcapi.manage_existing_snapshot(
+            context, volume, snapshot_object, ref,
+            request_spec=objects.RequestSpec(**kwargs))
         return snapshot_object
 
     def get_manageable_snapshots(self, context, host, cluster_name,
@@ -2066,7 +2066,8 @@ class API(base.Base):
                 vref.status == 'in-use' and
                 vref.bootable):
             ctxt.authorize(
-                attachment_policy.MULTIATTACH_BOOTABLE_VOLUME_POLICY)
+                attachment_policy.MULTIATTACH_BOOTABLE_VOLUME_POLICY,
+                target_obj=vref)
 
         # FIXME(JDG):  We want to be able to do things here like reserve a
         # volume for Nova to do BFV WHILE the volume may be in the process of
@@ -2088,6 +2089,10 @@ class API(base.Base):
             override = False
             if instance_uuid:
                 override = True
+                # Refresh the volume reference in case multiple instances were
+                # being concurrently attached to the same non-multiattach
+                # volume.
+                vref = objects.Volume.get_by_id(ctxt, vref.id)
                 for attachment in vref.volume_attachment:
                     if attachment.instance_uuid != instance_uuid:
                         override = False

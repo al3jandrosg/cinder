@@ -66,16 +66,16 @@ class VolumeController(volumes_v2.VolumeController):
         LOG.info("Delete volume with id: %(id)s %(params)s",
                  {'id': id, 'params': params}, context=context)
 
-        if force:
-            context.authorize(policy.FORCE_DELETE_POLICY)
-
         volume = self.volume_api.get(context, id)
+
+        if force:
+            context.authorize(policy.FORCE_DELETE_POLICY, target_obj=volume)
 
         self.volume_api.delete(context, volume,
                                cascade=cascade,
                                force=force)
 
-        return webob.Response(status_int=202)
+        return webob.Response(status_int=http_client.ACCEPTED)
 
     @common.process_general_filtering('volume')
     def _process_volume_filtering(self, context=None, filters=None,
@@ -370,7 +370,7 @@ class VolumeController(volumes_v2.VolumeController):
             msg = ("The option 'multiattach' "
                    "is deprecated and will be removed in a future "
                    "release.  The default behavior going forward will "
-                   "be to specify mulitattach enabled volume types.")
+                   "be to specify multiattach enabled volume types.")
             versionutils.report_deprecated_feature(LOG, msg)
 
         new_volume = self.volume_api.create(context,

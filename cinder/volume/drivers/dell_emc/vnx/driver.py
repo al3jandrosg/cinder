@@ -77,9 +77,13 @@ class VNXDriver(driver.ManageableVD,
           10.1.0 - Add QoS support
           10.2.0 - Add replication group support
           11.0.0 - Fix failure of migration during cloning
+          12.0.0 - Add `volume revert to snapshot` support
+          12.1.0 - Adjust max_luns_per_storage_group and
+                   check_max_pool_luns_threshold
+          12.1.1 - Fix perf issue when create/delete volume
     """
 
-    VERSION = '11.00.00'
+    VERSION = '12.01.01'
     VENDOR = 'Dell EMC'
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "EMC_VNX_CI"
@@ -141,6 +145,10 @@ class VNXDriver(driver.ManageableVD,
         """Deletes a snapshot."""
         self.adapter.delete_snapshot(snapshot)
 
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Reverts a volume to a snapshot"""
+        self.adapter.restore_snapshot(volume, snapshot)
+
     def ensure_export(self, context, volume):
         """Driver entry point to get the export info for an existing volume."""
         pass
@@ -157,7 +165,6 @@ class VNXDriver(driver.ManageableVD,
         """Make sure volume is exported."""
         pass
 
-    @zm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -171,6 +178,9 @@ class VNXDriver(driver.ManageableVD,
         and a list of wwns which are visible to the remote wwn(s).
         Example return values:
         FC:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'fibre_channel'
                 'data': {
@@ -183,7 +193,11 @@ class VNXDriver(driver.ManageableVD,
                     }
                 }
             }
+
         iSCSI:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'iscsi'
                 'data': {
@@ -194,6 +208,7 @@ class VNXDriver(driver.ManageableVD,
                     'target_luns': [1, 1],
                 }
             }
+
         """
         LOG.debug("Entering initialize_connection"
                   " - connector: %(connector)s.",
@@ -203,9 +218,9 @@ class VNXDriver(driver.ManageableVD,
         LOG.debug("Exit initialize_connection"
                   " - Returning connection info: %(conn_info)s.",
                   {'conn_info': conn_info})
+        zm_utils.add_fc_zone(conn_info)
         return conn_info
 
-    @zm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector."""
         LOG.debug("Entering terminate_connection"
@@ -215,6 +230,7 @@ class VNXDriver(driver.ManageableVD,
         LOG.debug("Exit terminate_connection"
                   " - Returning connection info: %(conn_info)s.",
                   {'conn_info': conn_info})
+        zm_utils.remove_fc_zone(conn_info)
         return conn_info
 
     def get_volume_stats(self, refresh=False):

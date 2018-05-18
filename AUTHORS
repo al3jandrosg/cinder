@@ -45,6 +45,7 @@ Alexey Yelistratov <ayelistratov@mirantis.com>
 Alfredo Moralejo <amoralej@redhat.com>
 Alon Marx <alonma@il.ibm.com>
 Alyson Rosa <alyson.rodrigues.rosa@gmail.com>
+Ameed Ashour <Ameed.Ashour.ext@nokia.com>
 Amit Oren <aoren@infinidat.com>
 Amit Saha <amsaha@gmail.com>
 AmitKumarDas <amit.das@cloudbyte.com>
@@ -408,6 +409,7 @@ Kendall Nelson <kennelson11@gmail.com>
 Kendall Nelson <kjnelson@us.ibm.com>
 Kenji Yasui <k-yasui@ti.jp.nec.com>
 Kevin Fox <kevin@efox.cc>
+Kien Ha <kienha9922@gmail.com>
 Koert van der Veer <koert@cloudvps.com>
 Kui Shi <skuicloud@gmail.com>
 Kun Huang <academicgareth@gmail.com>
@@ -444,6 +446,7 @@ Lucian Petrut <petrutlucian94@gmail.com>
 Lucio Seki <lucioseki@gmail.com>
 Luis A. Garcia <luis@linux.vnet.ibm.com>
 Luis Pigueiras <luis.pigueiras@cern.ch>
+Luiz Gavioli <luizbenedito.gavioli@fit-tecnologia.org.br>
 Lujin <luo.lujin@jp.fujitsu.com>
 Luong Anh Tuan <tuanla@vn.fujitsu.com>
 Lynxzh <jmzhang@cn.ibm.com>
@@ -528,6 +531,7 @@ Navneet Singh <navsinghnitd@gmail.com>
 Navneet Singh <singn@netapp.com>
 Neha Alhat <neha.alhat@nttdata.com>
 Ngo Quoc Cuong <cuongnq@vn.fujitsu.com>
+Nguyen Hai <nguyentrihai93@gmail.com>
 Nguyen Hung Phuong <phuongnh@vn.fujitsu.com>
 Nicholas Jones <nj762h@att.com>
 Nicolas Trangez <ikke@nicolast.be>
@@ -855,6 +859,7 @@ abhiram moturi <abhiram.moturi@oracle.com>
 abhiram_moturi <abhiram.moturi@oracle.com>
 abhishekkekane <abhishek.kekane@nttdata.com>
 aimee.ukasick <au7569@att.com>
+albertjone <guanalbertjone@gmail.com>
 alexey-mr <alexey.morlang@gmail.com>
 alonma <alonma@il.ibm.com>
 amoturi <abhiram.moturi@oracle.com>
@@ -868,8 +873,10 @@ april <xiaolixu@cn.ibm.com>
 arsenc <arsenc@synology.com>
 ashish.billore <ashish.billore@gmail.com>
 bailinzhang <zhang.bailin@zte.com.cn>
+baiwenteng <baiwenteng@inspur.com>
 bhagyashris <bhagyashri.shewale@nttdata.com>
 binean <ting.wang@easystack.cn>
+caoyuan <cao.yuan@99cloud.net>
 caoyue <yue.cao@easystack.cn>
 chadlung <chad.lung@gmail.com>
 chaochin <chaochin@zhaoqin-RHEL-GPFS1.(none)>
@@ -913,7 +920,9 @@ hussainchachuliya <hussain.chachuliya@nttdata.com>
 huyang <huyang1@huawei.com>
 iain MacDonnell <iain.macdonnell@oracle.com>
 iberezovskiy <iberezovskiy@mirantis.com>
+imacdonn <iain.macdonnell@oracle.com>
 int32bit <krystism@gmail.com>
+iswarya_vakati <v.iswarya@nectechnologies.in>
 ivyzhang <shzyu@cn.ibm.com>
 j-griffith <john.griffith8@gmail.com>
 jakedahn <jake@ansolabs.com>
@@ -940,6 +949,7 @@ kongxiangyun <kongxyxian2010@163.com>
 kshimamu <kshimamu@cisco.com>
 kushal <kushal.wathore@hpe.com>
 lakshman <Lakshmi.Narayana.ctr@kaminario.com>
+leiyashuai <leiyashuai@inspur.com>
 leseb <sebastien.han@enovance.com>
 lg.yue <yuelongguang@letv.com>
 liangjingtao <liang.jingtao@zte.com.cn>
@@ -977,6 +987,7 @@ maoshuai <fwsakura@163.com>
 marcusvrn <marcus.nascimento@fit-tecnologia.org.br>
 masahiro ikeda <ikedamsh@nttdata.co.jp>
 mattanShalev <mattan@reduxio.com>
+mayurindalkar <mayur.indalkar@veritas.com>
 melissaml <ma.lei@99cloud.net>
 mikhail <mikhail.khodos@nexenta.com>
 mouad benchchaoui <m.benchchaoui@cloudbau.de>
@@ -993,6 +1004,7 @@ pangliye <pangliye@inspur.com>
 pawnesh.kumar <pawnesh.kumar@nectechnologies.in>
 peter_wang <peter.wang13@emc.com>
 peter_wang <wangxu198709@gmail.com>
+phenom <phenoxim@gmail.com>
 pooja jadhav <pooja.jadhav@nttdata.com>
 poojajadhav <pooja.jadhav@nttdata.com>
 pran1990 <praneshpg@gmail.com>
@@ -1019,6 +1031,7 @@ scottda <scott.dangelo@ibm.com>
 sdodsley <simon@purestorage.com>
 shangxiaobj <shangxiaobj@inspur.com>
 shanks.yang <yang.hao@inspur.com>
+shaoxj <shaoxj@inspur.com>
 shihanzhang <shihanzhang@huawei.com>
 skudriashev <skudriashev@griddynamics.com>
 sparkliu <spark.liu@cn.ibm.com>
@@ -1032,6 +1045,7 @@ sunyandi <sunyd@inspur.com>
 swapnil-nilangekar <swapnil.sun.nilangekar@hpe.com>
 tanlin <lin.tan@intel.com>
 taylorh <taylorh@synology.com>
+tpsilva <tiago.pasqualini@gmail.com>
 tsekiyam <tsekiyam@dhcp47-227.lab.bos.redhat.com>
 tswanson <tswanson@compellent.com>
 ubaumann <openstack@m.ubaumann.ch>
@@ -1047,7 +1061,9 @@ wanghao <wanghao749@huawei.com>
 wanghong <w.wanghong@huawei.com>
 wanghongtaozz <wanghongtaozz@inspur.com>
 wanghongxu <wang19930902@gmail.com>
+wanghui <wang_hui@inspur.com>
 wangpeng <wangpww@cn.ibm.com>
+wangqi <wang.qi@99cloud.net>
 wangqiangbj <wangqiangbj@inspur.com>
 wangxiyuan <wangxiyuan@huawei.com>
 wangzhenyu <wangzy@fiberhome.com>
@@ -1061,6 +1077,7 @@ xiexs <xiexs@cn.fujitsu.com>
 xing-yang <xing.yang@emc.com>
 xing-yang <xyang@alum.mit.edu>
 xqli-openstack <xiaoqin.li@hotmail.com>
+xuleibj <xuleibj@inspur.com>
 yanghuichan <yanghc@fiberhome.com>
 yanjun.fu <yanjun.fu@easystack.cn>
 yatin karel <yatin.karel@nectechnologies.in>

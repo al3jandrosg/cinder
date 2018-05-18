@@ -9,16 +9,17 @@
 # Yongbok Kim <ruo91@yongbok.net>, 2014
 # Andreas Jaeger <jaegerandi@gmail.com>, 2016. #zanata
 # Ian Y. Choi <ianyrchoi@gmail.com>, 2017. #zanata
+# Jaewook Oh <kyle.oh95@gmail.com>, 2018. #zanata
 msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-27 16:11+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2017-08-19 07:36+0000\n"
-"Last-Translator: Ian Y. Choi <ianyrchoi@gmail.com>\n"
+"PO-Revision-Date: 2018-03-20 12:19+0000\n"
+"Last-Translator: Jaewook Oh <kyle.oh95@gmail.com>\n"
 "Language: ko_KR\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 "Generated-By: Babel 2.0\n"
@@ -125,10 +126,6 @@ msgstr ""
 "다."
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "%s \"data\"가 결과에 없습니다."
 
@@ -218,9 +215,6 @@ msgstr "'consistencygroup_id'를 지정해야 함"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "'qemu-img info' 구문 분석에 실패했습니다. "
-
-msgid "'status' must be specified."
-msgstr "'상태'가 지정되어야 합니다."
 
 #, python-format
 msgid ""
@@ -383,6 +377,10 @@ msgstr "올바르지 않은 인증 키로 %s 전송을 시도했습니다. "
 #, python-format
 msgid "Authentication failed, verify the switch credentials, error code %s."
 msgstr "인증 실패, 스위치 자격 증명 확인, 오류 코드 %s."
+
+#, python-format
+msgid "Availability zone '%(az)s' is invalid."
+msgstr "가용성 구역 '%(az)s'이(가) 올바르지 않습니다. "
 
 #, python-format
 msgid "Availability zone '%(s_az)s' is invalid."
@@ -3261,6 +3259,10 @@ msgid "Invalid disk type: %s."
 msgstr "올바르지 않은 디스크 유형: %s."
 
 #, python-format
+msgid "Invalid group type: %(reason)s"
+msgstr "잘못된 그룹 타입: %(reason)s"
+
+#, python-format
 msgid "Invalid host: %(reason)s"
 msgstr "잘못된 호스트: %(reason)s"
 
@@ -3341,16 +3343,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "올바르지 않은 qos 스펙: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "올바르지 않은 대상에 볼륨을 접속하는 요청이 올바르지 않습니다. "
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"올바르지 않은 모드로 볼륨을 접속하는 유효하지 않은 요청입니다. 접속 모드는 "
-"'rw' 또는 'ro'여야 합니다. "
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "올바르지 않은 예약 만기 %(expire)s."
@@ -3395,18 +3387,6 @@ msgstr "올바르지 않은 업데이트 설정: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "강제 실행에 대한 올바르지 않은 값 '%s'입니다. "
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "'부트 가능'에 대한 값이 올바르지 않음: '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "'강제 실행'에 대해 값이 올바르지 않음: '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "'읽기 전용'에 대한 값이 올바르지 않음: '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "'scheduler_max_attempts'에 대한 올바르지 않은 값, >= 1이어야 함"
@@ -3486,12 +3466,6 @@ msgid ""
 "Issuing a fail-over failed because replication is not properly configured."
 msgstr "복제가 적절하게 구성되지 않았으므로 장애 복구 실행에 실패했습니다."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"키 이름은 영숫자 문자, 밑줄, 마침표, 콜론, 하이픈만 포함할 수 있습니다."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -3503,19 +3477,11 @@ msgstr "중첩 할당량 지원을 받기 위해 Keystone 버전 3 이상을 사
 msgid "LUN not found with given ref %s."
 msgstr "주어진 ref %s을(를) 사용하여 LUN을 찾을 수 없습니다. "
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "마지막 %s cinder syslog 항목:-"
-
 msgid "LeftHand cluster not found"
 msgstr "LeftHand 클러스터를 찾을 수 없음"
 
 msgid "License is unavailable."
 msgstr "라이센스를 사용할 수 없습니다."
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "행 %(dis)d : %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3716,9 +3682,6 @@ msgstr ""
 "클라우드 관리자가 프로젝트를 나열하고 가져올 수 있는 Keystone policy.json을 "
 "사용하여 클라우드 관리자로 이 명령을 실행해야 합니다."
 
-msgid "Must specify 'connector'"
-msgstr "'커넥터'를 지정해야 함"
-
 msgid "Must specify 'new_volume'"
 msgstr "'new_volume'을 지정해야 함"
 
@@ -3756,12 +3719,6 @@ msgstr "올바른 상태를 지정해야 함"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "ExtensionManager 클래스를 지정해야 함"
-
-msgid "Must specify bootable in request."
-msgstr "요청에서 부트 가능을 지정해야 합니다."
-
-msgid "Must specify readonly in request."
-msgstr "요청에서 읽기 전용을 지정해야 합니다."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "스냅샷 source-name 또는 source-id를 지정해야 합니다."
@@ -3828,12 +3785,6 @@ msgstr ""
 "새 크기는 백엔드 스토리지의 실제 크기보다 커야 함: realsize: %(oldsize)s, "
 "newsize: %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr "새 볼륨 크기를 정수로 지정해야 합니다. "
-
-msgid "New volume type must be specified."
-msgstr "새 볼륨 유형을 지정해야 합니다."
-
 msgid "New volume type not specified in request_spec."
 msgstr "새 볼륨 유형이 request_spec에서 지정되지 않았습니다."
 
@@ -3855,9 +3806,6 @@ msgstr "제공된 iSCSI IP를 가진 활성 iSCSI 포털이 없음"
 msgid "No backups available to do an incremental backup."
 msgstr "증분 백업을 수행할 수 있는 백업이 없습니다. "
 
-msgid "No cinder entries in syslog!"
-msgstr "syslog에 cinder 항목이 없습니다!"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "이름이 %s인 복제 LUN을 파일러에서 찾을 수 없음"
@@ -3868,9 +3816,6 @@ msgstr "구성 노드를 찾을 수 없습니다. "
 #, python-format
 msgid "No element by given name %s."
 msgstr "지정된 이름 %s의 요소가 없습니다."
-
-msgid "No errors in logfiles!"
-msgstr "로그 파일에 오류가 없습니다!"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -3894,9 +3839,6 @@ msgstr "%s에 대한 올바른 iscsi 포털을 찾을 수 없습니다."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "대상 배열에 iSCSI 사용 포트가 없습니다. "
-
-msgid "No image_name was specified in request."
-msgstr "요청에 image_name이 지정되지 않았습니다. "
 
 msgid "No initiator connected to fabric."
 msgstr "개시자가 패브릭에 연결되지 않았습니다."
@@ -4071,9 +4013,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "REST 서버 인증서의 경로를 지정해야 합니다. "
-
-msgid "Please specify a name for QoS specs."
-msgstr "QoS 스펙에 대한 이름을 지정하십시오. "
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4322,9 +4261,6 @@ msgstr "요청 본문에 너무 많은 항목이 들어있음"
 
 msgid "Request body contains too many items."
 msgstr "요청 본문이 너무 많은 항목을 포함합니다."
-
-msgid "Request body empty"
-msgstr "요청 본문이 비어 있음"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -4795,9 +4731,6 @@ msgstr ""
 "호스트를 장애 복구할 준비가 되지 않았습니다. 볼륨을 다시 동기화하고 LeftHand "
 "백엔드에서 복제를 재개하십시오."
 
-msgid "The key cannot be None."
-msgstr "키는 None이 되어서는 안 됩니다. "
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "update_migrated_volume 메소드가 구현되지 않았습니다. "
 
@@ -4924,10 +4857,6 @@ msgstr "%(volume_size)sG를 보유할 수 있는 공유가 없음"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "%(volume_size)sG를 호스트할 수 있는 공유가 없습니다."
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "해당 조치가 없음: %s"
 
 msgid "There is no virtual disk device."
 msgstr "가상 디스크 디바이스가 없습니다."
@@ -5173,9 +5102,6 @@ msgstr "iSCSI 맵핑을 찾을 수 없습니다. "
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "ssh_hosts_key_file을 찾을 수 없음: %s"
-
-msgid "Unable to find system log file!"
-msgstr "시스템 로그 파일을 찾을 수 없음!"
 
 #, python-format
 msgid ""
@@ -6819,10 +6745,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp에 따옴표 누락 %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy는 'on-demand' 또는 'never'이어야 함. 패스됨: %s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

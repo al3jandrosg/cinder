@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-27 16:11+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -117,10 +117,6 @@ msgid ""
 msgstr "%(workers)d 的 %(worker_name)s 值無效，必須大於 0。"
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "結果中沒有 %s \"data\"。"
 
@@ -203,9 +199,6 @@ msgstr "必須指定 'consistencygroup_id'"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "'qemu-img info' 剖析失敗。"
-
-msgid "'status' must be specified."
-msgstr "必須指定 'status'。"
 
 #, python-format
 msgid ""
@@ -3188,14 +3181,6 @@ msgstr "所配置的預先提取類型 %s 無效。PrefetchType 必須位於 0�
 msgid "Invalid qos specs: %(reason)s"
 msgstr "無效的服務品質規格：%(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "將磁區連接至無效目標的要求無效"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr "以無效模式來連接磁區的要求無效。連接模式應該是 'rw' 或 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "無效的預約有效期限 %(expire)s。"
@@ -3239,18 +3224,6 @@ msgstr "無效的更新設定：'%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "force 的值 '%s' 無效。"
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "'bootable' 的值無效：'%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "'force' 的值 '%s' 無效"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "'readonly' 的值無效：'%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "'scheduler_max_attempts' 的值無效，必須 >= 1"
@@ -3327,11 +3300,6 @@ msgid ""
 "Issuing a fail-over failed because replication is not properly configured."
 msgstr "發出失效接手失敗，因為未正確配置抄寫。"
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr "索引鍵名稱只能包含英數字元、底線、句點、冒號及連字號。"
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError：%s"
@@ -3343,19 +3311,11 @@ msgstr "Keystone 第 3 版或更高版本必須用於取得巢狀配額支援。
 msgid "LUN not found with given ref %s."
 msgstr "找不到具有給定參照 %s 的 LUN。"
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "最後 %s 個 Cinder Syslog 項目：-"
-
 msgid "LeftHand cluster not found"
 msgstr "找不到 LeftHand 叢集"
 
 msgid "License is unavailable."
 msgstr "無法使用授權。"
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "第 %(dis)d 行：%(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3543,9 +3503,6 @@ msgstr ""
 "必須以雲端管理者身分使用 Keystone policy.json 來執行此指令，此 policy.json 容"
 "許雲端管理者列出和取得任何專案。"
 
-msgid "Must specify 'connector'"
-msgstr "必須指定 'connector'"
-
 msgid "Must specify 'new_volume'"
 msgstr "必須指定 'new_volume'"
 
@@ -3577,12 +3534,6 @@ msgstr "必須指定有效的狀態"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "必須指定 ExtensionManager 類別"
-
-msgid "Must specify bootable in request."
-msgstr "必須在要求中指定 bootable。"
-
-msgid "Must specify readonly in request."
-msgstr "必須在要求中指定 readonly。"
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "必須指定 Snapshot source-name 或 source-id。"
@@ -3645,12 +3596,6 @@ msgstr ""
 "新大小應該大於後端儲存體中的實際大小。實際大小：%(oldsize)s，新大小："
 "%(newsize)s。"
 
-msgid "New volume size must be specified as an integer."
-msgstr "必須將新的磁區大小指定為整數。"
-
-msgid "New volume type must be specified."
-msgstr "必須指定新的磁區類型。"
-
 msgid "New volume type not specified in request_spec."
 msgstr "request_spec 中沒有指定新的磁區類型。"
 
@@ -3672,9 +3617,6 @@ msgstr "沒有具備所提供之 iSCSI IP 的作用中 iSCSI 入口網站"
 msgid "No backups available to do an incremental backup."
 msgstr "沒有可用的備份來執行增量備份。"
 
-msgid "No cinder entries in syslog!"
-msgstr "Syslog 中沒有 Cinder 項目！"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "在編檔器上找不到名稱為 %s 的複製 LUN"
@@ -3685,9 +3627,6 @@ msgstr "找不到任何配置節點。"
 #, python-format
 msgid "No element by given name %s."
 msgstr "依給定的名稱 %s，找不到元素。"
-
-msgid "No errors in logfiles!"
-msgstr "日誌檔中沒有錯誤！"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -3709,9 +3648,6 @@ msgstr "找不到 %s 的良好 iSCSI 入口網站。"
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "目標陣列上沒有支援 iSCSI 的埠。"
-
-msgid "No image_name was specified in request."
-msgstr "未在要求中指定 image_name。"
 
 msgid "No initiator connected to fabric."
 msgstr "沒有起始器已連接至光纖。"
@@ -3878,9 +3814,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "必須指定 REST 伺服器憑證的路徑。"
-
-msgid "Please specify a name for QoS specs."
-msgstr "請為服務品質規格指定名稱。"
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4129,9 +4062,6 @@ msgstr "要求內文包含太多項目"
 
 msgid "Request body contains too many items."
 msgstr "要求內文包含太多項目。"
-
-msgid "Request body empty"
-msgstr "要求內文是空的"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -4575,9 +4505,6 @@ msgid ""
 msgstr ""
 "主機尚未備妥以進行失效回復。請重新同步磁區，並回復 LeftHand 後端上的抄寫。"
 
-msgid "The key cannot be None."
-msgstr "金鑰不能是「無」。"
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "未實作方法 update_migrated_volume。"
 
@@ -4696,10 +4623,6 @@ msgstr "沒有共用可以管理 %(volume_size)sG"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "沒有共用項目可以管理 %(volume_size)s G。"
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "沒有這樣的動作：%s"
 
 msgid "There is no virtual disk device."
 msgstr "沒有虛擬磁碟裝置。"
@@ -4937,9 +4860,6 @@ msgstr "找不到 iSCSI 對映。"
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "找不到 ssh_hosts_key_file：%s"
-
-msgid "Unable to find system log file!"
-msgstr "找不到系統日誌檔！"
 
 #, python-format
 msgid ""
@@ -6494,10 +6414,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp 遺漏引用 %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy 必須是 'on-demand' 或 'never'，已傳遞：%s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

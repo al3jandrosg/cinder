@@ -31,6 +31,7 @@ from oslo_utils import encodeutils
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import units
+from retrying import retry
 import six
 
 from cinder import context
@@ -118,10 +119,10 @@ storwize_svc_opts = [
                      'creation.'),
     cfg.IntOpt('storwize_svc_flashcopy_rate',
                default=50,
-               min=1, max=100,
+               min=1, max=150,
                help='Specifies the Storwize FlashCopy copy rate to be used '
                'when creating a full volume copy. The default is rate '
-               'is 50, and the valid rates are 1-100.'),
+               'is 50, and the valid rates are 1-150.'),
     cfg.StrOpt('storwize_svc_mirror_pool',
                default=None,
                help='Specifies the name of the pool in which mirrored copy '
@@ -130,9 +131,14 @@ storwize_svc_opts = [
                default=None,
                help='Specifies the name of the peer pool for hyperswap '
                     'volume, the peer pool must exist on the other site.'),
-    cfg.StrOpt('storwize_preferred_host_site',
-               default=None,
-               help='Specifies the preferred host site name.'),
+    cfg.DictOpt('storwize_preferred_host_site',
+                default={},
+                help='Specifies the site information for host. '
+                     'One WWPN or multi WWPNs used in the host can be '
+                     'specified. For example: '
+                     'storwize_preferred_host_site=site1:wwpn1,'
+                     'site2:wwpn2&wwpn3 or '
+                     'storwize_preferred_host_site=site1:iqn1,site2:iqn2'),
     cfg.IntOpt('cycle_period_seconds',
                default=300,
                min=60, max=86400,
@@ -296,37 +302,12 @@ class StorwizeSSH(object):
 
         If vdisk already mapped and multihostmap is True, use the force flag.
         """
-        ssh_cmd = ['svctask', 'mkvdiskhostmap', '-host', '"%s"' % host, vdisk]
-
-        if lun:
-            ssh_cmd.insert(ssh_cmd.index(vdisk), '-scsi')
-            ssh_cmd.insert(ssh_cmd.index(vdisk), lun)
+        ssh_cmd = ['svctask', 'mkvdiskhostmap', '-host', '"%s"' % host,
+                   '-scsi', lun, '"%s"' % vdisk]
 
         if multihostmap:
             ssh_cmd.insert(ssh_cmd.index('mkvdiskhostmap') + 1, '-force')
-        try:
-            self.run_ssh_check_created(ssh_cmd)
-            result_lun = self.get_vdiskhostmapid(vdisk, host)
-            if result_lun is None or (lun and lun != result_lun):
-                msg = (_('mkvdiskhostmap error:\n command: %(cmd)s\n '
-                       'lun: %(lun)s\n result_lun: %(result_lun)s') %
-                       {'cmd': ssh_cmd,
-                        'lun': lun,
-                        'result_lun': result_lun})
-                LOG.error(msg)
-                raise exception.VolumeDriverException(message=msg)
-            return result_lun
-        except Exception as ex:
-            if (not multihostmap and hasattr(ex, 'message') and
-                    'CMMVC6071E' in ex.message):
-                LOG.error('storwize_svc_multihostmap_enabled is set '
-                          'to False, not allowing multi host mapping.')
-                raise exception.VolumeDriverException(
-                    message=_('CMMVC6071E The VDisk-to-host mapping was not '
-                              'created because the VDisk is already mapped '
-                              'to a host.\n"'))
-            with excutils.save_and_reraise_exception():
-                LOG.error('Error mapping VDisk-to-host')
+        self.run_ssh_check_created(ssh_cmd)
 
     def mkrcrelationship(self, master, aux, system, asyncmirror,
                          cyclingmode=False):
@@ -569,11 +550,12 @@ class StorwizeSSH(object):
 
     def mkfcmap(self, source, target, full_copy, copy_rate, consistgrp=None):
         ssh_cmd = ['svctask', 'mkfcmap', '-source', '"%s"' % source, '-target',
-                   '"%s"' % target, '-autodelete']
+                   '"%s"' % target]
         if not full_copy:
             ssh_cmd.extend(['-copyrate', '0'])
         else:
             ssh_cmd.extend(['-copyrate', six.text_type(copy_rate)])
+            ssh_cmd.append('-autodelete')
         if consistgrp:
             ssh_cmd.extend(['-consistgrp', consistgrp])
         out, err = self._ssh(ssh_cmd, check_exit_code=False)
@@ -702,14 +684,14 @@ class StorwizeSSH(object):
                    '-filtervalue', 'node_id=%s' % node_id]
         return self.run_ssh_info(ssh_cmd, with_header=True)
 
-    def lstargetportfc(self, own_node_id=None, host_io_permitted=None):
+    def lstargetportfc(self, current_node_id=None, host_io_permitted=None):
         ssh_cmd = ['svcinfo', 'lstargetportfc', '-delim', '!']
-        if own_node_id and host_io_permitted:
+        if current_node_id and host_io_permitted:
             ssh_cmd += ['-filtervalue', '%s:%s' % (
-                'owning_node_id=%s' % own_node_id,
+                'current_node_id=%s' % current_node_id,
                 'host_io_permitted=%s' % host_io_permitted)]
-        elif own_node_id:
-            ssh_cmd += ['-filtervalue', 'owning_node_id=%s' % own_node_id]
+        elif current_node_id:
+            ssh_cmd += ['-filtervalue', 'current_node_id=%s' % current_node_id]
         return self.run_ssh_info(ssh_cmd, with_header=True)
 
     def migratevdisk(self, vdisk, dest_pool, copy_id='0'):
@@ -865,6 +847,10 @@ class StorwizeHelpers(object):
 
         site_iogrp = []
         pool_data = self.get_pool_attrs(pool)
+        if pool_data is None:
+            msg = (_('Failed getting details for pool %s.') % pool)
+            LOG.error(msg)
+            raise exception.InvalidConfigurationValue(message=msg)
         if 'site_id' in pool_data and pool_data['site_id']:
             for node in state['storage_nodes'].values():
                 if pool_data['site_id'] == node['site_id']:
@@ -967,7 +953,7 @@ class StorwizeHelpers(object):
         wwpns = set()
         # In the response of lstargetportfc, the host_io_permitted
         # indicates whether the port can be used for host I/O
-        resp = self.ssh.lstargetportfc(own_node_id=node_id,
+        resp = self.ssh.lstargetportfc(current_node_id=node_id,
                                        host_io_permitted=host_io)
         for port_info in resp:
             wwpns.add(port_info['WWPN'])
@@ -1167,25 +1153,62 @@ class StorwizeHelpers(object):
     def delete_host(self, host_name):
         self.ssh.rmhost(host_name)
 
+    def _get_unused_lun_id(self, host_name):
+        luns_used = []
+        result_lun = '-1'
+        resp = self.ssh.lshostvdiskmap(host_name)
+        for mapping_info in resp:
+            luns_used.append(int(mapping_info['SCSI_id']))
+
+        luns_used.sort()
+        result_lun = str(len(luns_used))
+        for index, n in enumerate(luns_used):
+            if n > index:
+                result_lun = str(index)
+                break
+
+        return result_lun
+
+    @cinder_utils.trace
     def map_vol_to_host(self, volume_name, host_name, multihostmap):
         """Create a mapping between a volume to a host."""
 
-        LOG.debug('Enter: map_vol_to_host: volume %(volume_name)s to '
-                  'host %(host_name)s.',
-                  {'volume_name': volume_name, 'host_name': host_name})
-
         # Check if this volume is already mapped to this host
         result_lun = self.ssh.get_vdiskhostmapid(volume_name, host_name)
-        if result_lun is None:
-            result_lun = self.ssh.mkvdiskhostmap(host_name, volume_name, None,
-                                                 multihostmap)
+        if result_lun:
+            LOG.debug('volume %(volume_name)s is already mapped to the host '
+                      '%(host_name)s.',
+                      {'volume_name': volume_name, 'host_name': host_name})
+            return int(result_lun)
 
-        LOG.debug('Leave: map_vol_to_host: LUN %(result_lun)s, volume '
-                  '%(volume_name)s, host %(host_name)s.',
-                  {'result_lun': result_lun,
-                   'volume_name': volume_name,
-                   'host_name': host_name})
-        return int(result_lun)
+        def _retry_on_exception(e):
+            if hasattr(e, 'msg') and 'CMMVC5879E' in e.msg:
+                return True
+            return False
+
+        @retry(retry_on_exception=_retry_on_exception,
+               stop_max_attempt_number=3,
+               wait_random_min=1,
+               wait_random_max=10)
+        def make_vdisk_host_map():
+            try:
+                result_lun = self._get_unused_lun_id(host_name)
+                self.ssh.mkvdiskhostmap(host_name, volume_name, result_lun,
+                                        multihostmap)
+                return int(result_lun)
+            except Exception as ex:
+                if (not multihostmap and hasattr(ex, 'msg') and
+                        'CMMVC6071E' in ex.msg):
+                    LOG.warning('storwize_svc_multihostmap_enabled is set '
+                                'to False, not allowing multi host mapping.')
+                    raise exception.VolumeDriverException(
+                        message=_('CMMVC6071E The VDisk-to-host mapping was '
+                                  'not created because the VDisk is already '
+                                  'mapped to a host.'))
+                with excutils.save_and_reraise_exception():
+                    LOG.error('Error mapping VDisk-to-host.')
+
+        return make_vdisk_host_map()
 
     def unmap_vol_from_host(self, volume_name, host_name):
         """Unmap the volume and delete the host if it has no more mappings."""
@@ -1253,10 +1276,10 @@ class StorwizeHelpers(object):
                'stretched_cluster': cluster_partner,
                'replication': False,
                'nofmtdisk': config.storwize_svc_vol_nofmtdisk,
+               'flashcopy_rate': config.storwize_svc_flashcopy_rate,
                'mirror_pool': config.storwize_svc_mirror_pool,
                'volume_topology': None,
                'peer_pool': config.storwize_peer_pool,
-               'host_site': config.storwize_preferred_host_site,
                'cycle_period_seconds': config.cycle_period_seconds}
         return opt
 
@@ -1790,13 +1813,39 @@ class StorwizeHelpers(object):
                      {'cg': cgId})
         return volume_model_updates
 
+    def check_flashcopy_rate(self, flashcopy_rate):
+        sys_info = self.get_system_info()
+        code_level = sys_info['code_level']
+        if flashcopy_rate not in range(1, 151):
+            raise exception.InvalidInput(
+                reason=_('The configured flashcopy rate should be '
+                         'between 1 and 150.'))
+        elif code_level < (7, 8, 1, 0) and flashcopy_rate > 100:
+            msg = (_('The configured flashcopy rate is %(fc_rate)s, The '
+                     'storage code level is %(code_level)s, the flashcopy_rate'
+                     ' range is 1-100 if the storwize code level '
+                     'below 7.8.1.') % {'fc_rate': flashcopy_rate,
+                                        'code_level': code_level})
+            LOG.error(msg)
+            raise exception.VolumeDriverException(message=msg)
+
+    def update_flashcopy_rate(self, volume_name, new_flashcopy_rate):
+        mapping_ids = self._get_vdisk_fc_mappings(volume_name)
+        for map_id in mapping_ids:
+            attrs = self._get_flashcopy_mapping_attributes(map_id)
+            copy_rate = attrs['copy_rate']
+            # update flashcopy rate for clone volume
+            if copy_rate != '0':
+                self.ssh.chfcmap(map_id,
+                                 copyrate=six.text_type(new_flashcopy_rate))
+
     def run_flashcopy(self, source, target, timeout, copy_rate,
                       full_copy=True, restore=False):
         """Create a FlashCopy mapping from the source to the target."""
         LOG.debug('Enter: run_flashcopy: execute FlashCopy from source '
                   '%(source)s to target %(target)s.',
                   {'source': source, 'target': target})
-
+        self.check_flashcopy_rate(copy_rate)
         fc_map_id = self.ssh.mkfcmap(source, target, full_copy, copy_rate)
         self._prepare_fc_map(fc_map_id, timeout, restore)
         self.ssh.startfcmap(fc_map_id, restore)
@@ -1828,8 +1877,9 @@ class StorwizeHelpers(object):
         opts['iogrp'] = src_attrs['IO_group_id']
         self.create_vdisk(target, src_size, 'b', pool, opts)
 
+        self.check_flashcopy_rate(opts['flashcopy_rate'])
         self.ssh.mkfcmap(source, target, full_copy,
-                         config.storwize_svc_flashcopy_rate,
+                         opts['flashcopy_rate'],
                          consistgrp=consistgrp)
 
         LOG.debug('Leave: create_flashcopy_to_consistgrp: '
@@ -2128,7 +2178,7 @@ class StorwizeHelpers(object):
         timeout = config.storwize_svc_flashcopy_timeout
         try:
             self.run_flashcopy(src, tgt, timeout,
-                               config.storwize_svc_flashcopy_rate,
+                               opts['flashcopy_rate'],
                                full_copy=full_copy)
         except Exception:
             with excutils.save_and_reraise_exception():
@@ -4546,6 +4596,10 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             # If the old_opts contain QoS keys, disable them.
             self._helpers.disable_vdisk_qos(volume['name'], old_opts['qos'])
 
+        if new_opts['flashcopy_rate'] != old_opts['flashcopy_rate']:
+            self._helpers.update_flashcopy_rate(volume.name,
+                                                new_opts['flashcopy_rate'])
+
         # Delete replica if needed
         if old_rep_type and not new_rep_type:
             self._aux_backend_helpers.delete_rc_volume(volume['name'],
@@ -5185,11 +5239,12 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if rep_type:
             raise exception.InvalidInput(
                 reason=_('Reverting replication volume is not supported.'))
+        opts = self._get_vdisk_params(volume.volume_type_id)
         try:
             self._helpers.run_flashcopy(
                 snapshot.name, volume.name,
                 self.configuration.storwize_svc_flashcopy_timeout,
-                self.configuration.storwize_svc_flashcopy_rate, True, True)
+                opts['flashcopy_rate'], True, True)
         except Exception as err:
             msg = (_("Reverting volume %(vol)s to snapshot %(snap)s failed "
                      "due to: %(err)s.")
@@ -5237,47 +5292,49 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         """Build pool status"""
         QoS_support = True
         pool_stats = {}
-        try:
-            pool_data = self._helpers.get_pool_attrs(pool)
-            if pool_data:
-                easy_tier = pool_data['easy_tier'] in ['on', 'auto']
-                total_capacity_gb = float(pool_data['capacity']) / units.Gi
-                free_capacity_gb = float(pool_data['free_capacity']) / units.Gi
-                allocated_capacity_gb = (float(pool_data['used_capacity']) /
-                                         units.Gi)
-                provisioned_capacity_gb = float(
-                    pool_data['virtual_capacity']) / units.Gi
+        pool_data = self._helpers.get_pool_attrs(pool)
+        if pool_data:
+            easy_tier = pool_data['easy_tier'] in ['on', 'auto']
+            total_capacity_gb = float(pool_data['capacity']) / units.Gi
+            free_capacity_gb = float(pool_data['free_capacity']) / units.Gi
+            allocated_capacity_gb = (float(pool_data['used_capacity']) /
+                                     units.Gi)
+            provisioned_capacity_gb = float(
+                pool_data['virtual_capacity']) / units.Gi
 
-                rsize = self.configuration.safe_get(
-                    'storwize_svc_vol_rsize')
-                # rsize of -1 or 100 means fully allocate the mdisk
-                use_thick_provisioning = rsize == -1 or rsize == 100
-                over_sub_ratio = self.configuration.safe_get(
-                    'max_over_subscription_ratio')
-                location_info = ('StorwizeSVCDriver:%(sys_id)s:%(pool)s' %
-                                 {'sys_id': self._state['system_id'],
-                                  'pool': pool_data['name']})
-                multiattach = (self.configuration.
-                               storwize_svc_multihostmap_enabled)
-                pool_stats = {
-                    'pool_name': pool_data['name'],
-                    'total_capacity_gb': total_capacity_gb,
-                    'free_capacity_gb': free_capacity_gb,
-                    'allocated_capacity_gb': allocated_capacity_gb,
-                    'provisioned_capacity_gb': provisioned_capacity_gb,
-                    'compression_support': self._state['compression_enabled'],
-                    'reserved_percentage':
-                        self.configuration.reserved_percentage,
-                    'QoS_support': QoS_support,
-                    'consistencygroup_support': True,
-                    'location_info': location_info,
-                    'easytier_support': easy_tier,
-                    'multiattach': multiattach,
-                    'thin_provisioning_support': not use_thick_provisioning,
-                    'thick_provisioning_support': use_thick_provisioning,
-                    'max_over_subscription_ratio': over_sub_ratio,
-                    'consistent_group_snapshot_enabled': True,
-                }
+            rsize = self.configuration.safe_get(
+                'storwize_svc_vol_rsize')
+            # rsize of -1 or 100 means fully allocate the mdisk
+            use_thick_provisioning = rsize == -1 or rsize == 100
+            over_sub_ratio = self.configuration.safe_get(
+                'max_over_subscription_ratio')
+            location_info = ('StorwizeSVCDriver:%(sys_id)s:%(pool)s' %
+                             {'sys_id': self._state['system_id'],
+                              'pool': pool_data['name']})
+            multiattach = (self.configuration.
+                           storwize_svc_multihostmap_enabled)
+            backend_state = ('up' if pool_data['status'] == 'online' else
+                             'down')
+            pool_stats = {
+                'pool_name': pool_data['name'],
+                'total_capacity_gb': total_capacity_gb,
+                'free_capacity_gb': free_capacity_gb,
+                'allocated_capacity_gb': allocated_capacity_gb,
+                'provisioned_capacity_gb': provisioned_capacity_gb,
+                'compression_support': self._state['compression_enabled'],
+                'reserved_percentage':
+                    self.configuration.reserved_percentage,
+                'QoS_support': QoS_support,
+                'consistencygroup_support': True,
+                'location_info': location_info,
+                'easytier_support': easy_tier,
+                'multiattach': multiattach,
+                'thin_provisioning_support': not use_thick_provisioning,
+                'thick_provisioning_support': use_thick_provisioning,
+                'max_over_subscription_ratio': over_sub_ratio,
+                'consistent_group_snapshot_enabled': True,
+                'backend_state': backend_state,
+            }
             if self._replica_enabled:
                 pool_stats.update({
                     'replication_enabled': self._replica_enabled,
@@ -5287,9 +5344,18 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                     'consistent_group_replication_enabled': True
                 })
 
-        except exception.VolumeBackendAPIException:
-            msg = _('Failed getting details for pool %s.') % pool
-            raise exception.VolumeBackendAPIException(data=msg)
+        else:
+            LOG.error('Failed getting details for pool %s.', pool)
+            pool_stats = {'pool_name': pool,
+                          'total_capacity_gb': 0,
+                          'free_capacity_gb': 0,
+                          'allocated_capacity_gb': 0,
+                          'provisioned_capacity_gb': 0,
+                          'thin_provisioning_support': True,
+                          'thick_provisioning_support': False,
+                          'max_over_subscription_ratio': 0,
+                          'reserved_percentage': 0,
+                          'backend_state': 'down'}
 
         return pool_stats
 
@@ -5524,3 +5590,47 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                           "from rccg. Exception: %(exception)s.",
                           {'vol': volume.name, 'exception': err})
         return model_update, added_vols, removed_vols
+
+    def _get_volume_host_site_from_conf(self, volume, connector, iscsi=False):
+        host_site = self.configuration.safe_get('storwize_preferred_host_site')
+        select_site = None
+        if not host_site:
+            LOG.debug('There is no host_site configured for volume %s.',
+                      volume.name)
+            return select_site
+        if iscsi:
+            for site, iqn in host_site.items():
+                if connector['initiator'].lower() in iqn.lower():
+                    if select_site is None:
+                        select_site = site
+                    elif select_site != site:
+                        msg = _('Configured the host IQN in both sites.')
+                        LOG.error(msg)
+                        raise exception.InvalidConfigurationValue(message=msg)
+        else:
+            for wwpn in connector['wwpns']:
+                for site, wwpn_list in host_site.items():
+                    if wwpn.lower() in wwpn_list.lower():
+                        if select_site is None:
+                            select_site = site
+                        elif select_site != site:
+                            msg = _('Configured the host wwpns not in the'
+                                    ' same site.')
+                            LOG.error(msg)
+                            raise exception.InvalidConfigurationValue(
+                                message=msg)
+        return select_site
+
+    def _update_host_site_for_hyperswap_volume(self, host_name, host_site):
+        host_info = self._helpers.ssh.lshost(host=host_name)
+        if not host_info[0]['site_name'] and host_site:
+            self._helpers.update_host(host_name, host_site)
+        elif host_info[0]['site_name']:
+            ref_host_site = host_info[0]['site_name']
+            if host_site and host_site != ref_host_site:
+                msg = (_('The existing host site is %(ref_host_site)s,'
+                         ' but the new host site is %(host_site)s.') %
+                       {'ref_host_site': ref_host_site,
+                        'host_site': host_site})
+                LOG.error(msg)
+                raise exception.InvalidConfigurationValue(message=msg)

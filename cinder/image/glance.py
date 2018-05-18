@@ -253,6 +253,16 @@ class GlanceImageService(object):
 
         return _params
 
+    def list_members(self, context, image_id):
+        """Returns a list of dicts with image member data."""
+        try:
+            return self._client.call(context,
+                                     'list',
+                                     controller='image_members',
+                                     image_id=image_id)
+        except Exception:
+            _reraise_translated_image_exception(image_id)
+
     def show(self, context, image_id):
         """Returns a dict with image data for the given opaque image id."""
         try:
@@ -407,8 +417,8 @@ class GlanceImageService(object):
         #                 is redundant, so ignore it.
         image_meta = {key: getattr(image, key)
                       for key in image.keys()
-                      if self._image_schema.is_base_property(key) is True
-                      and key != 'schema'}
+                      if self._image_schema.is_base_property(key) is True and
+                      key != 'schema'}
 
         # NOTE(aarefiev): nova is expected that all image properties
         # (custom or defined in schema-image.json) stores in
@@ -435,8 +445,7 @@ class GlanceImageService(object):
 
         return image_meta
 
-    @staticmethod
-    def _is_image_available(context, image):
+    def _is_image_available(self, context, image):
         """Check image availability.
 
         This check is needed in case Nova and Glance are deployed
@@ -457,6 +466,12 @@ class GlanceImageService(object):
 
         if context.project_id and ('project_id' in properties):
             return str(properties['project_id']) == str(context.project_id)
+
+        if image.visibility == 'shared':
+            for member in self.list_members(context, image.id):
+                if (context.project_id == member['member_id'] and
+                        member['status'] == 'accepted'):
+                    return True
 
         try:
             user_id = properties['user_id']

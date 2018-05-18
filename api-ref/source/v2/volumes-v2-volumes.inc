@@ -66,8 +66,12 @@ List volumes with details
 
 Lists all Block Storage volumes, with details, that the project can access.
 
+Response codes
+--------------
 
-Normal response codes: 200
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -95,7 +99,6 @@ Response Parameters
    - os-vol-host-attr:host: os-vol-host-attr:host
    - encrypted: encrypted
    - updated_at: updated_at
-   - os-volume-replication:extended_status: os-volume-replication:extended_status
    - replication_status: replication_status
    - snapshot_id: snapshot_id
    - id: id
@@ -114,7 +117,6 @@ Response Parameters
    - name: name
    - bootable: bootable_response
    - created_at: created_at
-   - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volumes: volumes
    - volume_type: volume_type
 
@@ -125,7 +127,6 @@ Response Example
 
 .. literalinclude:: ./samples/volumes-list-detailed-response.json
    :language: javascript
-
 
 
 
@@ -165,7 +166,12 @@ Troubleshooting
 - The storage node needs enough free storage space to match the size
   of the volume creation request.
 
-Normal response codes: 202
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
 
 
 Request
@@ -239,7 +245,12 @@ List volumes
 Lists summary information for all Block Storage volumes that the project can access.
 
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -287,8 +298,12 @@ Preconditions
 
 - The volume must exist.
 
+Response codes
+--------------
 
-Normal response codes: 200
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -312,7 +327,6 @@ Response Parameters
    - os-vol-host-attr:host: os-vol-host-attr:host
    - encrypted: encrypted
    - updated_at: updated_at
-   - os-volume-replication:extended_status: os-volume-replication:extended_status
    - replication_status: replication_status
    - snapshot_id: snapshot_id
    - id: id
@@ -332,7 +346,6 @@ Response Parameters
    - name: name
    - bootable: bootable_response
    - created_at: created_at
-   - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volume_type: volume_type
 
 
@@ -354,7 +367,12 @@ Update volume
 Updates a volume.
 
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -406,14 +424,11 @@ Response Parameters
    - volume_type: volume_type
 
 
-
 Response Example
 ----------------
 
 .. literalinclude:: ./samples/volume-update-response.json
    :language: javascript
-
-
 
 
 Delete volume
@@ -448,7 +463,13 @@ Troubleshooting
 - The volume managed by OpenStack Block Storage is not deleted from
   the storage system.
 
-Normal response codes: 202
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
 
 
 Request
@@ -462,9 +483,6 @@ Request
 
 
 
-
-
-
 Create volume metadata
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -473,7 +491,12 @@ Create volume metadata
 Creates or replaces metadata for a volume. Does not modify items that are not
 in the request.
 
-Normal response codes: 202
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
 
 
 Request
@@ -517,7 +540,12 @@ Show volume metadata
 Shows metadata for a volume.
 
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -554,8 +582,12 @@ Update volume metadata
 
 Replaces all the volume's metadata with the key-value pairs in the request.
 
+Response codes
+--------------
 
-Normal response codes: 200
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -599,7 +631,12 @@ Show volume metadata for a specific key
 
 Shows metadata for a volume for a specific key.
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -620,14 +657,11 @@ Response Parameters
    - metadata: metadata_3
 
 
-
 Response Example
 ----------------
 
 .. literalinclude:: ./samples/volume-metadata-show-response.json
    :language: javascript
-
-
 
 
 Delete volume metadata
@@ -637,7 +671,12 @@ Delete volume metadata
 
 Deletes metadata for a volume.
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request
@@ -650,8 +689,6 @@ Request
    - key: key_1
 
 
-
-
 Update volume metadata for a specific key
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -659,7 +696,12 @@ Update volume metadata for a specific key
 
 Update metadata for a volume for a specific key.
 
-Normal response codes: 200
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 200
 
 
 Request

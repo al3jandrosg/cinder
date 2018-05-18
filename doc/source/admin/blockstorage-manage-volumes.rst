@@ -7,12 +7,6 @@ iSCSI solution that uses :term:`Logical Volume Manager (LVM)` for Linux.
 
 .. note::
 
-   The OpenStack Block Storage service is not a shared storage
-   solution like a Network Attached Storage (NAS) of NFS volumes
-   where you can attach a volume to multiple servers. With the
-   OpenStack Block Storage service, you can attach a volume to only
-   one instance at a time.
-
    The OpenStack Block Storage service also provides drivers that
    enable you to use several vendors' back-end storage devices in
    addition to the base LVM implementation.  These storage devices can
@@ -66,6 +60,7 @@ troubleshoot your installation and back up your Compute volumes.
    blockstorage-volume-backups-export-import.rst
    blockstorage-lio-iscsi-support.rst
    blockstorage-volume-number-weigher.rst
+   blockstorage-capacity-based-qos.rst
    blockstorage-consistency-groups.rst
    blockstorage-driver-filter-weighing.rst
    blockstorage-ratelimit-volume-copy-bandwidth.rst

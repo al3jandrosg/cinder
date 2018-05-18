@@ -12,9 +12,6 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 %:
 	dh $@  --with python2,systemd,apache2
 
-get-orig-source:
-	uscan --verbose --rename --destdir=../build-area
-
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
 	ostestr

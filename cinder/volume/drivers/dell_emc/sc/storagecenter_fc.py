@@ -34,7 +34,7 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
     """Implements commands for Dell Storage Center FC management.
 
     To enable the driver add the following line to the cinder configuration:
-        volume_driver=cinder.volume.drivers.dell_emc.sc.dell_storagecenter_fc.\
+        volume_driver=cinder.volume.drivers.dell_emc.sc.storagecenter_fc.\
         SCFCDriver
 
     Version history:
@@ -62,10 +62,11 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
         3.6.0 - Server type support.
         3.7.0 - Support for Data Reduction, Group QOS and Volume QOS.
         4.0.0 - Driver moved to dell_emc.
+        4.1.0 - Timeouts added to rest calls.
 
     """
 
-    VERSION = '4.0.0'
+    VERSION = '4.1.0'
 
     CI_WIKI_NAME = "Dell_EMC_SC_Series_CI"
 
@@ -75,7 +76,14 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
             self.configuration.safe_get('volume_backend_name') or 'Dell-FC'
         self.storage_protocol = 'FC'
 
-    @fczm_utils.add_fc_zone
+    def validate_connector(self, connector):
+        """Fail if connector doesn't contain all the data needed by driver.
+
+        Do a check on the connector and ensure that it has wwnns, wwpns.
+        """
+        self.validate_connector_has_setting(connector, 'wwpns')
+        self.validate_connector_has_setting(connector, 'wwnns')
+
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -147,6 +155,7 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
                                                  init_targ_map,
                                                  'discard': True}}
                                 LOG.debug('Return FC data: %s', data)
+                                fczm_utils.add_fc_zone(data)
                                 return data
                             LOG.error('Lun mapping returned null!')
 
@@ -230,7 +239,6 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
                 'data': {}}
         return info
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, force=False, **kwargs):
         # Special case
         if connector is None:
@@ -292,6 +300,7 @@ class SCFCDriver(storagecenter_common.SCCommonDriver,
                     if scserver and api.get_volume_count(scserver) == 0:
                         info['data'] = {'target_wwn': targets,
                                         'initiator_target_map': init_targ_map}
+                        fczm_utils.remove_fc_zone(info)
                     return info
 
             except Exception:

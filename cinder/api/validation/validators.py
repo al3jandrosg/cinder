@@ -26,10 +26,12 @@ from jsonschema import exceptions as jsonschema_exc
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
 import six
+import webob.exc
 
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields as c_fields
+from cinder import utils
 
 
 def _soft_validate_additional_properties(
@@ -85,6 +87,34 @@ def _soft_validate_additional_properties(
             del param_value[prop]
 
 
+def _validate_string_length(value, entity_name, mandatory=False,
+                            min_length=0, max_length=None,
+                            remove_whitespaces=False):
+    """Check the length of specified string.
+
+    :param value: the value of the string
+    :param entity_name: the name of the string
+    :mandatory: string is mandatory or not
+    :param min_length: the min_length of the string
+    :param max_length: the max_length of the string
+    :param remove_whitespaces: True if trimming whitespaces is needed
+                                   else False
+    """
+    if not mandatory and not value:
+        return True
+
+    if mandatory and not value:
+        msg = _("The '%s' can not be None.") % entity_name
+        raise webob.exc.HTTPBadRequest(explanation=msg)
+
+    if remove_whitespaces:
+        value = value.strip()
+
+    utils.check_string_length(value, entity_name,
+                              min_length=min_length,
+                              max_length=max_length)
+
+
 @jsonschema.FormatChecker.cls_checks('date-time')
 def _validate_datetime_format(param_value):
     try:
@@ -103,6 +133,22 @@ def _validate_name(param_value):
     elif len(param_value.strip()) == 0:
         msg = _("The 'name' can not be empty.")
         raise exception.InvalidName(reason=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('name_skip_leading_trailing_spaces',
+                                     exception.InvalidName)
+def _validate_name_skip_leading_trailing_spaces(param_value):
+    if not param_value:
+        msg = _("The 'name' can not be None.")
+        raise exception.InvalidName(reason=msg)
+    param_value = param_value.strip()
+    if len(param_value) == 0:
+        msg = _("The 'name' can not be empty.")
+        raise exception.InvalidName(reason=msg)
+    elif len(param_value) > 255:
+        msg = _("The 'name' can not be greater than 255 characters.")
+        raise exception.InvalidInput(reason=msg)
     return True
 
 
@@ -125,6 +171,21 @@ def _validate_status(param_value):
     return True
 
 
+@jsonschema.FormatChecker.cls_checks('progress')
+def _validate_progress(progress):
+    if progress:
+        try:
+            integer = int(progress[:-1])
+        except ValueError:
+            msg = _('progress must be an integer percentage')
+            raise exception.InvalidInput(reason=msg)
+        if integer < 0 or integer > 100 or progress[-1] != '%':
+            msg = _('progress must be an integer percentage between'
+                    ' 0 and 100')
+            raise exception.InvalidInput(reason=msg)
+    return True
+
+
 @jsonschema.FormatChecker.cls_checks('base64')
 def _validate_base64_format(instance):
     try:
@@ -138,6 +199,14 @@ def _validate_base64_format(instance):
         # TypeError will be raised at here.
         return False
 
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('disabled_reason')
+def _validate_disabled_reason(param_value):
+    _validate_string_length(param_value, 'disabled_reason',
+                            mandatory=False, min_length=1, max_length=255,
+                            remove_whitespaces=True)
     return True
 
 

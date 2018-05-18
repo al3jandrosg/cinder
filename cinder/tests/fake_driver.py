@@ -240,38 +240,42 @@ class FakeISERDriver(FakeLoggingVolumeDriver):
 
 class FakeFibreChannelDriver(driver.FibreChannelDriver):
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
-        return {
+        conn_info = {
             'driver_volume_type': 'fibre_channel',
             'data': {
                 'initiator_target_map': {'fake_wwn': ['fake_wwn2']},
             }}
+        fczm_utils.add_fc_zone(conn_info)
+        return conn_info
 
-    @fczm_utils.add_fc_zone
     def no_zone_initialize_connection(self, volume, connector):
         """This shouldn't call the ZM."""
-        return {
+        conn_info = {
             'driver_volume_type': 'bogus',
             'data': {
                 'initiator_target_map': {'fake_wwn': ['fake_wwn2']},
             }}
+        fczm_utils.add_fc_zone(conn_info)
+        return conn_info
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
-        return {
+        conn_info = {
             'driver_volume_type': 'fibre_channel',
             'data': {
                 'initiator_target_map': {'fake_wwn': ['fake_wwn2']},
             }}
+        fczm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
-    @fczm_utils.remove_fc_zone
     def no_zone_terminate_connection(self, volume, connector, **kwargs):
-        return {
+        conn_info = {
             'driver_volume_type': 'bogus',
             'data': {
                 'initiator_target_map': {'fake_wwn': ['fake_wwn2']},
             }}
+        fczm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
 
 class FakeGateDriver(lvm.LVMVolumeDriver):
@@ -397,3 +401,11 @@ class FakeGateDriver(lvm.LVMVolumeDriver):
             snapshot_model_updates.append(snapshot_model_update)
 
         return model_update, snapshot_model_updates
+
+
+class FakeHAReplicatedLoggingVolumeDriver(FakeLoggingVolumeDriver):
+    SUPPORTS_ACTIVE_ACTIVE = True
+
+    @utils.trace_method
+    def failover_completed(self, context, active_backend_id=None):
+        pass

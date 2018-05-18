@@ -22,7 +22,6 @@ import time
 
 import ddt
 import mock
-from oslo_concurrency import processutils as putils
 from oslo_utils import timeutils
 import six
 from six.moves import range
@@ -150,25 +149,6 @@ class GenericUtilsTestCase(test.TestCase):
         self.assertEqual('/dev/xvda', utils.make_dev_path('xvda'))
         self.assertEqual('/dev/xvdb1', utils.make_dev_path('xvdb', 1))
         self.assertEqual('/foo/xvdc1', utils.make_dev_path('xvdc', 1, '/foo'))
-
-    @mock.patch('cinder.utils.execute')
-    def test_read_file_as_root(self, mock_exec):
-        out = mock.Mock()
-        err = mock.Mock()
-        mock_exec.return_value = (out, err)
-        test_filepath = '/some/random/path'
-        output = utils.read_file_as_root(test_filepath)
-        mock_exec.assert_called_once_with('cat', test_filepath,
-                                          run_as_root=True)
-        self.assertEqual(out, output)
-
-    @mock.patch('cinder.utils.execute',
-                side_effect=putils.ProcessExecutionError)
-    def test_read_file_as_root_fails(self, mock_exec):
-        test_filepath = '/some/random/path'
-        self.assertRaises(exception.FileNotFound,
-                          utils.read_file_as_root,
-                          test_filepath)
 
     @test.testtools.skipIf(sys.platform == "darwin", "SKIP on OSX")
     @mock.patch('tempfile.NamedTemporaryFile')
@@ -354,6 +334,16 @@ class TemporaryChownTestCase(test.TestCase):
         mock_getuid.assert_called_once_with()
         mock_stat.assert_called_once_with(test_filename)
         self.assertFalse(mock_exec.called)
+
+    @mock.patch('os.name', 'nt')
+    @mock.patch('os.stat')
+    @mock.patch('cinder.utils.execute')
+    def test_temporary_chown_win32(self, mock_exec, mock_stat):
+        with utils.temporary_chown(mock.sentinel.path):
+            pass
+
+        mock_exec.assert_not_called()
+        mock_stat.assert_not_called()
 
 
 class TempdirTestCase(test.TestCase):

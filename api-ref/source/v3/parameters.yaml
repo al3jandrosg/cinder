@@ -13,12 +13,6 @@ admin_project_id:
   in: path
   required: true
   type: string
-all_tenants:
-  description: |
-    Shows details for all projects.
-  in: path
-  required: false
-  type: string
 attachment_id_1:
   description: |
     The ID of the attachment.
@@ -121,6 +115,13 @@ key_5:
   in: path
   required: true
   type: string
+list_volume:
+  description: |
+    Show volume ids in this group. Default is False.
+  in: path
+  required: false
+  type: string
+  min_version: 3.25
 message_id:
   description: |
     The UUID of the message.
@@ -169,23 +170,11 @@ transfer_id:
   in: path
   required: true
   type: string
-vol_type_id:
-  description: |
-    The UUID for an existing volume type.
-  in: path
-  required: true
-  type: string
 volume_id_path:
   description: |
     The UUID of the volume.
   in: path
   required: true
-  type: string
-volume_type:
-  description: |
-    The ID of Volume Type to be accessed by project.
-  in: path
-  required: false
   type: string
 volume_type_access:
   description: |
@@ -450,7 +439,7 @@ allow_attached_volume:
 attach_mode:
   description: |
     The attach mode of attachment, read-only ('ro') or
-    read-and-write ('rw'), default is 'ro'.
+    read-and-write ('rw'), default is 'rw'.
   in: body
   required: false
   type: string
@@ -512,6 +501,13 @@ availability_zone_3:
   in: body
   required: true
   type: string
+availability_zone_4:
+  description: |
+    The backup availability zone key value pair.
+  in: body
+  required: false
+  type: string
+  min_version: 3.51
 backend_id:
   description: |
     ID of backend to failover to. Default is ``None``.
@@ -550,7 +546,7 @@ backup_id_1:
   in: body
   required: false
   type: string
-  min_version: 3.46
+  min_version: 3.47
 backup_service:
   description: |
     The service used to perform the backup.
@@ -1885,16 +1881,6 @@ namespace_1:
 new_size:
   description: |
     The new size of the volume, in gibibytes (GiB).
-
-    .. note:: Some volume backends require the storage to be in some multiple
-      value rather than incremental. For example, the EMC ScaleIO backend
-      requires storage in multiples of 8GB. There is a known limitation such
-      that a request to extend the size of a volume for these backends will be
-      rounded up to the nearest multiple but the actual physical size of the
-      storage will not be reflected back in the API for the volume size. For
-      example, a request to extend the size of an 8GB ScaleIO-backed volume
-      to 9GB will actually result in 16GB of physical storage but only 9GB will
-      be reflected in the API and counted for quota usage.
   in: body
   required: true
   type: integer
@@ -2038,25 +2024,6 @@ os-vol-tenant-attr:tenant_id:
     The project ID which the volume belongs to.
   in: body
   required: true
-  type: string
-os-volume-replication:driver_data:
-  description: |
-    The name of the volume replication driver.
-  in: body
-  required: false
-  type: string
-os-volume-replication:extended_status:
-  description: |
-    The volume replication status managed by the
-    driver of backend storage.
-  in: body
-  required: false
-  type: string
-os-volume-replication:extended_status_1:
-  description: |
-    The status of the volume replication.
-  in: body
-  required: false
   type: string
 os-volume_upload_image:
   description: |
@@ -2433,7 +2400,7 @@ snapshot_id_3:
   description: |
     The UUID of the source volume snapshot. The API
     creates a new volume snapshot with the same size as the source
-    volume snapshot.
+    volume snapshot unless a larger size is requested.
   in: body
   required: true
   type: string
@@ -2506,8 +2473,8 @@ source_replica:
   type: string
 source_volid:
   description: |
-    The UUID of the source volume. The API creates a
-    new volume with the same size as the source volume.
+    The UUID of the source volume. The API creates a new volume with the same
+    size as the source volume unless a larger size is requested.
   in: body
   required: false
   type: string
@@ -2810,6 +2777,13 @@ volume_id_7:
   in: body
   required: true
   type: string
+volume_ids:
+  description: |
+    A list of ``volume`` ids, available only when ``list_volume`` set true.
+  in: body
+  required: false
+  type: array
+  min_version: 3.25
 volume_image_metadata:
   description: |
     List of image metadata entries.  Only included for volumes that were
@@ -2827,6 +2801,12 @@ volume_name:
 volume_name_1:
   description: |
     The volume name.
+  in: body
+  required: false
+  type: string
+volume_type:
+  description: |
+    The ID of Volume Type to be accessed by project.
   in: body
   required: false
   type: string

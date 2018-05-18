@@ -19,7 +19,7 @@ import os
 import re
 import traceback
 
-from defusedxml import lxml as etree
+from defusedxml import lxml
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
@@ -153,7 +153,7 @@ def convert_to_id(value62):
 class MStorageVolumeCommon(object):
     """M-Series Storage volume common class."""
 
-    VERSION = '1.10.1'
+    VERSION = '1.10.2'
     WIKI_NAME = 'NEC_Cinder_CI'
 
     def do_setup(self, context):
@@ -291,7 +291,7 @@ class MStorageVolumeCommon(object):
         try:
             with open(product, 'r') as f:
                 xml = f.read()
-                root = etree.fromstring(xml)
+                root = lxml.fromstring(xml)
                 vendor_name = root.xpath('./VendorName')[0].text
 
                 product_dict = {}
@@ -783,7 +783,7 @@ class MStorageVolumeCommon(object):
         return hostports
 
     def configs(self, xml):
-        root = etree.fromstring(xml)
+        root = lxml.fromstring(xml)
         pools = self.get_pool_config(xml, root)
         lds, used_ldns = self.get_ld_config(xml, root, pools)
         iscsi_ldsets = self.get_iscsi_ldset_config(xml, root)

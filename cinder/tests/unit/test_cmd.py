@@ -93,13 +93,14 @@ class TestCinderBackupCmd(test.TestCase):
         super(TestCinderBackupCmd, self).setUp()
         sys.argv = ['cinder-backup']
 
+    @mock.patch('cinder.cmd.backup._launch_backup_process')
     @mock.patch('cinder.service.wait')
     @mock.patch('cinder.service.serve')
     @mock.patch('cinder.service.Service.create')
     @mock.patch('cinder.utils.monkey_patch')
     @mock.patch('oslo_log.log.setup')
     def test_main(self, log_setup, monkey_patch, service_create, service_serve,
-                  service_wait):
+                  service_wait, launch_mock):
         server = service_create.return_value
 
         cinder_backup.main()
@@ -109,9 +110,35 @@ class TestCinderBackupCmd(test.TestCase):
         log_setup.assert_called_once_with(CONF, "cinder")
         monkey_patch.assert_called_once_with()
         service_create.assert_called_once_with(binary='cinder-backup',
-                                               coordination=True)
+                                               coordination=True,
+                                               process_number=1)
         service_serve.assert_called_once_with(server)
         service_wait.assert_called_once_with()
+        launch_mock.assert_not_called()
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main_multiprocess(self, log_setup, monkey_patch, service_create,
+                               get_launcher):
+        CONF.set_override('backup_workers', 2)
+        cinder_backup.main()
+
+        self.assertEqual('cinder', CONF.project)
+        self.assertEqual(CONF.version, version.version_string())
+
+        c1 = mock.call(binary=constants.BACKUP_BINARY,
+                       coordination=True,
+                       process_number=1)
+        c2 = mock.call(binary=constants.BACKUP_BINARY,
+                       coordination=True,
+                       process_number=2)
+        service_create.assert_has_calls([c1, c2])
+
+        launcher = get_launcher.return_value
+        self.assertEqual(2, launcher.launch_service.call_count)
+        launcher.wait.assert_called_once_with()
 
 
 class TestCinderSchedulerCmd(test.TestCase):
@@ -167,6 +194,7 @@ class TestCinderVolumeCmdPosix(test.TestCase):
         backends = ['', 'backend1', 'backend2', '']
         CONF.set_override('enabled_backends', backends)
         CONF.set_override('host', 'host')
+        CONF.set_override('cluster', None)
         launcher = get_launcher.return_value
 
         cinder_volume.main()
@@ -270,6 +298,7 @@ class TestCinderVolumeCmdWin32(test.TestCase):
         backends = ['', 'backend1', 'backend2', '']
         CONF.set_override('enabled_backends', backends)
         CONF.set_override('host', 'host')
+        CONF.set_override('cluster', None)
         launcher = get_launcher.return_value
 
         sys.argv += ['--backend_name', 'backend2']
@@ -297,6 +326,7 @@ class TestCinderVolumeCmdWin32(test.TestCase):
         # We're expecting the service to be run within the same process.
         CONF.set_override('enabled_backends', ['backend2'])
         CONF.set_override('host', 'host')
+        CONF.set_override('cluster', None)
         launcher = get_launcher.return_value
 
         cinder_volume.main()
@@ -326,12 +356,39 @@ class TestCinderManageCmd(test.TestCase):
         ex = self.assertRaises(SystemExit, db_cmds.purge, age_in_days)
         self.assertEqual(1, ex.code)
 
+    @mock.patch('cinder.objects.ServiceList.get_all')
     @mock.patch('cinder.db.migration.db_sync')
-    def test_db_commands_sync(self, db_sync):
+    def test_db_commands_sync(self, db_sync, service_get_mock):
         version = 11
         db_cmds = cinder_manage.DbCommands()
         db_cmds.sync(version=version)
         db_sync.assert_called_once_with(version)
+        service_get_mock.assert_not_called()
+
+    @mock.patch('cinder.objects.Service.save')
+    @mock.patch('cinder.objects.ServiceList.get_all')
+    @mock.patch('cinder.db.migration.db_sync')
+    def test_db_commands_sync_bump_versions(self, db_sync, service_get_mock,
+                                            service_save):
+        ctxt = context.get_admin_context()
+        services = [fake_service.fake_service_obj(ctxt,
+                                                  binary='cinder-' + binary,
+                                                  rpc_current_version='0.1',
+                                                  object_current_version='0.2')
+                    for binary in ('volume', 'scheduler', 'backup')]
+        service_get_mock.return_value = services
+
+        version = 11
+        db_cmds = cinder_manage.DbCommands()
+        db_cmds.sync(version=version, bump_versions=True)
+        db_sync.assert_called_once_with(version)
+
+        self.assertEqual(3, service_save.call_count)
+        for service in services:
+            self.assertEqual(cinder_manage.RPC_VERSIONS[service.binary],
+                             service.rpc_current_version)
+            self.assertEqual(cinder_manage.OVO_VERSION,
+                             service.object_current_version)
 
     @mock.patch('oslo_db.sqlalchemy.migration.db_version')
     def test_db_commands_version(self, db_version):
@@ -614,56 +671,6 @@ class TestCinderManageCmd(test.TestCase):
             config_cmds.list(param='host')
 
             self.assertEqual(expected_out, fake_out.getvalue())
-
-    def test_get_log_commands_no_errors(self):
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
-            CONF.set_override('log_dir', None)
-            expected_out = 'No errors in logfiles!\n'
-
-            get_log_cmds = cinder_manage.GetLogCommands()
-            get_log_cmds.errors()
-
-            out_lines = fake_out.getvalue().splitlines(True)
-
-            self.assertTrue(out_lines[0].startswith('DEPRECATED'))
-            self.assertEqual(expected_out, out_lines[1])
-
-    @mock.patch('six.moves.builtins.open')
-    @mock.patch('os.listdir')
-    def test_get_log_commands_errors(self, listdir, open):
-        CONF.set_override('log_dir', 'fake-dir')
-        listdir.return_value = ['fake-error.log']
-
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
-            open.return_value = six.StringIO(
-                '[ ERROR ] fake-error-message')
-            expected_out = ['fake-dir/fake-error.log:-\n',
-                            'Line 1 : [ ERROR ] fake-error-message\n']
-
-            get_log_cmds = cinder_manage.GetLogCommands()
-            get_log_cmds.errors()
-
-            out_lines = fake_out.getvalue().splitlines(True)
-
-            self.assertTrue(out_lines[0].startswith('DEPRECATED'))
-            self.assertEqual(expected_out[0], out_lines[1])
-            self.assertEqual(expected_out[1], out_lines[2])
-
-            open.assert_called_once_with('fake-dir/fake-error.log', 'r')
-            listdir.assert_called_once_with(CONF.log_dir)
-
-    @mock.patch('six.moves.builtins.open')
-    @mock.patch('os.path.exists')
-    def test_get_log_commands_syslog_no_log_file(self, path_exists, open):
-        path_exists.return_value = False
-
-        get_log_cmds = cinder_manage.GetLogCommands()
-        with mock.patch('sys.stdout', new=six.StringIO()):
-            exit = self.assertRaises(SystemExit, get_log_cmds.syslog)
-            self.assertEqual(1, exit.code)
-
-            path_exists.assert_any_call('/var/log/syslog')
-            path_exists.assert_any_call('/var/log/messages')
 
     @mock.patch('cinder.db.backup_get_all')
     @mock.patch('cinder.context.get_admin_context')

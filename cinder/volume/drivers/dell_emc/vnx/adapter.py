@@ -61,6 +61,7 @@ class CommonAdapter(replication.ReplicationAdapter):
         self.allowed_ports = None
         self.force_delete_lun_in_sg = None
         self.max_over_subscription_ratio = None
+        self.max_luns_per_storage_group = None
         self.ignore_pool_full_threshold = None
         self.reserved_percentage = None
         self.destroy_empty_sg = None
@@ -81,6 +82,8 @@ class CommonAdapter(replication.ReplicationAdapter):
         self._normalize_config()
         self.client = self._build_client_from_config(
             self.config, self.queue_path)
+        self.client.set_max_luns_per_sg(
+            self.config.max_luns_per_storage_group)
         # Replication related
         if (self.active_backend_id in
                 common.ReplicationDeviceList.get_backend_ids(self.config)):
@@ -777,10 +780,13 @@ class CommonAdapter(replication.ReplicationAdapter):
     def delete_volume(self, volume):
         """Deletes an EMC volume."""
         async_migrate = utils.is_async_migrate_enabled(volume)
+        snap_copy = (utils.construct_snap_name(volume) if
+                     utils.is_snapcopy_enabled(volume) else None)
         self.cleanup_lun_replication(volume)
         try:
             self.client.delete_lun(volume.name,
-                                   force=self.force_delete_lun_in_sg)
+                                   force=self.force_delete_lun_in_sg,
+                                   snap_copy=snap_copy)
         except storops_ex.VNXLunUsedByFeatureError:
             # Case 1. Migration not finished, cleanup related stuff.
             if async_migrate:
@@ -794,8 +800,9 @@ class CommonAdapter(replication.ReplicationAdapter):
             # Here, we assume no Cinder managed snaps, and add it to queue
             # for later deletion
             self.client.delay_delete_lun(volume.name)
-        # Case 2. Migration already finished, delete temp snap if exists.
-        if async_migrate:
+        # Case 2. Migration already finished, try to delete the temp snap
+        # only when it's a cloned volume.
+        if async_migrate and volume.source_volid:
             self.client.delete_snapshot(utils.construct_snap_name(volume))
 
     def extend_volume(self, volume, new_size):
@@ -810,6 +817,11 @@ class CommonAdapter(replication.ReplicationAdapter):
     def delete_snapshot(self, snapshot):
         """Deletes a snapshot."""
         self.client.delete_snapshot(snapshot.name)
+
+    def restore_snapshot(self, volume, snapshot):
+        """Restores a snapshot."""
+        lun_id = self.client.get_lun_id(volume)
+        self.client.restore_snapshot(lun_id, snapshot.name)
 
     def _get_referenced_lun(self, existing_ref):
         lun = None

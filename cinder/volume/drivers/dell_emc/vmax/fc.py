@@ -90,9 +90,11 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
               - Support for manage/unmanage snapshots
                 (vmax-manage-unmanage-snapshot)
               - Support for revert to volume snapshot
+        3.2.0 - Support for retyping replicated volumes (bp
+                vmax-retype-replicated-volumes)
     """
 
-    VERSION = "3.1.0"
+    VERSION = "3.2.0"
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_VMAX_CI"
@@ -196,7 +198,6 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         """
         pass
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -207,6 +208,9 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         The target_wwn can be a single entry or a list of wwns that
         correspond to the list of remote wwn(s) that will export the volume.
         Example return values:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'fibre_channel'
                 'data': {
@@ -226,6 +230,7 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
                     'target_wwn': ['1234567890123', '0987654321321'],
                 }
             }
+
         :param volume: the cinder volume object
         :param connector: the connector object
         :returns: dict -- the target_wwns and initiator_target_map
@@ -233,7 +238,9 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         device_info = self.common.initialize_connection(
             volume, connector)
         if device_info:
-            return self.populate_data(device_info, volume, connector)
+            conn_info = self.populate_data(device_info, volume, connector)
+            fczm_utils.add_fc_zone(conn_info)
+            return conn_info
         else:
             return {}
 
@@ -262,7 +269,6 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
 
         return data
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector.
 
@@ -284,6 +290,7 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         if zoning_mappings:
             self.common.terminate_connection(volume, connector)
             data = self._cleanup_zones(zoning_mappings)
+        fczm_utils.remove_fc_zone(data)
         return data
 
     def _get_zoning_mappings(self, volume, connector):

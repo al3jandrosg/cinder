@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-03 01:53+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -21,7 +21,7 @@ msgstr ""
 "%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n"
 "%100>=11 && n%100<=14)? 2 : 3);\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Russian\n"
 
 #, python-format
@@ -125,10 +125,6 @@ msgstr ""
 "больше 0."
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "В результате нет элемента \"data\" %s."
 
@@ -218,9 +214,6 @@ msgstr "Необходимо указать consistencygroup_id"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "Ошибка анализа 'qemu-img info'."
-
-msgid "'status' must be specified."
-msgstr "Должно быть указано значение status."
 
 #, python-format
 msgid ""
@@ -3414,17 +3407,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Недопустимая спецификация QoS: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr ""
-"Недопустимый запрос на подключение тома к недопустимому целевому объекту"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Недопустимый запрос на подключение тома с недопустимым режимом. Режим "
-"подключения должен быть 'rw' или 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Неверный срок резервирования %(expire)s."
@@ -3468,18 +3450,6 @@ msgstr "Недопустимый параметр обновления: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Неверное значение '%s' для принудительного применения."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Недопустимое значение для 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Недопустимое значение для 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Недопустимое значение для 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr ""
@@ -3562,13 +3532,6 @@ msgid ""
 msgstr ""
 "Переключение после сбоя невозможно, так как репликация настроена неверно."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Имена ключей могут содержать только алфавитно-цифровые символы, символы "
-"подчеркивания, точки, двоеточия и дефисы."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -3580,19 +3543,11 @@ msgstr "Поддержка вложенных квот доступна в keyst
 msgid "LUN not found with given ref %s."
 msgstr "LUN не найден по данной ссылке %s."
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "Последние записи системного протокола cinder %s:-"
-
 msgid "LeftHand cluster not found"
 msgstr "Кластер LeftHand не найден"
 
 msgid "License is unavailable."
 msgstr "Лицензия недоступна."
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "Строка %(dis)d : %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3799,9 +3754,6 @@ msgstr ""
 "Keystone policy.json, где администратору облака предоставлены права на вывод "
 "списка проектов и получение любого проекта."
 
-msgid "Must specify 'connector'"
-msgstr "Необходимо указать 'connector'"
-
 msgid "Must specify 'new_volume'"
 msgstr "Необходимо указать 'new_volume'"
 
@@ -3839,12 +3791,6 @@ msgstr "Необходимо указать допустимое состоян�
 
 msgid "Must specify an ExtensionManager class"
 msgstr "Необходимо указать класс ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "Необходимо указать загружаемый файл в запросе."
-
-msgid "Must specify readonly in request."
-msgstr "В запросе должен быть указан параметр readonly."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "Необходимо указать source-name или source-id моментальной копии."
@@ -3911,12 +3857,6 @@ msgstr ""
 "Новый размер должен быть больше фактического размера в базовой системе "
 "хранения. Фактический размер: %(oldsize)s, новый размер: %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr "Новый размер тома необходимо указывать в виде целого числа."
-
-msgid "New volume type must be specified."
-msgstr "Должен быть указан тип нового тома."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Новый тип тома не указан в request_spec."
 
@@ -3938,9 +3878,6 @@ msgstr "Нет активных порталов iSCSI с указанными I
 msgid "No backups available to do an incremental backup."
 msgstr "Нет резервных копий для создания дополняющей резервной копии."
 
-msgid "No cinder entries in syslog!"
-msgstr "Нет записей cinder в системном протоколе!"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr ""
@@ -3952,9 +3889,6 @@ msgstr "Не найден узел конфигурации."
 #, python-format
 msgid "No element by given name %s."
 msgstr "Не найден элемент с именем %s."
-
-msgid "No errors in logfiles!"
-msgstr "Нет ошибок в файлах протоколов!"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -3978,9 +3912,6 @@ msgstr "Не найдены правильные порталы iscsi для %s.
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "В целевом массиве нет портов с поддержкой iSCSI."
-
-msgid "No image_name was specified in request."
-msgstr "В запросе не указан параметр image_name."
 
 msgid "No initiator connected to fabric."
 msgstr "Никакой инициатор не подключен к фабрике."
@@ -4159,9 +4090,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "Необходимо указать путь к сертификату сервера REST."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Укажите имя спецификации QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4418,9 +4346,6 @@ msgstr "Тело запроса содержит избыточное колич
 
 msgid "Request body contains too many items."
 msgstr "Тело запроса содержит слишком много элементов."
-
-msgid "Request body empty"
-msgstr "Пустое тело запроса"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -4908,9 +4833,6 @@ msgstr ""
 "Хост не готов к обратному переключению. Выполните повторную синхронизацию "
 "томов и возобновите репликацию в базовых системах LeftHand."
 
-msgid "The key cannot be None."
-msgstr "Ключ не может быть None."
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "Метод update_migrated_volume не реализован."
 
@@ -5031,10 +4953,6 @@ msgstr "Отсутствуют общие ресурсы, которые мог�
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "Нет общих ресурсов, способных вместить %(volume_size)s ГБ."
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "Не существует такого действия: %s"
 
 msgid "There is no virtual disk device."
 msgstr "Нет устройства виртуального диска."
@@ -5293,9 +5211,6 @@ msgstr "Не найдены связи iSCSI."
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "Не найден ssh_hosts_key_file: %s"
-
-msgid "Unable to find system log file!"
-msgstr "Не найден файл системного протокола!"
 
 #, python-format
 msgid ""
@@ -6968,12 +6883,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "у mdiskgrp отсутствуют кавычки %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr ""
-"Значение migration_policy должно быть on-demand или never, передано значение "
-"%s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

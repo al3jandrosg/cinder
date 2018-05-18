@@ -16,7 +16,6 @@
 import inspect
 import json
 import math
-import random
 import re
 import socket
 import string
@@ -482,14 +481,17 @@ class SolidFireDriver(san.SanISCSIDriver):
     def _build_endpoint_info(self, **kwargs):
         endpoint = {}
 
+        # NOTE(jdg): We default to the primary cluster config settings
+        # but always check to see if desired settings were passed in
+        # to handle things like replication targets with unique settings
         endpoint['mvip'] = (
             kwargs.get('mvip', self.configuration.san_ip))
         endpoint['login'] = (
             kwargs.get('login', self.configuration.san_login))
         endpoint['passwd'] = (
-            kwargs.get('passwd', self.configuration.san_password))
+            kwargs.get('password', self.configuration.san_password))
         endpoint['port'] = (
-            kwargs.get('port', self.configuration.sf_api_port))
+            kwargs.get(('port'), self.configuration.sf_api_port))
         endpoint['url'] = 'https://%s:%s' % (endpoint['mvip'],
                                              endpoint['port'])
         endpoint['svip'] = kwargs.get('svip', self.configuration.sf_svip)
@@ -652,8 +654,9 @@ class SolidFireDriver(san.SanISCSIDriver):
     def _generate_random_string(self, length):
         """Generates random_string to use for CHAP password."""
 
-        char_set = string.ascii_uppercase + string.digits
-        return ''.join(random.sample(char_set, length))
+        return vol_utils.generate_password(
+            length=length,
+            symbolgroups=(string.ascii_uppercase + string.digits))
 
     def _get_model_info(self, sfaccount, sf_volume_id, endpoint=None):
         """Gets the connection info for specified account and volume."""

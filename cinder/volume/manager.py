@@ -156,30 +156,6 @@ CONF.register_opts(volume_manager_opts)
 CONF.register_opts(volume_backend_opts, group=config.SHARED_CONF_GROUP)
 
 MAPPING = {
-    'cinder.volume.drivers.emc.scaleio':
-    'cinder.volume.drivers.dell_emc.scaleio.driver',
-    'cinder.volume.drivers.emc.vnx.driver.EMCVNXDriver':
-    'cinder.volume.drivers.dell_emc.vnx.driver.VNXDriver',
-    'cinder.volume.drivers.emc.xtremio.XtremIOISCSIDriver':
-    'cinder.volume.drivers.dell_emc.xtremio.XtremIOISCSIDriver',
-    'cinder.volume.drivers.emc.xtremio.XtremIOFibreChannelDriver':
-    'cinder.volume.drivers.dell_emc.xtremio.XtremIOFCDriver',
-    'cinder.volume.drivers.datera.DateraDriver':
-    'cinder.volume.drivers.datera.datera_iscsi.DateraDriver',
-    'cinder.volume.drivers.emc.emc_vmax_iscsi.EMCVMAXISCSIDriver':
-    'cinder.volume.drivers.dell_emc.vmax.iscsi.VMAXISCSIDriver',
-    'cinder.volume.drivers.emc.emc_vmax_fc.EMCVMAXFCDriver':
-    'cinder.volume.drivers.dell_emc.vmax.fc.VMAXFCDriver',
-    'cinder.volume.drivers.eqlx.DellEQLSanISCSIDriver':
-    'cinder.volume.drivers.dell_emc.ps.PSSeriesISCSIDriver',
-    'cinder.volume.drivers.dell.dell_storagecenter_iscsi.'
-    'DellStorageCenterISCSIDriver':
-    'cinder.volume.drivers.dell_emc.sc.storagecenter_iscsi.'
-    'SCISCSIDriver',
-    'cinder.volume.drivers.dell.dell_storagecenter_fc.'
-    'DellStorageCenterFCDriver':
-    'cinder.volume.drivers.dell_emc.sc.storagecenter_fc.'
-    'SCFCDriver',
     'cinder.volume.drivers.windows.windows.WindowsDriver':
     'cinder.volume.drivers.windows.iscsi.WindowsISCSIDriver',
 }
@@ -547,14 +523,23 @@ class VolumeManager(manager.CleanableManager,
             with excutils.save_and_reraise_exception():
                 LOG.error("Service not found for updating replication_status.")
 
-        if service.replication_status != (
-                fields.ReplicationStatus.FAILED_OVER):
+        if service.replication_status != fields.ReplicationStatus.FAILED_OVER:
             if stats and stats.get('replication_enabled', False):
-                service.replication_status = fields.ReplicationStatus.ENABLED
+                replication_status = fields.ReplicationStatus.ENABLED
             else:
-                service.replication_status = fields.ReplicationStatus.DISABLED
+                replication_status = fields.ReplicationStatus.DISABLED
 
-        service.save()
+            if replication_status != service.replication_status:
+                service.replication_status = replication_status
+                service.save()
+
+        # Update the cluster replication status if necessary
+        cluster = service.cluster
+        if (cluster and
+                cluster.replication_status != service.replication_status):
+            cluster.replication_status = service.replication_status
+            cluster.save()
+
         LOG.info("Driver post RPC initialization completed successfully.",
                  resource={'type': 'driver',
                            'id': self.driver.__class__.__name__})
@@ -1608,22 +1593,18 @@ class VolumeManager(manager.CleanableManager,
             if qos and qos.get('consumer') in ['front-end', 'both']:
                 specs = qos.get('specs')
 
+            # NOTE(mnaser): The following configures for per-GB QoS
             if specs is not None:
-                # Compute fixed IOPS values for per-GB keys
-                if 'write_iops_sec_per_gb' in specs:
-                    specs['write_iops_sec'] = (
-                        int(specs['write_iops_sec_per_gb']) * int(volume.size))
-                    specs.pop('write_iops_sec_per_gb')
+                volume_size = int(volume.size)
+                tune_opts = ('read_iops_sec', 'read_bytes_sec',
+                             'write_iops_sec', 'write_bytes_sec',
+                             'total_iops_sec', 'total_bytes_sec')
 
-                if 'read_iops_sec_per_gb' in specs:
-                    specs['read_iops_sec'] = (
-                        int(specs['read_iops_sec_per_gb']) * int(volume.size))
-                    specs.pop('read_iops_sec_per_gb')
-
-                if 'total_iops_sec_per_gb' in specs:
-                    specs['total_iops_sec'] = (
-                        int(specs['total_iops_sec_per_gb']) * int(volume.size))
-                    specs.pop('total_iops_sec_per_gb')
+                for option in tune_opts:
+                    option_per_gb = '%s_per_gb' % option
+                    if option_per_gb in specs:
+                        specs[option] = int(specs[option_per_gb]) * volume_size
+                        specs.pop(option_per_gb)
 
         qos_spec = dict(qos_specs=specs)
         conn_info['data'].update(qos_spec)

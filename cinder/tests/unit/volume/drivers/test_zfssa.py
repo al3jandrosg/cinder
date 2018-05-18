@@ -562,6 +562,60 @@ class TestZFSSAISCSIDriver(test.TestCase):
             [])
 
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
+    def test_volume_attach_detach_multipath(self, _get_provider_info):
+        lcfg = self.configuration
+        test_target_iqn = 'iqn.1986-03.com.sun:02:00000-aaaa-bbbb-cccc-ddddd'
+        self.drv._get_provider_info.return_value = {
+            'provider_location': '%s %s' % (lcfg.zfssa_target_portal,
+                                            test_target_iqn)
+        }
+
+        def side_effect_get_initiator_initiatorgroup(arg):
+            return [{
+                'iqn.1-0.org.deb:01:d7': 'test-init-grp1',
+                'iqn.1-0.org.deb:01:d9': 'test-init-grp2',
+            }[arg]]
+
+        self.drv.zfssa.get_initiator_initiatorgroup.side_effect = (
+            side_effect_get_initiator_initiatorgroup)
+
+        initiator = 'iqn.1-0.org.deb:01:d7'
+        initiator_group = 'test-init-grp1'
+        lu_number = '246'
+
+        self.drv.zfssa.get_lun.side_effect = iter([
+            {'initiatorgroup': [], 'number': []},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+        ])
+
+        connector = {
+            'initiator': initiator,
+            'multipath': True
+        }
+        props = self.drv.initialize_connection(self.test_vol, connector)
+        self.drv._get_provider_info.assert_called_once_with()
+        self.assertEqual('iscsi', props['driver_volume_type'])
+        self.assertEqual(self.test_vol['id'], props['data']['volume_id'])
+        self.assertEqual([lcfg.zfssa_target_portal],
+                         props['data']['target_portals'])
+        self.assertEqual([test_target_iqn], props['data']['target_iqns'])
+        self.assertEqual([int(lu_number)], props['data']['target_luns'])
+        self.assertFalse(props['data']['target_discovered'])
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [initiator_group])
+
+        self.drv.terminate_connection(self.test_vol, connector)
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [])
+
+    @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
     def test_volume_attach_detach_live_migration(self, _get_provider_info):
         lcfg = self.configuration
         test_target_iqn = 'iqn.1986-03.com.sun:02:00000-aaaa-bbbb-cccc-ddddd'
@@ -1700,6 +1754,48 @@ class TestZFSSAApi(test.TestCase):
                           self.zfssa.get_project_stats,
                           self.pool,
                           self.project)
+
+    def test_get_pool_stats_not_owned(self):
+        # Case where the pool is owned by the cluster peer when cluster
+        # is active. In this case, we should fail, because the driver is
+        # configured to talk to the wrong control head.
+        pool_data = {'pool': {'asn': 'fake-asn-b',
+                     'owner': 'fakepeer'}}
+        version_data = {'version': {'asn': 'fake-asn-a',
+                        'nodename': 'fakehost'}}
+        cluster_data = {'cluster': {'peer_hostname': 'fakepeer',
+                                    'peer_asn': 'fake-asn-b',
+                                    'peer_state': 'AKCS_CLUSTERED'}}
+        self.zfssa.rclient.get.side_effect = [
+            self._create_response(client.Status.OK,
+                                  json.dumps(pool_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(version_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(cluster_data))]
+        self.assertRaises(exception.InvalidInput,
+                          self.zfssa.get_pool_details,
+                          self.pool)
+
+    def test_get_pool_stats_stripped(self):
+        # Case where the pool is owned by the cluster peer when it is in a
+        # stripped state. In this case, so long as the owner and ASN for the
+        # pool match the peer, we should not fail.
+        pool_data = {'pool': {'asn': 'fake-asn-a',
+                     'owner': 'fakehost'}}
+        version_data = {'version': {'asn': 'fake-asn-b',
+                        'nodename': 'fakepeer'}}
+        cluster_data = {'cluster': {'peer_hostname': 'fakehost',
+                                    'peer_asn': 'fake-asn-a',
+                                    'peer_state': 'AKCS_STRIPPED'}}
+        self.zfssa.rclient.get.side_effect = [
+            self._create_response(client.Status.OK,
+                                  json.dumps(pool_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(version_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(cluster_data))]
+        self.zfssa.get_pool_details(self.pool)
 
 
 class TestZFSSANfsApi(test.TestCase):

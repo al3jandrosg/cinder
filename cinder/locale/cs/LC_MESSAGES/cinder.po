@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-03 01:53+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Language: cs\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Czech\n"
 
 #, python-format
@@ -121,10 +121,6 @@ msgstr ""
 "Hodnota %(worker_name)s ve %(workers)d je neplatná, musí být větší než 0."
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid ""
 "%s cannot be accessed. Verify that GPFS is active and file system is mounted."
 msgstr ""
@@ -201,9 +197,6 @@ msgstr "'consistencygroup_id' musí být zadáno"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "zpracování 'qemu-img info' selhalo."
-
-msgid "'status' must be specified."
-msgstr "'status' musí být zadáno."
 
 #, python-format
 msgid ""
@@ -2761,16 +2754,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Neplatné specifikace qos: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "Neplatná žádost o připojení svazku k neplatnému hostiteli"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Neplatná žádost o připojení svazku s neplatným režimem. Režim připojení by "
-"měl být 'rw' nebo 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Neplatné vypršení rezervace %(expire)s."
@@ -2807,18 +2790,6 @@ msgstr "Neplatné nastavení aktualizace: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Neplatná hodnota '%s' pro vynucení."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Neplatná hodnota pro 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Neplatná hodnota pro 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Neplatná hodnota pro 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "Neplatná hodnota pro 'scheduler_max_attempts', musí být >=1"
@@ -2897,13 +2868,6 @@ msgstr ""
 "Vyvolání zavedení záložního systému, protože replikace není správně "
 "nastavena."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Názvy klíče mohou obsahovat pouze alfanumerické znaky, podtržítka, tečky, "
-"dvojtečky a pomlčky."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "Chyba klíče: %s"
@@ -2912,16 +2876,8 @@ msgstr "Chyba klíče: %s"
 msgid "LUN not found with given ref %s."
 msgstr "LUN nenalezena pomocí zadaného odkazu %s."
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "Posledních %s položek cinder v záznamu systému:-"
-
 msgid "LeftHand cluster not found"
 msgstr "Cluster LeftHand nebyl nalezen"
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "Řádek %(dis)d : %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3100,9 +3056,6 @@ msgstr "Je nutné zavést schedule_get_pools"
 msgid "Must pass wwpn or host to lsfabric."
 msgstr "lsfabric je nutné předat wwpn nebo host."
 
-msgid "Must specify 'connector'"
-msgstr "Musíte zadat 'connector'"
-
 msgid "Must specify 'new_volume'"
 msgstr "Musíte zadat 'new_volume'"
 
@@ -3139,12 +3092,6 @@ msgstr "Musíte zadat platný stav"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "Musí být určena třída ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "V žádosti musíte zadat bootable."
-
-msgid "Must specify readonly in request."
-msgstr "V žádosti musíte zadat readonly."
 
 msgid "Must specify storage pools. Option: sio_storage_pools."
 msgstr "Musíte zadat zásoby úložiště. Volba: sio_storage_pools."
@@ -3197,12 +3144,6 @@ msgstr ""
 "Nová velikost pro rozšíření musí být větší než současná. (současná: "
 "%(size)s, rozšířená: %(new_size)s)."
 
-msgid "New volume size must be specified as an integer."
-msgstr "Nová velikost svazku musí být zadána jako celé číslo."
-
-msgid "New volume type must be specified."
-msgstr "Musíte zadat nový typ svazku."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Nový typ svazku nebyl zadán ve specifikaci žádosti."
 
@@ -3215,9 +3156,6 @@ msgstr "Žádné aktivní portály iSCSI zadané pomocí IP iSCSI"
 msgid "No backups available to do an incremental backup."
 msgstr "Žádná záloha pro provedení přírůstkové zálohy."
 
-msgid "No cinder entries in syslog!"
-msgstr "Žádné položky cinder v záznamu systému!"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "Ve správci souborů nebyl nalezen klonovaný LUN s názvem %s"
@@ -3228,9 +3166,6 @@ msgstr "Nenalezen žádný uzel nastavení."
 #, python-format
 msgid "No element by given name %s."
 msgstr "Žádný prvek podle zadaného názvu %s."
-
-msgid "No errors in logfiles!"
-msgstr "Žádné chyby v souborech záznamu!"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -3254,9 +3189,6 @@ msgstr "Pro %s nenalezeny žádné vhodné portály iscsi."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "V cílovém poli není žádný port umožňující iSCSI."
-
-msgid "No image_name was specified in request."
-msgstr "V žádosti nebyl zadán název obrazu."
 
 #, python-format
 msgid "No initiator group found for initiator %s"
@@ -3423,9 +3355,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "Cesta k certifikátu serveru REST musí být zadána."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Prosím zadejte název pro specifikaci QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -3612,9 +3541,6 @@ msgstr "Tělo požadavku obsahuje příliš mnoho položek"
 
 msgid "Request body contains too many items."
 msgstr "Tělo požadavku obsahuje příliš mnoho položek."
-
-msgid "Request body empty"
-msgstr "Tělo žádosti je prázdné"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -3976,9 +3902,6 @@ msgstr "Doba konce (%(end)s) musí být po době začátku (%(start)s)."
 msgid "The failed-over volume could not be deleted: %s"
 msgstr "Záložní svazek nelze smazat: %s."
 
-msgid "The key cannot be None."
-msgstr "Klíč nemůže být None."
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "Metoda update_migrated_volume není zavedena."
 
@@ -4078,10 +4001,6 @@ msgstr "Neexistuje sdílení schopné hostit %(volume_size)sG"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "Neexistuje sdílení schopné hostit %(volume_size)sG."
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "Žádná taková činnost: %s"
 
 msgid "There is no virtual disk device."
 msgstr "Neexistuje žádné zařízení virtuálního disku."
@@ -4270,9 +4189,6 @@ msgstr "Nelze najít mapování iSCSI."
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "Nelze najít soubor klíčů hostitelů ssh: %s"
-
-msgid "Unable to find system log file!"
-msgstr "Nelze najít soubor záznamu systému!"
 
 #, python-format
 msgid "Unable to find volume %s"
@@ -5362,10 +5278,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp chybí uvozovky %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "zásady přesunu musí být 'on-demand' nebo 'never', předáno: %s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

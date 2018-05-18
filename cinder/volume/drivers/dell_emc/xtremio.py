@@ -752,9 +752,9 @@ class XtremIOVolumeDriver(san.SanDriver):
                     LOG.warning('Failed to clean IG %d without mappings', idx)
 
     def _get_password(self):
-        return ''.join(RANDOM.choice
-                       (string.ascii_uppercase + string.digits)
-                       for _ in range(12))
+        return vutils.generate_password(
+            length=12,
+            symbolgroups=(string.ascii_uppercase + string.digits))
 
     def create_lun_map(self, volume, ig, lun_num=None):
         try:
@@ -1206,7 +1206,6 @@ class XtremIOFCDriver(XtremIOVolumeDriver,
         seq = range(len(uniq_luns) + 1)
         return min(set(seq) - uniq_luns)
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         wwpns = self._get_initiator_names(connector)
         ig_name = self._get_ig_name(connector)
@@ -1240,14 +1239,15 @@ class XtremIOFCDriver(XtremIOVolumeDriver,
         for ig in igs:
             lunmap = self.create_lun_map(volume, ig, lun_num)
             lun_num = lunmap['lun']
-        return {'driver_volume_type': 'fibre_channel',
-                'data': {
-                    'target_discovered': False,
-                    'target_lun': lun_num,
-                    'target_wwn': self.get_targets(),
-                    'initiator_target_map': i_t_map}}
+        conn_info = {'driver_volume_type': 'fibre_channel',
+                     'data': {
+                         'target_discovered': False,
+                         'target_lun': lun_num,
+                         'target_wwn': self.get_targets(),
+                         'initiator_target_map': i_t_map}}
+        fczm_utils.add_fc_zone(conn_info)
+        return conn_info
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         (super(XtremIOFCDriver, self)
          .terminate_connection(volume, connector, **kwargs))
@@ -1264,8 +1264,10 @@ class XtremIOFCDriver(XtremIOVolumeDriver,
             data = {'target_wwn': self.get_targets(),
                     'initiator_target_map': i_t_map}
 
-        return {'driver_volume_type': 'fibre_channel',
-                'data': data}
+        conn_info = {'driver_volume_type': 'fibre_channel',
+                     'data': data}
+        fczm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
     def _get_initiator_names(self, connector):
         return [wwpn if ':' in wwpn else

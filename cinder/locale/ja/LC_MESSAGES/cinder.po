@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-03 01:53+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -22,7 +22,7 @@ msgstr ""
 "Language: ja\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Japanese\n"
 
 #, python-format
@@ -170,10 +170,6 @@ msgstr ""
 "せん。"
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "結果内に %s \"data\" がありません。"
 
@@ -275,9 +271,6 @@ msgstr "'consistencygroup_id' を指定する必要があります。"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "'qemu-img info' の解析に失敗しました。"
-
-msgid "'status' must be specified."
-msgstr "'status' を指定する必要があります。"
 
 msgid "'success' not found"
 msgstr "'success' が見つかりません。"
@@ -4199,14 +4192,6 @@ msgid "Invalid disk type: %s."
 msgstr "ディスクタイプが無効です: %s。"
 
 #, python-format
-msgid ""
-"Invalid disk-format '%(disk_format)s' is specified. Allowed disk-formats are "
-"%(allowed_disk_formats)s."
-msgstr ""
-"無効なディスクフォーマット '%(disk_format)s'  が指定されました。許可される"
-"ディスクフォーマットは %(allowed_disk_formats)s です。"
-
-#, python-format
 msgid "Invalid filter keys: %s"
 msgstr "無効なフィルターキー :  %s"
 
@@ -4294,16 +4279,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "qos 仕様が無効です: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "ボリュームを無効なターゲットに接続する要求は無効です"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"無効なモードでボリュームを接続しようとしているため、要求は無効です。接続モー"
-"ドは 'rw' または 'ro' でなければなりません"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "予約の有効期限 %(expire)s が無効です。"
@@ -4359,18 +4334,6 @@ msgstr "delete-volumes フラッグの値 '%s' が無効です。"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "force の値 '%s' は無効です。"
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr " 'bootable' の値 '%s' は無効です。"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "'force' の値 '%s' は無効です。"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr " 'readonly' の値 '%s' は無効です。"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "'scheduler_max_attempts' の値が無効です。1 以上でなければなりません"
@@ -4469,13 +4432,6 @@ msgstr "再試行可能な Kaminario 例外: %(reason)s"
 msgid "KaminarioCinderDriver failure: %(reason)s"
 msgstr "Kaminario Cinder ドライバー障害です: %(reason)s"
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"鍵の名前に含めることができるのは、英数字、アンダースコアー、ピリオド、コロ"
-"ン、およびハイフンのみです。"
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -4496,19 +4452,11 @@ msgstr "UUID %(uuid)s の LUN が見つかりません。"
 msgid "LUN not found with given ref %s."
 msgstr "指定された参照 %s を持つ LUN が見つかりません。"
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "最後の %s cinder syslog 項目:-"
-
 msgid "LeftHand cluster not found"
 msgstr "LeftHand クラスターが見つかりません"
 
 msgid "License is unavailable."
 msgstr "ライセンスが使用できません。"
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "行 %(dis)d : %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -4787,9 +4735,6 @@ msgstr ""
 "policy.json を使用して、クラウド管理者としてこのコマンドを実行する必要があり"
 "ます。"
 
-msgid "Must specify 'connector'"
-msgstr "'connector' を指定する必要があります"
-
 msgid "Must specify 'new_volume'"
 msgstr "'new_volume' を指定する必要があります。"
 
@@ -4827,18 +4772,12 @@ msgstr "有効な状態を指定してください。"
 msgid "Must specify an ExtensionManager class"
 msgstr "ExtensionManager クラスを指定する必要があります"
 
-msgid "Must specify bootable in request."
-msgstr "要求にブート可能を指定する必要があります。"
-
 msgid ""
 "Must specify one or more of the following keys to update: name, description, "
 "add_volumes, remove_volumes."
 msgstr ""
 "更新を行うには、次のキーを一つ以上指定する必要があります : 名前、説明、 "
 "add_volumes 、 remove_volumes"
-
-msgid "Must specify readonly in request."
-msgstr "要求内で読み取り専用を指定する必要があります。"
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr ""
@@ -4907,12 +4846,6 @@ msgstr ""
 "新規サイズはバックエンドストレージの実サイズよりも大きくなければなりません。"
 "実サイズ: %(oldsize)s、新規サイズ: %(newsize)s。"
 
-msgid "New volume size must be specified as an integer."
-msgstr "新しいボリュームサイズを整数で指定する必要があります。"
-
-msgid "New volume type must be specified."
-msgstr "新規ボリュームタイプを指定する必要があります。"
-
 msgid "New volume type not specified in request_spec."
 msgstr "新規のボリュームタイプが要求仕様に指定されていません。"
 
@@ -4938,9 +4871,6 @@ msgstr "提供された iSCSI IP の iSCSI ポータルがアクティブでは�
 msgid "No backups available to do an incremental backup."
 msgstr "増分バックアップを実行するために使用可能なバックアップがありません。"
 
-msgid "No cinder entries in syslog!"
-msgstr "cinder 項目が syslog にありません。"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "複製された %s という名前の LUN はファイラーで見つかりません"
@@ -4951,9 +4881,6 @@ msgstr "設定ノードが見つかりません。"
 #, python-format
 msgid "No element by given name %s."
 msgstr "指定された名前 %s の要素はありません。"
-
-msgid "No errors in logfiles!"
-msgstr "ログファイル内にエラーはありません。"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -4981,9 +4908,6 @@ msgstr "id %s のグループスナップショットは存在しません。"
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "ターゲット配列に iSCSI に対応するポートがありません。"
-
-msgid "No image_name was specified in request."
-msgstr "要求に image_name が指定されていませんでした。"
 
 msgid "No initiator connected to fabric."
 msgstr "ファブリックに接続されたイニシエーターはありません。"
@@ -5219,9 +5143,6 @@ msgstr "パラメーター %s には、少なくとも1つのボリューム を
 #, python-format
 msgid "Please provide valid format volume: lun for parameter %s"
 msgstr "パラメーター %s に、正しい形式で ボリューム: lun を指定してください。"
-
-msgid "Please specify a name for QoS specs."
-msgstr "QoS 仕様の名前を指定してください。"
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -5530,9 +5451,6 @@ msgstr "要求本体に含まれる項目が多すぎます"
 
 msgid "Request body contains too many items."
 msgstr "要求本体に含まれる項目が多すぎます。"
-
-msgid "Request body empty"
-msgstr "要求本体が空です"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -6246,9 +6164,6 @@ msgstr ""
 "インポートした LUN はホスト %(host)s に管理されていないプール %(lun_pool)s に"
 "あります。"
 
-msgid "The key cannot be None."
-msgstr "キーは None に設定することはできません。"
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "update_migrated_volume メソッドが実装されていません。"
 
@@ -6431,10 +6346,6 @@ msgstr "%(volume_size)sG をホストできる共有がありません"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "%(volume_size)sG をホストできる共有がありません。"
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "このようなアクションはありません: %s"
 
 msgid "There is no virtual disk device."
 msgstr "仮想ディスクデバイスがありません。"
@@ -6740,9 +6651,6 @@ msgstr "イニシエーター %(name)s 用のサーバーオブジェクトが�
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "ssh_hosts_key_file が見つかりません: %s"
 
-msgid "Unable to find system log file!"
-msgstr "システムログファイルが見つかりません。"
-
 #, python-format
 msgid ""
 "Unable to find viable pg snapshot to use forfailover on selected secondary "
@@ -6923,9 +6831,6 @@ msgid ""
 "%(attr)s."
 msgstr ""
 " マッピング %(id)s の予期されないマッピング状態 %(status)s。属性: %(attr)s。"
-
-msgid "Unexpected 'disabled_reason' found on enable request."
-msgstr "enable request に予期しない  'disabled_reason'  が見つかりました。"
 
 #, python-format
 msgid ""
@@ -8760,12 +8665,6 @@ msgstr "マーカーが見つかりません: %s"
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp に引用符 %s がありません"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr ""
-"migration_policy は 'on-demand' または 'never' でなければなりません。%s が渡"
-"されました"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

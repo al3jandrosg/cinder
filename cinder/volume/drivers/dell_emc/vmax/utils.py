@@ -15,10 +15,10 @@
 
 from copy import deepcopy
 import datetime
+from defusedxml import minidom
 import hashlib
 import random
 import re
-from xml.dom import minidom
 
 from cinder.objects.group import Group
 from oslo_log import log as logging
@@ -495,6 +495,16 @@ class VMAXUtils(object):
         else:
             return True
 
+    def change_replication(self, vol_is_replicated, new_type):
+        """Check if volume types have different replication status.
+
+        :param vol_is_replicated: from source
+        :param new_type: from target
+        :return: bool
+        """
+        is_tgt_rep = self.is_replication_enabled(new_type['extra_specs'])
+        return vol_is_replicated != is_tgt_rep
+
     @staticmethod
     def is_replication_enabled(extra_specs):
         """Check if replication is to be enabled.
@@ -801,3 +811,16 @@ class VMAXUtils(object):
                 [REP_ASYNC, REP_METRO]):
             return True
         return False
+
+    @staticmethod
+    def get_temp_failover_grp_name(rep_config):
+        """Get the temporary group name used for failover.
+
+        :param rep_config: the replication config
+        :return: temp_grp_name
+        """
+        temp_grp_name = ("OS-%(rdf)s-temp-rdf-sg"
+                         % {'rdf': rep_config['rdf_group_label']})
+        LOG.debug("The temp rdf managed group name is %(name)s",
+                  {'name': temp_grp_name})
+        return temp_grp_name

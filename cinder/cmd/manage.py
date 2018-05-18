@@ -56,7 +56,6 @@ from __future__ import print_function
 
 
 import logging as python_logging
-import os
 import prettytable
 import sys
 import time
@@ -68,6 +67,7 @@ from oslo_log import log as logging
 from oslo_utils import timeutils
 
 # Need to register global_opts
+from cinder.backup import rpcapi as backup_rpcapi
 from cinder.common import config  # noqa
 from cinder.common import constants
 from cinder import context
@@ -78,13 +78,23 @@ from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder.i18n import _
 from cinder import objects
+from cinder.objects import base as ovo_base
 from cinder import rpc
+from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import version
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import utils as vutils
 
 
 CONF = cfg.CONF
+
+RPC_VERSIONS = {
+    'cinder-scheduler': scheduler_rpcapi.SchedulerAPI.RPC_API_VERSION,
+    'cinder-volume': volume_rpcapi.VolumeAPI.RPC_API_VERSION,
+    'cinder-backup': backup_rpcapi.BackupAPI.RPC_API_VERSION,
+}
+
+OVO_VERSION = ovo_base.OBJ_VERSIONS.get_current()
 
 
 def _get_non_shared_target_hosts(ctxt):
@@ -267,17 +277,39 @@ class DbCommands(object):
 
     @args('version', nargs='?', default=None, type=int,
           help='Database version')
-    def sync(self, version=None):
+    @args('--bump-versions', dest='bump_versions', default=False,
+          action='store_true',
+          help='Update RPC and Objects versions when doing offline upgrades, '
+               'with this we no longer need to restart the services twice '
+               'after the upgrade to prevent ServiceTooOld exceptions.')
+    def sync(self, version=None, bump_versions=False):
         """Sync the database up to the most recent version."""
         if version is not None and version > db.MAX_INT:
             print(_('Version should be less than or equal to '
                     '%(max_version)d.') % {'max_version': db.MAX_INT})
             sys.exit(1)
         try:
-            return db_migration.db_sync(version)
+            result = db_migration.db_sync(version)
         except db_exc.DBMigrationError as ex:
             print("Error during database migration: %s" % ex)
             sys.exit(1)
+
+        try:
+            if bump_versions:
+                ctxt = context.get_admin_context()
+                services = objects.ServiceList.get_all(ctxt)
+                for service in services:
+                    rpc_version = RPC_VERSIONS[service.binary]
+                    if (service.rpc_current_version != rpc_version or
+                            service.object_current_version != OVO_VERSION):
+                        service.rpc_current_version = rpc_version
+                        service.object_current_version = OVO_VERSION
+                        service.save()
+        except Exception as ex:
+            print(_('Error during service version bump: %s') % ex)
+            sys.exit(2)
+
+        return result
 
     def version(self):
         """Print the current database version."""
@@ -457,68 +489,6 @@ class ConfigCommands(object):
         else:
             for key, value in CONF.items():
                 print('%s = %s' % (key, value))
-
-
-class GetLogCommands(object):
-    """Get logging information."""
-
-    deprecation_msg = ('DEPRECATED: The log commands are deprecated '
-                       'since Queens and are not maintained. They will be '
-                       'removed in an upcoming release.')
-
-    def errors(self):
-        """Get all of the errors from the log files."""
-
-        print(self.deprecation_msg)
-
-        error_found = 0
-        if CONF.log_dir:
-            logs = [x for x in os.listdir(CONF.log_dir) if x.endswith('.log')]
-            for file in logs:
-                log_file = os.path.join(CONF.log_dir, file)
-                lines = [line.strip() for line in open(log_file, "r")]
-                lines.reverse()
-                print_name = 0
-                for index, line in enumerate(lines):
-                    if line.find(" ERROR ") > 0:
-                        error_found += 1
-                        if print_name == 0:
-                            print(log_file + ":-")
-                            print_name = 1
-                        print(_("Line %(dis)d : %(line)s") %
-                              {'dis': len(lines) - index, 'line': line})
-        if error_found == 0:
-            print(_("No errors in logfiles!"))
-
-    @args('num_entries', nargs='?', type=int, default=10,
-          help='Number of entries to list (default: %(default)d)')
-    def syslog(self, num_entries=10):
-        """Get <num_entries> of the cinder syslog events."""
-
-        print(self.deprecation_msg)
-
-        entries = int(num_entries)
-        count = 0
-        log_file = ''
-        if os.path.exists('/var/log/syslog'):
-            log_file = '/var/log/syslog'
-        elif os.path.exists('/var/log/messages'):
-            log_file = '/var/log/messages'
-        else:
-            print(_("Unable to find system log file!"))
-            sys.exit(1)
-        lines = [line.strip() for line in open(log_file, "r")]
-        lines.reverse()
-        print(_("Last %s cinder syslog entries:-") % (entries))
-        for line in lines:
-            if line.find("cinder") > 0:
-                count += 1
-                print(_("%s") % (line))
-            if count == entries:
-                break
-
-        if count == 0:
-            print(_("No cinder entries in syslog!"))
 
 
 class BackupCommands(object):
@@ -759,7 +729,6 @@ CATEGORIES = {
     'cg': ConsistencyGroupCommands,
     'db': DbCommands,
     'host': HostCommands,
-    'logs': GetLogCommands,
     'service': ServiceCommands,
     'shell': ShellCommands,
     'version': VersionCommands,

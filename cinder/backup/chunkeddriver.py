@@ -25,6 +25,7 @@ import abc
 import hashlib
 import json
 import os
+import sys
 
 import eventlet
 from oslo_config import cfg
@@ -40,6 +41,9 @@ from cinder.i18n import _
 from cinder import objects
 from cinder.objects import fields
 from cinder.volume import utils as volume_utils
+
+if sys.platform == 'win32':
+    from os_win import utilsfactory as os_win_utilsfactory
 
 LOG = logging.getLogger(__name__)
 
@@ -115,6 +119,13 @@ class ChunkedBackupDriver(driver.BackupDriver):
         self.compressor = \
             self._get_compressor(CONF.backup_compression_algorithm)
         self.support_force_delete = True
+
+        if sys.platform == 'win32' and self.chunk_size_bytes % 4096:
+            # The chunk size must be a multiple of the sector size. In order
+            # to fail out early and avoid attaching the disks, we'll just
+            # enforce the chunk size to be a multiple of 4096.
+            err = _("Invalid chunk size. It must be a multiple of 4096.")
+            raise exception.InvalidConfigurationValue(message=err)
 
     def _get_object_writer(self, container, object_name, extra_metadata=None):
         """Return writer proxy-wrapped to execute methods in native thread."""
@@ -361,7 +372,7 @@ class ChunkedBackupDriver(driver.BackupDriver):
                 container, object_name, extra_metadata=extra_metadata
         ) as writer:
             writer.write(output_data)
-        md5 = hashlib.md5(data).hexdigest()
+        md5 = eventlet.tpool.execute(hashlib.md5, data).hexdigest()
         obj[object_name]['md5'] = md5
         LOG.debug('backup MD5 for %(object_name)s: %(md5)s',
                   {'object_name': object_name, 'md5': md5})
@@ -453,6 +464,31 @@ class ChunkedBackupDriver(driver.BackupDriver):
                                                extra_usage_info=
                                                object_meta)
 
+    def _get_win32_phys_disk_size(self, disk_path):
+        win32_diskutils = os_win_utilsfactory.get_diskutils()
+        disk_number = win32_diskutils.get_device_number_from_device_name(
+            disk_path)
+        return win32_diskutils.get_disk_size(disk_number)
+
+    def _calculate_sha(self, data):
+        """Calculate SHA256 of a data chunk.
+
+        This method cannot log anything as it is called on a native thread.
+        """
+        # NOTE(geguileo): Using memoryview to avoid data copying when slicing
+        # for the sha256 call.
+        chunk = memoryview(data)
+        shalist = []
+        off = 0
+        datalen = len(chunk)
+        while off < datalen:
+            chunk_end = min(datalen, off + self.sha_block_size_bytes)
+            block = chunk[off:chunk_end]
+            sha = hashlib.sha256(block).hexdigest()
+            shalist.append(sha)
+            off += self.sha_block_size_bytes
+        return shalist
+
     def backup(self, backup, volume_file, backup_metadata=True):
         """Backup the given volume.
 
@@ -487,6 +523,13 @@ class ChunkedBackupDriver(driver.BackupDriver):
                 err = _('Volume size increased since the last '
                         'backup. Do a full backup.')
                 raise exception.InvalidBackup(reason=err)
+
+        if sys.platform == 'win32':
+            # When dealing with Windows physical disks, we need the exact
+            # size of the disk. Attempting to read passed this boundary will
+            # lead to an IOError exception. At the same time, we cannot
+            # seek to the end of file.
+            win32_disk_size = self._get_win32_phys_disk_size(volume_file.name)
 
         (object_meta, object_sha256, extra_metadata, container,
          volume_size_bytes) = self._prepare_backup(backup)
@@ -527,23 +570,19 @@ class ChunkedBackupDriver(driver.BackupDriver):
                 LOG.debug('Cancel the backup process of %s.', backup.id)
                 break
             data_offset = volume_file.tell()
-            data = volume_file.read(self.chunk_size_bytes)
+
+            if sys.platform == 'win32':
+                read_bytes = min(self.chunk_size_bytes,
+                                 win32_disk_size - data_offset)
+            else:
+                read_bytes = self.chunk_size_bytes
+            data = volume_file.read(read_bytes)
+
             if data == b'':
                 break
 
             # Calculate new shas with the datablock.
-            shalist = []
-            off = 0
-            datalen = len(data)
-            while off < datalen:
-                chunk_start = off
-                chunk_end = chunk_start + self.sha_block_size_bytes
-                if chunk_end > datalen:
-                    chunk_end = datalen
-                chunk = data[chunk_start:chunk_end]
-                sha = hashlib.sha256(chunk).hexdigest()
-                shalist.append(sha)
-                off += self.sha_block_size_bytes
+            shalist = eventlet.tpool.execute(self._calculate_sha, data)
             sha256_list.extend(shalist)
 
             # If parent_backup is not None, that means an incremental
@@ -570,7 +609,7 @@ class ChunkedBackupDriver(driver.BackupDriver):
 
                 # The last extent extends to the end of data buffer.
                 if extent_off != -1:
-                    extent_end = datalen
+                    extent_end = len(data)
                     segment = data[extent_off:extent_end]
                     self._backup_chunk(backup, container, segment,
                                        data_offset + extent_off,
@@ -615,8 +654,14 @@ class ChunkedBackupDriver(driver.BackupDriver):
 
         self._finalize_backup(backup, container, object_meta, object_sha256)
 
-    def _restore_v1(self, backup, volume_id, metadata, volume_file):
-        """Restore a v1 volume backup."""
+    def _restore_v1(self, backup, volume_id, metadata, volume_file,
+                    requested_backup):
+        """Restore a v1 volume backup.
+
+        Raises BackupRestoreCancel on any requested_backup status change, we
+        ignore the backup parameter for this check since that's only the
+        current data source from the list of backup sources.
+        """
         backup_id = backup['id']
         LOG.debug('v1 volume backup restore of %s started.', backup_id)
         extra_metadata = metadata.get('extra_metadata')
@@ -637,6 +682,13 @@ class ChunkedBackupDriver(driver.BackupDriver):
             raise exception.InvalidBackup(reason=err)
 
         for metadata_object in metadata_objects:
+            # Abort when status changes to error, available, or anything else
+            with requested_backup.as_read_deleted():
+                requested_backup.refresh()
+            if requested_backup.status != fields.BackupStatus.RESTORING:
+                raise exception.BackupRestoreCancel(back_id=backup.id,
+                                                    vol_id=volume_id)
+
             object_name, obj = list(metadata_object.items())[0]
             LOG.debug('restoring object. backup: %(backup_id)s, '
                       'container: %(container)s, object name: '
@@ -683,7 +735,10 @@ class ChunkedBackupDriver(driver.BackupDriver):
                   backup_id)
 
     def restore(self, backup, volume_id, volume_file):
-        """Restore the given volume backup from backup repository."""
+        """Restore the given volume backup from backup repository.
+
+        Raises BackupRestoreCancel on any backup status change.
+        """
         backup_id = backup['id']
         container = backup['container']
         object_prefix = backup['service_metadata']
@@ -725,7 +780,7 @@ class ChunkedBackupDriver(driver.BackupDriver):
             backup1 = backup_list[index]
             index = index - 1
             metadata = self._read_metadata(backup1)
-            restore_func(backup1, volume_id, metadata, volume_file)
+            restore_func(backup1, volume_id, metadata, volume_file, backup)
 
             volume_meta = metadata.get('volume_meta', None)
             try:

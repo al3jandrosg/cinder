@@ -1,3 +1,17 @@
+cinder (2:13.0.0~b1-0ubuntu1) cosmic; urgency=medium
+
+  * d/watch: Scope to 13.x series.
+  * New upstream milestone for OpenStack Rocky.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/control: Update Standards-Version to 4.1.4.
+  * d/watch, d/control: Use https URLs.
+  * d/control: Drop obsolete XS-Testsuite: autopkgtest header.
+  * d/control, d/tests/*: Enable autopkgtest-pkg-python testsuite.
+  * d/p/fix-sqlite3-migration-tests.patch: Cherry-picked from gerrit to
+    fix DB migration error: https://review.openstack.org/#/c/570361/
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 18 May 2018 10:40:38 -0400
+
 cinder (2:12.0.1-0ubuntu2) cosmic; urgency=medium
 
   * New upstream version.

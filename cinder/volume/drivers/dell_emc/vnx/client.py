@@ -102,11 +102,12 @@ class Client(object):
                    qos_specs=None):
         pool = self.vnx.get_pool(name=pool)
         try:
-            lun = pool.create_lun(lun_name=name,
-                                  size_gb=size,
-                                  provision=provision,
-                                  tier=tier,
-                                  ignore_thresholds=ignore_thresholds)
+            with pool.with_no_poll():
+                lun = pool.create_lun(lun_name=name,
+                                      size_gb=size,
+                                      provision=provision,
+                                      tier=tier,
+                                      ignore_thresholds=ignore_thresholds)
         except storops_ex.VNXLunNameInUseError:
             lun = self.vnx.get_lun(name=name)
 
@@ -140,17 +141,15 @@ class Client(object):
             lun = self.get_lun(name=volume.name)
             return lun.lun_id
 
-    def delete_lun(self, name, force=False):
+    def delete_lun(self, name, force=False, snap_copy=False):
         """Deletes a LUN or mount point."""
         lun = self.get_lun(name=name)
-        smp_attached_snap = (lun.attached_snapshot if lun.is_snap_mount_point
-                             else None)
-
         try:
             # Do not delete the snapshots of the lun.
             lun.delete(force_detach=True, detach_from_sg=force)
-            if smp_attached_snap:
-                smp_attached_snap.delete()
+            if snap_copy:
+                snap = self.vnx.get_snap(name=snap_copy)
+                snap.delete()
         except storops_ex.VNXLunNotFoundError as ex:
             LOG.info("LUN %(name)s is already deleted. This message can "
                      "be safely ignored. Message: %(msg)s",
@@ -336,6 +335,10 @@ class Client(object):
         snap = self.vnx.get_snap(name=snap_name)
         snap.modify(allow_rw=allow_rw, auto_delete=auto_delete,
                     keep_for=None)
+
+    def restore_snapshot(self, lun_id, snap_name):
+        lun = self.get_lun(lun_id=lun_id)
+        lun.restore_snap(snap_name)
 
     def create_consistency_group(self, cg_name, lun_id_list=None):
         try:
@@ -729,3 +732,8 @@ class Client(object):
 
     def filter_sg(self, attached_lun_id):
         return self.vnx.get_sg().shadow_copy(attached_lun=attached_lun_id)
+
+    def set_max_luns_per_sg(self, max_luns):
+        """Sets max LUNs per storage group."""
+        storops.vnx.resource.sg.VNXStorageGroup.set_max_luns_per_sg(max_luns)
+        LOG.info('Set max LUNs per storage group to %s.', max_luns)

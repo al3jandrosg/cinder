@@ -61,6 +61,11 @@ BACKEND_QOS_CONSUMERS = frozenset(['back-end', 'both'])
 QOS_MAX_IOPS = 'maxIOPS'
 QOS_MAX_BWS = 'maxBWS'
 
+# Max retries for the REST API client in case of a failure:
+_API_MAX_RETRIES = 5
+_INFINIDAT_CINDER_IDENTIFIER = (
+    "cinder/%s" % version.version_info.release_string())
+
 infinidat_opts = [
     cfg.StrOpt('infinidat_pool_name',
                help='Name of the pool from which volumes are allocated'),
@@ -113,10 +118,11 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         1.3 - added generic volume groups support
         1.4 - added support for QoS
         1.5 - added support for volume compression
+        1.6 - added support for volume multi-attach
 
     """
 
-    VERSION = '1.5'
+    VERSION = '1.6'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "INFINIDAT_CI"
@@ -125,6 +131,16 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         super(InfiniboxVolumeDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(infinidat_opts)
         self._lookup_service = fczm_utils.create_lookup_service()
+
+    def _setup_and_get_system_object(self, management_address, auth):
+        system = infinisdk.InfiniBox(management_address, auth=auth)
+        system.api.add_auto_retry(
+            lambda e: isinstance(
+                e, infinisdk.core.exceptions.APITransportFailure) and
+            "Interrupted system call" in e.error_desc, _API_MAX_RETRIES)
+        system.api.set_source_identifier(_INFINIDAT_CINDER_IDENTIFIER)
+        system.login()
+        return system
 
     def do_setup(self, context):
         """Driver initialization"""
@@ -135,8 +151,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         auth = (self.configuration.san_login,
                 self.configuration.san_password)
         self.management_address = self.configuration.san_ip
-        self._system = infinisdk.InfiniBox(self.management_address, auth=auth)
-        self._system.login()
+        self._system = (
+            self._setup_and_get_system_object(self.management_address, auth))
         backend_name = self.configuration.safe_get('volume_backend_name')
         self._backend_name = backend_name or self.__class__.__name__
         self._volume_stats = None
@@ -314,11 +330,13 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         target_wwpns = list(self._get_online_fc_ports())
         target_wwpns, init_target_map = self._build_initiator_target_map(
             connector, target_wwpns)
-        return dict(driver_volume_type='fibre_channel',
-                    data=dict(target_discovered=False,
-                              target_wwn=target_wwpns,
-                              target_lun=lun,
-                              initiator_target_map=init_target_map))
+        conn_info = dict(driver_volume_type='fibre_channel',
+                         data=dict(target_discovered=False,
+                                   target_wwn=target_wwpns,
+                                   target_lun=lun,
+                                   initiator_target_map=init_target_map))
+        fczm_utils.add_fc_zone(conn_info)
+        return conn_info
 
     def _get_iscsi_network_space(self, netspace_name):
         netspace = self._system.network_spaces.safe_get(
@@ -401,7 +419,6 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
             ports = [iqn.IQN(connector['initiator'])]
         return ports
 
-    @fczm_utils.add_fc_zone
     @infinisdk_to_cinder_exceptions
     @coordination.synchronized('infinidat-{self.management_address}-lock')
     def initialize_connection(self, volume, connector):
@@ -411,7 +428,6 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         else:
             return self._initialize_connection_iscsi(volume, connector)
 
-    @fczm_utils.remove_fc_zone
     @infinisdk_to_cinder_exceptions
     @coordination.synchronized('infinidat-{self.management_address}-lock')
     def terminate_connection(self, volume, connector, **kwargs):
@@ -446,8 +462,11 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                                                          target_wwpns))
                     result_data = dict(target_wwn=target_wwpns,
                                        initiator_target_map=target_map)
-        return dict(driver_volume_type=volume_type,
-                    data=result_data)
+        conn_info = dict(driver_volume_type=volume_type,
+                         data=result_data)
+        if self._protocol == 'FC':
+            fczm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
     @infinisdk_to_cinder_exceptions
     def get_volume_stats(self, refresh=False):
@@ -474,7 +493,8 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
                                       QoS_support=qos_support,
                                       thin_provisioning_support=thin,
                                       thick_provisioning_support=not thin,
-                                      max_over_subscription_ratio=max_osr)
+                                      max_over_subscription_ratio=max_osr,
+                                      multiattach=True)
         return self._volume_stats
 
     def _create_volume(self, volume):

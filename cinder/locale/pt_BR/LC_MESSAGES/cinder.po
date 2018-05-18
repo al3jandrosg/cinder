@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-27 16:11+0000\n"
+"POT-Creation-Date: 2018-04-17 01:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -123,10 +123,6 @@ msgid ""
 msgstr "Valor %(worker_name)s de %(workers)d é inválido, deve ser maior que 0."
 
 #, python-format
-msgid "%s"
-msgstr "%s"
-
-#, python-format
 msgid "%s \"data\" is not in result."
 msgstr "Os \"dados\" %s não estão no resultado."
 
@@ -217,9 +213,6 @@ msgstr "'consistencygroup_id' deve ser especificado"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "Falha na análise de 'qemu-img info'."
-
-msgid "'status' must be specified."
-msgstr "'status' deve ser especificado."
 
 #, python-format
 msgid ""
@@ -3441,16 +3434,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Inválidas qos specs: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "Solicitação inválida para anexar volume a um destino inválido"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Solicitação inválida para anexar o volume a um modo inválido. O modo de "
-"anexação deve ser 'rw' ou 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Expiração de reserva inválida %(expire)s."
@@ -3496,18 +3479,6 @@ msgstr "Configuração de atualização inválida: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Valor inválido '%s' para força."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Valor inválido para 'inicializável': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Valor inválido para 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Valor inválido para 'somente leitura': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "Valor inválido para 'scheduler_max_attempts'; deve ser >= 1"
@@ -3592,13 +3563,6 @@ msgstr ""
 "Falha ao emitir um failover porque a replicação não está configurada "
 "corretamente."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Nomes de chaves só podem conter caracteres alfanuméricos, sublinhados, "
-"pontos, vírgulas e hifens."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -3612,19 +3576,11 @@ msgstr ""
 msgid "LUN not found with given ref %s."
 msgstr "LUN não localizado com ref %s dada."
 
-#, python-format
-msgid "Last %s cinder syslog entries:-"
-msgstr "Últimas %s entradas syslog do cinder:-"
-
 msgid "LeftHand cluster not found"
 msgstr "cluster LeftHand não localizado"
 
 msgid "License is unavailable."
 msgstr "A licença está indisponível."
-
-#, python-format
-msgid "Line %(dis)d : %(line)s"
-msgstr "Linha %(dis)d: %(line)s"
 
 #, python-format
 msgid "Linked clone of source volume not supported in state: %s."
@@ -3837,9 +3793,6 @@ msgstr ""
 "json do Keystone, que permite que o administrador em nuvem liste e obtenha "
 "qualquer projeto. "
 
-msgid "Must specify 'connector'"
-msgstr "Deve especificar 'conector'"
-
 msgid "Must specify 'new_volume'"
 msgstr "Deve especificar 'new_volume'"
 
@@ -3877,12 +3830,6 @@ msgstr "Deve especificar um status válido"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "Deve especificar uma classe ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "Deve especificar inicializável na solicitação."
-
-msgid "Must specify readonly in request."
-msgstr "Deve especificar somente leitura na solicitação."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr ""
@@ -3951,12 +3898,6 @@ msgstr ""
 "O novo tamanho deve ser maior que o tamanho real a partir do armazenamento "
 "de backend. realsize: %(oldsize)s, newsize: %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr "Novo tamanho do volume deve ser especificado como um número inteiro."
-
-msgid "New volume type must be specified."
-msgstr "Novo tipo de volume deve ser especificado."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Tipo de volume novo não especificado em request_spec."
 
@@ -3978,9 +3919,6 @@ msgstr "Nenhum portal iSCSI ativo com IPs de iSCSI fornecidos"
 msgid "No backups available to do an incremental backup."
 msgstr "Não há backups disponíveis para fazer um backup incremental."
 
-msgid "No cinder entries in syslog!"
-msgstr "Nenhuma entrada do cinder no syslog!"
-
 #, python-format
 msgid "No cloned LUN named %s found on the filer"
 msgstr "Nenhum LUN clonado denominado %s foi localizado no arquivador"
@@ -3991,9 +3929,6 @@ msgstr "Nenhum nó de configuração localizado."
 #, python-format
 msgid "No element by given name %s."
 msgstr "Nenhum elemento pelo nome fornecido %s."
-
-msgid "No errors in logfiles!"
-msgstr "Sem erros nos arquivos de log!"
 
 #, python-format
 msgid "No file found with %s as backing file."
@@ -4017,9 +3952,6 @@ msgstr "Nenhum portal de iscsi bom localizado para %s."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "Nenhuma porta ativada para iSCSI na matriz de destino."
-
-msgid "No image_name was specified in request."
-msgstr "Nenhum image_name foi especificado na solicitação."
 
 msgid "No initiator connected to fabric."
 msgstr "Nenhum iniciador conectado à malha."
@@ -4202,9 +4134,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "O caminho para o certificado do servidor REST deve ser especificado."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Por favor, especifique o nome para as especificações QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4461,9 +4390,6 @@ msgstr "O corpo da solicitação contém excesso de itens"
 
 msgid "Request body contains too many items."
 msgstr "Corpo da requisição contém itens demais."
-
-msgid "Request body empty"
-msgstr "Corpo da solicitação vazio"
 
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
@@ -4959,9 +4885,6 @@ msgstr ""
 "O host não está pronto para efetuar failback. Ressincronize os volumes e "
 "continue a replicação nos backends LEftHand."
 
-msgid "The key cannot be None."
-msgstr "A chave não pode ser Nenhum."
-
 msgid "The method update_migrated_volume is not implemented."
 msgstr "O método update_migrated_volume não está implementado."
 
@@ -5095,10 +5018,6 @@ msgstr "Não há compartilhamento que possa hospedar %(volume_size)sG"
 #, python-format
 msgid "There is no share which can host %(volume_size)sG."
 msgstr "Não há nenhum compartilhamento que possa armazenar %(volume_size)sG."
-
-#, python-format
-msgid "There is no such action: %s"
-msgstr "Essa ação não existe: %s"
 
 msgid "There is no virtual disk device."
 msgstr "Não há nenhum dispositivo de disco virtual."
@@ -5362,9 +5281,6 @@ msgstr "Não é possível localizar mapeamentos de iSCSI."
 #, python-format
 msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "Não foi possível encontrar ssh_hosts_key_file: %s"
-
-msgid "Unable to find system log file!"
-msgstr "Não é possível encontrar o arquivo de log do sistema!"
 
 #, python-format
 msgid ""
@@ -7059,10 +6975,6 @@ msgstr ""
 #, python-format
 msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp não tem aspas %s"
-
-#, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy deve ser 'on-demand' ou 'never', transmitido: %s"
 
 #, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."

@@ -39,7 +39,7 @@ Driver Configuration Reference
    drivers/dell-storagecenter-driver
    drivers/dell-emc-unity-driver
    drivers/dell-emc-vnx-driver
-   drivers/emc-vmax-driver
+   drivers/dell-emc-vmax-driver
    drivers/emc-xtremio-driver
    drivers/fujitsu-eternus-dx-driver
    drivers/hpe-3par-driver
@@ -51,6 +51,7 @@ Driver Configuration Reference
    drivers/ibm-storage-volume-driver
    drivers/ibm-storwize-svc-driver
    drivers/infinidat-volume-driver
+   drivers/inspur-instorage-driver
    drivers/itri-disco-driver
    drivers/kaminario-driver
    drivers/lenovo-driver
@@ -66,6 +67,7 @@ Driver Configuration Reference
    drivers/storpool-volume-driver
    drivers/synology-dsm-driver
    drivers/tintri-volume-driver
+   drivers/veritas-access-iscsi-driver
    drivers/vzstorage-driver
    drivers/vmware-vmdk-driver
    drivers/windows-iscsi-volume-driver
