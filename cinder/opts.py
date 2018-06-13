@@ -27,16 +27,14 @@ from cinder import objects
 objects.register_all()
 
 from cinder.api import common as cinder_api_common
-from cinder.api.contrib import types_extra_specs as \
-    cinder_api_contrib_typesextraspecs
 from cinder.api.middleware import auth as cinder_api_middleware_auth
 from cinder.api.views import versions as cinder_api_views_versions
 from cinder.backup import api as cinder_backup_api
 from cinder.backup import chunkeddriver as cinder_backup_chunkeddriver
 from cinder.backup import driver as cinder_backup_driver
 from cinder.backup.drivers import ceph as cinder_backup_drivers_ceph
+from cinder.backup.drivers import gcs as cinder_backup_drivers_gcs
 from cinder.backup.drivers import glusterfs as cinder_backup_drivers_glusterfs
-from cinder.backup.drivers import google as cinder_backup_drivers_google
 from cinder.backup.drivers import nfs as cinder_backup_drivers_nfs
 from cinder.backup.drivers import posix as cinder_backup_drivers_posix
 from cinder.backup.drivers import swift as cinder_backup_drivers_swift
@@ -210,15 +208,14 @@ def list_opts():
         ('DEFAULT',
             itertools.chain(
                 cinder_api_common.api_common_opts,
-                cinder_api_contrib_typesextraspecs.extraspec_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
                 cinder_api_views_versions.versions_opts,
                 cinder_backup_api.backup_api_opts,
                 cinder_backup_chunkeddriver.chunkedbackup_service_opts,
                 cinder_backup_driver.service_opts,
                 cinder_backup_drivers_ceph.service_opts,
+                cinder_backup_drivers_gcs.gcsbackup_service_opts,
                 cinder_backup_drivers_glusterfs.glusterfsbackup_service_opts,
-                cinder_backup_drivers_google.gcsbackup_service_opts,
                 cinder_backup_drivers_nfs.nfsbackup_service_opts,
                 cinder_backup_drivers_posix.posixbackup_service_opts,
                 cinder_backup_drivers_swift.swiftbackup_service_opts,
@@ -254,6 +251,7 @@ def list_opts():
                 [cinder_volume_api.az_cache_time_opt],
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
+                cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_datacore_driver.datacore_opts,
                 cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
                 cinder_volume_drivers_inspur_instorage_instoragecommon.
@@ -283,6 +281,7 @@ def list_opts():
             itertools.chain(
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
+                cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_coprhd_common.volume_opts,
                 cinder_volume_drivers_coprhd_scaleio.scaleio_opts,
                 cinder_volume_drivers_datera_dateraiscsi.d_opts,

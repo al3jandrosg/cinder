@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-04-17 01:13+0000\n"
+"POT-Creation-Date: 2018-05-31 14:50+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -1364,9 +1364,6 @@ msgstr "La colonna prevista non è stata trovata in %(fun)s: %(hdr)s."
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "Impossibile trovare la chiave prevista %(key)s in %(fun)s: %(raw)s."
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "La causa disabilitata contiene caratteri non validi o è troppo lunga"
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "Impossibile trovare il dominio con nome %s.  "
@@ -2062,13 +2059,6 @@ msgid "Error[status] %(stat)s - [result] %(res)s] while getting volume id."
 msgstr ""
 "Errore [status] %(stat)s - [result] %(res)s] durante il richiamo dell'id "
 "volume."
-
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr ""
-"Superamento numero max tentativi di pianificazione %(max_attempts)d per il "
-"volume %(volume_id)s"
 
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "Superato il limite di istantanee per volume"
@@ -3295,9 +3285,6 @@ msgstr ""
 "questo caso, può essere risolto provando a ripetere l'eliminazione dopo 30 "
 "secondi."
 
-msgid "Incorrect request body format"
-msgstr "Il formato del corpo della richiesta non è corretto"
-
 msgid "Incremental backups exist for this backup."
 msgstr "Per questo backup esistono backup incrementali."
 
@@ -3713,9 +3700,6 @@ msgstr "url richiesta non corretto"
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "Risposta non valida per il comando %(cmd)s: %(reason)s"
 
-msgid "Malformed scheduler_hints attribute"
-msgstr "Attributo scheduler_hints non corretto"
-
 #, python-format
 msgid "Malformed show fcns database string: %s"
 msgstr "Stringa comando show fcns database non corretta: %s"
@@ -3870,23 +3854,11 @@ msgstr ""
 "Eseguire questo comando come admin cloud utilizzando un Keystone policy.json "
 "che consenta all'admin cloud di visualizzare e ottenere qualsiasi progetto."
 
-msgid "Must specify 'new_volume'"
-msgstr "È necessario specificare 'new_volume'"
-
-msgid "Must specify 'status'"
-msgstr "È necessario specificare 'status'"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr ""
 "È necessario specificare 'status', 'attach_status' o 'migration_status' per "
 "l'aggiornamento."
-
-msgid "Must specify a valid attach status"
-msgstr "È necessario specificare uno stato di allegato valido"
-
-msgid "Must specify a valid migration status"
-msgstr "È necessario specificare uno stato di migrazione valido"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -3901,9 +3873,6 @@ msgid ""
 msgstr ""
 "È necessario specificare un tipo di provisioning %(valid)s valido, il valore "
 "'%(prov)s' non è valido."
-
-msgid "Must specify a valid status"
-msgstr "È necessario specificare uno stato valido"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "È necessario specificare una classe ExtensionManager"

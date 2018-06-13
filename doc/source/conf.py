@@ -58,6 +58,7 @@ extensions = ['sphinx.ext.coverage',
               'stevedore.sphinxext',
               'oslo_config.sphinxconfiggen',
               'ext.cinder_driverlist',
+              'ext.driver_opts',
               'oslo_policy.sphinxext',
               'oslo_policy.sphinxpolicygen',
               'sphinxcontrib.apidoc',
@@ -239,7 +240,7 @@ htmlhelp_basename = 'cinderdoc'
 # [howto/manual]).
 latex_documents = [
     ('index', 'Cinder.tex', u'Cinder Documentation',
-     u'Anso Labs, LLC', 'manual'),
+     u'Cinder Contributors', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

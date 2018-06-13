@@ -36,6 +36,7 @@ from cinder import context
 from cinder import coordination
 from cinder import db
 from cinder import exception
+from cinder.message import message_field
 from cinder import objects
 from cinder.objects import fields
 from cinder.policies import volumes as vol_policy
@@ -679,6 +680,38 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             self.assertRaises(exception.PolicyNotAuthorized,
                               volume_api.create, self.context, 1, 'name',
                               'description', multiattach=True)
+
+    @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
+    def test_create_volume_with_encrypted_volume_type_multiattach(self):
+        ctxt = context.get_admin_context()
+
+        cipher = 'aes-xts-plain64'
+        key_size = 256
+        control_location = 'front-end'
+
+        db.volume_type_create(ctxt,
+                              {'id': '61298380-0c12-11e3-bfd6-4b48424183be',
+                               'name': 'LUKS',
+                               'extra_specs': {'multiattach': '<is> True'}})
+        db.volume_type_encryption_create(
+            ctxt,
+            '61298380-0c12-11e3-bfd6-4b48424183be',
+            {'control_location': control_location,
+             'provider': ENCRYPTION_PROVIDER,
+             'cipher': cipher,
+             'key_size': key_size})
+
+        volume_api = cinder.volume.api.API()
+
+        db_vol_type = db.volume_type_get_by_name(ctxt, 'LUKS')
+
+        self.assertRaises(exception.InvalidVolume,
+                          volume_api.create,
+                          self.context,
+                          1,
+                          'name',
+                          'description',
+                          volume_type=db_vol_type)
 
     @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
     def test_create_volume_with_encrypted_volume_type_aes(self):
@@ -2409,16 +2442,22 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         fake_reservations = ['RESERVATION']
 
         # Test driver exception
-        with mock.patch.object(self.volume.driver,
-                               'extend_volume') as extend_volume:
-            extend_volume.side_effect =\
-                exception.CinderException('fake exception')
-            volume['status'] = 'extending'
-            self.volume.extend_volume(self.context, volume, '4',
-                                      fake_reservations)
-            volume.refresh()
-            self.assertEqual(2, volume.size)
-            self.assertEqual('error_extending', volume.status)
+        with mock.patch.object(
+                self.volume.driver, 'extend_volume',
+                side_effect=exception.CinderException('fake exception')):
+            with mock.patch.object(
+                    self.volume.message_api, 'create') as mock_create:
+                volume['status'] = 'extending'
+                self.volume.extend_volume(self.context, volume, '4',
+                                          fake_reservations)
+                volume.refresh()
+                self.assertEqual(2, volume.size)
+                self.assertEqual('error_extending', volume.status)
+                mock_create.assert_called_once_with(
+                    self.context,
+                    message_field.Action.EXTEND_VOLUME,
+                    resource_uuid=volume.id,
+                    detail=message_field.Detail.DRIVER_FAILED_EXTEND)
 
     @mock.patch('cinder.compute.API')
     def _test_extend_volume_manager_successful(self, volume, nova_api):

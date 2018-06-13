@@ -18,6 +18,10 @@
               - ^doc/.*$
               - ^releasenotes/.*$
         - openstack-tox-lower-constraints
+        - cinder-tox-functional-py36
+        - cinder-tox-py36
+        - cinder-rally-task:
+            voting: false
     gate:
       jobs:
         - cinder-tox-compliance
@@ -35,6 +39,18 @@
               - ^releasenotes/.*$
 
         - openstack-tox-lower-constraints
+    experimental:
+      jobs:
+        - tempest-cinder-v2-api:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^api-ref/.*$
+              - ^cinder/hacking/.*$
+              - ^cinder/locale/.*$
+              - ^cinder/tests/unit.*$
+              - ^contrib/block-box.*$
+              - ^doc/.*$
+              - ^releasenotes/.*$
 - job:
     # Previously named legacy-tempest-dsvm-full-lio
     name: cinder-tempest-dsvm-lvm-lio-barbican
@@ -97,3 +113,48 @@
       - ^releasenotes/.*$
       - ^setup.cfg$
       - ^tools/.*$
+- job:
+    # Testing running on bionic
+    name: cinder-tox-functional-py36
+    parent: openstack-tox
+    nodeset: ubuntu-bionic
+    vars:
+        tox_envlist: functional-py36
+    irrelevant-files:
+      - ^.*\.rst$
+      - ^api-ref/.*$
+      - ^cinder/hacking/.*$
+      - ^cinder/locale/.*$
+      - ^cinder/tests/unit.*$
+      - ^contrib/block-box.*$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+      - ^tools/.*$
+- job:
+    # Testing running on bionic
+    name: cinder-tox-py36
+    parent: openstack-tox
+    nodeset: ubuntu-bionic
+    vars:
+        tox_envlist: py36
+    irrelevant-files:
+      - ^.*\.rst$
+      - ^api-ref/.*$
+      - ^cinder/hacking/.*$
+      - ^cinder/locale/.*$
+      - ^cinder/tests/functional.*$
+      - ^contrib/block-box.*$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+      - ^tools/.*$
+
+- job:
+    name: cinder-rally-task
+    parent: rally-task-cinder
+    timeout: 7800
+    vars:
+      devstack_plugins:
+        rally-openstack: https://git.openstack.org/openstack/rally-openstack
+      rally_task: rally-jobs/cinder.yaml
+    required-projects:
+      - openstack/rally-openstack

@@ -3,7 +3,7 @@ Lenovo Fibre Channel and iSCSI drivers
 ======================================
 
 The ``LenovoFCDriver`` and ``LenovoISCSIDriver`` Cinder drivers allow
-Lenovo S3200 or S2200 arrays to be used for block storage in OpenStack
+Lenovo S-Series arrays to be used for block storage in OpenStack
 deployments.
 
 System requirements
@@ -11,7 +11,7 @@ System requirements
 
 To use the Lenovo drivers, the following are required:
 
-- Lenovo S3200 or S2200 array with:
+- Lenovo S2200, S3200, DS2200, DS4200 or DS6200 array with:
 
   - iSCSI or FC host interfaces
   - G22x firmware or later
@@ -34,6 +34,12 @@ Supported operations
 - Migrate a volume with back-end assistance.
 - Retype a volume.
 - Manage and unmanage a volume.
+
+.. note::
+
+  The generic grouping functionality supported in the G265 and later
+  firmware is not supported by OpenStack Cinder due to differences in
+  the grouping models used in Cinder and the S-Series firmware.
 
 Configuring the array
 ~~~~~~~~~~~~~~~~~~~~~
@@ -59,9 +65,11 @@ Configuring the array
       let the volume scheduler choose where new volumes are allocated.
 
    -  The rest of the options will be repeated for each storage pool in a
-      given array: the appropriate Cinder driver name; IP address or
-      host name of the array management interface; the username and password
-      of an array user account with ``manage`` privileges; and the iSCSI IP
+      given array: ``volume_driver`` specifies the Cinder driver name;
+      ``san_ip`` specifies the IP addresses or host names of the array's
+      management controllers; ``san_login`` and ``san_password`` specify
+      the username and password of an array user account with ``manage``
+      privileges; and ``lenovo_iscsi_ips`` specfies the iSCSI IP
       addresses for the array if using the iSCSI transport protocol.
 
    In the examples below, two back ends are defined, one for pool A and one
@@ -156,4 +164,7 @@ Driver-specific options
 The following table contains the configuration options that are specific
 to the Lenovo drivers.
 
-.. include:: ../../tables/cinder-lenovo.inc
+.. config-table::
+   :config-target: Lenovo
+
+   cinder.volume.drivers.lenovo.lenovo_common

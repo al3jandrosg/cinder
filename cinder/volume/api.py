@@ -1714,6 +1714,11 @@ class API(base.Base):
                         'quota_reservations': reservations,
                         'old_reservations': old_reservations}
 
+        type_azs = volume_utils.extract_availability_zones_from_volume_type(
+            new_type)
+        if type_azs is not None:
+            request_spec['availability_zones'] = type_azs
+
         self.scheduler_rpcapi.retype(context, volume,
                                      request_spec=request_spec,
                                      filter_properties={})
@@ -2163,7 +2168,7 @@ class API(base.Base):
         ctxt.authorize(attachment_policy.DELETE_POLICY,
                        target_obj=attachment)
         volume = objects.Volume.get_by_id(ctxt, attachment.volume_id)
-        if attachment.attach_status == 'reserved':
+        if attachment.attach_status == fields.VolumeAttachStatus.RESERVED:
             self.db.volume_detached(ctxt.elevated(), attachment.volume_id,
                                     attachment.get('id'))
             self.db.volume_admin_metadata_delete(ctxt.elevated(),

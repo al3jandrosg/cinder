@@ -102,7 +102,7 @@ RBD_OPTS = [
                 help='Set to True for driver to report total capacity as a '
                      'dynamic value -used + current free- and to False to '
                      'report a static value -quota max bytes if defined and '
-                     'global size of cluster if not-.'),
+                     'global size of cluster if not.'),
     cfg.BoolOpt('rbd_exclusive_cinder_pool', default=False,
                 help="Set to True if the pool is used exclusively by Cinder. "
                      "On exclusive use driver won't query images' provisioned "
@@ -147,7 +147,6 @@ class RBDVolumeProxy(object):
                                            read_only=read_only)
             self.volume = tpool.Proxy(self.volume)
         except driver.rbd.Error:
-            LOG.exception("error opening rbd image %s", name)
             if self._close_conn:
                 driver._disconnect_from_rados(rados_client, rados_ioctx)
             raise
@@ -199,6 +198,8 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Cinder_Jenkins"
+
+    SUPPORTS_ACTIVE_ACTIVE = True
 
     SYSCONFDIR = '/etc/ceph/'
 
@@ -403,15 +404,15 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
         total_provisioned = 0
         with RADOSClient(self) as client:
             for t in self.RBDProxy().list(client.ioctx):
-                with RBDVolumeProxy(self, t, read_only=True,
-                                    client=client.cluster,
-                                    ioctx=client.ioctx) as v:
-                    try:
+                try:
+                    with RBDVolumeProxy(self, t, read_only=True,
+                                        client=client.cluster,
+                                        ioctx=client.ioctx) as v:
                         size = v.size()
-                    except self.rbd.ImageNotFound:
-                        LOG.debug("Image %s is not found.", t)
-                    else:
-                        total_provisioned += size
+                except self.rbd.ImageNotFound:
+                    LOG.debug("Image %s is not found.", t)
+                else:
+                    total_provisioned += size
 
         total_provisioned = math.ceil(float(total_provisioned) / units.Gi)
         return total_provisioned
@@ -1185,8 +1186,8 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
             secondary_id = candidates.pop()
         return secondary_id, self._get_target_config(secondary_id)
 
-    def failover_host(self, context, volumes, secondary_id=None, groups=None):
-        """Failover to replication target."""
+    def failover(self, context, volumes, secondary_id=None, groups=None):
+        """Failover replicated volumes."""
         LOG.info('RBD driver failover started.')
         if not self._is_replication_enabled:
             raise exception.UnableToFailOver(
@@ -1201,14 +1202,34 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
 
         # Try to demote the volumes first
         demotion_results = self._demote_volumes(volumes)
+
         # Do the failover taking into consideration if they have been demoted
         updates = [self._failover_volume(volume, remote, is_demoted,
                                          replication_status)
                    for volume, is_demoted in zip(volumes, demotion_results)]
-        self._active_backend_id = secondary_id
-        self._active_config = remote
+
         LOG.info('RBD driver failover completed.')
         return secondary_id, updates, []
+
+    def failover_completed(self, context, secondary_id=None):
+        """Failover to replication target."""
+        LOG.info('RBD driver failover completion started.')
+        secondary_id, remote = self._get_failover_target_config(secondary_id)
+
+        self._active_backend_id = secondary_id
+        self._active_config = remote
+        LOG.info('RBD driver failover completion completed.')
+
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
+        """Failover to replication target.
+
+        This function combines calls to failover() and failover_completed() to
+        perform failover when Active/Active is not enabled.
+        """
+        active_backend_id, volume_update_list, group_update_list = (
+            self.failover(context, volumes, secondary_id, groups))
+        self.failover_completed(context, secondary_id)
+        return active_backend_id, volume_update_list, group_update_list
 
     def ensure_export(self, context, volume):
         """Synchronously recreates an export for a logical volume."""
@@ -1550,6 +1571,12 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                             # image is considered to be used by client(s).
                             image_info['safe_to_manage'] = False
                             image_info['reason_not_safe'] = 'volume in use'
+                        elif image_name.endswith('.deleted'):
+                            # parent of cloned volume which marked as deleted
+                            # should not be manageable.
+                            image_info['safe_to_manage'] = False
+                            image_info['reason_not_safe'] = (
+                                'volume marked as deleted')
                         else:
                             image_info['safe_to_manage'] = True
                             image_info['reason_not_safe'] = None
@@ -1731,7 +1758,14 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
             snapshot_name = existing_ref['source-name']
             volume.rename_snap(utils.convert_str(snapshot_name),
                                utils.convert_str(snapshot.name))
+            if not volume.is_protected_snap(snapshot.name):
+                volume.protect_snap(snapshot.name)
 
     def unmanage_snapshot(self, snapshot):
         """Removes the specified snapshot from Cinder management."""
-        pass
+        with RBDVolumeProxy(self, snapshot.volume_name) as volume:
+            volume.set_snap(snapshot.name)
+            children = volume.list_children()
+            volume.set_snap(None)
+            if not children and volume.is_protected_snap(snapshot.name):
+                volume.unprotect_snap(snapshot.name)

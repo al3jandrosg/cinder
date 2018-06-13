@@ -19,7 +19,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-04-17 01:13+0000\n"
+"POT-Creation-Date: 2018-05-31 14:50+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -870,13 +870,6 @@ msgid ""
 msgstr ""
 "无法同时提供“cgsnapshot_id”和“source_cgid”以从源创建一致性组 %(name)s。"
 
-#, python-format
-msgid ""
-"Cannot provide both 'group_snapshot_id' and 'source_group_id' to create "
-"group %(name)s from source."
-msgstr ""
-"无法同时提供“group_snapshot_id”和“source_group_id”以通过源创建组 %(name)s。"
-
 msgid "Cannot register resource"
 msgstr "无法注册资源"
 
@@ -1553,9 +1546,6 @@ msgstr "%(fun)s 中找不到需要的列：%(hdr)s。"
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "在 %(fun)s 中找不到期望的键 %(key)s：%(raw)s。"
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "禁用的原因包含无效字符或太长"
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "找不到名称为 %s 的域。"
@@ -1614,13 +1604,6 @@ msgid ""
 "consistency group %(name)s from source."
 msgstr ""
 "必须提供“cgsnapshot_id”或者“source_cgid”，以从源创建一致性组 %(name)s。"
-
-#, python-format
-msgid ""
-"Either 'group_snapshot_id' or 'source_group_id' must be provided to create "
-"group %(name)s from source."
-msgstr ""
-"必须提供“group_snapshot_id”或者“source_group_id”，才能通过源创建组 %(name)s。"
 
 #, python-format
 msgid ""
@@ -2215,11 +2198,6 @@ msgstr ""
 #, python-format
 msgid "Error[status] %(stat)s - [result] %(res)s] while getting volume id."
 msgstr "获取卷标识时发生错误 [status] %(stat)s - [result] %(res)s]。"
-
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr "对于卷 %(volume_id)s，已超过最大调度尝试次数 %(max_attempts)d"
 
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "超出每个卷的快照数限制"
@@ -3455,9 +3433,6 @@ msgstr ""
 "不正确的端口号. 负载均衡端口号为: %(lb_api_port)s, api服务端口号为: "
 "%(apisvc_port)s"
 
-msgid "Incorrect request body format"
-msgstr "不正确的请求主体格式"
-
 msgid "Incremental backups exist for this backup."
 msgstr "对于此备份，存在增量备份。"
 
@@ -3728,10 +3703,6 @@ msgid "Invalid update setting: '%s'"
 msgstr "无效的更新设置：'%s'"
 
 #, python-format
-msgid "Invalid value '%s' for delete-volumes flag."
-msgstr "删除卷标志的值\"%s\"无效。"
-
-#, python-format
 msgid "Invalid value '%s' for force."
 msgstr "值“%s”对于 force 无效。"
 
@@ -3897,9 +3868,6 @@ msgstr "错误格式的请求url"
 #, python-format
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "对命令 %(cmd)s 的响应的格式不正确：%(reason)s"
-
-msgid "Malformed scheduler_hints attribute"
-msgstr "错误格式的 scheduler_hints 属性"
 
 #, python-format
 msgid "Malformed show fcns database string: %s"
@@ -4070,21 +4038,9 @@ msgstr ""
 "必须以云管理员身份使用 Keystone policy.json（它允许云管理员列示和获取任何项"
 "目）运行此命令。"
 
-msgid "Must specify 'new_volume'"
-msgstr "必须指定“new_volume”"
-
-msgid "Must specify 'status'"
-msgstr "必须指定“status”"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr "必须指定“status”、“attach_status”或“migration_status”以进行更新。"
-
-msgid "Must specify a valid attach status"
-msgstr "必须指定有效连接状态"
-
-msgid "Must specify a valid migration status"
-msgstr "必须指定有效迁移状态"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -4095,9 +4051,6 @@ msgid ""
 "Must specify a valid provisioning type %(valid)s, value '%(prov)s' is "
 "invalid."
 msgstr "指定有效供应类型 %(valid)s，值“%(prov)s”无效。"
-
-msgid "Must specify a valid status"
-msgstr "必须指定有效状态"
 
 msgid "Must specify an ExtensionManager class"
 msgstr "必须明确一个ExtensionManager类"
@@ -7312,10 +7265,6 @@ msgstr "已更改组快照"
 msgid "group_snapshots assigned"
 msgstr "已分配组快照"
 
-#, python-format
-msgid "group_type must be provided to create group %(name)s."
-msgstr "创建组%(name)s时必须提供group_type。"
-
 msgid "group_type_id cannot be None"
 msgstr "group_type_id 不能为None"
 
@@ -7673,10 +7622,6 @@ msgstr "已分配卷类型"
 #, python-format
 msgid "volume_types must be provided to create consistency group %(name)s."
 msgstr "必须提供 volume_types，才能创建一致性组 %(name)s。"
-
-#, python-format
-msgid "volume_types must be provided to create group %(name)s."
-msgstr "必须提供volume_types，才能创建组 %(name)s。"
 
 msgid "volumes assigned"
 msgstr "已分配卷"

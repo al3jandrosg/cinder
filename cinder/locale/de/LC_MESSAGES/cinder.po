@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-04-17 01:13+0000\n"
+"POT-Creation-Date: 2018-05-31 14:50+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -1419,9 +1419,6 @@ msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr ""
 "Der erwartete Schlüssel %(key)s wurde in %(fun)s nicht gefunden: %(raw)s."
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "Ursache für Inaktivierung: Enthält ungültige Zeichen oder ist zu lang."
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "Domäne mit dem Namen %s wurde nicht gefunden."
@@ -2108,13 +2105,6 @@ msgid "Error[status] %(stat)s - [result] %(res)s] while getting volume id."
 msgstr ""
 "Fehler [Status] %(stat)s - [Ergebnis] %(res)s] beim Abrufen der Datenträger-"
 "ID."
-
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr ""
-"Die maximal zulässige Anzahl von %(max_attempts)d Planungsversuchen wurde "
-"für den Datenträger %(volume_id)s überschritten."
 
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "Maximale Anzahl an Schattenkopien pro Datenträger überschritten."
@@ -3370,9 +3360,6 @@ msgstr ""
 "behoben werden, wenn Sie den Löschversuch nach Ablauf von 30 Sekunden "
 "wiederholen."
 
-msgid "Incorrect request body format"
-msgstr "Falsches Format für Anforderungshauptteil"
-
 msgid "Incremental backups exist for this backup."
 msgstr "Inkrementelle Sicherungen sind für diese Sicherung vorhanden."
 
@@ -3788,9 +3775,6 @@ msgstr "Fehlerhafte Anforderungs-URL"
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "Fehlerhafte Antwort auf Befehl %(cmd)s: %(reason)s"
 
-msgid "Malformed scheduler_hints attribute"
-msgstr "Attribut 'scheduler_hints' fehlerhaft"
-
 #, python-format
 msgid "Malformed show fcns database string: %s"
 msgstr "Fehlerhafte Zeichenkette für Anzeige von FCNS-Datenbank: %s"
@@ -3949,23 +3933,11 @@ msgstr ""
 "Richtliniendatei 'policy.json' ausgeführt werden, damit der "
 "Cloudadministrator beliebige Projekte auflisten und abrufen kann. "
 
-msgid "Must specify 'new_volume'"
-msgstr "'new_volume' muss angegeben werden."
-
-msgid "Must specify 'status'"
-msgstr "'status' muss angegeben werden."
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr ""
 "'status', 'attach_status' oder 'migration_status' muss für die "
 "Aktualisierung angegeben werden. "
-
-msgid "Must specify a valid attach status"
-msgstr "Ein gültiger Anhangstatus muss angegeben werden."
-
-msgid "Must specify a valid migration status"
-msgstr "Ein gültiger Migrationsstatus muss angegeben werden."
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -3980,9 +3952,6 @@ msgid ""
 msgstr ""
 "Ein gültiger Bereitstellungstyp %(valid)s muss angegeben werden. Wert "
 "'%(prov)s' ist ungültig."
-
-msgid "Must specify a valid status"
-msgstr "Ein gültiger Status muss angegeben werden."
 
 msgid "Must specify an ExtensionManager class"
 msgstr "Eine ExtensionManager-Klasse muss angegeben werden."

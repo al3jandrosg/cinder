@@ -18,6 +18,7 @@ Tests For Scheduler
 """
 
 import collections
+import copy
 from datetime import datetime
 import ddt
 import mock
@@ -138,13 +139,51 @@ class SchedulerManagerTestCase(test.TestCase):
         mock_extend.assert_called_once_with(
             self.context, volume, 2, 'fake_reservation')
 
+    @ddt.data({'key': 'value'},
+              objects.RequestSpec(volume_id=fake.VOLUME2_ID))
+    def test_append_operation_decorator(self, rs):
+
+        @manager.append_operation_type()
+        def _fake_schedule_method1(request_spec=None):
+            return request_spec
+
+        @manager.append_operation_type(name='_fake_schedule_method22')
+        def _fake_schedule_method2(request_spec=None):
+            return request_spec
+
+        @manager.append_operation_type()
+        def _fake_schedule_method3(request_spec2=None):
+            return request_spec2
+
+        result1 = _fake_schedule_method1(request_spec=copy.deepcopy(rs))
+        result2 = _fake_schedule_method2(request_spec=copy.deepcopy(rs))
+        result3 = _fake_schedule_method3(request_spec2=copy.deepcopy(rs))
+        self.assertEqual('_fake_schedule_method1', result1['operation'])
+        self.assertEqual('_fake_schedule_method22', result2['operation'])
+        self.assertEqual(rs, result3)
+
+    @ddt.data([{'key1': 'value1'}, {'key1': 'value2'}],
+              [objects.RequestSpec(volume_id=fake.VOLUME_ID),
+               objects.RequestSpec(volume_id=fake.VOLUME2_ID)])
+    def test_append_operation_decorator_with_list(self, rs_list):
+
+        @manager.append_operation_type()
+        def _fake_schedule_method(request_spec_list=None):
+            return request_spec_list
+
+        result1 = _fake_schedule_method(request_spec_list=rs_list)
+        for rs in result1:
+            self.assertEqual('_fake_schedule_method', rs['operation'])
+
     @ddt.data('available', 'in-use')
     @mock.patch('cinder.scheduler.driver.Scheduler.backend_passes_filters')
     @mock.patch(
         'cinder.scheduler.host_manager.BackendState.consume_from_volume')
     @mock.patch('cinder.volume.rpcapi.VolumeAPI.extend_volume')
     @mock.patch('cinder.quota.QUOTAS.rollback')
-    def test_extend_volume_no_valid_host(self, status, mock_rollback,
+    @mock.patch('cinder.message.api.API.create')
+    def test_extend_volume_no_valid_host(self, status, mock_create,
+                                         mock_rollback,
                                          mock_extend, mock_consume,
                                          mock_backend_passes):
         volume = fake_volume.fake_volume_obj(self.context,
@@ -165,6 +204,11 @@ class SchedulerManagerTestCase(test.TestCase):
                 self.context, 'fake_reservation', project_id=volume.project_id)
             mock_consume.assert_not_called()
             mock_extend.assert_not_called()
+            mock_create.assert_called_once_with(
+                self.context,
+                message_field.Action.EXTEND_VOLUME,
+                resource_uuid=volume.id,
+                exception=no_valid_backend)
 
     @mock.patch('cinder.quota.QuotaEngine.expire')
     def test_clean_expired_reservation(self, mock_clean):
@@ -583,4 +627,5 @@ class SchedulerDriverModuleTestCase(test.TestCase):
         _mock_vol_update.assert_called_once_with(
             self.context, volume.id, {'host': 'fake_host',
                                       'cluster_name': 'fake_cluster',
-                                      'scheduled_at': scheduled_at})
+                                      'scheduled_at': scheduled_at,
+                                      'availability_zone': None})

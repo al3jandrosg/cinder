@@ -207,6 +207,10 @@ class InvalidAvailabilityZone(Invalid):
     message = _("Availability zone '%(az)s' is invalid.")
 
 
+class InvalidTypeAvailabilityZones(Invalid):
+    message = _("Volume type's availability zones are invalid %(az)s.")
+
+
 class InvalidVolumeType(Invalid):
     message = _("Invalid volume type: %(reason)s")
 
@@ -1349,3 +1353,17 @@ class ServiceUserTokenNoAuth(CinderException):
     message = _("The [service_user] send_service_user_token option was "
                 "requested, but no service auth could be loaded. Please check "
                 "the [service_user] configuration section.")
+
+
+class UnsupportedNVMETProtocol(Invalid):
+    message = _("An invalid 'target_protocol' "
+                "value was provided: %(protocol)s")
+
+
+# NVMET driver
+class NVMETTargetAddError(CinderException):
+    message = "Failed to add subsystem: %(subsystem)s"
+
+
+class NVMETTargetDeleteError(CinderException):
+    message = "Failed to delete subsystem: %(subsystem)s"

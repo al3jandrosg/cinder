@@ -2605,6 +2605,11 @@ class VolumeManager(manager.CleanableManager,
         except Exception:
             LOG.exception("Extend volume failed.",
                           resource=volume)
+            self.message_api.create(
+                context,
+                message_field.Action.EXTEND_VOLUME,
+                resource_uuid=volume.id,
+                detail=message_field.Detail.DRIVER_FAILED_EXTEND)
             try:
                 self.db.volume_update(context, volume.id,
                                       {'status': 'error_extending'})
@@ -4508,7 +4513,7 @@ class VolumeManager(manager.CleanableManager,
             # TODO(jdg): object method here
             self.db.volume_attachment_update(
                 context, attachment.get('id'),
-                {'attach_status': 'error_detaching'})
+                {'attach_status': fields.VolumeAttachStatus.ERROR_DETACHING})
         else:
             self.db.volume_detached(context.elevated(), vref.id,
                                     attachment.get('id'))

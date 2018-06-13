@@ -579,14 +579,17 @@ class RBDTestCase(test.TestCase):
     @mock.patch.object(driver.RBDDriver, '_get_image_status')
     def test_get_manageable_volumes(self, mock_get_image_status):
         cinder_vols = [{'id': '00000000-0000-0000-0000-000000000000'}]
-        vols = ['volume-00000000-0000-0000-0000-000000000000', 'vol1', 'vol2']
+        vols = ['volume-00000000-0000-0000-0000-000000000000', 'vol1', 'vol2',
+                'volume-11111111-1111-1111-1111-111111111111.deleted']
         self.mock_rbd.RBD.return_value.list.return_value = vols
         image = self.mock_proxy.return_value.__enter__.return_value
-        image.size.side_effect = [2 * units.Gi, 4 * units.Gi, 6 * units.Gi]
+        image.size.side_effect = [2 * units.Gi, 4 * units.Gi, 6 * units.Gi,
+                                  8 * units.Gi]
         mock_get_image_status.side_effect = [
             {'watchers': []},
             {'watchers': [{"address": "192.168.120.61:0\/3012034728",
-                           "client": 44431941, "cookie": 94077162321152}]}]
+                           "client": 44431941, "cookie": 94077162321152}]},
+            {'watchers': []}]
         res = self.driver.get_manageable_volumes(
             cinder_vols, None, 1000, 0, ['size'], ['asc'])
         exp = [{'size': 2, 'reason_not_safe': 'already managed',
@@ -599,7 +602,13 @@ class RBDTestCase(test.TestCase):
                 'cinder_id': None, 'extra_info': None},
                {'size': 6, 'reason_not_safe': 'volume in use',
                 'safe_to_manage': False, 'reference': {'source-name': 'vol2'},
-                'cinder_id': None, 'extra_info': None}]
+                'cinder_id': None, 'extra_info': None},
+               {'size': 8, 'reason_not_safe': 'volume marked as deleted',
+                'safe_to_manage': False, 'cinder_id': None, 'extra_info': None,
+                'reference': {
+                    'source-name':
+                        'volume-11111111-1111-1111-1111-111111111111.deleted'}}
+               ]
         self.assertEqual(exp, res)
 
     @common_mocks
@@ -1804,7 +1813,7 @@ class RBDTestCase(test.TestCase):
             [mock.call(mock.ANY, v, remote, False,
                        fields.ReplicationStatus.FAILED_OVER)
              for v in volumes])
-        mock_get_cfg.assert_called_once_with(secondary_id)
+        mock_get_cfg.assert_called_with(secondary_id)
 
     @mock.patch.object(driver.RBDDriver, '_failover_volume', autospec=True)
     def test_failover_host_failback(self, mock_failover_vol):
@@ -1945,9 +1954,11 @@ class RBDTestCase(test.TestCase):
         exist_snapshot = 'snapshot-exist'
         existing_ref = {'source-name': exist_snapshot}
         proxy.rename_snap.return_value = 0
+        proxy.is_protected_snap.return_value = False
         self.driver.manage_existing_snapshot(self.snapshot_b, existing_ref)
         proxy.rename_snap.assert_called_with(exist_snapshot,
                                              self.snapshot_b.name)
+        proxy.protect_snap.assert_called_with(self.snapshot_b.name)
 
     @common_mocks
     def test_manage_existing_snapshot_with_exist_rbd_image(self):
@@ -1964,42 +1975,46 @@ class RBDTestCase(test.TestCase):
         # Make sure the exception was raised
         self.assertEqual([self.mock_rbd.ImageExists], RAISED_EXCEPTIONS)
 
+    @common_mocks
+    def test_unmanage_snapshot(self):
+        proxy = self.mock_proxy.return_value
+        proxy.__enter__.return_value = proxy
+        proxy.list_children.return_value = []
+        proxy.is_protected_snap.return_value = True
+        self.driver.unmanage_snapshot(self.snapshot_b)
+        proxy.unprotect_snap.assert_called_with(self.snapshot_b.name)
+
     @mock.patch('cinder.volume.drivers.rbd.RBDVolumeProxy')
     @mock.patch('cinder.volume.drivers.rbd.RADOSClient')
     @mock.patch('cinder.volume.drivers.rbd.RBDDriver.RBDProxy')
     def test__get_usage_info(self, rbdproxy_mock, client_mock, volproxy_mock):
-        def FakeVolProxy(size):
-            if size == -1:
-                size_mock = mock.Mock(side_effect=MockImageNotFoundException)
-            else:
-                size_mock = mock.Mock(return_value=size * units.Gi)
-            return mock.Mock(return_value=mock.Mock(size=size_mock))
+
+        def FakeVolProxy(size_or_exc):
+            return mock.Mock(return_value=mock.Mock(
+                size=mock.Mock(side_effect=(size_or_exc,))))
 
         volumes = ['volume-1', 'non-existent', 'non-cinder-volume']
 
         client = client_mock.return_value.__enter__.return_value
         rbdproxy_mock.return_value.list.return_value = volumes
 
-        volproxy_mock.side_effect = [
-            mock.Mock(**{'__enter__': FakeVolProxy(1.0),
-                         '__exit__': mock.Mock()}),
-            mock.Mock(**{'__enter__': FakeVolProxy(-1),
-                         '__exit__': mock.Mock()}),
-            mock.Mock(**{'__enter__': FakeVolProxy(2.0),
-                         '__exit__': mock.Mock()})
-        ]
-
-        with mock.patch.object(self.driver, 'rbd') as mock_rbd:
-            mock_rbd.ImageNotFound = MockImageNotFoundException
+        with mock.patch.object(self.driver, 'rbd',
+                               ImageNotFound=MockImageNotFoundException):
+            volproxy_mock.side_effect = [
+                mock.MagicMock(**{'__enter__': FakeVolProxy(s)})
+                for s in (1.0 * units.Gi,
+                          self.driver.rbd.ImageNotFound,
+                          2.0 * units.Gi)
+            ]
             total_provision = self.driver._get_usage_info()
 
         rbdproxy_mock.return_value.list.assert_called_once_with(client.ioctx)
-        volproxy_mock.assert_has_calls([
-            mock.call(self.driver, volumes[0], read_only=True,
-                      client=client.cluster, ioctx=client.ioctx),
-            mock.call(self.driver, volumes[1], read_only=True,
-                      client=client.cluster, ioctx=client.ioctx),
-        ])
+
+        expected_volproxy_calls = [
+            mock.call(self.driver, v, read_only=True,
+                      client=client.cluster, ioctx=client.ioctx)
+            for v in volumes]
+        self.assertEqual(expected_volproxy_calls, volproxy_mock.mock_calls)
 
         self.assertEqual(3.00, total_provision)
 

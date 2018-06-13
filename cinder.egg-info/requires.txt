@@ -3,7 +3,7 @@ Babel!=2.4.0,>=2.3.4
 decorator>=3.4.0
 defusedxml>=0.5.0
 enum34>=1.0.4
-eventlet!=0.18.3,!=0.20.1,<0.21.0,>=0.18.2
+eventlet!=0.18.3,!=0.20.1,>=0.18.2
 greenlet>=0.4.10
 httplib2>=0.9.1
 iso8601>=0.1.11

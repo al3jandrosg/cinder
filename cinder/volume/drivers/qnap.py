@@ -63,16 +63,16 @@ CONF.register_opts(qnap_opts, group=configuration.SHARED_CONF_GROUP)
 class QnapISCSIDriver(san.SanISCSIDriver):
     """QNAP iSCSI based cinder driver
 
-      .. code-block:: default
+    .. code-block:: default
 
-        Version History:
-          1.0.0:
-                Initial driver (Only iSCSI).
-          1.2.001:
-                Add supports for Thin Provisioning, SSD Cache, Deduplication
-                , Compression and CHAP.
-          1.2.002:
-                Add support for QES fw 2.0.0.
+      Version History:
+        1.0.0:
+              Initial driver (Only iSCSI).
+        1.2.001:
+              Add supports for Thin Provisioning, SSD Cache, Deduplication,
+              Compression and CHAP.
+        1.2.002:
+              Add support for QES fw 2.0.0.
 
     NOTE: Set driver_ssl_cert_verify as True under backend section to
           enable SSL verification.
@@ -334,12 +334,13 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         while True:
             created_lun = self.api_executor.get_lun_info(
                 LUNIndex=create_lun_index)
-            if created_lun.find('LUNNAA') is not None:
+            if (created_lun is not None and
+                    created_lun.find('LUNNAA').text is not None):
                 lun_naa = created_lun.find('LUNNAA').text
 
             try_times = try_times + 3
             eventlet.sleep(self.TIME_INTERVAL)
-            if(try_times > max_wait_sec or lun_naa is not None):
+            if(try_times > max_wait_sec or lun_naa != ""):
                 break
 
         LOG.debug('LUNNAA: %s', lun_naa)
@@ -510,14 +511,15 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         while True:
             created_lun = self.api_executor.get_lun_info(
                 LUNName=cloned_lun_name)
-            if created_lun.find('LUNNAA') is not None:
+            if (created_lun is not None and
+                    created_lun.find('LUNNAA') is not None):
                 lun_naa = created_lun.find('LUNNAA').text
                 lun_index = created_lun.find('LUNIndex').text
                 LOG.debug('LUNIndex: %s', lun_index)
 
             try_times = try_times + 3
             eventlet.sleep(self.TIME_INTERVAL)
-            if(try_times > max_wait_sec or lun_naa is not None):
+            if(try_times > max_wait_sec or lun_naa != ""):
                 break
 
         LOG.debug('LUNNAA: %s', lun_naa)
@@ -564,12 +566,13 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         while True:
             created_snapshot = self.api_executor.get_snapshot_info(
                 lun_index=lun_index, snapshot_name=create_snapshot_name)
-            if created_snapshot is not None:
+            if (created_snapshot is not None and
+                    created_snapshot.find('snapshot_id').text is not None):
                 snapshot_id = created_snapshot.find('snapshot_id').text
 
             try_times = try_times + 3
             eventlet.sleep(self.TIME_INTERVAL)
-            if(try_times > max_wait_sec or created_snapshot is not None):
+            if(try_times > max_wait_sec or snapshot_id != ""):
                 break
 
         LOG.debug('created_snapshot: %s', created_snapshot)
@@ -621,14 +624,16 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         while True:
             created_lun = self.api_executor.get_lun_info(
                 LUNName=create_lun_name)
-            if created_lun.find('LUNNAA') is not None:
+            if (created_lun is not None and
+                    created_lun.find('LUNNAA') is not None):
                 lun_naa = created_lun.find('LUNNAA').text
                 lun_index = created_lun.find('LUNIndex').text
+                LOG.debug('LUNNAA: %s', lun_naa)
                 LOG.debug('LUNIndex: %s', lun_index)
 
             try_times = try_times + 3
             eventlet.sleep(self.TIME_INTERVAL)
-            if(try_times > max_wait_sec or lun_naa is not None):
+            if(try_times > max_wait_sec or lun_naa != ""):
                 break
 
         if (volume['size'] > snapshot['volume_size']):
@@ -1078,10 +1083,13 @@ class QnapISCSIDriver(san.SanISCSIDriver):
 
     @utils.synchronized('_attach_volume')
     def _detach_volume(self, context, attach_info, volume, properties,
-                       force=False, remote=False):
-        super(QnapISCSIDriver, self)._detach_volume(context, attach_info,
-                                                    volume, properties,
-                                                    force, remote)
+                       force=False, remote=False, ignore_errors=False):
+        super(QnapISCSIDriver, self)._detach_volume(
+            context, attach_info,
+            volume, properties,
+            force=force, remote=remote,
+            ignore_errors=ignore_errors
+        )
 
     @utils.synchronized('_attach_volume')
     def _attach_volume(self, context, volume, properties, remote=False):

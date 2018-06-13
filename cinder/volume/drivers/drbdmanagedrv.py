@@ -98,11 +98,11 @@ drbd_opts = [
                help='Volume resize completion wait plugin.'),
     cfg.BoolOpt('drbdmanage_devs_on_controller',
                 default=True,
-                help='''If set, the c-vol node will receive a useable
-                /dev/drbdX device, even if the actual data is stored on
-                other nodes only.
-                This is useful for debugging, maintenance, and to be
-                able to do the iSCSI export from the c-vol node.''')
+                help='If set, the c-vol node will receive a useable '
+                '/dev/drbdX device, even if the actual data is stored on '
+                'other nodes only. '
+                'This is useful for debugging, maintenance, and to be '
+                'able to do the iSCSI export from the c-vol node.')
     # TODO(PM): offsite_redundancy?
     # TODO(PM): choose DRBDmanage storage pool?
 ]
@@ -278,10 +278,10 @@ class DrbdManageBaseDriver(driver.VolumeDriver):
 
     # DRBDmanage works in kiB units; Cinder uses GiB.
     def _vol_size_to_dm(self, size):
-        return int(size * units.Gi / units.Ki)
+        return size * units.Gi / units.Ki
 
     def _vol_size_to_cinder(self, size):
-        return int(size * units.Ki / units.Gi)
+        return size * units.Ki / units.Gi
 
     def is_clean_volume_name(self, name, prefix):
         try:

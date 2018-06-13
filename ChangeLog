@@ -1,25 +1,161 @@
 CHANGES
 =======
 
+13.0.0.0b2
+----------
+
+* Add NexentaEdge drivers
+* Tests: Remove some ovo FutureWarnings about UUIDs
+* Disable failing backup tests in LIO/Barbican job
+* Fix documentation error
+* Correct S-Series to DS-Series systems
+* Remove the deprecated config option
+* Fix GCS backup driver docs
+* Doc: Fix broken link (Nimble)
+* Imported Translations from Zanata
+* Add user messages for extend volume operation
+* V3 jsonschema validation: volume\_type\_encryption
+* Update storage backends supported for Lenovo
+* Fix handling of 'cinder\_encryption\_key\_id' image metadata
+* Fix api-ref for backup export and import
+* Missing request parameters in update quotas
+* Trivial: Update pypi url to new url
+* V3 jsonschema validation: admin\_actions
+* api-ref: Fix v3 API version details error
+* Add cinder v2 experimental job
+* Fix cannot add a column with non-constant default
+* Update author in latex sphinx doc builds
+* Update the volume-encryption doc
+* Additional fix for hostname validation regex
+* doc: correct indentation from a note block
+* V3 jsonschema validation: scheduler\_hints
+* INFINIDAT: fixing extend mechanism
+* Fix the argument for cinder-manage command
+* Fix cinder-volume setup in block-box
+* [Docs] Fixes documentation warning
+* Remove duplicate sample files
+* Fix option description in DRBD driver
+* Remove Ocata config option changes doc
+* VMAX driver - Enable multiattach support
+* Fix wrong usage of fields.BackupStatus.AVAILABLE
+* ScaleIO: Rebranding of product to VxFlex OS
+* Disable test\_volume\_backup\_restore for lio-barbican job
+* Support availability-zone type
+* Fix create backup API document
+* Imported Translations from Zanata
+* [Api-ref] fix incorrect host value in worker cleanup api
+* Fix NVMET minor log message issues
+* Fix google backup driver
+* V3 jsonschema validation: os-services
+* Huawei driver supports create\_group\_from\_src
+* Disallow multiattach for encrypted volumes
+* NetApp ONTAP iSCSI: Force exception on online extend
+* Fix hostname validation regex
+* Add snapshots to minimum driver interface
+* Add descriptions for auth\_strategy choices
+* RBD: remove redundant exception log to reduce noise
+* Log backup\_service.restore() exception
+* [Unity] Add support of removing empty host
+* V3 json schema validation: generic volume groups
+* Fix i18n issue in volume\_action and admin\_action
+* Support filter backend based on operation type
+* Remove stale pip-missing-reqs tox test
+* [ci][rally] make the job inherit the right parent
+* Make config-table display list defaults in list format
+* QNAP: driver fails to detach while uploading volume to image
+* Remove static config option table for Infinidat
+* Remove zonemanager static config option tables
+* [VNX] Fix property set in configuration doc
+* Fix os-detach attachment\_id schema
+* Adding NVMET target for NVMeOF
+* DRBD: Remove cast to int in size calculation
+* Remove backup driver static config option tables
+* Add missing 'transfer' parameter in API document
+* Update HPE docs to use config-table directive
+* Skip running py36 tests on irrelevant files
+* Remove ZFSSA static config option tables
+* Remove Zadara static config option table
+* Remove Virtuozzo static config option table
+* Remove Tintri static config option table
+* Remove Synology static config option table
+* Remove SolidFire static config option table
+* Remove Quobyte static config option table
+* Replace Chinese punctuation with English punctuation
+* Replace cluster object's host with service\_topic\_queue
+* IBM XIV: enable FC zoning to all the ports
+* [doc] Add the possible status for attachment
+* Remove Nimble static config option table
+* Remove NEC static config option table
+* Remove static config option table for Lenovo
+* Remove Kaminario static config option table
+* Remove static config option table for DISCO driver
+* Add skip filter to config-table directive
+* Imported Translations from Zanata
+* Update auth\_url value in install docs
+* Fix doc warnings causing local failures
+* Updates overprovisioning dev-ref
+* Add reno to test-requirements
+* api-ref: modify 'has\_dependent\_backups' param's description
+* V3 jsonschema validation: Quota classes
+* V3 jsonschema validation: Quotas
+* Remove Fujitsu static config table
+* Update Dell EMC docs to use config-table directive
+* Update Datera docs to use config-table directive
+* Update Sheepdog docs to use config-table directive
+* Remove remaining block device driver config info
+* Update CoprHD docs to use config-table directive
+* GoodnessWeigher schedules non-type volumes
+* Add config table sphinx directive
+* Fix doc errors in nimble driver documentation
+* api-ref: Correct the cgsnapshot\_id parameter
+* Test running jobs under py36/bionic
+* Imported Translations from Zanata
+* Fix QNap docstring format
+* Fix driver docstring RST formatting
+* Add VERSION and WIKI\_NAME to NEC driver
+* Remove deprecated lvm\_max\_over\_subscription\_ratio
+* Add Keystone v3 domain information to context
+* RBD: Handle ImageNotFound exception in \_get\_usage\_info correctly
+* QNAP: driver fails to create volume and snapshot in some case
+* RBD: add support for active/active replication
+* Dell EMC SC: Removed space from debug statement
+* Collect resource id from RequestSpec parameter
+* Add missing VolumeAttachStatus enum field
+* Clearup duplicate req\_version variable
+* Parent of RBD cloned volume marked as deleted should not be manageable
+* Trivial: Update pypi url to new url
+* WinSMB volume driver doc: Add Volume backup support
+
 13.0.0.0b1
 ----------
 
 * Clarify sizing when creating vol from source
 * Improve API method logging
+* NetApp ONTAP: Set new sub-lun clone limit for ONTAP driver
+* Adding abstract class NVMeOF
+* V3 jsonschema validation: volume\_transfer
 * Imported Translations from Zanata
 * FC: refactor fczm utils decorators to functions
+* VMAX driver - Attaches/detaches after host assisted retype failing
+* V3 json schema validation: volume manage
+* V3 json schema validation: workers
+* RBD snapshot needs to be protected/unprotected after being managed/unmanaged
+* VMware: Extend volume after clone
 * Set sample\_default for 'host' option
+* Uncap eventlet
 * ZFSSA implement "Enhance iSCSI multipath support"
 * Rephrase for multiattach support
 * NetApp ONTAP: Fix export path used as volume name
 * Use InvalidConfigurationValue instead of InvalidInput
 * NEC docs: add new features and improve description
+* Update the HP MSA and Lenovo driver documentation
 * ZFSSA accept pool stats when cluster node stripped
 * Refresh volume when checking for conflicting attachments
 * nimble: update documentation for supportability
 * Doc: Add driver security notes to contributor doc
 * Move MV history under API Microversion contrib docs
 * V3 jsonschema validation: snapshot\_actions
+* Fix mocks for ZFS Storage Appliance unit tests
 * Storwize: Report backend state in service list
 * Add doc to pep8 check\_exec
 * VMAX docs - miscellaneous clarifications
@@ -28,6 +164,7 @@ CHANGES
 * add lower-constraints job
 * Unignore .stestr.conf
 * VNX: fix performance in create/delete\_volume
+* Default pep8/fast8 to run under python 3
 * Move testing info higher in contrib docs
 * Clean up doc configuration
 * Use sphinxcontrib.apidoc for module docs
@@ -38,6 +175,7 @@ CHANGES
 * Handle migrating encryption key IDs in Backup table
 * Dell EMC SC: dell-storagecenter-driver docs updated
 * Doc: Add inspur driver doc to toctree
+* VMware: Adding NFS41 datastore as supported
 * Avoid second restart on offline upgrades
 * [Optimize] Validate configured scheduler filters when initialize
 * Remove extended attribute 'os-volume-replication' in Doc
@@ -357,6 +495,7 @@ CHANGES
 * Check create from image policy when image not none
 * Validate metadata before reserve quota
 * api-ref: fix the response parameter for multiattach
+* Docs: ibm\_storage\_driver: Fix volume\_driver path in documentation
 * Synology: Rename iSCSI target config option
 * Revert volume consumed capacity when rescheduling
 * 3PAR: fix create group from source functionality

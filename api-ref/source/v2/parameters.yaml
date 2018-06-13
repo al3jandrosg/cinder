@@ -29,7 +29,7 @@ cgsnapshot_id_1:
   description: |
     The ID of the consistency group snapshot.
   in: path
-  required: false
+  required: true
   type: string
 encryption_id:
   description: |
@@ -293,6 +293,19 @@ backup:
   in: body
   required: true
   type: object
+backup_gigabytes:
+  description: |
+    The size (GB) of backups that are allowed for each project.
+  in: body
+  required: true
+  type: integer
+backup_record:
+  description: |
+    An object recording volume backup metadata, including ``backup_service``
+    and ``backup_url``.
+  in: body
+  required: true
+  type: object
 backup_service:
   description: |
     The service used to perform the backup.
@@ -301,7 +314,7 @@ backup_service:
   type: string
 backup_url:
   description: |
-    The backup encoded metadata.
+    An identifier string to locate the backup.
   in: body
   required: true
   type: string
@@ -619,8 +632,8 @@ free_capacity:
   type: string
 has_dependent_backups:
   description: |
-    If this value is ``true``, the backup depends on
-    other backups.
+    If this value is ``true``, there are other backups depending on
+    this backup.
   in: body
   required: false
   type: boolean
@@ -1265,6 +1278,13 @@ os-vol-tenant-attr:tenant_id:
   in: body
   required: true
   type: string
+per_volume_gigabytes:
+  description: |
+    The size (GB) of volumes in request that are allowed for each
+    volume.
+  in: body
+  required: true
+  type: integer
 perVolumeGigabytes:
   description: |
     The maximum amount of storage per volume, in gibibytes (GiB).
@@ -1470,7 +1490,7 @@ snapshot_id_2:
   description: |
     The UUID of the source volume snapshot.
   in: body
-  required: true
+  required: false
   type: string
 source_cgid:
   description: |
@@ -1586,6 +1606,12 @@ totalVolumesUsed:
   in: body
   required: true
   type: integer
+transfer:
+  description: |
+    The volume transfer object.
+  in: body
+  required: true
+  type: object
 updated:
   description: |
     The date and time stamp when the extension was
