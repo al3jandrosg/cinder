@@ -14,13 +14,15 @@
 #    under the License.
 """Unit tests for image utils."""
 
-import ddt
 import errno
 import math
 
+import cryptography
+import ddt
 import mock
 from oslo_concurrency import processutils
 from oslo_utils import units
+from six.moves import builtins
 
 from cinder import exception
 from cinder.image import image_utils
@@ -345,6 +347,132 @@ class TestFetch(test.TestCase):
                               _user_id, _project_id)
 
 
+class MockVerifier(object):
+    def update(self, data):
+        return
+
+    def verify(self):
+        return True
+
+
+class BadVerifier(object):
+    def update(self, data):
+        return
+
+    def verify(self):
+        raise cryptography.exceptions.InvalidSignature(
+            'Invalid signature.'
+        )
+
+
+class TestVerifyImageSignature(test.TestCase):
+
+    @mock.patch('cursive.signature_utils.get_verifier')
+    @mock.patch('oslo_utils.fileutils.remove_path_on_error')
+    def test_image_signature_verify_failed(self, mock_remove, mock_get):
+        self.mock_object(builtins, 'open', mock.mock_open())
+        ctxt = mock.sentinel.context
+        metadata = {'name': 'test image',
+                    'is_public': False,
+                    'protected': False,
+                    'properties':
+                        {'img_signature_certificate_uuid': 'fake_uuid',
+                         'img_signature_hash_method': 'SHA-256',
+                         'img_signature': 'signature',
+                         'img_signature_key_type': 'RSA-PSS'}}
+
+        class FakeImageService(object):
+            def show(self, context, image_id):
+                return metadata
+
+        self.flags(verify_glance_signatures='enabled')
+        mock_get.return_value = BadVerifier()
+
+        self.assertRaises(exception.ImageSignatureVerificationException,
+                          image_utils.verify_glance_image_signature,
+                          ctxt, FakeImageService(), 'fake_id',
+                          'fake_path')
+        mock_get.assert_called_once_with(
+            context=ctxt,
+            img_signature_certificate_uuid='fake_uuid',
+            img_signature_hash_method='SHA-256',
+            img_signature='signature',
+            img_signature_key_type='RSA-PSS')
+
+    @mock.patch('cursive.signature_utils.get_verifier')
+    def test_image_signature_metadata_missing(self, mock_get):
+        ctxt = mock.sentinel.context
+        metadata = {'name': 'test image',
+                    'is_public': False,
+                    'protected': False,
+                    'properties': {}}
+
+        class FakeImageService(object):
+            def show(self, context, image_id):
+                return metadata
+
+        self.flags(verify_glance_signatures='enabled')
+
+        result = image_utils.verify_glance_image_signature(
+            ctxt, FakeImageService(), 'fake_id', 'fake_path')
+        self.assertFalse(result)
+        mock_get.assert_not_called()
+
+    @mock.patch('cursive.signature_utils.get_verifier')
+    def test_image_signature_metadata_incomplete(self, mock_get):
+        ctxt = mock.sentinel.context
+        metadata = {'name': 'test image',
+                    'is_public': False,
+                    'protected': False,
+                    'properties':
+                        {'img_signature_certificate_uuid': None,
+                         'img_signature_hash_method': 'SHA-256',
+                         'img_signature': 'signature',
+                         'img_signature_key_type': 'RSA-PSS'}}
+
+        class FakeImageService(object):
+            def show(self, context, image_id):
+                return metadata
+
+        self.flags(verify_glance_signatures='enabled')
+
+        self.assertRaises(exception.InvalidSignatureImage,
+                          image_utils.verify_glance_image_signature, ctxt,
+                          FakeImageService(), 'fake_id', 'fake_path')
+        mock_get.assert_not_called()
+
+    @mock.patch('cursive.signature_utils.get_verifier')
+    @mock.patch('oslo_utils.fileutils.remove_path_on_error')
+    def test_image_signature_verify_success(self, mock_remove, mock_get):
+        self.mock_object(builtins, 'open', mock.mock_open())
+        ctxt = mock.sentinel.context
+        metadata = {'name': 'test image',
+                    'is_public': False,
+                    'protected': False,
+                    'properties':
+                        {'img_signature_certificate_uuid': 'fake_uuid',
+                         'img_signature_hash_method': 'SHA-256',
+                         'img_signature': 'signature',
+                         'img_signature_key_type': 'RSA-PSS'}}
+
+        class FakeImageService(object):
+            def show(self, context, image_id):
+                return metadata
+
+        self.flags(verify_glance_signatures='enabled')
+        mock_get.return_value = MockVerifier()
+
+        result = image_utils.verify_glance_image_signature(
+            ctxt, FakeImageService(), 'fake_id', 'fake_path')
+        self.assertTrue(result)
+        mock_get.assert_called_once_with(
+            context=ctxt,
+            img_signature_certificate_uuid='fake_uuid',
+            img_signature_hash_method='SHA-256',
+            img_signature='signature',
+            img_signature_key_type='RSA-PSS')
+
+
 class TestVerifyImage(test.TestCase):
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.fileutils')
@@ -372,12 +500,13 @@ class TestVerifyImage(test.TestCase):
         (mock_fileutils.remove_path_on_error.return_value.__exit__
             .assert_called_once_with(None, None, None))
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.fileutils')
     @mock.patch('cinder.image.image_utils.fetch')
     def test_kwargs(self, mock_fetch, mock_fileutils, mock_info,
-                    mock_check_space):
+                    mock_check_space, mock_check_size):
         ctxt = mock.sentinel.context
         image_service = FakeImageService()
         image_id = mock.sentinel.image_id
@@ -402,6 +531,8 @@ class TestVerifyImage(test.TestCase):
             .assert_called_once_with())
         (mock_fileutils.remove_path_on_error.return_value.__exit__
             .assert_called_once_with(None, None, None))
+        mock_check_size.assert_called_once_with(mock_data.virtual_size,
+                                                size, image_id)
 
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.fileutils')
@@ -435,10 +566,12 @@ class TestVerifyImage(test.TestCase):
                           image_utils.fetch_verify_image,
                           ctxt, image_service, image_id, dest)
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.fileutils')
     @mock.patch('cinder.image.image_utils.fetch')
-    def test_size_error(self, mock_fetch, mock_fileutils, mock_info):
+    def test_size_error(self, mock_fetch, mock_fileutils, mock_info,
+                        mock_check_size):
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_id = mock.sentinel.image_id
@@ -447,7 +580,10 @@ class TestVerifyImage(test.TestCase):
         mock_data = mock_info.return_value
         mock_data.file_format = 'test_format'
         mock_data.backing_file = None
-        mock_data.virtual_size = 2
+        mock_data.virtual_size = 2 * units.Gi
+
+        mock_check_size.side_effect = exception.ImageUnacceptable(
+            image_id='fake_image_id', reason='test')
 
         self.assertRaises(exception.ImageUnacceptable,
                           image_utils.fetch_verify_image,
@@ -456,24 +592,22 @@ class TestVerifyImage(test.TestCase):
 
 class TestTemporaryDir(test.TestCase):
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('os.makedirs')
-    @mock.patch('os.path.exists', return_value=True)
+    @mock.patch('oslo_utils.fileutils.ensure_tree')
     @mock.patch('cinder.image.image_utils.utils.tempdir')
-    def test_conv_dir_exists(self, mock_tempdir, mock_exists, mock_make,
+    def test_conv_dir_exists(self, mock_tempdir, mock_make,
                              mock_conf):
         mock_conf.image_conversion_dir = mock.sentinel.conv_dir
 
         output = image_utils.temporary_dir()
 
-        self.assertFalse(mock_make.called)
+        self.assertTrue(mock_make.called)
         mock_tempdir.assert_called_once_with(dir=mock.sentinel.conv_dir)
         self.assertEqual(output, mock_tempdir.return_value)
 
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('os.makedirs')
-    @mock.patch('os.path.exists', return_value=False)
+    @mock.patch('oslo_utils.fileutils.ensure_tree')
     @mock.patch('cinder.image.image_utils.utils.tempdir')
-    def test_create_conv_dir(self, mock_tempdir, mock_exists, mock_make,
+    def test_create_conv_dir(self, mock_tempdir, mock_make,
                              mock_conf):
         mock_conf.image_conversion_dir = mock.sentinel.conv_dir
 
@@ -484,16 +618,15 @@ class TestTemporaryDir(test.TestCase):
         self.assertEqual(output, mock_tempdir.return_value)
 
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('os.makedirs')
-    @mock.patch('os.path.exists', return_value=False)
+    @mock.patch('oslo_utils.fileutils.ensure_tree')
     @mock.patch('cinder.image.image_utils.utils.tempdir')
-    def test_no_conv_dir(self, mock_tempdir, mock_exists, mock_make,
+    def test_no_conv_dir(self, mock_tempdir, mock_make,
                          mock_conf):
         mock_conf.image_conversion_dir = None
 
         output = image_utils.temporary_dir()
 
-        self.assertFalse(mock_make.called)
+        self.assertTrue(mock_make.called)
         mock_tempdir.assert_called_once_with(dir=None)
         self.assertEqual(output, mock_tempdir.return_value)
 
@@ -775,6 +908,7 @@ class TestFetchToVolumeFormat(test.TestCase):
                                              run_as_root=True,
                                              src_format='raw')
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
@@ -788,7 +922,7 @@ class TestFetchToVolumeFormat(test.TestCase):
     @mock.patch('cinder.image.image_utils.CONF')
     def test_kwargs(self, mock_conf, mock_temp, mock_info, mock_fetch,
                     mock_is_xen, mock_repl_xen, mock_copy, mock_convert,
-                    mock_check_space):
+                    mock_check_space, mock_check_size):
         ctxt = mock.sentinel.context
         image_service = FakeImageService()
         image_id = mock.sentinel.image_id
@@ -825,7 +959,10 @@ class TestFetchToVolumeFormat(test.TestCase):
                                              out_subformat=out_subformat,
                                              run_as_root=run_as_root,
                                              src_format='raw')
+        mock_check_size.assert_called_once_with(data.virtual_size,
+                                                size, image_id)
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
@@ -839,7 +976,8 @@ class TestFetchToVolumeFormat(test.TestCase):
     @mock.patch('cinder.image.image_utils.CONF')
     def test_convert_from_vhd(self, mock_conf, mock_temp, mock_info,
                               mock_fetch, mock_is_xen, mock_repl_xen,
-                              mock_copy, mock_convert, mock_check_space):
+                              mock_copy, mock_convert, mock_check_space,
+                              mock_check_size):
         ctxt = mock.sentinel.context
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
@@ -878,6 +1016,7 @@ class TestFetchToVolumeFormat(test.TestCase):
                                              run_as_root=run_as_root,
                                              src_format=expect_format)
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
@@ -889,7 +1028,8 @@ class TestFetchToVolumeFormat(test.TestCase):
     @mock.patch('cinder.image.image_utils.CONF')
     def test_convert_from_iso(self, mock_conf, mock_temp, mock_info,
                               mock_fetch, mock_is_xen, mock_copy,
-                              mock_convert, mock_check_space):
+                              mock_convert, mock_check_space,
+                              mock_check_size):
         ctxt = mock.sentinel.context
         image_id = mock.sentinel.image_id
         dest = mock.sentinel.dest
@@ -1120,6 +1260,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_copy.called)
         self.assertFalse(mock_convert.called)
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
     @mock.patch(
@@ -1131,7 +1272,8 @@ class TestFetchToVolumeFormat(test.TestCase):
     @mock.patch('cinder.image.image_utils.temporary_file')
     @mock.patch('cinder.image.image_utils.CONF')
     def test_size_error(self, mock_conf, mock_temp, mock_info, mock_fetch,
-                        mock_is_xen, mock_repl_xen, mock_copy, mock_convert):
+                        mock_is_xen, mock_repl_xen, mock_copy, mock_convert,
+                        mock_check_size):
         ctxt = mock.sentinel.context
         image_service = mock.Mock(temp_images=None)
         image_id = mock.sentinel.image_id
@@ -1148,6 +1290,9 @@ class TestFetchToVolumeFormat(test.TestCase):
         data.backing_file = None
         data.virtual_size = int(1234.5 * units.Gi)
         tmp = mock_temp.return_value.__enter__.return_value
+
+        mock_check_size.side_effect = exception.ImageUnacceptable(
+            image_id='fake_image_id', reason='test')
 
         self.assertRaises(
             exception.ImageUnacceptable,
@@ -1263,6 +1408,7 @@ class TestFetchToVolumeFormat(test.TestCase):
         self.assertFalse(mock_copy.called)
         self.assertFalse(mock_convert.called)
 
+    @mock.patch('cinder.image.image_utils.check_virtual_size')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
@@ -1276,7 +1422,8 @@ class TestFetchToVolumeFormat(test.TestCase):
     @mock.patch('cinder.image.image_utils.CONF')
     def test_xenserver_to_vhd(self, mock_conf, mock_temp, mock_info,
                               mock_fetch, mock_is_xen, mock_repl_xen,
-                              mock_copy, mock_convert, mock_check_space):
+                              mock_copy, mock_convert, mock_check_space,
+                              mock_check_size):
         ctxt = mock.sentinel.context
         image_service = FakeImageService()
         image_id = mock.sentinel.image_id
@@ -1554,11 +1701,10 @@ class TestVhdUtils(test.TestCase):
 class TestCreateTemporaryFile(test.TestCase):
     @mock.patch('cinder.image.image_utils.os.close')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('cinder.image.image_utils.os.path.exists')
     @mock.patch('cinder.image.image_utils.os.makedirs')
     @mock.patch('cinder.image.image_utils.tempfile.mkstemp')
     def test_create_temporary_file_no_dir(self, mock_mkstemp, mock_dirs,
-                                          mock_path, mock_conf, mock_close):
+                                          mock_conf, mock_close):
         mock_conf.image_conversion_dir = None
         fd = mock.sentinel.file_descriptor
         path = mock.sentinel.absolute_pathname
@@ -1572,11 +1718,10 @@ class TestCreateTemporaryFile(test.TestCase):
 
     @mock.patch('cinder.image.image_utils.os.close')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('cinder.image.image_utils.os.path.exists', return_value=True)
     @mock.patch('cinder.image.image_utils.os.makedirs')
     @mock.patch('cinder.image.image_utils.tempfile.mkstemp')
     def test_create_temporary_file_with_dir(self, mock_mkstemp, mock_dirs,
-                                            mock_path, mock_conf, mock_close):
+                                            mock_conf, mock_close):
         conv_dir = mock.sentinel.image_conversion_dir
         mock_conf.image_conversion_dir = conv_dir
         fd = mock.sentinel.file_descriptor
@@ -1586,17 +1731,16 @@ class TestCreateTemporaryFile(test.TestCase):
         output = image_utils.create_temporary_file()
 
         self.assertEqual(path, output)
-        self.assertFalse(mock_dirs.called)
+        self.assertTrue(mock_dirs.called)
         mock_mkstemp.assert_called_once_with(dir=conv_dir)
         mock_close.assert_called_once_with(fd)
 
     @mock.patch('cinder.image.image_utils.os.close')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('cinder.image.image_utils.os.path.exists', return_value=False)
-    @mock.patch('cinder.image.image_utils.os.makedirs')
+    @mock.patch('cinder.image.image_utils.fileutils.ensure_tree')
     @mock.patch('cinder.image.image_utils.tempfile.mkstemp')
     def test_create_temporary_file_and_dir(self, mock_mkstemp, mock_dirs,
-                                           mock_path, mock_conf, mock_close):
+                                           mock_conf, mock_close):
         conv_dir = mock.sentinel.image_conversion_dir
         mock_conf.image_conversion_dir = conv_dir
         fd = mock.sentinel.file_descriptor

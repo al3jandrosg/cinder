@@ -208,8 +208,11 @@ nullable_string = {
 volume_size = {
     'type': ['integer', 'string'],
     'pattern': '^[0-9]+$',
-    'minimum': 1
+    'minimum': 1,
+    'maximum': constants.DB_MAX_INT
 }
+volume_size_allows_null = copy.deepcopy(volume_size)
+volume_size_allows_null['type'] += ['null']
 
 
 hostname = {
@@ -262,3 +265,11 @@ key_size = {'type': ['string', 'integer', 'null'],
             'minimum': 0,
             'maximum': constants.DB_MAX_INT,
             'format': 'key_size'}
+
+
+availability_zone = {
+    'type': ['string', 'null'], 'minLength': 1, 'maxLength': 255
+}
+
+
+optional_boolean = {'oneOf': [{'type': 'null'}, boolean]}

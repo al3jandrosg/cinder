@@ -151,44 +151,20 @@ VMAX Driver Integration
 
 #. Configure Block Storage in cinder.conf
 
+    .. config-table::
+       :config-target: VMAX
+
+       cinder.volume.drivers.dell_emc.vmax.common
+
    .. note::
 
       For security and backend uniformity, the use of the XML file for VMAX
-      backend configuration has been deprecated in Queens. While the xml file
-      usage will still be supported, a warning will be issued on its impending
-      deprecation.
-
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  VMAX parameter | cinder.conf parameter  | Default | Required | Description               |
-   +=================+========================+=========+==========+===========================+
-   |  RestServerIp   | san_ip                 | "       | Yes      | IP address of the         |
-   |                 |                        |         |          | Unisphere server          |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  RestServerPort | san_rest_port          | 8443    | No       | Port of the               |
-   |                 |                        |         |          | Unisphere server          |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  RestUserName   | san_login              | 'admin' | Yes      | Username of the           |
-   |                 |                        |         |          | Unisphere server          |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  RestPassword   | san_password           | "       | Yes      | Password of the           |
-   |                 |                        |         |          | Unisphere server          |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  Array          | vmax_array             | None    | Yes      | Unique VMAX array         |
-   |                 |                        |         |          | serial number             |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  SRP            | vmax_srp               | None    | Yes      | Name of the               |
-   |                 |                        |         |          | storage resource pool     |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  PortGroups     | vmax_port_groups       | None    | Yes      | The name(s) of VMAX       |
-   |                 |                        |         |          | port group(s)             |
-   +-----------------+------------------------+---------+----------+---------------------------+
-   |  SSLVerify      | driver_ssl_cert_verify | False   | No       | The path to the           |
-   |                 | driver_ssl_cert_path   | None    | No       | ``my_unisphere_host.pem`` |
-   +-----------------+------------------------+---------+----------+---------------------------+
+      backend configuration was deprecated in Queens and removed entirely
+      in Rocky.
 
    .. note::
 
-      ``san_rest_port`` is ``8443`` by default but can be changed if
+      ``san_api_port`` is ``8443`` by default but can be changed if
       necessary. For the purposes of this documentation the default is
       assumed so the tag will not appear in any of the ``cinder.conf``
       extracts below.
@@ -1182,8 +1158,7 @@ Configure the source and target arrays
 
 #. Configure an SRDF group between the chosen source and target
    arrays for the VMAX cinder driver to use. The source array must correspond
-   with the 'vmax_array' entry in the cinder.conf (or the ``<Array>`` entry
-   in the VMAX XML file for legacy setups).
+   with the 'vmax_array' entry in the cinder.conf.
 #. Select both the director and the ports for the SRDF emulation to use on
    both sides. Bear in mind that network topology is important when choosing
    director endpoints. Supported modes are `Synchronous`, `Asynchronous`,

@@ -10,13 +10,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import os
 import traceback
 
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from oslo_utils import fileutils
 from oslo_utils import timeutils
 import taskflow.engines
 from taskflow.patterns import linear_flow
@@ -98,6 +98,8 @@ class OnFailureRescheduleTask(flow_utils.CinderTask):
             exception.VolumeTypeNotFound,
             exception.ImageUnacceptable,
             exception.ImageTooBig,
+            exception.InvalidSignatureImage,
+            exception.ImageSignatureVerificationException
         ]
 
     def execute(self, **kwargs):
@@ -760,9 +762,8 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         # NOTE(mnaser): This check *only* happens if the backend is not able
         #               to clone volumes and we have to resort to downloading
         #               the image from Glance and uploading it.
-        if (CONF.image_conversion_dir and not
-                os.path.exists(CONF.image_conversion_dir)):
-            os.makedirs(CONF.image_conversion_dir)
+        if CONF.image_conversion_dir:
+            fileutils.ensure_tree(CONF.image_conversion_dir)
         try:
             image_utils.check_available_space(
                 CONF.image_conversion_dir,
@@ -811,6 +812,17 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                     with image_utils.TemporaryImages.fetch(
                             image_service, context, image_id,
                             backend_name) as tmp_image:
+                        if CONF.verify_glance_signatures != 'disabled':
+                            # Verify image signature via reading content from
+                            # temp image, and store the verification flag if
+                            # required.
+                            verified = \
+                                image_utils.verify_glance_image_signature(
+                                    context, image_service,
+                                    image_id, tmp_image)
+                            self.db.volume_glance_metadata_bulk_create(
+                                context, volume.id,
+                                {'signature_verified': verified})
                         # Try to create the volume as the minimal size,
                         # then we can extend once the image has been
                         # downloaded.
@@ -839,6 +851,15 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                             detail=
                             message_field.Detail.NOT_ENOUGH_SPACE_FOR_IMAGE,
                             exception=e)
+                except exception.ImageSignatureVerificationException as err:
+                    with excutils.save_and_reraise_exception():
+                        self.message.create(
+                            context,
+                            message_field.Action.COPY_IMAGE_TO_VOLUME,
+                            resource_uuid=volume.id,
+                            detail=
+                            message_field.Detail.SIGNATURE_VERIFICATION_FAILED,
+                            exception=err)
 
             if should_create_cache_entry:
                 # Update the newly created volume db entry before we clone it
@@ -951,7 +972,6 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                      "backup service to restore the volume with backup.",
                      {'id': backup_id})
             model_update = self._create_raw_volume(volume, **kwargs) or {}
-            model_update.update({'status': 'restoring-backup'})
             volume.update(model_update)
             volume.save()
 

@@ -106,7 +106,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -161,7 +161,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -212,7 +212,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_9
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -256,6 +256,7 @@ Request
    - instance_uuid: instance_uuid_1
    - connector: connector
    - volume_uuid: volume_id_7
+   - mode: attach_mode_1
 
 Request Example
 ---------------
@@ -274,7 +275,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -334,7 +335,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 

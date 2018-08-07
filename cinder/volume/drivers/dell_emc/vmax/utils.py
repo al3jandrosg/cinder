@@ -15,9 +15,7 @@
 
 from copy import deepcopy
 import datetime
-from defusedxml import minidom
 import hashlib
-import random
 import re
 
 from cinder.objects.group import Group
@@ -73,6 +71,8 @@ RDF_ACTIVE = 'active'
 RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
 METROBIAS = 'metro_bias'
+DEFAULT_PORT = 8443
+
 # Multiattach constants
 IS_MULTIATTACH = 'multiattach'
 OTHER_PARENT_SG = 'other_parent_sg_name'
@@ -83,7 +83,8 @@ NO_SLO_SG = 'no_slo_sg'
 VMAX_SERVER_IP = 'san_ip'
 VMAX_USER_NAME = 'san_login'
 VMAX_PASSWORD = 'san_password'
-VMAX_SERVER_PORT = 'san_rest_port'
+VMAX_SERVER_PORT_NEW = 'san_api_port'
+VMAX_SERVER_PORT_OLD = 'san_rest_port'
 VMAX_ARRAY = 'vmax_array'
 VMAX_WORKLOAD = 'vmax_workload'
 VMAX_SRP = 'vmax_srp'
@@ -218,7 +219,7 @@ class VMAXUtils(object):
         """
         element_name = volume_id
         uuid_regex = (re.compile(
-            '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+            r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
             re.I))
         match = uuid_regex.search(volume_id)
         if match:
@@ -305,136 +306,6 @@ class VMAXUtils(object):
                      "20.0 instead...")
             max_over_sub_ratio = 20.0
         return max_over_sub_ratio
-
-    @staticmethod
-    def _process_tag(element, tag_name):
-        """Process the tag to get the value.
-
-        :param element: the parent element
-        :param tag_name: the tag name
-        :returns: nodeValue(can be None)
-        """
-        node_value = None
-        try:
-            processed_element = element.getElementsByTagName(tag_name)[0]
-            node_value = processed_element.childNodes[0].nodeValue
-            if node_value:
-                node_value = node_value.strip()
-        except IndexError:
-            pass
-        return node_value
-
-    def _get_connection_info(self, rest_element):
-        """Given the filename get the rest server connection details.
-
-        :param rest_element: the rest element
-        :returns: dict -- connargs - the connection info dictionary
-        :raises: VolumeBackendAPIException
-        """
-        connargs = {
-            'RestServerIp': (
-                self._process_tag(rest_element, 'RestServerIp')),
-            'RestServerPort': (
-                self._process_tag(rest_element, 'RestServerPort')),
-            'RestUserName': (
-                self._process_tag(rest_element, 'RestUserName')),
-            'RestPassword': (
-                self._process_tag(rest_element, 'RestPassword'))}
-
-        for k, __ in connargs.items():
-            if connargs[k] is None:
-                exception_message = (_(
-                    "RestServerIp, RestServerPort, RestUserName, "
-                    "RestPassword must have valid values."))
-                LOG.error(exception_message)
-                raise exception.VolumeBackendAPIException(
-                    data=exception_message)
-
-        # These can be None
-        connargs['SSLCert'] = self._process_tag(rest_element, 'SSLCert')
-        connargs['SSLVerify'] = (
-            self._process_tag(rest_element, 'SSLVerify'))
-
-        return connargs
-
-    def parse_file_to_get_array_map(self, file_name):
-        """Parses a file and gets array map.
-
-        Given a file, parse it to get array and pool(srp).
-
-        .. code:: ini
-
-          <EMC>
-          <RestServerIp>10.108.246.202</RestServerIp>
-          <RestServerPort>8443</RestServerPort>
-          <RestUserName>smc</RestUserName>
-          <RestPassword>smc</RestPassword>
-          <SSLCert>/path/client.cert</SSLCert>
-          <SSLVerify>/path/to/certfile.pem</SSLVerify>
-          <PortGroups>
-              <PortGroup>OS-PORTGROUP1-PG</PortGroup>
-          </PortGroups>
-          <Array>000198700439</Array>
-          <SRP>SRP_1</SRP>
-          </EMC>
-
-        :param file_name: the configuration file
-        :returns: list
-        """
-        LOG.warning("Use of xml file in backend configuration is deprecated "
-                    "in Queens and will not be supported in future releases.")
-        kwargs = {}
-        my_file = open(file_name, 'r')
-        data = my_file.read()
-        my_file.close()
-        dom = minidom.parseString(data)
-        try:
-            connargs = self._get_connection_info(dom)
-            portgroup = self._get_random_portgroup(dom)
-            serialnumber = self._process_tag(dom, 'Array')
-            if serialnumber is None:
-                LOG.error("Array Serial Number must be in the file %(file)s.",
-                          {'file': file_name})
-            srp_name = self._process_tag(dom, 'SRP')
-            if srp_name is None:
-                LOG.error("SRP Name must be in the file %(file)s.",
-                          {'file': file_name})
-            slo = self._process_tag(dom, 'ServiceLevel')
-            workload = self._process_tag(dom, 'Workload')
-            kwargs = (
-                {'RestServerIp': connargs['RestServerIp'],
-                 'RestServerPort': connargs['RestServerPort'],
-                 'RestUserName': connargs['RestUserName'],
-                 'RestPassword': connargs['RestPassword'],
-                 'SSLCert': connargs['SSLCert'],
-                 'SSLVerify': connargs['SSLVerify'],
-                 'SerialNumber': serialnumber,
-                 'srpName': srp_name,
-                 'PortGroup': portgroup})
-            if slo is not None:
-                kwargs.update({'ServiceLevel': slo, 'Workload': workload})
-
-        except IndexError:
-            pass
-        return kwargs
-
-    @staticmethod
-    def _get_random_portgroup(element):
-        """Randomly choose a portgroup from list of portgroups.
-
-        :param element: the parent element
-        :returns: the randomly chosen port group
-        """
-        portgroupelements = element.getElementsByTagName('PortGroup')
-        if portgroupelements and len(portgroupelements) > 0:
-            portgroupnames = [portgroupelement.childNodes[0].nodeValue.strip()
-                              for portgroupelement in portgroupelements
-                              if portgroupelement.childNodes]
-            portgroupnames = list(set(filter(None, portgroupnames)))
-            pg_len = len(portgroupnames)
-            if pg_len > 0:
-                return portgroupnames[random.randint(0, pg_len - 1)]
-        return None
 
     def get_temp_snap_name(self, clone_name, source_device_id):
         """Construct a temporary snapshot name for clone operation.
@@ -819,6 +690,36 @@ class VMAXUtils(object):
             return True
         return False
 
+    def derive_default_sg_from_extra_specs(self, extra_specs, rep_mode=None):
+        """Get the name of the default sg from the extra specs.
+
+        :param extra_specs: extra specs
+        :returns: default sg - string
+        """
+        do_disable_compression = self.is_compression_disabled(
+            extra_specs)
+        rep_enabled = self.is_replication_enabled(extra_specs)
+        return self.get_default_storage_group_name(
+            extra_specs[SRP], extra_specs[SLO],
+            extra_specs[WORKLOAD],
+            is_compression_disabled=do_disable_compression,
+            is_re=rep_enabled, rep_mode=rep_mode)
+
+    @staticmethod
+    def merge_dicts(d1, *args):
+        """Merge dictionaries
+
+        :param d1: dict 1
+        :param *args: one or more dicts
+        :returns: merged dict
+        """
+        d2 = {}
+        for d in args:
+            d2 = d.copy()
+            d2.update(d1)
+            d1 = d2
+        return d2
+
     @staticmethod
     def get_temp_failover_grp_name(rep_config):
         """Get the temporary group name used for failover.
@@ -879,3 +780,81 @@ class VMAXUtils(object):
         is_tgt_multiattach = vol_utils.is_replicated_str(
             new_type_extra_specs.get('multiattach'))
         return is_src_multiattach != is_tgt_multiattach
+
+    @staticmethod
+    def is_volume_manageable(source_vol):
+        """Check if a volume with verbose description is valid for management.
+
+        :param source_vol: the verbose volume dict
+        :return: bool True/False
+        """
+        vol_head = source_vol['volumeHeader']
+
+        # VMAX disk geometry uses cylinders, so volume sizes are matched to
+        # the nearest full cylinder size: 1GB = 547cyl = 1026MB
+        if vol_head['capMB'] < 1026 or not vol_head['capGB'].is_integer():
+            return False
+
+        if (vol_head['numSymDevMaskingViews'] > 0 or
+                vol_head['mapped'] is True or
+                source_vol['maskingInfo']['masked'] is True):
+            return False
+
+        if (vol_head['status'] != 'Ready' or
+                vol_head['serviceState'] != 'Normal' or
+                vol_head['emulationType'] != 'FBA' or
+                vol_head['configuration'] != 'TDEV' or
+                vol_head['system_resource'] is True or
+                vol_head['private'] is True or
+                vol_head['encapsulated'] is True or
+                vol_head['reservationInfo']['reserved'] is True):
+            return False
+
+        for key, value in source_vol['rdfInfo'].items():
+            if value is True:
+                return False
+
+        if source_vol['timeFinderInfo']['snapVXTgt'] is True:
+            return False
+
+        if vol_head['nameModifier'][0:3] == 'OS-':
+            return False
+
+        return True
+
+    @staticmethod
+    def is_snapshot_manageable(source_vol):
+        """Check if a volume with snapshot description is valid for management.
+
+        :param source_vol: the verbose volume dict
+        :return: bool True/False
+        """
+        vol_head = source_vol['volumeHeader']
+
+        if not source_vol['timeFinderInfo']['snapVXSrc']:
+            return False
+
+        # VMAX disk geometry uses cylinders, so volume sizes are matched to
+        # the nearest full cylinder size: 1GB = 547cyl = 1026MB
+        if (vol_head['capMB'] < 1026 or
+                not vol_head['capGB'].is_integer()):
+            return False
+
+        if (vol_head['emulationType'] != 'FBA' or
+                vol_head['configuration'] != 'TDEV' or
+                vol_head['private'] is True or
+                vol_head['system_resource'] is True):
+            return False
+
+        snap_gen_info = (source_vol['timeFinderInfo']['snapVXSession'][0][
+            'srcSnapshotGenInfo'][0]['snapshotHeader'])
+
+        if (snap_gen_info['snapshotName'][0:3] == 'OS-' or
+                snap_gen_info['snapshotName'][0:5] == 'temp-'):
+            return False
+
+        if (snap_gen_info['expired'] is True
+                or snap_gen_info['generation'] > 0):
+            return False
+
+        return True

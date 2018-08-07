@@ -16,9 +16,8 @@
 import ast
 from copy import deepcopy
 import datetime
-import tempfile
+import platform
 import time
-from xml.dom import minidom
 
 import mock
 import requests
@@ -37,10 +36,12 @@ from cinder.tests.unit import fake_group
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.tests.unit import utils as test_utils
+from cinder import version as openstack_version
 from cinder.volume.drivers.dell_emc.vmax import common
 from cinder.volume.drivers.dell_emc.vmax import fc
 from cinder.volume.drivers.dell_emc.vmax import iscsi
 from cinder.volume.drivers.dell_emc.vmax import masking
+from cinder.volume.drivers.dell_emc.vmax import metadata
 from cinder.volume.drivers.dell_emc.vmax import provision
 from cinder.volume.drivers.dell_emc.vmax import rest
 from cinder.volume.drivers.dell_emc.vmax import utils
@@ -154,7 +155,7 @@ class VMAXCommonData(object):
 
     # cinder volume info
     ctx = context.RequestContext('admin', 'fake', True)
-    provider_location = {'array': six.text_type(array),
+    provider_location = {'array': array,
                          'device_id': device_id}
 
     provider_location2 = {'array': six.text_type(array),
@@ -283,8 +284,8 @@ class VMAXCommonData(object):
     extra_specs_rep_enabled['replication_enabled'] = True
     rep_extra_specs = deepcopy(extra_specs_rep_enabled)
     rep_extra_specs['array'] = remote_array
-    rep_extra_specs['interval'] = 0
-    rep_extra_specs['retries'] = 0
+    rep_extra_specs['interval'] = 1
+    rep_extra_specs['retries'] = 1
     rep_extra_specs['srp'] = srp2
     rep_extra_specs['rep_mode'] = 'Synchronous'
     rep_extra_specs2 = deepcopy(rep_extra_specs)
@@ -589,8 +590,10 @@ class VMAXCommonData(object):
                      "remoteSymmetrixID": remote_array}]}}]}}
 
     workloadtype = {"workloadId": ["OLTP", "OLTP_REP", "DSS", "DSS_REP"]}
-    slo_details = {"sloId": ["Bronze", "Diamond", "Gold",
-                             "Optimized", "Platinum", "Silver"]}
+    srp_slo_details = {"serviceLevelDemand": [
+        {"serviceLevelId": "None"}, {"serviceLevelId": "Diamond"},
+        {"serviceLevelId": "Gold"}, {"serviceLevelId": "Optimized"}]}
+    slo_details = ['None', 'Diamond', 'Gold', 'Optimized']
 
     # replication
     volume_snap_vx = {"snapshotLnks": [],
@@ -683,6 +686,268 @@ class VMAXCommonData(object):
 
     headroom = {"headroom": [{"headroomCapacity": 20348.29}]}
 
+    private_vol_rest_response_single = {
+        "id": "f3aab01c-a5a8-4fb4-af2b-16ae1c46dc9e_0", "count": 1,
+        "expirationTime": 1521650650793, "maxPageSize": 1000,
+        "resultList": {"to": 1, "from": 1, "result": [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+                "status": "Ready", "configuration": "TDEV"}}]}}
+    private_vol_rest_response_none = {
+        "id": "f3aab01c-a5a8-4fb4-af2b-16ae1c46dc9e_0", "count": 0,
+        "expirationTime": 1521650650793, "maxPageSize": 1000,
+        "resultList": {"to": 0, "from": 0, "result": []}}
+    private_vol_rest_response_iterator_first = {
+        "id": "f3aab01c-a5a8-4fb4-af2b-16ae1c46dc9e_0", "count": 1500,
+        "expirationTime": 1521650650793, "maxPageSize": 1000,
+        "resultList": {"to": 1, "from": 1, "result": [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00002",
+                "status": "Ready", "configuration": "TDEV"}}]}}
+    private_vol_rest_response_iterator_second = {
+        "to": 2000, "from": 1001, "result": [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+                "status": "Ready", "configuration": "TDEV"}}]}
+    rest_iterator_resonse_one = {
+        "to": 1000, "from": 1, "result": [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+                "status": "Ready", "configuration": "TDEV"}}]}
+    rest_iterator_resonse_two = {
+        "to": 1500, "from": 1001, "result": [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00002",
+                "status": "Ready", "configuration": "TDEV"}}]}
+
+    # COMMON.PY
+    priv_vol_func_response_single = [
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 1026.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00001", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00001",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {
+                "mirror": False, "snapVXTgt": False,
+                "cloneTarget": False, "cloneSrc": False,
+                "snapVXSrc": True, "snapVXSession": [
+                    {"srcSnapshotGenInfo": [
+                        {"snapshotHeader": {
+                            "timestamp": 1512763278000, "expired": False,
+                            "secured": False, "snapshotName": "testSnap1",
+                            "device": "00001", "generation": 0, "timeToLive": 0
+                        }}]}]}}]
+
+    priv_vol_func_response_multi = [
+        {"volumeHeader": {
+            "private": False, "capGB": 100.0, "capMB": 102400.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00001", "status": "Ready", "numStorageGroups": 0,
+            "reservationInfo": {"reserved": False}, "mapped": False,
+            "encapsulated": False, "formattedName": "00001",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "maskingInfo": {"masked": False},
+            "timeFinderInfo": {
+                "mirror": False, "snapVXTgt": False,
+                "cloneTarget": False, "cloneSrc": False,
+                "snapVXSrc": True, "snapVXSession": [
+                    {"srcSnapshotGenInfo": [
+                        {"snapshotHeader": {
+                            "timestamp": 1512763278000, "expired": False,
+                            "secured": False, "snapshotName": "testSnap1",
+                            "device": "00001", "generation": 0, "timeToLive": 0
+                        }}]}]}},
+        {"volumeHeader": {
+            "private": False, "capGB": 200.0, "capMB": 204800.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00002", "status": "Ready", "numStorageGroups": 0,
+            "reservationInfo": {"reserved": False}, "mapped": False,
+            "encapsulated": False, "formattedName": "00002",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "maskingInfo": {"masked": False},
+            "timeFinderInfo": {
+                "mirror": False, "snapVXTgt": False,
+                "cloneTarget": False, "cloneSrc": False,
+                "snapVXSrc": True, "snapVXSession": [
+                    {"srcSnapshotGenInfo": [
+                        {"snapshotHeader": {
+                            "timestamp": 1512763278000, "expired": False,
+                            "secured": False, "snapshotName": "testSnap2",
+                            "device": "00002", "generation": 0, "timeToLive": 0
+                        }}]}]}},
+        {"volumeHeader": {
+            "private": False, "capGB": 300.0, "capMB": 307200.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00003", "status": "Ready", "numStorageGroups": 0,
+            "reservationInfo": {"reserved": False}, "mapped": False,
+            "encapsulated": False, "formattedName": "00003",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "maskingInfo": {"masked": False},
+            "timeFinderInfo": {
+                "mirror": False, "snapVXTgt": False,
+                "cloneTarget": False, "cloneSrc": False,
+                "snapVXSrc": True, "snapVXSession": [
+                    {"srcSnapshotGenInfo": [
+                        {"snapshotHeader": {
+                            "timestamp": 1512763278000, "expired": False,
+                            "secured": False, "snapshotName": "testSnap3",
+                            "device": "00003", "generation": 0, "timeToLive": 0
+                        }}]}]}},
+        {"volumeHeader": {
+            "private": False, "capGB": 400.0, "capMB": 409600.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00004", "status": "Ready", "numStorageGroups": 0,
+            "reservationInfo": {"reserved": False}, "mapped": False,
+            "encapsulated": False, "formattedName": "00004",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "maskingInfo": {"masked": False},
+            "timeFinderInfo": {
+                "mirror": False, "snapVXTgt": False,
+                "cloneTarget": False, "cloneSrc": False,
+                "snapVXSrc": True, "snapVXSession": [
+                    {"srcSnapshotGenInfo": [
+                        {"snapshotHeader": {
+                            "timestamp": 1512763278000, "expired": False,
+                            "secured": False, "snapshotName": "testSnap4",
+                            "device": "00004", "generation": 0, "timeToLive": 0
+                        }}]}]}}]
+
+    priv_vol_func_response_multi_invalid = [
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 10.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00001", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00001",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {"snapVXTgt": False, "snapVXSrc": False}},
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 1026.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00002", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00002",
+            "system_resource": False, "numSymDevMaskingViews": 1,
+            "nameModifier": "", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {"snapVXTgt": False, "snapVXSrc": False}},
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 1026.0,
+            "serviceState": "Normal", "emulationType": "CKD",
+            "volumeId": "00003", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00003",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {"snapVXTgt": False, "snapVXSrc": False}},
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 1026.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00004", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00004",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {"snapVXTgt": True, "snapVXSrc": False}},
+        {"volumeHeader": {
+            "private": False, "capGB": 1.0, "capMB": 1026.0,
+            "serviceState": "Normal", "emulationType": "FBA",
+            "volumeId": "00005", "status": "Ready", "mapped": False,
+            "numStorageGroups": 0, "reservationInfo": {"reserved": False},
+            "encapsulated": False, "formattedName": "00005",
+            "system_resource": False, "numSymDevMaskingViews": 0,
+            "nameModifier": "OS-vol", "configuration": "TDEV"},
+            "maskingInfo": {"masked": False},
+            "rdfInfo": {
+                "dynamicRDF": False, "RDF": False,
+                "concurrentRDF": False,
+                "getDynamicRDFCapability": "RDF1_Capable", "RDFA": False},
+            "timeFinderInfo": {"snapVXTgt": False, "snapVXSrc": False}}]
+
+    volume_info_dict = {
+        'volume_id': volume_id,
+        'service_level': 'Diamond',
+        'masking_view': 'OS-HostX-F-OS-fibre-PG-MV',
+        'host': fake_host,
+        'display_name': 'attach_vol_name',
+        'volume_updated_time': '2018-03-05 20:32:41',
+        'port_group': 'OS-fibre-PG',
+        'operation': 'attach', 'srp': 'SRP_1',
+        'initiator_group': 'OS-HostX-F-IG',
+        'serial_number': '000197800123',
+        'parent_storage_group': 'OS-HostX-F-OS-fibre-PG-SG',
+        'workload': 'DSS',
+        'child_storage_group': 'OS-HostX-SRP_1-DiamondDSS-OS-fibre-PG'}
+
+    data_dict = {volume_id: volume_info_dict}
+    platform = 'Linux-4.4.0-104-generic-x86_64-with-Ubuntu-16.04-xenial'
+    unisphere_version = u'V9.0.0.1'
+    openstack_release = '12.0.0.0b3.dev401'
+    openstack_version = '12.0.0'
+    python_version = '2.7.12'
+    vmax_driver_version = '3.1'
+    vmax_firmware_version = u'5977.1125.1125'
+    vmax_model = u'VMAX250F'
+
+    version_dict = {
+        'unisphere_version': unisphere_version,
+        'openstack_release': openstack_release,
+        'openstack_version': openstack_version,
+        'python_version': python_version,
+        'vmax_driver_version': vmax_driver_version,
+        'platform': platform,
+        'vmax_firmware_version': vmax_firmware_version,
+        'serial_number': array,
+        'vmax_model': vmax_model}
+
 
 class FakeLookupService(object):
     def get_device_mapping_from_network(self, initiator_wwns, target_wwns):
@@ -748,14 +1013,14 @@ class FakeRequestsSession(object):
                 return_object = self._sloprovisioning_ig(url)
             elif 'initiator' in url:
                 return_object = self._sloprovisioning_initiator(url)
+            elif 'service_level_demand_report' in url:
+                return_object = self.data.srp_slo_details
             elif 'srp' in url:
                 return_object = self.data.srp_details
             elif 'workloadtype' in url:
                 return_object = self.data.workloadtype
             elif 'compressionCapable' in url:
                 return_object = self.data.compression_info
-            else:
-                return_object = self.data.slo_details
 
         elif 'replication' in url:
             return_object = self._replication(url)
@@ -924,6 +1189,8 @@ class FakeConfiguration(object):
                 self.san_password = value
             elif key == 'san_ip':
                 self.san_ip = value
+            elif key == 'san_api_port':
+                self.san_api_port = value
             elif key == 'san_rest_port':
                 self.san_rest_port = value
             elif key == 'vmax_srp':
@@ -942,6 +1209,10 @@ class FakeConfiguration(object):
                 self.chap_username = value
             elif key == 'chap_password':
                 self.chap_password = value
+            elif key == 'driver_ssl_cert_verify':
+                self.driver_ssl_cert_verify = value
+            elif key == 'driver_ssl_cert_path':
+                self.driver_ssl_cert_path = value
 
     def safe_get(self, key):
         try:
@@ -953,89 +1224,15 @@ class FakeConfiguration(object):
         pass
 
 
-class FakeXML(object):
-
-    def __init__(self):
-        """"""
-        self.tempdir = tempfile.mkdtemp()
-        self.data = VMAXCommonData()
-
-    def create_fake_config_file(self, config_group, portgroup,
-                                ssl_verify=False):
-
-        doc = minidom.Document()
-        emc = doc.createElement("EMC")
-        doc.appendChild(emc)
-        doc = self.add_array_info(doc, emc, portgroup, ssl_verify)
-        filename = 'cinder_dell_emc_config_%s.xml' % config_group
-        config_file_path = self.tempdir + '/' + filename
-
-        f = open(config_file_path, 'w')
-        doc.writexml(f)
-        f.close()
-        return config_file_path
-
-    def add_array_info(self, doc, emc, portgroup_name, ssl_verify):
-        array = doc.createElement("Array")
-        arraytext = doc.createTextNode(self.data.array)
-        emc.appendChild(array)
-        array.appendChild(arraytext)
-
-        ecomserverip = doc.createElement("RestServerIp")
-        ecomserveriptext = doc.createTextNode("1.1.1.1")
-        emc.appendChild(ecomserverip)
-        ecomserverip.appendChild(ecomserveriptext)
-
-        ecomserverport = doc.createElement("RestServerPort")
-        ecomserverporttext = doc.createTextNode("8443")
-        emc.appendChild(ecomserverport)
-        ecomserverport.appendChild(ecomserverporttext)
-
-        ecomusername = doc.createElement("RestUserName")
-        ecomusernametext = doc.createTextNode("smc")
-        emc.appendChild(ecomusername)
-        ecomusername.appendChild(ecomusernametext)
-
-        ecompassword = doc.createElement("RestPassword")
-        ecompasswordtext = doc.createTextNode("smc")
-        emc.appendChild(ecompassword)
-        ecompassword.appendChild(ecompasswordtext)
-
-        portgroup = doc.createElement("PortGroup")
-        portgrouptext = doc.createTextNode(portgroup_name)
-        portgroup.appendChild(portgrouptext)
-
-        portgroups = doc.createElement("PortGroups")
-        portgroups.appendChild(portgroup)
-        emc.appendChild(portgroups)
-
-        srp = doc.createElement("SRP")
-        srptext = doc.createTextNode("SRP_1")
-        emc.appendChild(srp)
-        srp.appendChild(srptext)
-
-        if ssl_verify:
-            restcert = doc.createElement("SSLCert")
-            restcerttext = doc.createTextNode("/path/cert.crt")
-            emc.appendChild(restcert)
-            restcert.appendChild(restcerttext)
-
-            restverify = doc.createElement("SSLVerify")
-            restverifytext = doc.createTextNode("/path/cert.pem")
-            emc.appendChild(restverify)
-            restverify.appendChild(restverifytext)
-        return doc
-
-
 class VMAXUtilsTest(test.TestCase):
     def setUp(self):
         self.data = VMAXCommonData()
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
         super(VMAXUtilsTest, self).setUp()
-        config_group = 'UtilsTests'
-        fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_i, True)
-        configuration = FakeConfiguration(fake_xml, config_group)
+        configuration = FakeConfiguration(
+            None, 'UtilsTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = iscsi.VMAXISCSIDriver(configuration=configuration)
@@ -1068,48 +1265,6 @@ class VMAXUtilsTest(test.TestCase):
             {'name': 'no_type_id'})
         self.assertEqual({}, extra_specs)
 
-    def test_get_random_portgroup(self):
-        # 4 portgroups
-        data = ("<?xml version='1.0' encoding='UTF-8'?>\n<EMC>\n"
-                "<PortGroups>"
-                "<PortGroup>OS-PG1</PortGroup>\n"
-                "<PortGroup>OS-PG2</PortGroup>\n"
-                "<PortGroup>OS-PG3</PortGroup>\n"
-                "<PortGroup>OS-PG4</PortGroup>\n"
-                "</PortGroups>"
-                "</EMC>")
-        dom = minidom.parseString(data)
-        portgroup = self.utils._get_random_portgroup(dom)
-        self.assertIn('OS-PG', portgroup)
-
-        # Duplicate portgroups
-        data = ("<?xml version='1.0' encoding='UTF-8'?>\n<EMC>\n"
-                "<PortGroups>"
-                "<PortGroup>OS-PG1</PortGroup>\n"
-                "<PortGroup>OS-PG1</PortGroup>\n"
-                "<PortGroup>OS-PG1</PortGroup>\n"
-                "<PortGroup>OS-PG2</PortGroup>\n"
-                "</PortGroups>"
-                "</EMC>")
-        dom = minidom.parseString(data)
-        portgroup = self.utils._get_random_portgroup(dom)
-        self.assertIn('OS-PG', portgroup)
-
-    def test_get_random_portgroup_none(self):
-        # Missing PortGroup tag
-        data = ("<?xml version='1.0' encoding='UTF-8'?>\n<EMC>\n"
-                "</EMC>")
-        dom = minidom.parseString(data)
-        self.assertIsNone(self.utils._get_random_portgroup(dom))
-
-        # Missing portgroups
-        data = ("<?xml version='1.0' encoding='UTF-8'?>\n<EMC>\n"
-                "<PortGroups>"
-                "</PortGroups>"
-                "</EMC>")
-        dom = minidom.parseString(data)
-        self.assertIsNone(self.utils._get_random_portgroup(dom))
-
     def test_get_host_short_name(self):
         host_under_16_chars = 'host_13_chars'
         host1 = self.utils.get_host_short_name(
@@ -1134,53 +1289,6 @@ class VMAXUtilsTest(test.TestCase):
         volume_element_name = self.utils.get_volume_element_name(volume_id)
         expect_vol_element_name = ('OS-' + volume_id)
         self.assertEqual(expect_vol_element_name, volume_element_name)
-
-    def test_parse_file_to_get_array_map(self):
-        kwargs = (
-            {'RestServerIp': '1.1.1.1',
-             'RestServerPort': '8443',
-             'RestUserName': 'smc',
-             'RestPassword': 'smc',
-             'SSLCert': '/path/cert.crt',
-             'SSLVerify': '/path/cert.pem',
-             'SerialNumber': self.data.array,
-             'srpName': 'SRP_1',
-             'PortGroup': self.data.port_group_name_i})
-        array_info = self.utils.parse_file_to_get_array_map(
-            self.common.configuration.cinder_dell_emc_config_file)
-        self.assertEqual(kwargs, array_info)
-
-    @mock.patch.object(utils.VMAXUtils,
-                       '_get_connection_info')
-    @mock.patch.object(utils.VMAXUtils,
-                       '_get_random_portgroup')
-    def test_parse_file_to_get_array_map_errors(self, mock_port, mock_conn):
-        tempdir = tempfile.mkdtemp()
-        doc = minidom.Document()
-        emc = doc.createElement("EMC")
-        doc.appendChild(emc)
-        filename = 'cinder_dell_emc_config_%s.xml' % 'fake_xml'
-        config_file_path = tempdir + '/' + filename
-        f = open(config_file_path, 'w')
-        doc.writexml(f)
-        f.close()
-        array_info = self.utils.parse_file_to_get_array_map(
-            config_file_path)
-        self.assertIsNone(array_info['SerialNumber'])
-
-    def test_parse_file_to_get_array_map_conn_errors(self):
-        tempdir = tempfile.mkdtemp()
-        doc = minidom.Document()
-        emc = doc.createElement("EMC")
-        doc.appendChild(emc)
-        filename = 'cinder_dell_emc_config_%s.xml' % 'fake_xml'
-        config_file_path = tempdir + '/' + filename
-        f = open(config_file_path, 'w')
-        doc.writexml(f)
-        f.close()
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.utils.parse_file_to_get_array_map,
-                          config_file_path)
 
     def test_truncate_string(self):
         # string is less than max number
@@ -1543,6 +1651,22 @@ class VMAXUtilsTest(test.TestCase):
         self.assertFalse(self.utils.change_multiattach(
             extra_specs_ma_false, extra_specs_ma_false))
 
+    def test_is_volume_manageable(self):
+        for volume in self.data.priv_vol_func_response_multi:
+            self.assertTrue(
+                self.utils.is_volume_manageable(volume))
+        for volume in self.data.priv_vol_func_response_multi_invalid:
+            self.assertFalse(
+                self.utils.is_volume_manageable(volume))
+
+    def test_is_snapshot_manageable(self):
+        for volume in self.data.priv_vol_func_response_multi:
+            self.assertTrue(
+                self.utils.is_snapshot_manageable(volume))
+        for volume in self.data.priv_vol_func_response_multi_invalid:
+            self.assertFalse(
+                self.utils.is_snapshot_manageable(volume))
+
 
 class VMAXRestTest(test.TestCase):
     def setUp(self):
@@ -1550,10 +1674,10 @@ class VMAXRestTest(test.TestCase):
 
         super(VMAXRestTest, self).setUp()
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
-        config_group = 'RestTests'
-        fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_f)
-        configuration = FakeConfiguration(fake_xml, config_group)
+        configuration = FakeConfiguration(
+            None, 'RestTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = fc.VMAXFCDriver(configuration=configuration)
@@ -1728,8 +1852,8 @@ class VMAXRestTest(test.TestCase):
         self.assertEqual(ref_details, srp_details)
 
     def test_get_slo_list(self):
-        ref_settings = self.data.slo_details['sloId']
-        slo_settings = self.rest.get_slo_list(self.data.array)
+        ref_settings = self.data.slo_details
+        slo_settings = self.rest.get_slo_list(self.data.array, self.data.srp)
         self.assertEqual(ref_settings, slo_settings)
 
     def test_get_workload_settings(self):
@@ -2940,6 +3064,83 @@ class VMAXRestTest(test.TestCase):
             rename=True, new_snap_name=new_snap_backend_name)
         mock_modify.assert_called_once()
 
+    def test_get_private_volume_list_pass(self):
+        array_id = self.data.array
+        response = [{"volumeHeader": {
+            "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+            "status": "Ready", "configuration": "TDEV"}}]
+
+        with mock.patch.object(
+                self.rest, 'get_resource',
+                return_value=self.data.private_vol_rest_response_single):
+            volume = self.rest.get_private_volume_list(array_id)
+            self.assertEqual(response, volume)
+
+    def test_get_private_volume_list_none(self):
+        array_id = self.data.array
+        response = []
+        with mock.patch.object(
+                self.rest, 'get_resource', return_value=
+                VMAXCommonData.private_vol_rest_response_none):
+            vol_list = self.rest.get_private_volume_list(array_id)
+            self.assertEqual(response, vol_list)
+
+    @mock.patch.object(
+        rest.VMAXRest, 'get_iterator_page_list', return_value=
+        VMAXCommonData.private_vol_rest_response_iterator_second['result'])
+    @mock.patch.object(
+        rest.VMAXRest, 'get_resource', return_value=
+        VMAXCommonData.private_vol_rest_response_iterator_first)
+    def test_get_private_volume_list_iterator(self, mock_get_resource,
+                                              mock_iterator):
+        array_id = self.data.array
+        response = [
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00002",
+                "status": "Ready", "configuration": "TDEV"}},
+            {"volumeHeader": {
+                "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+                "status": "Ready", "configuration": "TDEV"}}]
+        volume = self.rest.get_private_volume_list(array_id)
+        self.assertEqual(response, volume)
+
+    def test_get_iterator_list(self):
+        with mock.patch.object(
+                self.rest, '_get_request', side_effect=[
+                    self.data.rest_iterator_resonse_one,
+                    self.data.rest_iterator_resonse_two]):
+
+            expected_response = [
+                {"volumeHeader": {
+                    "capGB": 1.0, "capMB": 1026.0, "volumeId": "00001",
+                    "status": "Ready", "configuration": "TDEV"}},
+                {"volumeHeader": {
+                    "capGB": 1.0, "capMB": 1026.0, "volumeId": "00002",
+                    "status": "Ready", "configuration": "TDEV"}}]
+            iterator_id = 'test_iterator_id'
+            result_count = 1500
+            start_position = 1
+            end_position = 1000
+
+            actual_response = self.rest.get_iterator_page_list(
+                iterator_id, result_count, start_position, end_position)
+            self.assertEqual(expected_response, actual_response)
+
+    def test_set_rest_credentials(self):
+        array_info = {
+            'RestServerIp': '10.10.10.10',
+            'RestServerPort': '8443',
+            'RestUserName': 'user_test',
+            'RestPassword': 'pass_test',
+            'SSLVerify': True,
+        }
+        self.rest.set_rest_credentials(array_info)
+        self.assertEqual('user_test', self.rest.user)
+        self.assertEqual('pass_test', self.rest.passwd)
+        self.assertTrue(self.rest.verify)
+        self.assertEqual('https://10.10.10.10:8443/univmax/restapi',
+                         self.rest.base_uri)
+
 
 class VMAXProvisionTest(test.TestCase):
     def setUp(self):
@@ -2947,10 +3148,10 @@ class VMAXProvisionTest(test.TestCase):
 
         super(VMAXProvisionTest, self).setUp()
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
-        config_group = 'ProvisionTests'
-        self.fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_i)
-        configuration = FakeConfiguration(self.fake_xml, config_group)
+        configuration = FakeConfiguration(
+            None, 'ProvisionTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = iscsi.VMAXISCSIDriver(configuration=configuration)
@@ -3424,6 +3625,26 @@ class VMAXProvisionTest(test.TestCase):
         mock_mod.assert_called_once()
         mock_del.assert_called_once()
 
+    @mock.patch.object(
+        rest.VMAXRest, 'get_snap_linked_device_list',
+        side_effect=[[{'targetDevice': VMAXCommonData.device_id2}],
+                     [{'targetDevice': VMAXCommonData.device_id2},
+                      {'targetDevice': VMAXCommonData.device_id3}]])
+    @mock.patch.object(provision.VMAXProvision, '_unlink_volume')
+    def test_delete_volume_snap_check_for_links(self, mock_unlink, mock_tgts):
+        self.provision.delete_volume_snap_check_for_links(
+            self.data.array, self.data.test_snapshot_snap_name,
+            self.data.device_id, self.data.extra_specs)
+        mock_unlink.assert_called_once_with(
+            self.data.array, "", "", self.data.test_snapshot_snap_name,
+            self.data.extra_specs, list_volume_pairs=[
+                (self.data.device_id, VMAXCommonData.device_id2)])
+        mock_unlink.reset_mock()
+        self.provision.delete_volume_snap_check_for_links(
+            self.data.array, self.data.test_snapshot_snap_name,
+            self.data.device_id, self.data.extra_specs)
+        self.assertEqual(2, mock_unlink.call_count)
+
 
 class VMAXCommonTest(test.TestCase):
     def setUp(self):
@@ -3432,11 +3653,10 @@ class VMAXCommonTest(test.TestCase):
         super(VMAXCommonTest, self).setUp()
         self.mock_object(volume_utils, 'get_max_over_subscription_ratio',
                          return_value=1.0)
-        config_group = 'CommonTests'
-        self.fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_f)
-        configuration = FakeConfiguration(self.fake_xml, config_group,
-                                          1, 1)
+        configuration = FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_f])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = fc.VMAXFCDriver(configuration=configuration)
@@ -3454,16 +3674,15 @@ class VMAXCommonTest(test.TestCase):
     @mock.patch.object(common.VMAXCommon,
                        '_get_slo_workload_combinations',
                        return_value=[])
-    @mock.patch.object(utils.VMAXUtils,
-                       'parse_file_to_get_array_map',
+    @mock.patch.object(common.VMAXCommon,
+                       'get_attributes_from_cinder_config',
                        return_value=[])
     def test_gather_info_no_opts(self, mock_parse, mock_combo, mock_rest):
         configuration = FakeConfiguration(None, 'config_group', None, None)
         fc.VMAXFCDriver(configuration=configuration)
 
     def test_get_slo_workload_combinations_success(self):
-        array_info = self.utils.parse_file_to_get_array_map(
-            self.common.pool_info['config_file'])
+        array_info = self.common.get_attributes_from_cinder_config()
         finalarrayinfolist = self.common._get_slo_workload_combinations(
             array_info)
         self.assertTrue(len(finalarrayinfolist) > 1)
@@ -3795,23 +4014,6 @@ class VMAXCommonTest(test.TestCase):
             data = self.common.update_volume_stats()
             self.assertEqual('CommonTests', data['volume_backend_name'])
 
-    def test_set_config_file_and_get_extra_specs(self):
-        volume = self.data.test_volume
-        extra_specs, config_file, qos_specs = (
-            self.common._set_config_file_and_get_extra_specs(volume))
-        self.assertEqual(self.data.vol_type_extra_specs, extra_specs)
-        self.assertEqual(self.fake_xml, config_file)
-
-    def test_set_config_file_and_get_extra_specs_no_specs(self):
-        volume = self.data.test_volume
-        ref_config = '/etc/cinder/cinder_dell_emc_config.xml'
-        with mock.patch.object(self.utils, 'get_volumetype_extra_specs',
-                               return_value=None):
-            extra_specs, config_file, qos_specs = (
-                self.common._set_config_file_and_get_extra_specs(volume))
-            self.assertIsNone(extra_specs)
-            self.assertEqual(ref_config, config_file)
-
     def test_find_device_on_array_success(self):
         volume = self.data.test_volume
         extra_specs = self.data.extra_specs
@@ -3912,18 +4114,6 @@ class VMAXCommonTest(test.TestCase):
             volume, None, extra_specs)
         self.assertEqual(ref_masked, maskedvols)
 
-    def test_register_config_file_from_config_group_exists(self):
-        config_group_name = 'CommonTests'
-        config_file = self.common._register_config_file_from_config_group(
-            config_group_name)
-        self.assertEqual(self.fake_xml, config_file)
-
-    def test_register_config_file_from_config_group_does_not_exist(self):
-        config_group_name = 'IncorrectName'
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.common._register_config_file_from_config_group,
-                          config_group_name)
-
     def test_initial_setup_success(self):
         volume = self.data.test_volume
         ref_extra_specs = deepcopy(self.data.extra_specs_intervals_set)
@@ -3933,8 +4123,9 @@ class VMAXCommonTest(test.TestCase):
 
     def test_initial_setup_failed(self):
         volume = self.data.test_volume
-        with mock.patch.object(self.utils, 'parse_file_to_get_array_map',
-                               return_value=None):
+        with mock.patch.object(
+                self.common, 'get_attributes_from_cinder_config',
+                return_value=None):
             self.assertRaises(exception.VolumeBackendAPIException,
                               self.common._initial_setup, volume)
 
@@ -4147,8 +4338,7 @@ class VMAXCommonTest(test.TestCase):
             volume_name, volume_size, extra_specs)
 
     def test_set_vmax_extra_specs(self):
-        srp_record = self.utils.parse_file_to_get_array_map(
-            self.fake_xml)
+        srp_record = self.common.get_attributes_from_cinder_config()
         extra_specs = self.common._set_vmax_extra_specs(
             self.data.vol_type_extra_specs, srp_record)
         ref_extra_specs = deepcopy(self.data.extra_specs_intervals_set)
@@ -4156,16 +4346,14 @@ class VMAXCommonTest(test.TestCase):
         self.assertEqual(ref_extra_specs, extra_specs)
 
     def test_set_vmax_extra_specs_no_srp_name(self):
-        srp_record = self.utils.parse_file_to_get_array_map(
-            self.fake_xml)
+        srp_record = self.common.get_attributes_from_cinder_config()
         extra_specs = self.common._set_vmax_extra_specs({}, srp_record)
         self.assertEqual('Optimized', extra_specs['slo'])
 
     def test_set_vmax_extra_specs_compr_disabled(self):
         with mock.patch.object(self.rest, 'is_compression_capable',
                                return_value=True):
-            srp_record = self.utils.parse_file_to_get_array_map(
-                self.fake_xml)
+            srp_record = self.common.get_attributes_from_cinder_config()
             extra_specs = self.common._set_vmax_extra_specs(
                 self.data.vol_type_extra_specs_compr_disabled, srp_record)
             ref_extra_specs = deepcopy(self.data.extra_specs_intervals_set)
@@ -4174,8 +4362,7 @@ class VMAXCommonTest(test.TestCase):
             self.assertEqual(ref_extra_specs, extra_specs)
 
     def test_set_vmax_extra_specs_compr_disabled_not_compr_capable(self):
-        srp_record = self.utils.parse_file_to_get_array_map(
-            self.fake_xml)
+        srp_record = self.common.get_attributes_from_cinder_config()
         extra_specs = self.common._set_vmax_extra_specs(
             self.data.vol_type_extra_specs_compr_disabled, srp_record)
         ref_extra_specs = deepcopy(self.data.extra_specs_intervals_set)
@@ -4183,16 +4370,20 @@ class VMAXCommonTest(test.TestCase):
         self.assertEqual(ref_extra_specs, extra_specs)
 
     def test_set_vmax_extra_specs_portgroup_as_spec(self):
-        srp_record = self.utils.parse_file_to_get_array_map(
-            self.fake_xml)
+        srp_record = self.common.get_attributes_from_cinder_config()
         extra_specs = self.common._set_vmax_extra_specs(
             {utils.PORTGROUPNAME: 'extra_spec_pg'}, srp_record)
         self.assertEqual('extra_spec_pg', extra_specs[utils.PORTGROUPNAME])
 
     def test_set_vmax_extra_specs_no_portgroup_set(self):
-        fake_xml = FakeXML().create_fake_config_file(
-            'test_no_pg_set', '')
-        srp_record = self.utils.parse_file_to_get_array_map(fake_xml)
+        srp_record = {'srpName': 'SRP_1',
+                      'RestServerIp': '1.1.1.1',
+                      'RestPassword': 'smc',
+                      'SSLCert': None,
+                      'RestServerPort': 8443,
+                      'SSLVerify': False,
+                      'RestUserName': 'smc',
+                      'SerialNumber': '000197800123'}
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.common._set_vmax_extra_specs,
                           {}, srp_record)
@@ -5047,28 +5238,103 @@ class VMAXCommonTest(test.TestCase):
         self.assertEqual(ref_dev_id, src_dev_id1)
         self.assertEqual(ref_dev_id, src_dev_id2)
 
-    def test_get_attributes_from_cinder_config(self):
+    def test_get_attributes_from_cinder_config_new_and_old(self):
         kwargs_expected = (
             {'RestServerIp': '1.1.1.1',
              'RestServerPort': 8443,
              'RestUserName': 'smc',
              'RestPassword': 'smc',
-             'SSLCert': None,
              'SSLVerify': False,
              'SerialNumber': self.data.array,
              'srpName': 'SRP_1',
              'PortGroup': self.data.port_group_name_i})
-        backup_conf = self.common.configuration
+        old_conf = FakeConfiguration(None, 'CommonTests', 1, 1)
         configuration = FakeConfiguration(
             None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
             vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
-            san_rest_port=8443, vmax_port_groups=[self.data.port_group_name_i])
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         self.common.configuration = configuration
         kwargs_returned = self.common.get_attributes_from_cinder_config()
         self.assertEqual(kwargs_expected, kwargs_returned)
-        self.common.configuration = backup_conf
+        self.common.configuration = old_conf
         kwargs = self.common.get_attributes_from_cinder_config()
         self.assertIsNone(kwargs)
+
+    def test_get_attributes_from_cinder_config_with_port_override_old(self):
+        kwargs_expected = (
+            {'RestServerIp': '1.1.1.1',
+             'RestServerPort': 3448,
+             'RestUserName': 'smc',
+             'RestPassword': 'smc',
+             'SSLVerify': False,
+             'SerialNumber': self.data.array,
+             'srpName': 'SRP_1',
+             'PortGroup': self.data.port_group_name_i})
+        configuration = FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_rest_port=3448, vmax_port_groups=[self.data.port_group_name_i])
+        self.common.configuration = configuration
+        kwargs_returned = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(kwargs_expected, kwargs_returned)
+
+    def test_get_attributes_from_cinder_config_with_port_override_new(self):
+        kwargs_expected = (
+            {'RestServerIp': '1.1.1.1',
+             'RestServerPort': 3448,
+             'RestUserName': 'smc',
+             'RestPassword': 'smc',
+             'SSLVerify': False,
+             'SerialNumber': self.data.array,
+             'srpName': 'SRP_1',
+             'PortGroup': self.data.port_group_name_i})
+        configuration = FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=3448, vmax_port_groups=[self.data.port_group_name_i])
+        self.common.configuration = configuration
+        kwargs_returned = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(kwargs_expected, kwargs_returned)
+
+    def test_get_attributes_from_cinder_config_no_port(self):
+        kwargs_expected = (
+            {'RestServerIp': '1.1.1.1',
+             'RestServerPort': 8443,
+             'RestUserName': 'smc',
+             'RestPassword': 'smc',
+             'SSLVerify': False,
+             'SerialNumber': self.data.array,
+             'srpName': 'SRP_1',
+             'PortGroup': self.data.port_group_name_i})
+        configuration = FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            vmax_port_groups=[self.data.port_group_name_i])
+        self.common.configuration = configuration
+        kwargs_returned = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(kwargs_expected, kwargs_returned)
+
+    def test_get_ssl_attributes_from_cinder_config(self):
+        conf = FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            vmax_port_groups=[self.data.port_group_name_i],
+            driver_ssl_cert_verify=True,
+            driver_ssl_cert_path='/path/to/cert')
+
+        self.common.configuration = conf
+        conf_returned = self.common.get_attributes_from_cinder_config()
+        self.assertEqual('/path/to/cert', conf_returned['SSLVerify'])
+
+        conf.driver_ssl_cert_verify = True
+        conf.driver_ssl_cert_path = None
+        conf_returned = self.common.get_attributes_from_cinder_config()
+        self.assertTrue(conf_returned['SSLVerify'])
+
+        conf.driver_ssl_cert_verify = False
+        conf.driver_ssl_cert_path = None
+        conf_returned = self.common.get_attributes_from_cinder_config()
+        self.assertFalse(conf_returned['SSLVerify'])
 
     @mock.patch.object(rest.VMAXRest,
                        'get_size_of_device_on_array',
@@ -5169,6 +5435,14 @@ class VMAXCommonTest(test.TestCase):
         mock_revert.assert_called_once_with(
             array, device_id, snap_name, extra_specs)
 
+    @mock.patch.object(utils.VMAXUtils, 'is_replication_enabled',
+                       return_value=True)
+    def test_revert_to_snapshot_replicated(self, mock_rep):
+        volume = self.data.test_volume
+        snapshot = self.data.test_snapshot
+        self.assertRaises(exception.VolumeDriverException,
+                          self.common.revert_to_snapshot, volume, snapshot)
+
     def test_get_initiator_check_flag(self):
         self.common.configuration.initiator_check = False
         initiator_check = self.common._get_initiator_check_flag()
@@ -5179,17 +5453,161 @@ class VMAXCommonTest(test.TestCase):
         initiator_check = self.common._get_initiator_check_flag()
         self.assertTrue(initiator_check)
 
+    def test_get_manageable_volumes_success(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_single):
+            vols_lists = self.common.get_manageable_volumes(
+                marker, limit, offset, sort_keys, sort_dirs)
+            expected_response = [
+                {'reference': {'source-id': '00001'}, 'safe_to_manage': True,
+                 'size': 1.0, 'reason_not_safe': None, 'cinder_id': None,
+                 'extra_info': {'config': 'TDEV', 'emulation': 'FBA'}}]
+            self.assertEqual(vols_lists, expected_response)
+
+    def test_get_manageable_volumes_filters_set(self):
+        marker, limit, offset = '00002', 2, 1
+        sort_keys, sort_dirs = 'size', 'desc'
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_multi):
+            vols_lists = self.common.get_manageable_volumes(
+                marker, limit, offset, sort_keys, sort_dirs)
+            expected_response = [
+                {'reference': {'source-id': '00003'}, 'safe_to_manage': True,
+                 'size': 300, 'reason_not_safe': None, 'cinder_id': None,
+                 'extra_info': {'config': 'TDEV', 'emulation': 'FBA'}},
+                {'reference': {'source-id': '00004'}, 'safe_to_manage': True,
+                 'size': 400, 'reason_not_safe': None, 'cinder_id': None,
+                 'extra_info': {'config': 'TDEV', 'emulation': 'FBA'}}]
+            self.assertEqual(vols_lists, expected_response)
+
+    def test_get_manageable_volumes_fail_no_vols(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=[]):
+            expected_response = []
+            vol_list = self.common.get_manageable_volumes(
+                marker, limit, offset, sort_keys, sort_dirs)
+            self.assertEqual(vol_list, expected_response)
+
+    def test_get_manageable_volumes_fail_no_valid_vols(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_multi_invalid):
+            expected_response = []
+            vol_list = self.common.get_manageable_volumes(
+                marker, limit, offset, sort_keys, sort_dirs)
+            self.assertEqual(vol_list, expected_response)
+
+    def test_get_manageable_snapshots_success(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_single):
+            snap_list = self.common.get_manageable_snapshots(
+                marker, limit, offset, sort_keys, sort_dirs)
+            expected_response = [{
+                'reference': {'source-name': 'testSnap1'},
+                'safe_to_manage': True, 'size': 1,
+                'reason_not_safe': None, 'cinder_id': None,
+                'extra_info': {
+                    'generation': 0, 'secured': False, 'timeToLive': 'N/A',
+                    'timestamp': mock.ANY},
+                'source_reference': {'source-id': '00001'}}]
+            self.assertEqual(snap_list, expected_response)
+
+    def test_get_manageable_snapshots_filters_set(self):
+        marker, limit, offset = 'testSnap2', 2, 1
+        sort_keys, sort_dirs = 'size', 'desc'
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_multi):
+            vols_lists = self.common.get_manageable_snapshots(
+                marker, limit, offset, sort_keys, sort_dirs)
+            expected_response = [
+                {'reference': {'source-name': 'testSnap3'},
+                 'safe_to_manage': True, 'size': 300, 'reason_not_safe': None,
+                 'cinder_id': None, 'extra_info': {
+                    'generation': 0, 'secured': False, 'timeToLive': 'N/A',
+                    'timestamp': mock.ANY},
+                 'source_reference': {'source-id': '00003'}},
+                {'reference': {'source-name': 'testSnap4'},
+                 'safe_to_manage': True, 'size': 400, 'reason_not_safe': None,
+                 'cinder_id': None, 'extra_info': {
+                    'generation': 0, 'secured': False, 'timeToLive': 'N/A',
+                    'timestamp': mock.ANY},
+                 'source_reference': {'source-id': '00004'}}]
+            self.assertEqual(vols_lists, expected_response)
+
+    def test_get_manageable_snapshots_fail_no_snaps(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=[]):
+            expected_response = []
+            vols_lists = self.common.get_manageable_snapshots(
+                marker, limit, offset, sort_keys, sort_dirs)
+            self.assertEqual(vols_lists, expected_response)
+
+    def test_get_manageable_snapshots_fail_no_valid_snaps(self):
+        marker = limit = offset = sort_keys = sort_dirs = None
+        with mock.patch.object(
+                self.rest, 'get_private_volume_list',
+                return_value=self.data.priv_vol_func_response_multi_invalid):
+            expected_response = []
+            vols_lists = self.common.get_manageable_snapshots(
+                marker, limit, offset, sort_keys, sort_dirs)
+            self.assertEqual(vols_lists, expected_response)
+
+    def test_get_slo_workload_combo_from_cinder_conf(self):
+        self.common.configuration.vmax_service_level = 'Diamond'
+        self.common.configuration.vmax_workload = 'DSS'
+        response1 = self.common.get_attributes_from_cinder_config()
+        self.assertEqual('Diamond', response1['ServiceLevel'])
+        self.assertEqual('DSS', response1['Workload'])
+
+        self.common.configuration.vmax_service_level = 'Diamond'
+        self.common.configuration.vmax_workload = None
+        response2 = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(self.common.configuration.vmax_service_level,
+                         response2['ServiceLevel'])
+        self.assertIsNone(response2['Workload'])
+
+        expected_response = {
+            'RestServerIp': '1.1.1.1',
+            'RestServerPort': 8443,
+            'RestUserName': 'smc',
+            'RestPassword': 'smc',
+            'SSLVerify': False,
+            'SerialNumber': '000197800123',
+            'srpName': 'SRP_1',
+            'PortGroup': 'OS-fibre-PG'}
+
+        self.common.configuration.vmax_service_level = None
+        self.common.configuration.vmax_workload = 'DSS'
+        response3 = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(expected_response, response3)
+
+        self.common.configuration.vmax_service_level = None
+        self.common.configuration.vmax_workload = None
+        response4 = self.common.get_attributes_from_cinder_config()
+        self.assertEqual(expected_response, response4)
+
 
 class VMAXFCTest(test.TestCase):
     def setUp(self):
         self.data = VMAXCommonData()
 
         super(VMAXFCTest, self).setUp()
-        config_group = 'FCTests'
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
-        self.fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_f)
-        self.configuration = FakeConfiguration(self.fake_xml, config_group)
+        self.configuration = FakeConfiguration(
+            None, 'FCTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = fc.VMAXFCDriver(configuration=self.configuration)
@@ -5443,11 +5861,10 @@ class VMAXISCSITest(test.TestCase):
         self.data = VMAXCommonData()
 
         super(VMAXISCSITest, self).setUp()
-        config_group = 'ISCSITests'
-        self.fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_i)
-        volume_utils.get_max_over_subscription_ratio = mock.Mock()
-        configuration = FakeConfiguration(self.fake_xml, config_group)
+        configuration = FakeConfiguration(
+            None, 'ISCSITests', 1, 1, san_ip='1.1.1.1', san_login='smc',
+            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
+            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = iscsi.VMAXISCSIDriver(configuration=configuration)
@@ -6748,9 +7165,6 @@ class VMAXCommonReplicationTest(test.TestCase):
         self.data = VMAXCommonData()
 
         super(VMAXCommonReplicationTest, self).setUp()
-        config_group = 'CommonReplicationTests'
-        self.fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_f)
         self.replication_device = {
             'target_device_id': self.data.remote_array,
             'remote_port_group': self.data.port_group_name_f,
@@ -6758,16 +7172,21 @@ class VMAXCommonReplicationTest(test.TestCase):
             'rdf_group_label': self.data.rdf_group_name,
             'allow_extend': 'True'}
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
+
         configuration = FakeConfiguration(
-            self.fake_xml, config_group,
+            None, 'CommonReplicationTests', 1, 1, san_ip='1.1.1.1',
+            san_login='smc', vmax_array=self.data.array, vmax_srp='SRP_1',
+            san_password='smc', san_api_port=8443,
+            vmax_port_groups=[self.data.port_group_name_f],
             replication_device=self.replication_device)
         rest.VMAXRest._establish_rest_session = mock.Mock(
             return_value=FakeRequestsSession())
         driver = fc.VMAXFCDriver(configuration=configuration)
-        iscsi_fake_xml = FakeXML().create_fake_config_file(
-            config_group, self.data.port_group_name_i)
         iscsi_config = FakeConfiguration(
-            iscsi_fake_xml, config_group,
+            None, 'CommonReplicationTests', 1, 1, san_ip='1.1.1.1',
+            san_login='smc', vmax_array=self.data.array, vmax_srp='SRP_1',
+            san_password='smc', san_api_port=8443,
+            vmax_port_groups=[self.data.port_group_name_i],
             replication_device=self.replication_device)
         iscsi_driver = iscsi.VMAXISCSIDriver(configuration=iscsi_config)
         self.iscsi_common = iscsi_driver.common
@@ -6781,8 +7200,8 @@ class VMAXCommonReplicationTest(test.TestCase):
             mock.Mock(
                 return_value=self.data.vol_type_extra_specs_rep_enabled))
         self.extra_specs = deepcopy(self.data.extra_specs_rep_enabled)
-        self.extra_specs['retries'] = 0
-        self.extra_specs['interval'] = 0
+        self.extra_specs['retries'] = 1
+        self.extra_specs['interval'] = 1
         self.extra_specs['rep_mode'] = 'Synchronous'
         self.async_rep_device = {
             'target_device_id': self.data.remote_array,
@@ -6791,7 +7210,10 @@ class VMAXCommonReplicationTest(test.TestCase):
             'rdf_group_label': self.data.rdf_group_name,
             'allow_extend': 'True', 'mode': 'async'}
         async_configuration = FakeConfiguration(
-            self.fake_xml, config_group,
+            None, 'CommonReplicationTests', 1, 1, san_ip='1.1.1.1',
+            san_login='smc', vmax_array=self.data.array, vmax_srp='SRP_1',
+            san_password='smc', san_api_port=8443,
+            vmax_port_groups=[self.data.port_group_name_f],
             replication_device=self.async_rep_device)
         self.async_driver = fc.VMAXFCDriver(configuration=async_configuration)
         self.metro_rep_device = {
@@ -6801,7 +7223,10 @@ class VMAXCommonReplicationTest(test.TestCase):
             'rdf_group_label': self.data.rdf_group_name,
             'allow_extend': 'True', 'mode': 'metro'}
         metro_configuration = FakeConfiguration(
-            self.fake_xml, config_group,
+            None, 'CommonReplicationTests', 1, 1, san_ip='1.1.1.1',
+            san_login='smc', vmax_array=self.data.array, vmax_srp='SRP_1',
+            san_password='smc', san_api_port=8443,
+            vmax_port_groups=[self.data.port_group_name_f],
             replication_device=self.metro_rep_device)
         self.metro_driver = fc.VMAXFCDriver(configuration=metro_configuration)
 
@@ -6819,9 +7244,9 @@ class VMAXCommonReplicationTest(test.TestCase):
     @mock.patch.object(masking.VMAXMasking, 'add_volume_to_storage_group')
     @mock.patch.object(
         common.VMAXCommon, '_replicate_volume',
-        return_value={
+        return_value=({
             'replication_driver_data':
-                VMAXCommonData.test_volume.replication_driver_data})
+                VMAXCommonData.test_volume.replication_driver_data}, {}))
     def test_create_replicated_volume(self, mock_rep, mock_add, mock_match,
                                       mock_check, mock_get, mock_cg):
         extra_specs = deepcopy(self.extra_specs)
@@ -6841,7 +7266,7 @@ class VMAXCommonReplicationTest(test.TestCase):
         extra_specs = deepcopy(self.extra_specs)
         extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
         with mock.patch.object(self.common, '_replicate_volume',
-                               return_value={}) as mock_rep:
+                               return_value=({}, {})) as mock_rep:
             self.common.create_cloned_volume(
                 self.data.test_clone_volume, self.data.test_volume)
             volume_dict = self.data.provider_location
@@ -6853,7 +7278,7 @@ class VMAXCommonReplicationTest(test.TestCase):
         extra_specs = deepcopy(self.extra_specs)
         extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
         with mock.patch.object(self.common, '_replicate_volume',
-                               return_value={}) as mock_rep:
+                               return_value=({}, {})) as mock_rep:
             self.common.create_volume_from_snapshot(
                 self.data.test_clone_volume, self.data.test_snapshot)
             volume_dict = self.data.provider_location
@@ -6867,7 +7292,8 @@ class VMAXCommonReplicationTest(test.TestCase):
         volume_dict = self.data.provider_location
         rs_enabled = fields.ReplicationStatus.ENABLED
         with mock.patch.object(self.common, 'setup_volume_replication',
-                               return_value=(rs_enabled, {})) as mock_setup:
+                               return_value=(rs_enabled, {}, {}))\
+                as mock_setup:
             self.common._replicate_volume(
                 self.data.test_volume, "1", volume_dict, self.extra_specs)
             mock_setup.assert_called_once_with(
@@ -7003,7 +7429,7 @@ class VMAXCommonReplicationTest(test.TestCase):
             self.data.device_id, volume_name, "5", extra_specs)
 
     def test_set_config_file_get_extra_specs_rep_enabled(self):
-        extra_specs, _, _ = self.common._set_config_file_and_get_extra_specs(
+        extra_specs, _ = self.common._set_config_file_and_get_extra_specs(
             self.data.test_volume)
         self.assertTrue(extra_specs['replication_enabled'])
 
@@ -7018,7 +7444,7 @@ class VMAXCommonReplicationTest(test.TestCase):
 
     @mock.patch.object(common.VMAXCommon,
                        '_replicate_volume',
-                       return_value={})
+                       return_value=({}, {}))
     def test_manage_existing_is_replicated(self, mock_rep):
         extra_specs = deepcopy(self.extra_specs)
         extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
@@ -7036,7 +7462,7 @@ class VMAXCommonReplicationTest(test.TestCase):
 
     @mock.patch.object(masking.VMAXMasking, 'remove_and_reset_members')
     def test_setup_volume_replication(self, mock_rm):
-        rep_status, rep_data = self.common.setup_volume_replication(
+        rep_status, rep_data, __ = self.common.setup_volume_replication(
             self.data.array, self.data.test_volume, self.data.device_id,
             self.extra_specs)
         self.assertEqual(fields.ReplicationStatus.ENABLED, rep_status)
@@ -7046,7 +7472,7 @@ class VMAXCommonReplicationTest(test.TestCase):
     @mock.patch.object(masking.VMAXMasking, 'remove_and_reset_members')
     @mock.patch.object(common.VMAXCommon, '_create_volume')
     def test_setup_volume_replication_target(self, mock_create, mock_rm):
-        rep_status, rep_data = self.common.setup_volume_replication(
+        rep_status, rep_data, __ = self.common.setup_volume_replication(
             self.data.array, self.data.test_volume, self.data.device_id,
             self.extra_specs, self.data.device_id2)
         self.assertEqual(fields.ReplicationStatus.ENABLED, rep_status)
@@ -7335,8 +7761,7 @@ class VMAXCommonReplicationTest(test.TestCase):
     def test_get_secondary_stats(self):
         rep_config = self.utils.get_replication_config(
             [self.replication_device])
-        array_map = self.utils.parse_file_to_get_array_map(
-            self.common.pool_info['config_file'])
+        array_map = self.common.get_attributes_from_cinder_config()
         finalarrayinfolist = self.common._get_slo_workload_combinations(
             array_map)
         array_info = finalarrayinfolist[0]
@@ -7534,7 +7959,7 @@ class VMAXCommonReplicationTest(test.TestCase):
     def test_setup_volume_replication_async(self, mock_rm, mock_add):
         extra_specs = deepcopy(self.extra_specs)
         extra_specs['rep_mode'] = utils.REP_ASYNC
-        rep_status, rep_data = (
+        rep_status, rep_data, __ = (
             self.async_driver.common.setup_volume_replication(
                 self.data.array, self.data.test_volume,
                 self.data.device_id, extra_specs))
@@ -7559,7 +7984,8 @@ class VMAXCommonReplicationTest(test.TestCase):
     @mock.patch.object(common.VMAXCommon, '_retype_remote_volume',
                        return_value=True)
     @mock.patch.object(common.VMAXCommon, 'setup_volume_replication',
-                       return_value=VMAXCommonData.provider_location2)
+                       return_value=(
+                           '', VMAXCommonData.provider_location2, ''))
     @mock.patch.object(common.VMAXCommon,
                        '_remove_vol_and_cleanup_replication')
     @mock.patch.object(utils.VMAXUtils, 'is_replication_enabled',
@@ -7593,3 +8019,230 @@ class VMAXCommonReplicationTest(test.TestCase):
                 self.data.test_volume.name, utils.REP_SYNC,
                 True, self.data.extra_specs)
         mock_retype.assert_called_once()
+
+
+class VMAXVolumeMetadataNoDebugTest(test.TestCase):
+    def setUp(self):
+        self.data = VMAXCommonData()
+
+        super(VMAXVolumeMetadataNoDebugTest, self).setUp()
+        is_debug = False
+        self.volume_metadata = metadata.VMAXVolumeMetadata(
+            rest.VMAXRest, '3.1', is_debug)
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata, '_fill_volume_trace_dict',
+                       return_value={})
+    def test_gather_volume_info(self, mock_fvtd):
+        self.volume_metadata.gather_volume_info(
+            self.data.volume_id, 'create', False, volume_size=1)
+        mock_fvtd.assert_not_called()
+
+
+class VMAXVolumeMetadataDebugTest(test.TestCase):
+    def setUp(self):
+        self.data = VMAXCommonData()
+
+        super(VMAXVolumeMetadataDebugTest, self).setUp()
+        is_debug = True
+        self.volume_metadata = metadata.VMAXVolumeMetadata(
+            rest.VMAXRest, '3.1', is_debug)
+        self.utils = self.volume_metadata.utils
+        self.rest = self.volume_metadata.rest
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata, '_fill_volume_trace_dict',
+                       return_value={})
+    def test_gather_volume_info(self, mock_fvtd):
+        self.volume_metadata.gather_volume_info(
+            self.data.volume_id, 'create', False, volume_size=1)
+        mock_fvtd.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_attach_info(self, mock_uvim):
+        self.volume_metadata.capture_attach_info(
+            self.data.test_volume, self.data.extra_specs,
+            self.data.masking_view_dict, self.data.fake_host,
+            False, False)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_create_volume(self, mock_uvim):
+        self.volume_metadata.capture_create_volume(
+            self.data.device_id, self.data.test_volume, "test_group",
+            "test_group_id", self.data.extra_specs, {}, 'create', None)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_manage_existing(self, mock_uvim):
+        self.volume_metadata.capture_manage_existing(
+            self.data.test_volume, {}, self.data.device_id,
+            self.data.extra_specs)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_failover_volume(self, mock_uvim):
+        self.volume_metadata.capture_failover_volume(
+            self.data.test_volume, self.data.device_id2,
+            self.data.remote_array, self.data.rdf_group_name,
+            self.data.device_id, self.data.array,
+            self.data.extra_specs, True, None,
+            fields.ReplicationStatus.FAILED_OVER, utils.REP_SYNC)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_modify_group(self, mock_uvim):
+        self.volume_metadata.capture_modify_group(
+            "test_group", "test_group_id", [self.data.test_volume],
+            [], self.data.array)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_extend_info(self, mock_uvim):
+        self.volume_metadata.capture_extend_info(
+            self.data.test_volume, 5, self.data.device_id,
+            self.data.extra_specs, self.data.array)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_detach_info(self, mock_uvim):
+        self.volume_metadata.capture_detach_info(
+            self.data.test_volume, self.data.extra_specs, self.data.device_id,
+            None, None)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_snapshot_info(self, mock_uvim):
+        self.volume_metadata.capture_snapshot_info(
+            self.data.test_volume, self.data.extra_specs, 'createSnapshot',
+            'ss-test-vol')
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
+    def test_capture_retype_info(self, mock_uvim):
+        self.volume_metadata.capture_retype_info(
+            self.data.test_volume.id, 20, self.data.device_id, self.data.array,
+            self.data.srp, self.data.slo, self.data.workload,
+            self.data.storagegroup_name_target, False, None,
+            False)
+        mock_uvim.assert_called_once()
+
+    def test_update_volume_info_metadata(self):
+        volume_metadata = self.volume_metadata.update_volume_info_metadata(
+            self.data.data_dict, self.data.version_dict)
+        self.assertEqual('2.7.12', volume_metadata['python_version'])
+        self.assertEqual('VMAX250F', volume_metadata['vmax_model'])
+        self.assertEqual('DSS', volume_metadata['workload'])
+        self.assertEqual('OS-fibre-PG', volume_metadata['port_group'])
+
+    def test_fill_volume_trace_dict(self):
+        datadict = {}
+        volume_trace_dict = {}
+        volume_key_value = {}
+        result_dict = {'operation': 'create',
+                       'volume_id': self.data.test_volume.id}
+        volume_metadata = self.volume_metadata._fill_volume_trace_dict(
+            self.data.test_volume.id, 'create', False, target_name=None,
+            datadict=datadict, volume_key_value=volume_key_value,
+            volume_trace_dict=volume_trace_dict)
+        self.assertEqual(result_dict, volume_metadata)
+
+    def test_fill_volume_trace_dict_multi_attach(self):
+        mv_list = ['mv1', 'mv2', 'mv3']
+        sg_list = ['sg1', 'sg2', 'sg3']
+        datadict = {}
+        volume_trace_dict = {}
+        volume_key_value = {}
+        result_dict = {'masking_view_1': 'mv1',
+                       'masking_view_2': 'mv2',
+                       'masking_view_3': 'mv3',
+                       'operation': 'attach',
+                       'storage_group_1': 'sg1',
+                       'storage_group_2': 'sg2',
+                       'storage_group_3': 'sg3',
+                       'volume_id': self.data.test_volume.id}
+        volume_metadata = self.volume_metadata._fill_volume_trace_dict(
+            self.data.test_volume.id, 'attach', False, target_name=None,
+            datadict=datadict, volume_trace_dict=volume_trace_dict,
+            volume_key_value=volume_key_value, mv_list=mv_list,
+            sg_list=sg_list)
+        self.assertEqual(result_dict, volume_metadata)
+
+    @mock.patch.object(utils.VMAXUtils, 'merge_dicts',
+                       return_value={})
+    def test_consolidate_volume_trace_list(self, mock_m2d):
+        self.volume_metadata.volume_trace_list = [self.data.data_dict]
+        volume_trace_dict = {'volume_updated_time': '2018-03-06 16:51:40',
+                             'operation': 'delete',
+                             'volume_id': self.data.volume_id}
+        volume_key_value = {self.data.volume_id: volume_trace_dict}
+        self.volume_metadata._consolidate_volume_trace_list(
+            self.data.volume_id, volume_trace_dict, volume_key_value)
+        mock_m2d.assert_called_once()
+
+    def test_merge_dicts_multiple(self):
+        d1 = {'a': 1, 'b': 2}
+        d2 = {'c': 3, 'd': 4}
+        d3 = {'e': 5, 'f': 6}
+        res_d = {'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5, 'f': 6}
+        result_dict = self.utils.merge_dicts(
+            d1, d2, d3)
+        self.assertEqual(res_d, result_dict)
+
+    def test_merge_dicts_multiple_2(self):
+        d1 = {'a': 1, 'b': 2}
+        d2 = {'b': 3, 'd': 4}
+        d3 = {'d': 5, 'e': 6}
+        res_d = {'a': 1, 'b': 2, 'd': 4, 'e': 6}
+        result_dict = self.utils.merge_dicts(
+            d1, d2, d3)
+        self.assertEqual(res_d, result_dict)
+
+    def test_merge_dicts(self):
+        self.volume_metadata.volume_trace_list = [self.data.data_dict]
+        volume_trace_dict = {'volume_updated_time': '2018-03-06 16:51:40',
+                             'operation': 'delete',
+                             'volume_id': self.data.volume_id}
+        result_dict = self.utils.merge_dicts(
+            volume_trace_dict, self.data.volume_info_dict)
+        self.assertEqual('delete', result_dict['operation'])
+        self.assertEqual(
+            '2018-03-06 16:51:40', result_dict['volume_updated_time'])
+        self.assertEqual('OS-fibre-PG', result_dict['port_group'])
+
+    @mock.patch.object(platform, 'platform',
+                       return_value=VMAXCommonData.platform)
+    @mock.patch.object(platform, 'python_version',
+                       return_value=VMAXCommonData.python_version)
+    @mock.patch.object(openstack_version.version_info, 'version_string',
+                       return_value=VMAXCommonData.openstack_version)
+    @mock.patch.object(openstack_version.version_info, 'release_string',
+                       return_value=VMAXCommonData.openstack_release)
+    @mock.patch.object(rest.VMAXRest, 'get_unisphere_version',
+                       return_value={
+                           'version': VMAXCommonData.unisphere_version})
+    @mock.patch.object(rest.VMAXRest, 'get_array_serial',
+                       return_value={
+                           'ucode': VMAXCommonData.vmax_firmware_version,
+                           'model': VMAXCommonData.vmax_model})
+    def test_gather_version_info(
+            self, mock_vi, mock_ur, mock_or, mock_ov, mock_pv, mock_p):
+        self.volume_metadata.gather_version_info(self.data.array)
+        self.assertEqual(
+            self.data.version_dict, self.volume_metadata.version_dict)

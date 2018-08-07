@@ -1,12 +1,174 @@
 CHANGES
 =======
 
+13.0.0.0b3
+----------
+
+* Fix indentation in docs
+* VSA: Concurrent request handling in attachment
+* NetApp ONTAP: Fix driver force detach operations
+* docs: Write high availability devref
+* Update volume create schema to allow 'null'
+* nimble: Fix missing ssl support
+* Set bootable when creating volume from snapshot
+* Update delete group snapshot API exception handling
+* tintri: Enable SSL with requests
+* Fix remotefs driver report wrong value
+* IBM XIV and DS8K: Update document for Rocky release:
+* Revert "Use Tempest scenario job to run all scenario tests"
+* Add release note for force delete MV fix
+* ActiveCluster support for Pure Storage drivers
+* XtremIO: support multiattach
+* NEC driver: Return non-random iscsi portal in initialize
+* Update microversion number with constants
+* Don't require size when creating volume from snap
+* Fix some nits in transfer volume with snapshots
+* Add keystoneauth options to list\_opts
+* Update microversion for force delete volume parameter
+* VMware: set 'shared\_targets' as False
+* INFINIDAT: validate\_connector should validate by protocol
+* DS8K: correct the behavior for retype method
+* Non Windows per service lock for Backup service
+* QNAP: Add support for QES 2.1.0
+* [doc] Use openstack client commands to replace cinder client
+* [doc] Use openstack client commands to replace cinder client
+* Use Tempest scenario job to run all scenario tests
+* Transfer snapshots with volumes
+* Update attachment create API document
+* NEC driver: loss of access after live-migration
+* Pure Storage FlashArray driver - enable multiattach support
+* VMAX driver - Block revert to snapshot for replicated volumes
+* VMAX driver - Add VMAX specific volume metadata to logs
+* Add ability to specify mode to attachment-create
+* use restore\_file instead of open volume when restoring
+* Unity: add multiattach support
+* Update api-ref and release notes for schema validation
+* Prepare Google Backup driver for latest libraries
+* Fix Port nvmet driver to use privsep
+* NetApp ONTAP iSCSI/FCP: Enable multiattach capability
+* Remove note about mox
+* Unity: add thick volume support
+* api-ref: Update notes on encryption key size
+* Use ensure\_tree instead of mkdir when creating paths
+* RemoteFS: Use summarize option for "du"
+* Remove hus-cmd from rootwrap volume.filters
+* Avoid os.getpgrp, breaking Windows c-backup support
+* Enable split logging for cinder-glanceclient interaction
+* Remove tee from volume.filters
+* Revert "Use os.mkdir instead of mkdir"
+* Change blockbox to block-box
+* Remove unused commands from volume.filters
+* Remove ssc command from volume.filters
+* NetApp: Deprecate E-Series drivers
+* Use os.mkdir instead of mkdir
+* Remove blockdev from volume.filters
+* Drop dmsetup from rootwrap
+* Remove mkdir from volume.filters
+* NetApp ONTAP: Remove NFS driver online volume extending support
+* Port nvmet driver to use privsep
+* DS8K: correct behavior and return value for terminate\_connection method
+* DS8K: correct the behavior for get\_pools method
+* Correct Pure Storage configuration documentation
+* INFINIDAT: change create\_child to create\_snapshot
+* Fix RBD incremental backup
+* Add blueprints and releasenotes link to README
+* Fix parameter description in volume and snapshot manage extension
+* Keep volume's status in 'creating' when creating from backup
+* RBD: support to get manageable snapshots
+* [NetApp ONTAP] Add filtering to API trace logging
+* [Logging] Enable filtering of trace\_api logs
+* Fix 'availability\_zones' attribute not recognized when creating volume
+* V3 jsonschema validation: Volumes
+* Handling type's multiattach extra specs in API task flow
+* NEC driver: Fix iscsi multipath initialize\_connection tests
+* NetApp ONTAP: Remove iSCSI/FC driver online volume extend support
+* Multipath: Update docs for backend drivers
+* Fix time convert error in testcases
+* NEC driver: Reuse iSCSI LUNs of detached volumes
+* Fix quota error when deleting temporary volume
+* Make scheduler check online\_extend\_support capability
+* Clean up unnecessary test params in test\_rbd
+* NetApp ONTAP NFS: Enable multiattach capability
+* Fix vmware disk type changed when volume type is eagerZeroedThick
+* Remove report of allocated\_capacity\_gb from Inspur driver
+* Fix v3 sample files
+* Dell EMC: SC FC Driver wwns api response in lower
+* Add v3 api-ref for force delete snapshot
+* api-ref: Adds os-update\_readonly\_flag API
+* Fix prophetstor drivers report value
+* Fix invalid escape sequence warnings
+* Get rid of conditional rtslib\_fb imports
+* DataCore: get rid of pylint errors due to contextlib
+* Nimble: Fix tuple being passed for exception init
+* Solidfire: Fix pylint errors for class decorators
+* NetApp: Remove duplicate volume\_type kwarg
+* Increase pylint processes
+* Add v3 api-ref for updating snapshot status
+* Reject any filter whose key contains non ascii character
+* HPE3PAR: Fix pointing to backend in group failover
+* Remove 'message' from format argument from exception
+* Fix the usage of RBDVolumeProxy in getting manageable volumes
+* Storwize: get list of all volumes for ensure\_export
+* Keep ORM names matching their VO counterparts
+* Storwize:clone volume with iogrp value as expected
+* DS8K: Enable multiattach support
+* Move blockbox DB volume to home directory
+* VMAX Driver - Incorrect SSL cert verification
+* VMAX docs - use config-table directive
+* VMAX driver - remove deprecated XML option
+* VMAX driver - Deleting snapshot that is source of multiple volumes fails
+* VMAX driver - Incorrect service level reporting
+* VMAX driver and docs - change san\_rest\_port to san\_api\_port
+* Imported Translations from Zanata
+* api-ref: Rephrase delete volume precondition
+* policy docs: Add volume summary under GET\_ALL\_POLICY entry
+* Storwize: add data reduction pool support
+* Allow running unit tests on macOS
+* Update macOS devref info
+* Fix tox -e docs failure
+* Add ansible helper to Linux dev environment info
+* Remove 'message' from format argument from exception
+* Remove 'message' from format argument from exception
+* Be explicit about tox python version
+* DS8K: correct the return value for initialize\_connection method
+* Add debug logs for weigher filters
+* Add documentation page for basic volume quality of service
+* VMAX: Address nits in list manageable code
+* Mark Dell EMC CoprHD Drivers unsupported
+* Add doc about backend\_default config
+* [doc]Modify failed hyperlinks
+* [api-ref] Fix the parameter metadata in v3
+* Empty option value maybe cause Unity driver failed to initialize
+* Support image signature verification
+* Imported Translations from Zanata
+* trivial: Add min\_version: 3.1 to api\_ref for upload volume
+* Fix cinder-volume uses latest req-id for all log calls
+
 13.0.0.0b2
 ----------
 
+* Mock log output from DataCore drivers
 * Add NexentaEdge drivers
+* VMware: Add file open mode to support python3
 * Tests: Remove some ovo FutureWarnings about UUIDs
+* Add check to the flake8 job
+* Cloning image fails results duplicate cache entry
+* api-ref: Fix some params in volume types
+* Switch to oslo\_messaging.ConfFixture.transport\_url
+* Run pylint job under py3
 * Disable failing backup tests in LIO/Barbican job
+* Remove kwargs 'message' when exception is created
+* Api-ref: Fix the incorrect parameter description
+* Replace os.makedirs to avoid process race
+* Implement privsep boilerplate in cinder
+* Default tox jobs to python3
+* Mark Disco driver unsupported
+* Mark the HGST Driver unsupported
+* Move driver config opts out of catchall page
+* RBD: support to report backend state
+* IBM XIV: Report backend state in service list
+* IBM DS8K: Report backend state
+* Add note about multiattach not supporting encryption to docs
 * Fix documentation error
 * Correct S-Series to DS-Series systems
 * Remove the deprecated config option
@@ -14,14 +176,20 @@ CHANGES
 * Doc: Fix broken link (Nimble)
 * Imported Translations from Zanata
 * Add user messages for extend volume operation
+* Mark DataCore Drivers unsupported
 * V3 jsonschema validation: volume\_type\_encryption
+* ZFSSA handle non-existent snapshot
 * Update storage backends supported for Lenovo
 * Fix handling of 'cinder\_encryption\_key\_id' image metadata
+* Remove \_static folder in doc directory
+* Update "auth\_url"
 * Fix api-ref for backup export and import
 * Missing request parameters in update quotas
 * Trivial: Update pypi url to new url
 * V3 jsonschema validation: admin\_actions
+* [Api-ref] fix the type of service\_id in worker cleanup api
 * api-ref: Fix v3 API version details error
+* [Unity] Return logged-out initiators
 * Add cinder v2 experimental job
 * Fix cannot add a column with non-constant default
 * Update author in latex sphinx doc builds
@@ -30,18 +198,23 @@ CHANGES
 * doc: correct indentation from a note block
 * V3 jsonschema validation: scheduler\_hints
 * INFINIDAT: fixing extend mechanism
+* Storwize: update the function is\_volume\_hyperswap
 * Fix the argument for cinder-manage command
+* NEC driver: Faster clone status check
 * Fix cinder-volume setup in block-box
 * [Docs] Fixes documentation warning
 * Remove duplicate sample files
 * Fix option description in DRBD driver
 * Remove Ocata config option changes doc
+* VMAX driver - VMAX list manageable volumes and snapshots
 * VMAX driver - Enable multiattach support
 * Fix wrong usage of fields.BackupStatus.AVAILABLE
 * ScaleIO: Rebranding of product to VxFlex OS
 * Disable test\_volume\_backup\_restore for lio-barbican job
 * Support availability-zone type
+* Fix rbd driver json loading
 * Fix create backup API document
+* Add missing volume APIs
 * Imported Translations from Zanata
 * [Api-ref] fix incorrect host value in worker cleanup api
 * Fix NVMET minor log message issues
@@ -55,11 +228,13 @@ CHANGES
 * Add descriptions for auth\_strategy choices
 * RBD: remove redundant exception log to reduce noise
 * Log backup\_service.restore() exception
+* Add support for promoting a failed over backend
 * [Unity] Add support of removing empty host
 * V3 json schema validation: generic volume groups
 * Fix i18n issue in volume\_action and admin\_action
 * Support filter backend based on operation type
 * Remove stale pip-missing-reqs tox test
+* NEC driver: Delete max volumes per pool limit
 * [ci][rally] make the job inherit the right parent
 * Make config-table display list defaults in list format
 * QNAP: driver fails to detach while uploading volume to image
@@ -110,6 +285,7 @@ CHANGES
 * api-ref: Correct the cgsnapshot\_id parameter
 * Test running jobs under py36/bionic
 * Imported Translations from Zanata
+* Clean output of driver list generation
 * Fix QNap docstring format
 * Fix driver docstring RST formatting
 * Add VERSION and WIKI\_NAME to NEC driver
@@ -123,12 +299,14 @@ CHANGES
 * Add missing VolumeAttachStatus enum field
 * Clearup duplicate req\_version variable
 * Parent of RBD cloned volume marked as deleted should not be manageable
+* Fix backup/restore error for ceph rbd backend
 * Trivial: Update pypi url to new url
 * WinSMB volume driver doc: Add Volume backup support
 
 13.0.0.0b1
 ----------
 
+* Dell EMC SC: Enabled multiattach in Storage Center Driver
 * Clarify sizing when creating vol from source
 * Improve API method logging
 * NetApp ONTAP: Set new sub-lun clone limit for ONTAP driver
@@ -180,6 +358,7 @@ CHANGES
 * [Optimize] Validate configured scheduler filters when initialize
 * Remove extended attribute 'os-volume-replication' in Doc
 * Cleanup volume management CLI reference
+* Use check\_virtual\_size to do the size check
 * Unity: fail to detach lun when auto zone enabled
 * Implementation of Cinder driver over FC for Inspur InStorage
 * Dell EMC SC: volume model update return missing vol id

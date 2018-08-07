@@ -180,7 +180,6 @@ class MStorageVolumeCommon(object):
         self._configuration = configuration
         self._host = host
         self._driver_name = driver_name
-        self._numofld_per_pool = 1024
 
         self._configuration.append_config_values(mstorage_opts)
         self._configuration.append_config_values(san.san_opts)
@@ -657,6 +656,7 @@ class MStorageVolumeCommon(object):
                           {'mode': tmode, 'line': unit.sourceline, 'out': xml})
             ldset = {'ldsetname': ldsetname,
                      'protocol': 'iSCSI',
+                     'mode': tmode,
                      'portal_list': portals,
                      'lds': ldsetlds,
                      'initiator_list': initiators}

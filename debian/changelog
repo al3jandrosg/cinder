@@ -1,3 +1,30 @@
+cinder (2:13.0.0~b3-0ubuntu1) cosmic; urgency=medium
+
+  * New upstream milestone for OpenStack Rocky.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 07 Aug 2018 16:14:02 -0400
+
+cinder (2:13.0.0~b2-0ubuntu2) cosmic; urgency=medium
+
+  * Add support for Python 3:
+    - d/control: Add Py3 BDs and python3-cinder package.
+    - d/control: Support Py2 first and Py3 as alternative.
+    - d/control: Move all python deps to python(3)-cinder Depends.
+    - d/control: Make python(3)-cinder conflict against each other.
+    - d/rules: Add Py3 support.
+    - d/rules: Use pkgos-dh_auto_install as this helps name binaries for
+      update-alternatives.
+    - d/python-cinder.install: Drop, not needed.
+    - d/cinder*.install: Drop usr/bin/* as pkgos-dh_auto_install handles
+      install of those files.
+    - d/python(3)-cinder.post*, d/python(3)-cinder.prerm: Add update-alternatives
+      to enable correct shebangs for Python binaries.
+    - d/tests/*: Enable Py3 tests for cinder daemons and add shebang tests.
+    - d/rules: Skip Py3.7 tests until they run successfully upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 06 Jul 2018 15:01:59 -0400
+
 cinder (2:13.0.0~b2-0ubuntu1) cosmic; urgency=medium
 
   * New upstream milestone for OpenStack Rocky.

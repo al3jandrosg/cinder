@@ -1284,9 +1284,11 @@ def transfer_destroy(context, transfer_id):
     return IMPL.transfer_destroy(context, transfer_id)
 
 
-def transfer_accept(context, transfer_id, user_id, project_id):
+def transfer_accept(context, transfer_id, user_id, project_id,
+                    no_snapshots=False):
     """Accept a volume transfer."""
-    return IMPL.transfer_accept(context, transfer_id, user_id, project_id)
+    return IMPL.transfer_accept(context, transfer_id, user_id, project_id,
+                                no_snapshots=no_snapshots)
 
 
 ###################
@@ -1604,6 +1606,16 @@ def purge_deleted_rows(context, age_in_days):
 
 def get_booleans_for_table(table_name):
     return IMPL.get_booleans_for_table(table_name)
+
+
+###################
+
+
+def reset_active_backend(context, enable_replication, active_backend_id,
+                         backend_host):
+    """Reset the active backend for a host."""
+    return IMPL.reset_active_backend(context, enable_replication,
+                                     active_backend_id, backend_host)
 
 
 ###################

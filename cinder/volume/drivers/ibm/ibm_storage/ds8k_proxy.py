@@ -102,7 +102,8 @@ EXTRA_SPECS_DEFAULTS = {
     'os400': '',
     'storage_pool_ids': '',
     'storage_lss_ids': '',
-    'async_clone': False
+    'async_clone': False,
+    'multiattach': False
 }
 
 ds8k_opts = [
@@ -142,9 +143,10 @@ class Lun(object):
         2.1.0 - Added support for specify pool and lss, also improve the code.
         2.1.1 - Added support for replication consistency group.
         2.1.2 - Added support for cloning volume asynchronously.
+        2.3.0 - Added support for reporting backend state.
     """
 
-    VERSION = "2.1.2"
+    VERSION = "2.3.0"
 
     class FakeLun(object):
 
@@ -163,6 +165,7 @@ class Lun(object):
             self.specified_pool = lun.specified_pool
             self.specified_lss = lun.specified_lss
             self.async_clone = lun.async_clone
+            self.multiattach = lun.multiattach
             self.status = lun.status
             if not self.is_snapshot:
                 self.replica_ds_name = lun.replica_ds_name
@@ -185,6 +188,8 @@ class Lun(object):
                 volume_update.pop('replication_driver_data', None)
                 volume_update['metadata'].pop('replication', None)
             volume_update['metadata']['vol_hex_id'] = self.ds_id
+            volume_update['multiattach'] = self.multiattach
+
             return volume_update
 
     def __init__(self, volume, is_snapshot=False):
@@ -209,6 +214,9 @@ class Lun(object):
             'drivers:storage_lss_ids',
             EXTRA_SPECS_DEFAULTS['storage_lss_ids']
         )
+        self.multiattach = self.specs.get(
+            'multiattach', '<is> %s' % EXTRA_SPECS_DEFAULTS['multiattach']
+        ).upper() == strings.METADATA_IS_TRUE
 
         if volume.provider_location:
             provider_location = ast.literal_eval(volume.provider_location)
@@ -334,6 +342,7 @@ class Lun(object):
             volume_update['replication_status'] = (
                 self.replication_status or
                 fields.ReplicationStatus.NOT_CAPABLE)
+            volume_update['multiattach'] = self.multiattach
 
         self.metadata['data_type'] = (self.data_type or
                                       self.metadata['data_type'])
@@ -462,36 +471,50 @@ class DS8KProxy(proxy.IBMStorageProxy):
     def _update_stats(self):
         if self._helper:
             storage_pools = self._helper.get_pools()
-            if not len(storage_pools):
-                msg = _('No pools found - make sure san_clustername '
-                        'is defined in the config file and that the '
-                        'pools exist on the storage.')
-                LOG.error(msg)
-                raise exception.CinderException(message=msg)
-            self._helper.update_storage_pools(storage_pools)
         else:
             raise exception.VolumeDriverException(
                 message=(_('Backend %s is not initialized.')
                          % self.configuration.volume_backend_name))
 
         stats = {
-            "volume_backend_name": self.configuration.volume_backend_name,
+            "volume_backend_name":
+                self.configuration.volume_backend_name,
             "serial_number": self._helper.backend['storage_unit'],
-            "extent_pools": self._helper.backend['pools_str'],
-            "vendor_name": 'IBM',
-            "driver_version": self.full_version,
-            "storage_protocol": self._helper.get_connection_type(),
-            "total_capacity_gb": self._b2gb(
-                sum(p['cap'] for p in storage_pools.values())),
-            "free_capacity_gb": self._b2gb(
-                sum(p['capavail'] for p in storage_pools.values())),
-            "reserved_percentage": self.configuration.reserved_percentage,
+            "reserved_percentage":
+                self.configuration.reserved_percentage,
             "consistent_group_snapshot_enabled": True,
             "group_replication_enabled": True,
             "consistent_group_replication_enabled": True,
-            "multiattach": False
+            "multiattach": True,
+            "vendor_name": 'IBM',
+            "driver_version": self.full_version,
+            "storage_protocol": self._helper.get_connection_type(),
+            "extent_pools": 'None',
+            "total_capacity_gb": 0,
+            "free_capacity_gb": 0,
+            "backend_state": 'up'
         }
-
+        if not len(storage_pools):
+            msg = _('No pools found - make sure san_clustername '
+                    'is defined in the config file and that the '
+                    'pools exist on the storage.')
+            LOG.error(msg)
+            stats.update({
+                "extent_pools": 'None',
+                "total_capacity_gb": 0,
+                "free_capacity_gb": 0,
+                "backend_state": 'down'
+            })
+        else:
+            self._helper.update_storage_pools(storage_pools)
+            stats.update({
+                "extent_pools": ','.join(p for p in storage_pools.keys()),
+                "total_capacity_gb": self._b2gb(
+                    sum(p['cap'] for p in storage_pools.values())),
+                "free_capacity_gb": self._b2gb(
+                    sum(p['capavail'] for p in storage_pools.values())),
+                "backend_state": 'up'
+            })
         if self._replication_enabled:
             stats['replication_enabled'] = self._replication_enabled
 
@@ -949,6 +972,10 @@ class DS8KProxy(proxy.IBMStorageProxy):
         old_type_replication, new_type_replication = _check_extra_specs(
             'replication_enabled', strings.METADATA_IS_TRUE)
 
+        # check multiattach capability
+        old_multiattach, new_multiattach = _check_extra_specs(
+            'multiattach', strings.METADATA_IS_TRUE)
+
         # start retype, please note that the order here is important
         # because of rollback problem once failed to retype.
         new_props = {}
@@ -1013,6 +1040,11 @@ class DS8KProxy(proxy.IBMStorageProxy):
                     self._replication.delete_replica(lun)
                 except Exception:
                     pass
+            if new_multiattach:
+                new_lun.multiattach = True
+            elif old_multiattach:
+                new_lun.multiattach = False
+
             try:
                 self._helper.delete_lun(lun)
             except Exception:
@@ -1027,6 +1059,10 @@ class DS8KProxy(proxy.IBMStorageProxy):
             elif old_type_replication and not new_type_replication:
                 lun = self._replication.delete_replica(lun)
                 lun.type_replication = False
+            if not old_multiattach and new_multiattach:
+                lun.multiattach = True
+            elif old_multiattach and not new_multiattach:
+                lun.multiattach = False
             volume_update = lun.get_volume_update()
         return True, volume_update
 
@@ -1065,9 +1101,8 @@ class DS8KProxy(proxy.IBMStorageProxy):
                 backend_helper.check_vol_mapped_to_host(connector, lun.ds_id))
             if host_id is None or not vol_mapped:
                 if host_id is None and not lun.type_replication:
-                    msg = (_('Failed to find the Host information.'))
-                    LOG.error(msg)
-                    raise exception.VolumeDriverException(message=msg)
+                    LOG.warning('Failed to find the Host information.')
+                    return ret_info
                 if host_id and not lun.type_replication and not vol_mapped:
                     LOG.warning("Volume %(vol)s is already not mapped to "
                                 "host %(host)s.",

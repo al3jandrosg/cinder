@@ -76,6 +76,11 @@ def gcs_client(func):
                        fake_google_client.FakeGoogleMediaIoBaseDownload)
     @mock.patch.object(hashlib, 'md5', FakeMD5)
     def func_wrapper(self, *args, **kwargs):
+        if google_dr.service_account:
+            with mock.patch.object(google_dr.service_account.Credentials,
+                                   'from_service_account_file',
+                                   fake_google_client.FakeGoogleCredentials):
+                return func(self, *args, **kwargs)
         return func(self, *args, **kwargs)
 
     return func_wrapper
@@ -93,13 +98,18 @@ def gcs_client2(func):
                        FakeObjectName._fake_generate_object_name_prefix)
     @mock.patch.object(hashlib, 'md5', FakeMD5)
     def func_wrapper(self, *args, **kwargs):
+        if google_dr.service_account:
+            with mock.patch.object(google_dr.service_account.Credentials,
+                                   'from_service_account_file',
+                                   fake_google_client.FakeGoogleCredentials):
+                return func(self, *args, **kwargs)
         return func(self, *args, **kwargs)
 
     return func_wrapper
 
 
 def fake_backup_metadata(self, backup, object_meta):
-    raise exception.BackupDriverException(message=_('fake'))
+    raise exception.BackupDriverException(reason=_('fake'))
 
 
 def fake_delete(self, backup):

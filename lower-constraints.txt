@@ -17,6 +17,7 @@ cmd2==0.8.1
 contextlib2==0.5.5
 coverage==4.0
 cryptography==2.1
+cursive==0.2.1
 ddt==1.0.1
 debtcollector==1.19.0
 decorator==3.4.0
@@ -130,7 +131,7 @@ retrying==1.2.3
 rfc3986==1.1.0
 Routes==2.3.1
 rsa==3.4.2
-rtslib-fb==2.1.43
+rtslib-fb==2.1.65
 simplejson==3.5.1
 six==1.10.0
 smmap2==2.0.3

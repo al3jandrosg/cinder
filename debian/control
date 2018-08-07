@@ -12,6 +12,9 @@ Build-Depends:
  python-all,
  python-pbr (>= 2.0.0),
  python-setuptools,
+ python3-all,
+ python3-pbr (>= 2.0.0),
+ python3-setuptools,
  python3-sphinx (>= 1.6.2),
 Build-Depends-Indep:
  python-babel (>= 2.3.4),
@@ -19,6 +22,7 @@ Build-Depends-Indep:
  python-castellan (>= 0.16.0),
  python-coverage (>= 4.0),
  python-cryptography (>= 2.1),
+ python-cursive (>= 0.2.1),
  python-ddt (>= 1.0.1),
  python-decorator (>= 3.4.0),
  python-defusedxml (>= 0.5.0),
@@ -93,6 +97,85 @@ Build-Depends-Indep:
  python-tooz (>= 1.58.0),
  python-tz (>= 2013.6),
  python-webob (>= 1:1.7.1),
+ python3-babel (>= 2.3.4),
+ python3-barbicanclient (>= 4.5.2),
+ python3-castellan (>= 0.16.0),
+ python3-coverage (>= 4.0),
+ python3-cryptography (>= 2.1),
+ python3-cursive (>= 0.2.1),
+ python3-ddt (>= 1.0.1),
+ python3-decorator (>= 3.4.0),
+ python3-defusedxml (>= 0.5.0),
+ python3-eventlet (>= 0.18.2),
+ python3-fixtures (>= 3.0.0),
+ python3-glanceclient (>= 1:2.8.0),
+ python3-googleapi (>= 1.4.2),
+ python3-greenlet (>= 0.4.10),
+ python3-hacking (>= 0.12.0),
+ python3-httplib2 (>= 0.9.1),
+ python3-iso8601 (>= 0.1.11),
+ python3-jsonschema (>= 2.6.0),
+ python3-keystoneauth1 (>= 3.4.0),
+ python3-keystoneclient (>= 1:3.8.0),
+ python3-keystonemiddleware (>= 4.17.0),
+ python3-lxml (>= 3.4.1),
+ python3-migrate (>= 0.11.0),
+ python3-mock (>= 2.0.0),
+ python3-novaclient (>= 2:9.1.0),
+ python3-oauth2client (>= 1.5.0),
+ python3-openstackdocstheme (>= 1.18.1),
+ python3-os-api-ref (>= 1.4.0),
+ python3-os-brick (>= 2.2.0),
+ python3-os-win (>= 3.0.0),
+ python3-oslo.concurrency (>= 3.26.0),
+ python3-oslo.config (>= 1:5.2.0),
+ python3-oslo.context (>= 1:2.19.2),
+ python3-oslo.db (>= 4.27.0),
+ python3-oslo.i18n (>= 3.15.3),
+ python3-oslo.log (>= 3.36.0),
+ python3-oslo.messaging (>= 5.29.0),
+ python3-oslo.middleware (>= 3.31.0),
+ python3-oslo.policy (>= 1.30.0),
+ python3-oslo.privsep (>= 1.23.0),
+ python3-oslo.reports (>= 1.18.0),
+ python3-oslo.rootwrap (>= 5.8.0),
+ python3-oslo.serialization (>= 2.18.0),
+ python3-oslo.service (>= 1.24.0),
+ python3-oslo.utils (>= 3.33.0),
+ python3-oslo.versionedobjects (>= 1.31.2),
+ python3-oslo.vmware (>= 2.17.0),
+ python3-oslotest (>= 1:3.2.0),
+ python3-osprofiler (>= 1.4.0),
+ python3-paramiko (>= 2.0.0),
+ python3-paste (>= 2.0.2),
+ python3-pastedeploy (>= 1.5.0),
+ python3-pep8,
+ python3-prettytable (>= 0.7.1),
+ python3-psutil (>= 3.2.2),
+ python3-psycopg2 (>= 2.6.2),
+ python3-pymysql (>= 0.7.6),
+ python3-pyparsing (>= 2.1.0),
+ python3-reno (>= 2.5.0),
+ python3-requests (>= 2.14.2),
+ python3-retrying (>= 1.2.3),
+ python3-routes (>= 2.3.1),
+ python3-rtslib-fb (>= 2.1.43),
+ python3-simplejson (>= 3.5.1),
+ python3-six (>= 1.10.0),
+ python3-sqlalchemy (>= 1.0.10),
+ python3-stestr,
+ python3-stevedore (>= 1:1.20.0),
+ python3-suds (>= 0.6),
+ python3-swiftclient (>= 1:3.2.0),
+ python3-taskflow (>= 2.16.0),
+ python3-tempest (>= 1:17.1.0),
+ python3-testrepository (>= 0.0.18),
+ python3-testresources (>= 2.0.0),
+ python3-testscenarios (>= 0.4),
+ python3-testtools (>= 2.2.0),
+ python3-tooz (>= 1.58.0),
+ python3-tz (>= 2013.6),
+ python3-webob (>= 1:1.7.1),
 Standards-Version: 4.1.4
 Homepage: https://launchpad.net/cinder
 Vcs-Browser: https://git.launchpad.net/~ubuntu-server-dev/ubuntu/+source/cinder
@@ -104,9 +187,8 @@ Architecture: all
 Depends:
  apache2 | httpd,
  cinder-common (= ${binary:Version}),
- libapache2-mod-wsgi,
+ libapache2-mod-wsgi | libapache2-mod-wsgi-py3,
  ${misc:Depends},
- ${python:Depends},
 Description: Cinder storage service - API server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -122,7 +204,6 @@ Architecture: all
 Depends:
  cinder-common (= ${binary:Version}),
  ${misc:Depends},
- ${python:Depends},
 Description: Cinder storage service - Scheduler server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -137,13 +218,10 @@ Package: cinder-common
 Architecture: all
 Depends:
  adduser,
- python-cinder (= ${binary:Version}),
+ python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
  ${misc:Depends},
- ${python:Depends},
 Recommends:
  ${misc:Recommends},
-Provides:
- ${python:Provides},
 Description: Cinder storage service - common files
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -159,7 +237,6 @@ Architecture: all
 Depends:
  cinder-common (= ${binary:Version}),
  ${misc:Depends},
- ${python:Depends},
 Description: Cinder storage service - Scheduler server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -178,7 +255,6 @@ Depends:
  qemu-utils,
  tgt,
  ${misc:Depends},
- ${python:Depends},
 Breaks:
  cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 ),
 Replaces:
@@ -201,6 +277,7 @@ Depends:
  python-barbicanclient (>= 4.5.2),
  python-castellan (>= 0.16.0),
  python-cryptography (>= 2.1),
+ python-cursive (>= 0.2.1),
  python-decorator (>= 3.4.0),
  python-defusedxml (>= 0.5.0),
  python-enum34 (>= 1.0.4),
@@ -264,7 +341,9 @@ Suggests:
  python-hp3parclient,
  python-oauth2client (>= 1.5.0),
  python-rtslib-fb,
-Description: Cinder Python libraries
+Conflicts:
+ python3-cinder,
+Description: Cinder Python 2 libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
  and private cloud providers regardless of size, by being simple to implement
@@ -272,4 +351,86 @@ Description: Cinder Python libraries
  .
  Cinder is the OpenStack Block storage service.
  .
- This package contains the Python library for Cinder.
+ This package contains the Python 2 library for Cinder.
+
+Package: python3-cinder
+Section: python
+Architecture: all
+Depends:
+ python3-babel (>= 2.3.4),
+ python3-barbicanclient (>= 4.5.2),
+ python3-castellan (>= 0.16.0),
+ python3-cryptography (>= 2.1),
+ python3-cursive (>= 0.2.1),
+ python3-decorator (>= 3.4.0),
+ python3-defusedxml (>= 0.5.0),
+ python3-eventlet (>= 0.18.2),
+ python3-glanceclient (>= 1:2.8.0),
+ python3-greenlet (>= 0.4.10),
+ python3-httplib2 (>= 0.9.1),
+ python3-iso8601 (>= 0.1.11),
+ python3-jsonschema (>= 2.6.0),
+ python3-keystoneauth1 (>= 3.4.0),
+ python3-keystoneclient (>= 1:3.8.0),
+ python3-keystonemiddleware (>= 4.17.0),
+ python3-lxml (>= 3.4.1),
+ python3-migrate (>= 0.11.0),
+ python3-novaclient (>= 2:9.1.0),
+ python3-os-brick (>= 2.2.0),
+ python3-os-win (>= 3.0.0),
+ python3-oslo.concurrency (>= 3.26.0),
+ python3-oslo.config (>= 1:5.2.0),
+ python3-oslo.context (>= 1:2.19.2),
+ python3-oslo.db (>= 4.27.0),
+ python3-oslo.i18n (>= 3.15.3),
+ python3-oslo.log (>= 3.36.0),
+ python3-oslo.messaging (>= 5.29.0),
+ python3-oslo.middleware (>= 3.31.0),
+ python3-oslo.policy (>= 1.30.0),
+ python3-oslo.privsep (>= 1.23.0),
+ python3-oslo.reports (>= 1.18.0),
+ python3-oslo.rootwrap (>= 5.8.0),
+ python3-oslo.serialization (>= 2.18.0),
+ python3-oslo.service (>= 1.24.0),
+ python3-oslo.utils (>= 3.33.0),
+ python3-oslo.versionedobjects (>= 1.31.2),
+ python3-oslo.vmware (>= 2.17.0),
+ python3-osprofiler (>= 1.4.0),
+ python3-paramiko (>= 2.0.0),
+ python3-paste (>= 2.0.2),
+ python3-pastedeploy (>= 1.5.0),
+ python3-prettytable (>= 0.7.1),
+ python3-psutil (>= 3.2.2),
+ python3-pyparsing (>= 2.1.0),
+ python3-requests (>= 2.14.2),
+ python3-retrying (>= 1.2.3),
+ python3-routes (>= 2.3.1),
+ python3-simplejson (>= 3.5.1),
+ python3-six (>= 1.10.0),
+ python3-sqlalchemy (>= 1.0.10),
+ python3-stevedore (>= 1:1.20.0),
+ python3-suds (>= 0.6),
+ python3-swiftclient (>= 1:3.2.0),
+ python3-taskflow (>= 2.16.0),
+ python3-tooz (>= 1.58.0),
+ python3-tz (>= 2013.6),
+ python3-webob (>= 1:1.7.1),
+ ${misc:Depends},
+ ${python3:Depends},
+Suggests:
+ python3-ceph,
+ python3-googleapi (>= 1.4.2),
+ python3-hp3parclient,
+ python3-oauth2client (>= 1.5.0),
+ python3-rtslib-fb,
+Conflicts:
+ python-cinder,
+Description: Cinder Python 3 libraries
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains the Python 3 library for Cinder.

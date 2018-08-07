@@ -75,14 +75,10 @@ class VMAXRest(object):
         port = array_info['RestServerPort']
         self.user = array_info['RestUserName']
         self.passwd = array_info['RestPassword']
-        self.cert = array_info['SSLCert']
-        verify = array_info['SSLVerify']
-        if verify and verify.lower() == 'false':
-            verify = False
-        self.verify = verify
+        self.verify = array_info['SSLVerify']
         ip_port = "%(ip)s:%(port)s" % {'ip': ip, 'port': port}
-        self.base_uri = ("https://%(ip_port)s/univmax/restapi"
-                         % {'ip_port': ip_port})
+        self.base_uri = ("https://%(ip_port)s/univmax/restapi" % {
+            'ip_port': ip_port})
         self.session = self._establish_rest_session()
 
     def _establish_rest_session(self):
@@ -97,8 +93,6 @@ class VMAXRest(object):
         session.auth = requests.auth.HTTPBasicAuth(self.user, self.passwd)
         if self.verify is not None:
             session.verify = self.verify
-        if self.cert:
-            session.cert = self.cert
 
         return session
 
@@ -436,13 +430,23 @@ class VMAXRest(object):
         :return: version and major_version(e.g. ("V8.4.0.16", "84"))
         """
         version, major_version = None, None
-        target_uri = "/%s/system/version" % U4V_VERSION
-        response = self._get_request(target_uri, 'version')
+        response = self.get_unisphere_version()
         if response and response.get('version'):
             version = response['version']
             version_list = version.split('.')
             major_version = version_list[0][1] + version_list[1]
         return version, major_version
+
+    def get_unisphere_version(self):
+        """Get the unisphere version from the server.
+
+        :returns: version dict
+        """
+        version_url = "/%s/system/version" % U4V_VERSION
+        version_dict = self._get_request(version_url, 'version')
+        if not version_dict:
+            LOG.error("Unisphere version info not found.")
+        return version_dict
 
     def get_srp_by_name(self, array, srp=None):
         """Returns the details of a storage pool.
@@ -457,16 +461,22 @@ class VMAXRest(object):
                                         resource_name=srp, params=None)
         return srp_details
 
-    def get_slo_list(self, array):
+    def get_slo_list(self, array, srp):
         """Retrieve the list of slo's from the array
 
         :param array: the array serial number
+        :param srp: return service levels associated with this srp
         :returns: slo_list -- list of service level names
         """
         slo_list = []
-        slo_dict = self.get_resource(array, SLOPROVISIONING, 'slo')
-        if slo_dict and slo_dict.get('sloId'):
-            slo_list = slo_dict['sloId']
+        res_name = '%s/service_level_demand_report' % srp
+        slo_dict = self.get_resource(array, SLOPROVISIONING, 'srp',
+                                     resource_name=res_name, version='90')
+        if slo_dict and slo_dict.get('serviceLevelDemand'):
+            for d in slo_dict['serviceLevelDemand']:
+                slo = d.get('serviceLevelId')
+                if slo and slo not in slo_list:
+                    slo_list.append(slo)
         return slo_list
 
     def get_workload_settings(self, array):
@@ -1010,6 +1020,72 @@ class VMAXRest(object):
         except (KeyError, TypeError):
             pass
         return device_ids
+
+    def get_private_volume_list(self, array, params=None):
+        """Retrieve list with volume details.
+
+        :param array: the array serial number
+        :param params: filter parameters
+        :returns: list -- dicts with volume information
+        """
+        volumes = []
+        volume_info = self.get_resource(
+            array, SLOPROVISIONING, 'volume', params=params,
+            private='/private')
+        try:
+            volumes = volume_info['resultList']['result']
+            iterator_id = volume_info['id']
+            volume_count = volume_info['count']
+            max_page_size = volume_info['maxPageSize']
+            start_position = volume_info['resultList']['from']
+            end_position = volume_info['resultList']['to']
+        except (KeyError, TypeError):
+            return volumes
+
+        if volume_count > max_page_size:
+            LOG.info("More entries exist in the result list, retrieving "
+                     "remainder of results from iterator.")
+
+            start_position += 1000
+            end_position += 1000
+            iterator_response = self.get_iterator_page_list(
+                iterator_id, volume_count, start_position, end_position)
+
+            volumes += iterator_response
+
+        return volumes
+
+    def get_iterator_page_list(self, iterator_id, result_count, start_position,
+                               end_position):
+        """Iterate through response if more than one page available.
+
+        :param iterator_id: the iterator ID
+        :param result_count: the amount of results in the iterator
+        :param start_position: position to begin iterator from
+        :param end_position: position to stop iterator
+        :return: list -- merged results from multiple pages
+        """
+        iterator_result = []
+        has_more_entries = True
+
+        while has_more_entries:
+            if start_position <= result_count <= end_position:
+                end_position = result_count
+                has_more_entries = False
+
+            params = {'to': start_position, 'from': end_position}
+            target_uri = ('/common/Iterator/%(iterator_id)s/page' % {
+                'iterator_id': iterator_id})
+            iterator_response = self._get_request(target_uri, 'iterator',
+                                                  params)
+            try:
+                iterator_result += iterator_response['result']
+                start_position += 1000
+                end_position += 1000
+            except (KeyError, TypeError):
+                pass
+
+        return iterator_result
 
     def _modify_volume(self, array, device_id, payload):
         """Modify a volume (PUT operation).

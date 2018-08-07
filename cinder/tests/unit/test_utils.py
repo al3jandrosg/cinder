@@ -450,6 +450,7 @@ class GetBlkdevMajorMinorTestCase(test.TestCase):
         self.assertEqual(size, stat_result.st_size)
         mock_stat.assert_called_once_with(test_file)
 
+    @test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
     @mock.patch('os.stat')
     def test_get_blkdev_major_minor(self, mock_stat):
 
@@ -1135,6 +1136,38 @@ class LogTracingTestCase(test.TestCase):
         result = _trace_test_api()
         self.assertEqual('OK', result)
         self.assertEqual(2, utils.LOG.debug.call_count)
+
+    def test_utils_trace_api_filtered(self):
+        self.mock_object(utils, 'LOG')
+
+        def filter_func(all_args):
+            return False
+
+        @utils.trace_api(filter_function=filter_func)
+        def _trace_test_api(*args, **kwargs):
+            return 'OK'
+
+        utils.setup_tracing(['api'])
+
+        result = _trace_test_api()
+        self.assertEqual('OK', result)
+        self.assertEqual(0, utils.LOG.debug.call_count)
+
+    def test_utils_trace_filtered(self):
+        self.mock_object(utils, 'LOG')
+
+        def filter_func(all_args):
+            return False
+
+        @utils.trace(filter_function=filter_func)
+        def _trace_test(*args, **kwargs):
+            return 'OK'
+
+        utils.setup_tracing(['api'])
+
+        result = _trace_test()
+        self.assertEqual('OK', result)
+        self.assertEqual(0, utils.LOG.debug.call_count)
 
     def test_utils_trace_method_default_logger(self):
         mock_log = self.mock_object(utils, 'LOG')

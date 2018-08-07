@@ -166,6 +166,54 @@ class CreateVolumeFlowTestCase(test.TestCase):
         consistencygroup_get_by_id.assert_called_once_with(self.ctxt, 5)
         mock_extract_host.assert_called_once_with('host@backend#pool')
 
+    @mock.patch('cinder.db.volume_create')
+    @mock.patch('cinder.objects.Volume.get_by_id')
+    @mock.patch('cinder.objects.Snapshot.get_by_id')
+    def test_create_volume_from_snapshot(self, snapshot_get_by_id,
+                                         volume_get_by_id,
+                                         volume_create):
+
+        volume_db = {'bootable': True}
+        volume_obj = fake_volume.fake_volume_obj(self.ctxt, **volume_db)
+        snapshot_obj = fake_snapshot.fake_snapshot_obj(self.ctxt)
+        snapshot_get_by_id.return_value = snapshot_obj
+        volume_get_by_id.return_value = volume_obj
+        volume_create.return_value = {'id': '123456'}
+
+        task = create_volume.EntryCreateTask()
+
+        result = task.execute(self.ctxt,
+                              optional_args=None,
+                              source_volid=None,
+                              snapshot_id=snapshot_obj.id,
+                              availability_zones=['nova'],
+                              size=1,
+                              encryption_key_id=None,
+                              description='123',
+                              name='123',
+                              multiattach=None)
+        self.assertTrue(result['volume_properties']['bootable'])
+
+        volume_db = {'bootable': False}
+        volume_obj = fake_volume.fake_volume_obj(self.ctxt, **volume_db)
+        snapshot_obj = fake_snapshot.fake_snapshot_obj(self.ctxt)
+        snapshot_get_by_id.return_value = snapshot_obj
+        volume_get_by_id.return_value = volume_obj
+
+        task = create_volume.EntryCreateTask()
+
+        result = task.execute(self.ctxt,
+                              optional_args=None,
+                              source_volid=None,
+                              snapshot_id=snapshot_obj.id,
+                              availability_zones=['nova'],
+                              size=1,
+                              encryption_key_id=None,
+                              description='123',
+                              name='123',
+                              multiattach=None)
+        self.assertFalse(result['volume_properties']['bootable'])
+
     @ddt.data(('enabled', {'replication_enabled': '<is> True'}),
               ('disabled', {'replication_enabled': '<is> False'}),
               ('disabled', {}))
@@ -174,10 +222,16 @@ class CreateVolumeFlowTestCase(test.TestCase):
                 'ExtractVolumeRequestTask.'
                 '_get_encryption_key_id', mock.Mock())
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
+    @mock.patch(
+        'cinder.objects.volume_type.VolumeType.get_by_name_or_id',
+        mock.Mock(return_value={}))
     def test_extract_volume_request_replication_status(self,
                                                        replication_status,
                                                        extra_specs,
                                                        fake_get_qos):
+        volume_type = {'id': fakes.VOLUME_TYPE_ID,
+                       'size': 1,
+                       'extra_specs': extra_specs}
         self.get_extra_specs.return_value = extra_specs
         fake_image_service = fake_image.FakeImageService()
         fake_key_manager = mock_key_manager.MockKeyManager()
@@ -191,8 +245,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               image_id=None,
                               source_volume=None,
                               availability_zone='nova',
-                              volume_type={'id': fakes.VOLUME_TYPE_ID,
-                                           'size': 1},
+                              volume_type=volume_type,
                               metadata=None,
                               key_manager=fake_key_manager,
                               consistencygroup=None,
@@ -200,22 +253,20 @@ class CreateVolumeFlowTestCase(test.TestCase):
                               group=None,
                               group_snapshot=None,
                               backup=None)
-        self.assertEqual(replication_status, result['replication_status'],
-                         extra_specs)
+        self.assertEqual(replication_status, result['replication_status'])
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.flows.api.create_volume.'
                 'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
                 '_get_encryption_key_id')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
+    @mock.patch(
+        'cinder.objects.volume_type.VolumeType.get_by_name_or_id',
+        mock.Mock(return_value={}))
     def test_extract_volume_request_from_image_encrypted(
             self,
             fake_get_qos,
             fake_get_encryption_key,
-            fake_get_volume_type_id,
             fake_is_encrypted):
 
         fake_image_service = fake_image.FakeImageService()
@@ -232,14 +283,13 @@ class CreateVolumeFlowTestCase(test.TestCase):
             {'nova'})
 
         fake_is_encrypted.return_value = True
-        fake_get_volume_type_id.return_value = fakes.VOLUME_TYPE_ID
         task.execute(self.ctxt,
                      size=1,
                      snapshot=None,
                      image_id=image_id,
                      source_volume=None,
                      availability_zone='nova',
-                     volume_type=None,
+                     volume_type={'name': 'fake_type', 'id': 1},
                      metadata=None,
                      key_manager=fake_key_manager,
                      consistencygroup=None,
@@ -248,17 +298,15 @@ class CreateVolumeFlowTestCase(test.TestCase):
                      group_snapshot=None,
                      backup=None)
         fake_get_encryption_key.assert_called_once_with(
-            fake_key_manager, self.ctxt, fakes.VOLUME_TYPE_ID,
+            fake_key_manager, self.ctxt, 1,
             None, None, image_meta)
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_volume_request_from_image(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_qos,
             fake_is_encrypted):
 
@@ -270,14 +318,14 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['size'] = 1
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
+        fake_get_type.return_value = volume_type
 
         task = create_volume.ExtractVolumeRequestTask(
             fake_image_service,
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_qos.return_value = {'qos_specs': None}
         result = task.execute(self.ctxt,
                               size=1,
@@ -306,17 +354,14 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'group_id': None,
                            'refresh_az': False,
                            'replication_status': 'disabled',
-                           'backup_id': None}
+                           'backup_id': None,
+                           'multiattach': False}
         self.assertEqual(expected_result, result)
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
     def test_extract_availability_zones_without_fallback(
             self,
-            fake_get_type_id,
             fake_get_qos,
             fake_is_encrypted):
         fake_image_service = fake_image.FakeImageService()
@@ -327,14 +372,13 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['size'] = 1
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
 
         task = create_volume.ExtractVolumeRequestTask(
             fake_image_service,
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_qos.return_value = {'qos_specs': None}
         self.assertRaises(exception.InvalidAvailabilityZone,
                           task.execute,
@@ -355,12 +399,8 @@ class CreateVolumeFlowTestCase(test.TestCase):
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
     def test_extract_availability_zones_with_azs_not_matched(
             self,
-            fake_get_type_id,
             fake_get_qos,
             fake_is_encrypted):
         fake_image_service = fake_image.FakeImageService()
@@ -372,6 +412,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
         volume_type = {'name': 'type1',
+                       'id': 1,
                        'extra_specs':
                            {'RESKEY:availability_zones': 'nova3'}}
 
@@ -379,7 +420,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
             fake_image_service, {'nova1', 'nova2'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_qos.return_value = {'qos_specs': None}
         self.assertRaises(exception.InvalidTypeAvailabilityZones,
                           task.execute,
@@ -465,12 +505,10 @@ class CreateVolumeFlowTestCase(test.TestCase):
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_availability_zones_with_fallback(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_qos,
             fake_is_encrypted):
 
@@ -484,14 +522,14 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['size'] = 1
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
+        fake_get_type.return_value = volume_type
 
         task = create_volume.ExtractVolumeRequestTask(
             fake_image_service,
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_qos.return_value = {'qos_specs': None}
         result = task.execute(self.ctxt,
                               size=1,
@@ -519,6 +557,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'cgsnapshot_id': None,
                            'group_id': None,
                            'refresh_az': True,
+                           'multiattach': False,
                            'replication_status': 'disabled',
                            'backup_id': None}
         self.assertEqual(expected_result, result)
@@ -529,12 +568,8 @@ class CreateVolumeFlowTestCase(test.TestCase):
                 return_value=mock.Mock(cipher='my-cipher-2000'))
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs',
                 return_value={'qos_specs': None})
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask._get_volume_type_id',
-                return_value=1)
     def test_get_encryption_key_id_castellan_error(
             self,
-            mock_get_type_id,
             mock_get_qos,
             mock_get_volume_type_encryption,
             mock_is_encrypted):
@@ -546,7 +581,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
                       'size': 1}
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
 
         with mock.patch.object(fake_key_manager, 'create_key',
                                side_effect=castellan_exc.KeyManagerError):
@@ -579,12 +614,10 @@ class CreateVolumeFlowTestCase(test.TestCase):
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_volume_request_task_with_large_volume_size(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_qos,
             fake_is_encrypted):
         fake_image_service = fake_image.FakeImageService()
@@ -595,14 +628,14 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['size'] = 1
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
+        fake_get_type.return_value = volume_type
 
         task = create_volume.ExtractVolumeRequestTask(
             fake_image_service,
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_qos.return_value = {'qos_specs': None}
         result = task.execute(self.ctxt,
                               size=(sys.maxsize + 1),
@@ -631,17 +664,16 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'cgsnapshot_id': None,
                            'refresh_az': False,
                            'group_id': None,
+                           'multiattach': False,
                            'backup_id': None}
         self.assertEqual(expected_result, result)
 
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_volume_request_from_image_with_qos_specs(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_qos,
             fake_is_encrypted):
 
@@ -653,14 +685,14 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['size'] = 1
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
-        volume_type = {'name': 'type1'}
+        volume_type = {'name': 'type1', 'id': 1}
+        fake_get_type.return_value = volume_type
 
         task = create_volume.ExtractVolumeRequestTask(
             fake_image_service,
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_qos_spec = {'specs': {'fake_key': 'fake'}}
         fake_get_qos.return_value = {'qos_specs': fake_qos_spec}
         result = task.execute(self.ctxt,
@@ -689,6 +721,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'cgsnapshot_id': None,
                            'group_id': None,
                            'refresh_az': False,
+                           'multiattach': False,
                            'replication_status': 'disabled',
                            'backup_id': None}
         self.assertEqual(expected_result, result)
@@ -697,18 +730,17 @@ class CreateVolumeFlowTestCase(test.TestCase):
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
     @mock.patch('cinder.volume.volume_types.get_default_volume_type')
     @mock.patch('cinder.volume.volume_types.get_volume_type_by_name')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_image_volume_type_from_image(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_vol_type,
             fake_get_def_vol_type,
             fake_get_qos,
             fake_is_encrypted):
 
-        image_volume_type = {'name': 'type_from_image'}
+        image_volume_type = {'name': 'type_from_image', 'id': 1}
+        fake_get_type.return_value = image_volume_type
         fake_image_service = fake_image.FakeImageService()
         image_id = 6
         image_meta = {}
@@ -716,7 +748,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
         image_meta['status'] = 'active'
         image_meta['size'] = 1
         image_meta['properties'] = {}
-        image_meta['properties']['cinder_img_volume_type'] = image_volume_type
+        image_meta['properties']['cinder_img_volume_type'] = 'fake_volume_type'
         fake_image_service.create(self.ctxt, image_meta)
         fake_key_manager = mock_key_manager.MockKeyManager()
 
@@ -725,9 +757,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_vol_type.return_value = image_volume_type
-        fake_get_def_vol_type.return_value = 'fake_vol_type'
         fake_get_qos.return_value = {'qos_specs': None}
         result = task.execute(self.ctxt,
                               size=1,
@@ -755,6 +785,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'cgsnapshot_id': None,
                            'group_id': None,
                            'refresh_az': False,
+                           'multiattach': False,
                            'replication_status': 'disabled',
                            'backup_id': None}
         self.assertEqual(expected_result, result)
@@ -763,12 +794,10 @@ class CreateVolumeFlowTestCase(test.TestCase):
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
     @mock.patch('cinder.volume.volume_types.get_default_volume_type')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     def test_extract_image_volume_type_from_image_invalid_type(
             self,
-            fake_get_type_id,
+            fake_get_type,
             fake_get_def_vol_type,
             fake_get_qos,
             fake_is_encrypted,
@@ -791,8 +820,8 @@ class CreateVolumeFlowTestCase(test.TestCase):
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
         fake_get_def_vol_type.return_value = {'name': 'fake_vol_type'}
+        fake_get_type.return_value = {'name': 'fake_vol_type'}
         fake_db_get_vol_type.side_effect = (
             exception.VolumeTypeNotFoundByName(volume_type_name='invalid'))
         fake_get_qos.return_value = {'qos_specs': None}
@@ -815,12 +844,13 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'source_volid': None,
                            'availability_zones': ['nova'],
                            'volume_type': {'name': 'fake_vol_type'},
-                           'volume_type_id': 1,
+                           'volume_type_id': None,
                            'encryption_key_id': None,
                            'qos_specs': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
+                           'multiattach': False,
                            'refresh_az': False,
                            'replication_status': 'disabled',
                            'backup_id': None}
@@ -829,22 +859,19 @@ class CreateVolumeFlowTestCase(test.TestCase):
     @mock.patch('cinder.db.volume_type_get_by_name')
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.volume_types.get_default_volume_type')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
+    @mock.patch('cinder.objects.volume_type.VolumeType.get_by_name_or_id')
     @ddt.data((8, None), (9, {'cinder_img_volume_type': None}))
     @ddt.unpack
     def test_extract_image_volume_type_from_image_properties_error(
             self,
             image_id,
             fake_img_properties,
-            fake_get_type_id,
-            fake_get_def_vol_type,
+            fake_get_type,
             fake_get_qos,
             fake_is_encrypted,
             fake_db_get_vol_type):
 
+        self.flags(default_volume_type='fake_volume_type')
         fake_image_service = fake_image.FakeImageService()
         image_meta = {}
         image_meta['id'] = image_id
@@ -859,8 +886,7 @@ class CreateVolumeFlowTestCase(test.TestCase):
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
-        fake_get_def_vol_type.return_value = {'name': 'fake_vol_type'}
+        fake_get_type.return_value = None
         fake_get_qos.return_value = {'qos_specs': None}
         result = task.execute(self.ctxt,
                               size=1,
@@ -880,14 +906,15 @@ class CreateVolumeFlowTestCase(test.TestCase):
                            'snapshot_id': None,
                            'source_volid': None,
                            'availability_zones': ['nova'],
-                           'volume_type': {'name': 'fake_vol_type'},
-                           'volume_type_id': 1,
+                           'volume_type': None,
+                           'volume_type_id': None,
                            'encryption_key_id': None,
                            'qos_specs': None,
                            'consistencygroup_id': None,
                            'cgsnapshot_id': None,
                            'group_id': None,
                            'refresh_az': False,
+                           'multiattach': False,
                            'replication_status': 'disabled',
                            'backup_id': None}
         self.assertEqual(expected_result, result)
@@ -895,14 +922,8 @@ class CreateVolumeFlowTestCase(test.TestCase):
     @mock.patch('cinder.db.volume_type_get_by_name')
     @mock.patch('cinder.volume.volume_types.is_encrypted')
     @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs')
-    @mock.patch('cinder.volume.volume_types.get_default_volume_type')
-    @mock.patch('cinder.volume.flows.api.create_volume.'
-                'ExtractVolumeRequestTask.'
-                '_get_volume_type_id')
     def test_extract_image_volume_type_from_image_invalid_input(
             self,
-            fake_get_type_id,
-            fake_get_def_vol_type,
             fake_get_qos,
             fake_is_encrypted,
             fake_db_get_vol_type):
@@ -920,8 +941,6 @@ class CreateVolumeFlowTestCase(test.TestCase):
             {'nova'})
 
         fake_is_encrypted.return_value = False
-        fake_get_type_id.return_value = 1
-        fake_get_def_vol_type.return_value = 'fake_vol_type'
         fake_get_qos.return_value = {'qos_specs': None}
 
         self.assertRaises(exception.InvalidInput,
@@ -1408,12 +1427,15 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.check_available_space')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_cannot_use_cache(
-            self, mock_qemu_info, mock_check_space, mock_get_internal_context,
+            self, mock_verify, mock_qemu_info, mock_check_space,
+            mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         mock_get_internal_context.return_value = None
         self.mock_driver.clone_image.return_value = (None, False)
+        self.flags(verify_glance_signatures='disabled')
         volume = fake_volume.fake_volume_obj(self.ctxt,
                                              host='host@backend#pool')
         image_info = imageutils.QemuImgInfo()
@@ -1509,8 +1531,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.db.volume_update')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_extend_failure(
-            self, mock_volume_update, mock_qemu_info, mock_check_size,
+            self, mock_verify, mock_volume_update, mock_qemu_info,
+            mock_check_size,
             mock_get_internal_context, mock_create_from_img_dl,
             mock_create_from_src, mock_handle_bootable, mock_fetch_img,
             mock_cleanup_cg):
@@ -1518,6 +1542,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         self.mock_cache.get_entry.return_value = None
         self.mock_driver.extend_volume.side_effect = (
             exception.CinderException('Error during extending'))
+        self.flags(verify_glance_signatures='disabled')
 
         volume_size = 2
         volume = fake_volume.fake_volume_obj(self.ctxt,
@@ -1632,14 +1657,16 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.objects.Volume.get_by_id')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.check_available_space')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_cache_miss(
-            self, mock_check_size, mock_qemu_info, mock_volume_get,
-            mock_volume_update, mock_get_internal_context,
+            self, mocl_verify, mock_check_size, mock_qemu_info,
+            mock_volume_get, mock_volume_update, mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         mock_get_internal_context.return_value = self.ctxt
         mock_fetch_img.return_value = mock.MagicMock(
             spec=utils.get_file_spec())
+        self.flags(verify_glance_signatures='disabled')
         image_info = imageutils.QemuImgInfo()
         image_info.virtual_size = '2147483648'
         mock_qemu_info.return_value = image_info
@@ -1703,9 +1730,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.objects.Volume.get_by_id')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.check_available_space')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_cache_miss_error_downloading(
-            self, mock_check_size, mock_qemu_info, mock_volume_get,
-            mock_volume_update, mock_get_internal_context,
+            self, mock_verify, mock_check_size, mock_qemu_info,
+            mock_volume_get, mock_volume_update, mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         mock_fetch_img.return_value = mock.MagicMock()
@@ -1714,6 +1742,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         mock_qemu_info.return_value = image_info
         self.mock_driver.clone_image.return_value = (None, False)
         self.mock_cache.get_entry.return_value = None
+        self.flags(verify_glance_signatures='disabled')
 
         volume = fake_volume.fake_volume_obj(self.ctxt, size=10,
                                              host='foo@bar#pool')
@@ -1769,12 +1798,15 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
 
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.check_available_space')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_no_internal_context(
-            self, mock_chk_space, mock_qemu_info, mock_get_internal_context,
+            self, mock_verify, mock_chk_space, mock_qemu_info,
+            mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
         self.mock_driver.clone_image.return_value = (None, False)
         mock_get_internal_context.return_value = None
+        self.flags(verify_glance_signatures='disabled')
         volume = fake_volume.fake_volume_obj(self.ctxt,
                                              host='host@backend#pool')
         image_info = imageutils.QemuImgInfo()
@@ -1837,8 +1869,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
                 '_cleanup_cg_in_volume')
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_cache_miss_error_size_invalid(
-            self, mock_qemu_info, mock_check_space, mock_get_internal_context,
+            self, mock_verify, mock_qemu_info, mock_check_space,
+            mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img, mock_cleanup_cg):
         mock_fetch_img.return_value = mock.MagicMock()
@@ -1847,6 +1881,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         mock_qemu_info.return_value = image_info
         self.mock_driver.clone_image.return_value = (None, False)
         self.mock_cache.get_entry.return_value = None
+        self.flags(verify_glance_signatures='disabled')
 
         volume = fake_volume.fake_volume_obj(self.ctxt, size=1,
                                              host='foo@bar#pool')
@@ -1943,8 +1978,10 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
     @mock.patch('cinder.image.image_utils.check_available_space')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.message.api.API.create')
+    @mock.patch('cinder.image.image_utils.verify_glance_image_signature')
     def test_create_from_image_cache_insufficient_size(
-            self, mock_message_create, mock_qemu_info, mock_check_space,
+            self, mock_verify, mock_message_create, mock_qemu_info,
+            mock_check_space,
             mock_get_internal_context,
             mock_create_from_img_dl, mock_create_from_src,
             mock_handle_bootable, mock_fetch_img):
@@ -1960,6 +1997,7 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         image_id = fakes.IMAGE_ID
         mock_create_from_img_dl.side_effect = exception.ImageTooBig(
             image_id=image_id, reason="fake")
+        self.flags(verify_glance_signatures='disabled')
 
         image_location = 'someImageLocationStr'
         image_meta = mock.MagicMock()

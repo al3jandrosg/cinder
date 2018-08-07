@@ -42,6 +42,25 @@ file-contents:
         larger number.
 
         ']
+  releasenotes/notes/add-split-logger-conf-option-0424e3bd91de3a5a.yaml:
+    features: ['Added boolean conf option ''split_loggers'' in [default] section of
+
+        cinder.conf to `enable split logging`_ functionality. The default
+
+        value of split_loggers option is set to False. Operator can set it''s
+
+        value to True to split HTTP content into subloggers to allow for
+
+        fine-grained control of what is logged and how. This new config option
+
+        ''split_loggers'' should be enabled only when keystoneauth log level is
+
+        set to DEBUG in ''default_log_levels'' config option.
+
+
+        .. _`enable split logging`: https://docs.openstack.org/keystoneauth/latest/using-sessions.html#logging
+
+        ']
   releasenotes/notes/bp-nvmeof-lvm-target-b7771955b426abe7.yaml:
     features: ['A new target, NVMET, is added for the LVM driver over RDMA,
 
@@ -77,6 +96,26 @@ file-contents:
         a volume to a size greater than the corresponding LUN max geometry.
 
         ']
+  releasenotes/notes/bug-1765182-34fdc4bb8482f8a5.yaml:
+    fixes: ['NetApp ONTAP (bug 1765182): Make ONTAP NetApp iSCSI driver and FC driver
+
+        report to the Cinder scheduler that they don''t support online volume
+
+        extending.
+
+        ']
+  releasenotes/notes/bug-1765182-bcafd577f4b81eb6.yaml:
+    fixes: ['Make Cinder scheduler check if backend reports `online_extend_support`
+
+        before performing an online extend operation.
+
+        ']
+  releasenotes/notes/bug-1765182-de132ba52167800b.yaml:
+    fixes: ['NetApp ONTAP (bug 1765182): Make ONTAP NetApp NFS driver report to the
+
+        Cinder scheduler that it doesn''t support online volume extending.
+
+        ']
   releasenotes/notes/bug-1765610-qnap-fix-volume-snapshot-create-fail-2bb785eafdb87fb6.yaml:
     fixes: ['Fixed QNAP driver failures to create volume and snapshot in some
 
@@ -100,6 +139,65 @@ file-contents:
         For example, setting `total_iops_sec_per_gb` to 30 and setting `total_bytes_sec_per_gb`
         to `1048576` (1MB) then creating a 100 GB volume with that QoS will result
         in a volume with 3,000 total IOPs and 100MB/s throughput limit.']
+  releasenotes/notes/cheesecake-promotion-30a3336fb911c3ad.yaml:
+    features: ['A new cinder-manage command, reset_active_backend, was added to promote
+        a
+
+        failed-over backend participating in replication.  This allows you to
+
+        reset a backend without manually editing the database.  A backend
+
+        undergoing promotion using this command is expected to be in a disabled
+
+        and frozen state.  Support for both standalone and clustered backend
+
+        configurations are supported.
+
+        ']
+  releasenotes/notes/coprhd-mark-unsupported-aa48145873db1ab1.yaml:
+    deprecations: ['The Dell EMC CoprHD drivers have been marked as unsupported and
+        are now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it. If its support status does not change, they will be
+
+        removed in the Stein development cycle.
+
+        ']
+    upgrade: ['The Dell EMC CoprHD drivers have been marked as unsupported and are
+        now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it.
+
+        ']
+  releasenotes/notes/datacore-mark-unsupported-2399bc19a789fb4c.yaml:
+    deprecations: ['The DataCore drivers have been marked as unsupported and are now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it. If its support status does not change, they will be
+
+        removed in the Stein development cycle.
+
+        ']
+    upgrade: ['The DataCore drivers have been marked as unsupported and are now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it.
+
+        ']
   releasenotes/notes/dell-emc-sc-api-timeouts-ce8d166e1847ea94.yaml:
     features: [Added dell_api_async_rest_timeout option to the Dell EMC SC driver.
         This is the timeout used for asynchronous REST calls to the Dell EMC SC REST
@@ -111,6 +209,48 @@ file-contents:
         than one IQN is attached to a volume. This fixes some random Nova Live Migration
         failures where the connection information being returned was for an IQN other
         than the one for which it was being requested.]
+  releasenotes/notes/dell-emc-sc-mult-attach-d09cfd06ee8db8da.yaml:
+    features: [Enabled Cinder Multi-Attach capability in the Dell EMC Storage Center
+        Cinder driver.]
+  releasenotes/notes/deprecate_san_rest_port-0d8610a872e92e09.yaml:
+    deprecations: ['VMAX driver - configuration tag san_rest_port will be replaced
+        by
+
+        san_api_port in the next release.
+
+        ']
+  releasenotes/notes/disco-mark-unsupported-f6eb8208c8c4eb3b.yaml:
+    deprecations: ['The Disco driver has been marked as unsupported and is now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it. If its support status does not change, it will be
+
+        removed in the Stein development cycle.
+
+        ']
+    upgrade: ['The Disco driver has been marked as unsupported and is now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it.
+
+        ']
+  releasenotes/notes/ds8k-allow-multi-attach-41fa7bddbbd719ec.yaml:
+    features: [IBM DS8K driver has added multiattach support.]
+  releasenotes/notes/ds8k-report-backend-state-in-service-list-f0898950a0f4b122.yaml:
+    features: ['Added flag ''backend_state'' which will give backend state info in
+        service list.
+
+        ']
+  releasenotes/notes/enable-multiattach-iscsi-fcp-netapp-driver-98ad2d75fbbf333f.yaml:
+    features: [NetApp ONTAP iSCSI and FCP drivers multiattach capability enabled.]
+  releasenotes/notes/enable-multiattach-nfs-netapp-driver-406b9b285d85c989.yaml:
+    features: [NetApp ONTAP NFS multiattach capability enabled.]
   releasenotes/notes/fail-detach-lun-when-auto-zone-enabled-9c87b18a3acac9d1.yaml:
     fixes: ['Dell EMC Unity Driver: Fixes `bug 1759175
 
@@ -190,6 +330,32 @@ file-contents:
         were not extended to target size but added the given target size.
 
         ']
+  releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml:
+    fixes: ['Fix a quota usage error triggered by a non-admin user backing up an
+
+        in-use volume. The forced backup uses a temporary volume, and quota
+
+        usage was incorrectly updated when the temporary volume was deleted
+
+        after the backup operation completed.
+
+        Fixes `bug 1778774 <https://bugs.launchpad.net/tripleo/+bug/1778774>`__.
+
+        ']
+  releasenotes/notes/force-delete-mv-a53924f09c475386.yaml:
+    fixes: ['Volume "force delete" was introduced with the 3.23 API microversion,
+
+        however the check for in the service was incorrectly looking for
+
+        microversion 3.2. That check has now been fixed. It is possible that an API
+
+        call using a microversion below 3.23 would previously work for this call,
+
+        which will now fail. This closes
+
+        `bug #1783028 <https://bugs.launchpad.net/cinder/+bug/1783028>`_.
+
+        ']
   releasenotes/notes/google-auth-for-gcs-backup-1642cd0e741fbdf9.yaml:
     deprecations: ['Cinder''s Google backup driver is now called gcs, so ``backup_driver``
         configuration for Google Cloud Storage should be updated from ``cinder.backup.drivers.google``
@@ -199,12 +365,45 @@ file-contents:
         and ``oauth2client`` libraries are present in the system.']
     fixes: [Google backup driver now works when using ``google-api-python-client``
         version 1.6.0 or higher.]
+  releasenotes/notes/hgst-mark-unsupported-b2886de36421c8b0.yaml:
+    deprecations: ['The HGST driver has been marked as unsupported and is now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it. If its support status does not change, it will be
+
+        removed in the Stein development cycle.
+
+        ']
+    upgrade: ['The HGST driver has been marked as unsupported and is now
+
+        deprecated. ``enable_unsupported_driver`` will need to be set
+
+        to ``True`` in the driver''s section in cinder.conf to continue
+
+        to use it.
+
+        ']
   releasenotes/notes/infinidat-multi-attach-support-533b3e559c15801f.yaml:
     features: [Support for volume multi-attach in the INFINIDAT InfiniBox driver.]
   releasenotes/notes/inspur-instorage-fc-cinder-driver-70c13e4a64d785d5.yaml:
     features: ['New FC Cinder volume driver for Inspur Instorage.
 
         ']
+  releasenotes/notes/json-schema-validation-0d22576bd556f4e0.yaml:
+    other: ["Added schema validation support using jsonschema `[json-schema-validation]`_\n\
+        for all supported v3 APIs.\n\nFollowing APIs were accepting boolean parameters\
+        \ with leading and trailing\nwhite spaces (for e.g. \" true \"). But now with\
+        \ schema validation support,\nall these boolean parameters henceforth will\
+        \ not accept leading and trailing\nwhitespaces to maintain consistency.\n\n\
+        * Generic volume groups:\n\n  * delete group: \"POST /v3/{project_id}/groups/{group_id}/action\"\
+        \n\n  * failover replication: \"POST /v3/{project_id}/groups/{group_id}/action\"\
+        \n* Volume Snapshots:\n\n  * create a snapshot: \"POST /v3/{project_id}/snapshots\"\
+        \n* Volume_actions:\n\n  * set bootable: \"POST /v3/{project_id}/volumes/{volume_id}/action\"\
+        \n\n  * volume readonly update: \"POST /v3/{project_id}/volumes/{volume_id}/action\"\
+        \n\n.. _`[json-schema-validation]`: https://blueprints.launchpad.net/cinder/+spec/json-schema-validation\n"]
   releasenotes/notes/migrate-backup-encryption-keys-to-barbican-6f07fd48d4937b2a.yaml:
     fixes: ['When encryption keys based on the ConfKeyManager''s fixed_key are migrated
 
@@ -215,6 +414,39 @@ file-contents:
         Fixes `bug 1757235 <https://bugs.launchpad.net/tripleo/+bug/1757235>`__.
 
         ']
+  releasenotes/notes/modify-ensure-export-1d56a40f5e762aa8.yaml:
+    fixes: ['Storwize SVC Driver: Fixes `bug 1749687
+
+        <https://bugs.launchpad.net/cinder/+bug/1749687>`__
+
+        previously lsvdisk() was called separately for every
+
+        ''in-use'' volume in order to check if the volume exists
+
+        on the storage.
+
+        In order to avoid problem of too long driver initialization
+
+        now lsvdisk() is called once per pool.
+
+        ']
+  releasenotes/notes/nec-delete-volume-per-limit-d10b9df86f64b80e.yaml:
+    upgrade: ['In NEC driver, the number of volumes in a storage pool is no longer
+        limited to 1024. More volumes can be created with storage firmware revision
+        1015 or later.']
+  releasenotes/notes/netapp-deprecate-eseries-drivers-bc4f552d277c07b9.yaml:
+    deprecations: ['The NetApp E-Series drivers are deprecated as of the Rocky release
+        and will be removed in the Stein release. Other configurations of the NetApp
+        driver, i.e Clustered Data ONTAP and Solidfire, are unaffected.']
+  releasenotes/notes/netapp-log-filter-f3256f55c3ac3faa.yaml:
+    features: [The NetApp ONTAP driver supports a new configuration option ``netapp_api_trace_pattern``
+        to enable filtering backend API interactions to log. This option must be specified
+        in the backend section when desired and it accepts a valid python regular
+        expression.]
+  releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml:
+    fixes: ['Fixed bug #1783582, where calls to os-force_detach were failing on NetApp
+
+        ONTAP iSCSI/FC drivers.']
   releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml:
     fixes: ['Fixed bug #1731474 on NetApp Data ONTAP driver that was causing LUNs
         to be created
@@ -224,6 +456,37 @@ file-contents:
         or later.']
   releasenotes/notes/nexentaedge-iscsi-driver-302529c56cdbbf38.yaml:
     features: [Added backend driver for Nexenta Edge iSCSI storage.]
+  releasenotes/notes/privsep-rocky-35bdfe70ed62a826.yaml:
+    security: ['Privsep transitions. Cinder is transitioning from using the older
+        style
+
+        rootwrap privilege escalation path to the new style Oslo privsep path.
+
+        This should improve performance and security of Cinder in the long term.
+
+        ', 'Privsep daemons are now started by Cinder when required. These daemons
+        can
+
+        be started via rootwrap if required. rootwrap configs therefore need to
+
+        be updated to include new privsep daemon invocations.
+
+        ']
+    upgrade: ['The following commands are no longer required to be listed in your
+        rootwrap
+
+        configuration: cgcreate; and cgset.
+
+        ']
+  releasenotes/notes/pure-active-cluster-edf8e7e80739b0f8.yaml:
+    features: [Added support to Pure Storage Volume Drivers for Active Cluster using
+        the standard replication API's for the Block Storage Service.]
+  releasenotes/notes/pure-storage-multiattach-support-994da363e181d627.yaml:
+    features: [Pure Storage FlashArray driver has added multiatach support.]
+  releasenotes/notes/qnap-support-qes-210-de75892f684cb9c3.yaml:
+    features: ['QNAP Cinder driver added support for QES fw 2.1.0.
+
+        ']
   releasenotes/notes/quobyte_vol-snap-cache-baf607f14d916ec7.yaml:
     fixes: ['Added a new optional cache of volumes generated from snapshots for the
 
@@ -240,6 +503,10 @@ file-contents:
     features: [Added support for active-active replication to the RBD driver.  This
         allows users to configure multiple volume backends that are all a member of
         the same cluster participating in replication.]
+  releasenotes/notes/rbd-support-list-manageable-snapshots-3474c62ed83fb788.yaml:
+    features: [Allow rbd driver to list manageable snapshots.]
+  releasenotes/notes/rbd-support-report-backend-state-4e124eb9efd36724.yaml:
+    features: [Allow rbd driver to report backend state.]
   releasenotes/notes/remove-backup-service-to-driver-mapping-4d2ed6f868a64175.yaml:
     upgrade: ['Backup service to driver mapping is removed. If you use old values
         like
@@ -274,6 +541,15 @@ file-contents:
         using the generic `max_over_subscription_ratio` setting.
 
         ']
+  releasenotes/notes/remove_deprecated_xml-4065b893d781f65c.yaml:
+    upgrade: ['VMAX driver - Removed deprecated option ``cinder_dell_emc_config_file``
+
+        ']
+  releasenotes/notes/report-backend-state-in-service-list-739a5398eec4a6b7.yaml:
+    features: ['Added flag ''backend_state: up/down'' which will give backend state
+        info in
+
+        service list.']
   releasenotes/notes/report-backend-state-in-service-list-93e9f2b204b735c0.yaml:
     features: ['Added flag ''backend_state'' which will give backend state info in
         service list.
@@ -314,6 +590,16 @@ file-contents:
         will corrupt the differencing image chain.
 
         ']
+  releasenotes/notes/ssl-cert-fix-42e8f263c15d5343.yaml:
+    fixes: ['VMAX driver - fixes SSL certificate verification error.
+
+        ']
+  releasenotes/notes/storwize-dr-pool-support-52db3a95e54aef88.yaml:
+    features: ['Added data reduction pool support for thin-provisoned and compressed
+
+        volume in Storwize cinder driver.
+
+        ']
   releasenotes/notes/storwize-hyperswap-host-site-update-621e763768fab9ee.yaml:
     fixes: ['Updated the parameter storwzie_preferred_host_site from StrOpt to DictOpt
 
@@ -331,6 +617,12 @@ file-contents:
       \  when creating and retyping volumes.\n* Volume type can be filtered within\
       \ extra spec: /types?extra_specs={\"key\":\"value\"}\n  since microversion \"\
       3.52\".\n"}
+  releasenotes/notes/support-image-signature-verification-yu8qub7286et9dh4.yaml:
+    features: ['Added image signature verification support when creating volume from
+        image. This depends on signature metadata from glance. This feature is turned
+        on by default, administrators can change behaviour by updating option ``verify_glance_signatures``.
+        Also, an additional image metadata ``signature_verified`` has been added to
+        indicate whether signature verification was performed during creating process.']
   releasenotes/notes/sync-bump-versions-a1e6f6359173892e.yaml:
     features: [Cinder-manage DB sync command can now bump the RPC and Objects versions
         of the services to avoid a second restart when doing offline upgrades.]
@@ -355,11 +647,24 @@ file-contents:
         many slow operations are happening at the same time (for example many huge
         volume deletions), we can now use the `backend_native_threads_pool_size` option
         in the RBD driver section to resolve the issue.']
+  releasenotes/notes/transfer-snapshots-with-volume-a7763570a807c742.yaml:
+    features: ['Support transfer volume with snapshots by default in new V3 API ''v3/volume_transfers''.
+        After microverison 3.55, if users don''t want to transfer snapshots, they
+        could use the new optional argument `no_snapshots=True` in request body of
+        new transfer creation API.']
   releasenotes/notes/unity-enable-ssl-14db2497225c4395.yaml:
     features: ['Dell EMC Unity Cinder driver allows enabling/disabling the SSL verification.
         Admin can set `True` or `False` for `driver_ssl_cert_verify` to enable or
         disable this function, alternatively set the `driver_ssl_cert_path=<PATH>`
         for customized CA path. Both above 2 options should go under the driver section.']
+  releasenotes/notes/unity-multiattach-support-993b997e522d9e84.yaml:
+    features: ['Dell EMC Unity: Implements `bp unity-multiattach-support
+
+        <https://blueprints.launchpad.net/cinder/+spec/unity-multiattach-support>`__
+
+        to support attaching a volume to multiple servers simultaneously.
+
+        ']
   releasenotes/notes/unity-remove-empty-host-17d567dbb6738e4e.yaml:
     features: ['Dell EMC Unity Driver: Adds support for removing empty host. The new
         option
@@ -369,10 +674,37 @@ file-contents:
         driver to remove the host after the last LUN is detached from it.
 
         ']
+  releasenotes/notes/unity-return-logged-out-initiator-6ab1f96f21bb284c.yaml:
+    fixes: ['Dell EMC Unity Driver: Fixes `bug 1773305
+
+        <https://bugs.launchpad.net/cinder/+bug/1773305>`__
+
+        to return the targets which connect to the logged-out initiators. Then the
+
+        zone manager could clean up the FC zone based on the correct target wwns.
+
+        ']
+  releasenotes/notes/unity-thick-support-fdbef833f2b4d54f.yaml:
+    features: ['Dell EMC Unity Driver: Add thick volume support. Refer to `Unity Cinder
+
+        Configuration document
+
+        <https://docs.openstack.org/cinder/latest/configuration/block-storage/drivers/dell-emc-unity-driver.html>`__
+
+        to create a thick volume.
+
+        ']
   releasenotes/notes/veritas_access_iscsi_driver-de642dad9e7d0890.yaml:
     features: [Added ISCSI based driver for Veritas Access.]
   releasenotes/notes/vmax-driver-multiattach-support-43a7f99cd2d742ee.yaml:
     features: [Dell EMC VMAX driver has added multiattach support.]
+  releasenotes/notes/vmax-list-manageable-vols-snaps-6a7f5aa114fae8f3.yaml:
+    features: [Dell EMC VMAX driver has added list manageable volumes and snapshots
+        support.]
+  releasenotes/notes/vmax-metadata-ac9bdd31e7e561c3.yaml:
+    features: ['Log VMAX specific metadata of a volume if debug is enabled.
+
+        ']
   releasenotes/notes/vmax-retype-replicated-volumes-325be6e5fd626819.yaml:
     features: [Support for retype (storage-assisted migration) of replicated volumes
         on VMAX cinder driver.]
@@ -413,66 +745,285 @@ file-contents:
         The Swift and Posix backup drivers are known to be working on Windows.
 
         ']
+  releasenotes/notes/xtremio-support-multiattache-20b1882a1216a8b2.yaml:
+    features: [Dell EMC XtremIO driver has added multiattach support.]
 notes:
 - files:
-  - [releasenotes/notes/add-operation-to-request-spec-7yt6ub75uy1284as.yaml, e1ec4b4c2e1f0de512f09e38824c1d7e2fa38617]
-  - [releasenotes/notes/bp-nvmeof-lvm-target-b7771955b426abe7.yaml, 8d7e131c587f31d85c76f990998d411af490554f]
-  - [releasenotes/notes/bug-1712651-7bc90264eb5001ea.yaml, 2b60912d5667350eae7ecbc67d4dba3658518d10]
-  - [releasenotes/notes/bug-1762424-f76af2f37fe408f1.yaml, 029cadbf4067ad6f0bf08588cf439587f3c7052c]
-  - [releasenotes/notes/bug-1765610-qnap-fix-volume-snapshot-create-fail-2bb785eafdb87fb6.yaml,
-    880ff557ca3d6569464b9667ac25825cf5e3c7fd]
-  - [releasenotes/notes/bug-1766768-qnap-fix-upload-volume-detach-fail-33cbee59f1381bda.yaml,
-    ee9fda3e89b619c058768d5fa17cc3e9ecf4a99f]
-  - [releasenotes/notes/fix-extend-volume-939e30f2e9e516bc.yaml, c96f3997104f0dca4ed191e3df92715b33bd1a63]
-  - [releasenotes/notes/google-auth-for-gcs-backup-1642cd0e741fbdf9.yaml, 79d7a4e8da6f1118b5c235928876cf78085f4332]
-  - [releasenotes/notes/nexentaedge-iscsi-driver-302529c56cdbbf38.yaml, e2bd03ef75b4417e3531186fd6cc0a270ffbd32c]
-  - [releasenotes/notes/rbd-active-active-replication-b230367912fe4a23.yaml, 245a488c36003764e3550c2c95fa4bef6119e0ea]
-  - [releasenotes/notes/remove-deprecated-option-9ad954726ed4d8c2.yaml, d1c5379369b24effdccfe5dde3e93bd21884eda5]
-  - [releasenotes/notes/remove-lvm-over-sub-3c8addbf47827045.yaml, 2c05388d5ccbbecbbe02b45aec30f24321da0057]
-  - [releasenotes/notes/scaleio-rebranding-d2d113c5d8e5c118.yaml, a852c46ba483e9a015c30a77fa461b45c1517786]
-  - [releasenotes/notes/support-az-in-volumetype-8yt6fg67de3976ty.yaml, 306fa19079ccf8f5278fdf36341edecd95df04a7]
-  - [releasenotes/notes/unity-remove-empty-host-17d567dbb6738e4e.yaml, f9a9aa5a25688cac86e5dc060a20374e4a29bbef]
-  - [releasenotes/notes/vmax-driver-multiattach-support-43a7f99cd2d742ee.yaml, 106cf3cbf0a094755d4af063a05de9aa36ae385d]
-  - [releasenotes/notes/vmware_vmdk_nfs41-450908bbbc9eea6d.yaml, 68e3b4a1d544683a7d7b0cfd7f730dc9a0bbdd77]
+  - - releasenotes/notes/add-split-logger-conf-option-0424e3bd91de3a5a.yaml
+    - !!binary |
+      NzBjNDhmZjZiYmY3YzQwOTRkYTM0YTFhZjI1NmFjN2ZiYzAzMjM5OQ==
+  - - releasenotes/notes/bug-1765182-34fdc4bb8482f8a5.yaml
+    - !!binary |
+      NzkyZWVhMGExMmJkOTdmNjkyOTRhZDA1NzBhYzMzMGEzZjFmZTQyMw==
+  - - releasenotes/notes/bug-1765182-bcafd577f4b81eb6.yaml
+    - !!binary |
+      ZjMzYjIzNGFhMDJhMmY2ODI0NTVjYmMwMTc1OGE3MzMwZDY0ZTZhZQ==
+  - - releasenotes/notes/bug-1765182-de132ba52167800b.yaml
+    - !!binary |
+      NDBkNTBlY2NkZWY5Y2MxYjQyYmI4ZTI0ZTZiNjQxYjIwMjEzNzIwZA==
+  - - releasenotes/notes/cheesecake-promotion-30a3336fb911c3ad.yaml
+    - !!binary |
+      ZGY4MWI1OWY5ZDFmNzBkY2RlMDAyZWI5MjUyYzU1ZTQ2ZDc3YTVjMA==
+  - - releasenotes/notes/coprhd-mark-unsupported-aa48145873db1ab1.yaml
+    - !!binary |
+      MTlkNWU2OGI0NmM4MjljZWU5Mjg1YzViYWVmZjE2NzcxYzE5NDJlMg==
+  - - releasenotes/notes/datacore-mark-unsupported-2399bc19a789fb4c.yaml
+    - !!binary |
+      MTNiOWRmNDA3NGRlOTQ1Y2IyMWQ4YzFhNjZiNzc0NmE0YjNjNGM2MQ==
+  - - releasenotes/notes/dell-emc-sc-mult-attach-d09cfd06ee8db8da.yaml
+    - !!binary |
+      MmU4MmYwZGU5MGQwNzdmN2Q4NzM1M2I1OWMxNGY2OWJmZjNkYmFhNQ==
+  - - releasenotes/notes/deprecate_san_rest_port-0d8610a872e92e09.yaml
+    - !!binary |
+      MDE3ZGQ2YjRiY2Y5MmMxNGQ0OTQyMTI2OGNiNTcxYzAwODc5ZjNjYw==
+  - - releasenotes/notes/disco-mark-unsupported-f6eb8208c8c4eb3b.yaml
+    - !!binary |
+      NGY0YTZiYTIzZjJlNDc5ZGQwMGE2Y2U5YzgwYTk2ODAzMmYzZjU3ZA==
+  - - releasenotes/notes/ds8k-allow-multi-attach-41fa7bddbbd719ec.yaml
+    - !!binary |
+      MzU5OWViNWJhOTQ4ZTc0M2FkNjM5OTlkYWJlZWNhZmE4NjM3M2VlMA==
+  - - releasenotes/notes/ds8k-report-backend-state-in-service-list-f0898950a0f4b122.yaml
+    - !!binary |
+      M2UxMmUyZjkzMGJlMjU2M2Y2OWJlZDM3OTA2NTIxNjg3Yjk0ODdhZQ==
+  - - releasenotes/notes/enable-multiattach-iscsi-fcp-netapp-driver-98ad2d75fbbf333f.yaml
+    - !!binary |
+      YWMwYzdkODliYTRjYjJiMWRjODk0YjFmNWExZjIzNjFiYzM2ZGMwZg==
+  - - releasenotes/notes/enable-multiattach-nfs-netapp-driver-406b9b285d85c989.yaml
+    - !!binary |
+      NGUwNjRhM2FlN2RkYzMwNWU3MjI2NDMyZDUyNDhmNGQ3YWU2Yzc3ZA==
+  - - releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
+    - !!binary |
+      OGQ5Zjg2MjkwMTNiY2I4ODBmYjNlMzNmMDNiMjc0YzEwYmVmZGFiMA==
+  - - releasenotes/notes/force-delete-mv-a53924f09c475386.yaml
+    - !!binary |
+      ZmU2OWY2NzkzNjkwNTdhN2MzODExNzhmNzcwYmY2OGQwYmMxY2VlMA==
+  - - releasenotes/notes/hgst-mark-unsupported-b2886de36421c8b0.yaml
+    - !!binary |
+      Yzg4ZDdiYTExNzIwNWY0MzNiZTRmY2RlMGMxZmVmNzE1MzRjNmNhZA==
+  - - releasenotes/notes/json-schema-validation-0d22576bd556f4e0.yaml
+    - !!binary |
+      ZDk4ZGJmNGRhODg1MmIwNzI2Yjg3NTIwNTExZmNjMTZiMWM3NWRkOA==
+  - - releasenotes/notes/modify-ensure-export-1d56a40f5e762aa8.yaml
+    - !!binary |
+      ZDVmNzljNTJkODg2ZTk2MmUxZTQyYWY0ZDg5MmIzNWVlYzViYjgxZg==
+  - - releasenotes/notes/nec-delete-volume-per-limit-d10b9df86f64b80e.yaml
+    - !!binary |
+      ZWNmZDRkMzkzYTEyYjQwOGI5OTYxMzU4ODQxYzcwZDIwYjQ3NmY0OQ==
+  - - releasenotes/notes/netapp-deprecate-eseries-drivers-bc4f552d277c07b9.yaml
+    - !!binary |
+      NzQ3MzczZjRiZGZlNDgxNDAwMGE4OGU0NDQzYjU2NTQ1ZDVkNTViZA==
+  - - releasenotes/notes/netapp-log-filter-f3256f55c3ac3faa.yaml
+    - !!binary |
+      YmIwYWFjNTYwZGJjNWEyODU5ZjAyODI0ZDM2YmY3NmQxNzAzOTM1OA==
+  - - releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml
+    - !!binary |
+      ODc3NmM4MWY2NGJmZWU4MTQ1NzNmMjE3YjE0MDQwOGY1N2ZiMzAyZA==
+  - - releasenotes/notes/privsep-rocky-35bdfe70ed62a826.yaml
+    - !!binary |
+      ODYxNjQ2ZDFiYTUzZjZiZWNlYTU5YmM1MDMwNjIyOWUxNjJmMGM2Yw==
+  - - releasenotes/notes/pure-active-cluster-edf8e7e80739b0f8.yaml
+    - !!binary |
+      NzE1MDY5ZjYxNTVjYTI5MmRiZTFiZGRlZjdiNmJkMWVjOGVhMGNjYw==
+  - - releasenotes/notes/pure-storage-multiattach-support-994da363e181d627.yaml
+    - !!binary |
+      OGY0ODAyYmFmNTE0MTVhYmQ2NjBiMWQ5YmM4YmQ3M2U1MzkzMThlMg==
+  - - releasenotes/notes/qnap-support-qes-210-de75892f684cb9c3.yaml
+    - !!binary |
+      NGRjZWI1NmY4ODkwYTYxNTI3YTA2NTIwYWJjMDc2YzBiNDJjZjkyYw==
+  - - releasenotes/notes/rbd-support-list-manageable-snapshots-3474c62ed83fb788.yaml
+    - !!binary |
+      MjgwY2M3YzVhZTRiMDdhOWExZTIzYjhmOWNjOTI1YmU5ODcyYzhlMQ==
+  - - releasenotes/notes/rbd-support-report-backend-state-4e124eb9efd36724.yaml
+    - !!binary |
+      MDA2Mjk2ODU2ODA4MDYzYmU2YzMyYzIwOTJiNDA1MTViNzczZGY4NA==
+  - - releasenotes/notes/remove_deprecated_xml-4065b893d781f65c.yaml
+    - !!binary |
+      YzBhNWJlMjU5ZTYwODgwOGQxODY2ZGQ4ZjU0YmNhY2Y4YWI2MzY1Yg==
+  - - releasenotes/notes/report-backend-state-in-service-list-739a5398eec4a6b7.yaml
+    - !!binary |
+      MDM2NzZiYWFjNTAyMGJhZmVkYjMyMjhmNTYxNzM0ZmI2ZDg5ZGM4ZQ==
+  - - releasenotes/notes/ssl-cert-fix-42e8f263c15d5343.yaml
+    - !!binary |
+      NTEyZmQwNzEyNGVhNzIxMGE2NjUzZTUxOWU5NjRhODk4YTMxZDQwNg==
+  - - releasenotes/notes/storwize-dr-pool-support-52db3a95e54aef88.yaml
+    - !!binary |
+      ODIyZmI3MDFkZTQ4ZDMwZTY2MmI1ZjE2MjcwYjNjMzhlODcwMzE1MQ==
+  - - releasenotes/notes/support-image-signature-verification-yu8qub7286et9dh4.yaml
+    - !!binary |
+      ZThjMjQ1NzdiOGJkOThkODYzNThhYmY1NDMwMTBiNzYyMjljODc1Nw==
+  - - releasenotes/notes/transfer-snapshots-with-volume-a7763570a807c742.yaml
+    - !!binary |
+      YzBlZmFhMWQ0NmI3NjI2OTNmOGZlM2EwOWQwMzU5ZWFkM2UwOTdjNA==
+  - - releasenotes/notes/unity-multiattach-support-993b997e522d9e84.yaml
+    - !!binary |
+      ZGZmZmYwOGEyMDRkZGY2NDE2Y2Q2ZGRiMDM2ZThlMDI5ZGM4MDUwOQ==
+  - - releasenotes/notes/unity-return-logged-out-initiator-6ab1f96f21bb284c.yaml
+    - !!binary |
+      MWVmMDZkNGEzMWMzMDEwZjE3MGRhMjBmY2M4MjNkZDgxZTc3YzFhNw==
+  - - releasenotes/notes/unity-thick-support-fdbef833f2b4d54f.yaml
+    - !!binary |
+      ZTQ1OGJkYmY4NGFiYTJkYWI1ZmMwZjY1YTQ5NzY0NDY2MDE2NTU4Yg==
+  - - releasenotes/notes/vmax-list-manageable-vols-snaps-6a7f5aa114fae8f3.yaml
+    - !!binary |
+      ZDA1YTdhMTBkYzA0MzM1YzIwNWFiM2VlNWEyZDAzYTYyYzI2YjhlOA==
+  - - releasenotes/notes/vmax-metadata-ac9bdd31e7e561c3.yaml
+    - !!binary |
+      NDY2MmVhZDhjM2VmMTk3MGJjN2JlNzgxNWJjYmFjYzIyMWY2ZmUxZQ==
+  - - releasenotes/notes/xtremio-support-multiattache-20b1882a1216a8b2.yaml
+    - !!binary |
+      NjA3ZTc2ODhiOTBlODIzM2FjOGM1MmI4OTZmYTExY2E0NGEyYjAyNg==
+  version: 13.0.0.0b3
+- files:
+  - - releasenotes/notes/add-operation-to-request-spec-7yt6ub75uy1284as.yaml
+    - !!binary |
+      ZTFlYzRiNGMyZTFmMGRlNTEyZjA5ZTM4ODI0YzFkN2UyZmEzODYxNw==
+  - - releasenotes/notes/bp-nvmeof-lvm-target-b7771955b426abe7.yaml
+    - !!binary |
+      OGQ3ZTEzMWM1ODdmMzFkODVjNzZmOTkwOTk4ZDQxMWFmNDkwNTU0Zg==
+  - - releasenotes/notes/bug-1712651-7bc90264eb5001ea.yaml
+    - !!binary |
+      MmI2MDkxMmQ1NjY3MzUwZWFlN2VjYmM2N2Q0ZGJhMzY1ODUxOGQxMA==
+  - - releasenotes/notes/bug-1762424-f76af2f37fe408f1.yaml
+    - !!binary |
+      MDI5Y2FkYmY0MDY3YWQ2ZjBiZjA4NTg4Y2Y0Mzk1ODdmM2M3MDUyYw==
+  - - releasenotes/notes/bug-1765610-qnap-fix-volume-snapshot-create-fail-2bb785eafdb87fb6.yaml
+    - !!binary |
+      ODgwZmY1NTdjYTNkNjU2OTQ2NGI5NjY3YWMyNTgyNWNmNWUzYzdmZA==
+  - - releasenotes/notes/bug-1766768-qnap-fix-upload-volume-detach-fail-33cbee59f1381bda.yaml
+    - !!binary |
+      ZWU5ZmRhM2U4OWI2MTljMDU4NzY4ZDVmYTE3Y2MzZTllY2Y0YTk5Zg==
+  - - releasenotes/notes/fix-extend-volume-939e30f2e9e516bc.yaml
+    - !!binary |
+      Yzk2ZjM5OTcxMDRmMGRjYTRlZDE5MWUzZGY5MjcxNWIzM2JkMWE2Mw==
+  - - releasenotes/notes/google-auth-for-gcs-backup-1642cd0e741fbdf9.yaml
+    - !!binary |
+      NzlkN2E0ZThkYTZmMTExOGI1YzIzNTkyODg3NmNmNzgwODVmNDMzMg==
+  - - releasenotes/notes/nexentaedge-iscsi-driver-302529c56cdbbf38.yaml
+    - !!binary |
+      ZTJiZDAzZWY3NWI0NDE3ZTM1MzExODZmZDZjYzBhMjcwZmZiZDMyYw==
+  - - releasenotes/notes/rbd-active-active-replication-b230367912fe4a23.yaml
+    - !!binary |
+      MjQ1YTQ4OGMzNjAwMzc2NGUzNTUwYzJjOTVmYTRiZWY2MTE5ZTBlYQ==
+  - - releasenotes/notes/remove-deprecated-option-9ad954726ed4d8c2.yaml
+    - !!binary |
+      ZDFjNTM3OTM2OWIyNGVmZmRjY2ZlNWRkZTNlOTNiZDIxODg0ZWRhNQ==
+  - - releasenotes/notes/remove-lvm-over-sub-3c8addbf47827045.yaml
+    - !!binary |
+      MmMwNTM4OGQ1Y2NiYmVjYmJlMDJiNDVhZWMzMGYyNDMyMWRhMDA1Nw==
+  - - releasenotes/notes/scaleio-rebranding-d2d113c5d8e5c118.yaml
+    - !!binary |
+      YTg1MmM0NmJhNDgzZTlhMDE1YzMwYTc3ZmE0NjFiNDVjMTUxNzc4Ng==
+  - - releasenotes/notes/support-az-in-volumetype-8yt6fg67de3976ty.yaml
+    - !!binary |
+      MzA2ZmExOTA3OWNjZjhmNTI3OGZkZjM2MzQxZWRlY2Q5NWRmMDRhNw==
+  - - releasenotes/notes/unity-remove-empty-host-17d567dbb6738e4e.yaml
+    - !!binary |
+      ZjlhOWFhNWEyNTY4OGNhYzg2ZTVkYzA2MGEyMDM3NGU0YTI5YmJlZg==
+  - - releasenotes/notes/vmax-driver-multiattach-support-43a7f99cd2d742ee.yaml
+    - !!binary |
+      MTA2Y2YzY2JmMGEwOTQ3NTVkNGFmMDYzYTA1ZGU5YWEzNmFlMzg1ZA==
+  - - releasenotes/notes/vmware_vmdk_nfs41-450908bbbc9eea6d.yaml
+    - !!binary |
+      NjhlM2I0YTFkNTQ0NjgzYTdkN2IwY2ZkN2Y3MzBkYzlhMGJiZGQ3Nw==
   version: 13.0.0.0b2
 - files:
-  - [releasenotes/notes/add-option-max_luns_per_storage_group-dfe3e1396b262bc8.yaml,
-    04847424b462ceade2daaca519a14e28779a026d]
-  - [releasenotes/notes/bug-1686745-e8f1569455f998ba.yaml, abca1abc7b01fc1d85af8b9cfa5b646abafc9d4a]
-  - [releasenotes/notes/bug-1690954-40fc21683977e996.yaml, 4d75cbf3c35a8aa917d3970beac99d612f13eed3]
-  - [releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml, 29d2090aef7b31df23ca846d365c6d21957486ba]
-  - [releasenotes/notes/dell-emc-sc-api-timeouts-ce8d166e1847ea94.yaml, 1d6ad6ef179f465289c95b5f45ac79b0f03e0866]
-  - [releasenotes/notes/dell-emc-sc-bugfix-1756914-ffca3133273040f6.yaml, f8980ea128dd6698a1cb3a283d98b47371b854f6]
-  - [releasenotes/notes/fail-detach-lun-when-auto-zone-enabled-9c87b18a3acac9d1.yaml,
-    c816be897e7ab1c95b38979b2cc94ecf179e44e7]
-  - [releasenotes/notes/feature-abort-restore-fe1252288c59e105.yaml, 89f6291ee33780ed6d4e4886d5d18a0ce0cdb182]
-  - [releasenotes/notes/feature-cross-az-backups-6b68c4c4456f2fd7.yaml, 5feaf74ccf10148859e206ce21bfd54dec2c1c16]
-  - [releasenotes/notes/feature-multi-process-backup-8cf5ad5a0cf9b2d5.yaml, 373b52404151d80e83004a37d543f825846edea1]
-  - [releasenotes/notes/feature-rbd-exclusive-pool-a9bdebdeb1f0bf37.yaml, f33baccc3544cbda6cd5908328a56096046657ed]
-  - [releasenotes/notes/fix-abort-backup-df196e9dcb992586.yaml, 4ff9e63707e2c4cf5869f28e3e86fd0606d2db9a]
-  - [releasenotes/notes/fix-cross-az-migration-ce97eff61280e1c7.yaml, fb8085894b69f56091bde19683a919cb15d502cc]
-  - [releasenotes/notes/infinidat-multi-attach-support-533b3e559c15801f.yaml, 666c0fc8db20dfe1d5adc036d24b52a3eaa1091a]
-  - [releasenotes/notes/inspur-instorage-fc-cinder-driver-70c13e4a64d785d5.yaml, a6e79968ed237a7f0982cdc0d8fcf231d63b38fc]
-  - [releasenotes/notes/migrate-backup-encryption-keys-to-barbican-6f07fd48d4937b2a.yaml,
-    341dd44ba796e933920da6718a2891e35ed88506]
-  - [releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml, 67391f1f0f30172190882e7d3f4a4ddc271dfa00]
-  - [releasenotes/notes/quobyte_vol-snap-cache-baf607f14d916ec7.yaml, 8c72fcadae92640331807f021401a7c250e56286]
-  - [releasenotes/notes/remove-backup-service-to-driver-mapping-4d2ed6f868a64175.yaml,
-    497cd4e3cdbea7b61d9bca46a65561993e0b9f26]
-  - [releasenotes/notes/remove-cinder-manage-logs-cmds-40fb8f475b37fb2f.yaml, adfda23b609aae482208966e8fd65f176d4bcd49]
-  - [releasenotes/notes/report-backend-state-in-service-list-93e9f2b204b735c0.yaml,
-    c5a8000b9c857521e896e1fc39a77f0fcfc12ccc]
-  - [releasenotes/notes/scaleio-zeropadding-a0273c56c4d14fca.yaml, 7feb62197d371ab7253dc86a34af6ff8b484b4df]
-  - [releasenotes/notes/smbfs-snapshot-attach-14742fe8f5864ac6.yaml, 32a08e4d6a18be743e936448f05f97113e80619c]
-  - [releasenotes/notes/storwize-hyperswap-host-site-update-621e763768fab9ee.yaml,
-    b13a8f810b143f5f0f465ab45eab453c1e65de7d]
-  - [releasenotes/notes/sync-bump-versions-a1e6f6359173892e.yaml, 3cd2ebd3759c76fdf5a292e612127094c7aa2b17]
-  - [releasenotes/notes/tpool-size-11121f78df24db39.yaml, e570436d1cca5cfa89388aec8b2daa63d01d0250]
-  - [releasenotes/notes/unity-enable-ssl-14db2497225c4395.yaml, 8aa49599c7df62de5ab25a0a841265092e2881f7]
-  - [releasenotes/notes/veritas_access_iscsi_driver-de642dad9e7d0890.yaml, a9fad35a20570e6ecd3757ea50e794a0592c3921]
-  - [releasenotes/notes/vmax-retype-replicated-volumes-325be6e5fd626819.yaml, 992542a9fb00efdd479d2d18fd6da848b162adf9]
-  - [releasenotes/notes/vmware_vmdk_datastore_regex-fe7b68ad69ef7384.yaml, f1e21ee2526e35c60f5d2251d569469dddd4efc5]
-  - [releasenotes/notes/vnx-perf-optimize-bd55dc3ef7584228.yaml, b54e7ff3576e495c4a1ed95a3e307b897860209b]
-  - [releasenotes/notes/vnx-revert-to-snapshot-e5494b6fb5ad5a1e.yaml, 2cd65abb713381bbf6155e6e176043f9c41c04a7]
-  - [releasenotes/notes/windows-volume-backup-b328858a20f5a499.yaml, 302402df330a52fbe9e531cf5603babad0c1f367]
+  - - releasenotes/notes/add-option-max_luns_per_storage_group-dfe3e1396b262bc8.yaml
+    - !!binary |
+      MDQ4NDc0MjRiNDYyY2VhZGUyZGFhY2E1MTlhMTRlMjg3NzlhMDI2ZA==
+  - - releasenotes/notes/bug-1686745-e8f1569455f998ba.yaml
+    - !!binary |
+      YWJjYTFhYmM3YjAxZmMxZDg1YWY4YjljZmE1YjY0NmFiYWZjOWQ0YQ==
+  - - releasenotes/notes/bug-1690954-40fc21683977e996.yaml
+    - !!binary |
+      NGQ3NWNiZjNjMzVhOGFhOTE3ZDM5NzBiZWFjOTlkNjEyZjEzZWVkMw==
+  - - releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml
+    - !!binary |
+      MjlkMjA5MGFlZjdiMzFkZjIzY2E4NDZkMzY1YzZkMjE5NTc0ODZiYQ==
+  - - releasenotes/notes/dell-emc-sc-api-timeouts-ce8d166e1847ea94.yaml
+    - !!binary |
+      MWQ2YWQ2ZWYxNzlmNDY1Mjg5Yzk1YjVmNDVhYzc5YjBmMDNlMDg2Ng==
+  - - releasenotes/notes/dell-emc-sc-bugfix-1756914-ffca3133273040f6.yaml
+    - !!binary |
+      Zjg5ODBlYTEyOGRkNjY5OGExY2IzYTI4M2Q5OGI0NzM3MWI4NTRmNg==
+  - - releasenotes/notes/fail-detach-lun-when-auto-zone-enabled-9c87b18a3acac9d1.yaml
+    - !!binary |
+      YzgxNmJlODk3ZTdhYjFjOTViMzg5NzliMmNjOTRlY2YxNzllNDRlNw==
+  - - releasenotes/notes/feature-abort-restore-fe1252288c59e105.yaml
+    - !!binary |
+      ODlmNjI5MWVlMzM3ODBlZDZkNGU0ODg2ZDVkMThhMGNlMGNkYjE4Mg==
+  - - releasenotes/notes/feature-cross-az-backups-6b68c4c4456f2fd7.yaml
+    - !!binary |
+      NWZlYWY3NGNjZjEwMTQ4ODU5ZTIwNmNlMjFiZmQ1NGRlYzJjMWMxNg==
+  - - releasenotes/notes/feature-multi-process-backup-8cf5ad5a0cf9b2d5.yaml
+    - !!binary |
+      MzczYjUyNDA0MTUxZDgwZTgzMDA0YTM3ZDU0M2Y4MjU4NDZlZGVhMQ==
+  - - releasenotes/notes/feature-rbd-exclusive-pool-a9bdebdeb1f0bf37.yaml
+    - !!binary |
+      ZjMzYmFjY2MzNTQ0Y2JkYTZjZDU5MDgzMjhhNTYwOTYwNDY2NTdlZA==
+  - - releasenotes/notes/fix-abort-backup-df196e9dcb992586.yaml
+    - !!binary |
+      NGZmOWU2MzcwN2UyYzRjZjU4NjlmMjhlM2U4NmZkMDYwNmQyZGI5YQ==
+  - - releasenotes/notes/fix-cross-az-migration-ce97eff61280e1c7.yaml
+    - !!binary |
+      ZmI4MDg1ODk0YjY5ZjU2MDkxYmRlMTk2ODNhOTE5Y2IxNWQ1MDJjYw==
+  - - releasenotes/notes/infinidat-multi-attach-support-533b3e559c15801f.yaml
+    - !!binary |
+      NjY2YzBmYzhkYjIwZGZlMWQ1YWRjMDM2ZDI0YjUyYTNlYWExMDkxYQ==
+  - - releasenotes/notes/inspur-instorage-fc-cinder-driver-70c13e4a64d785d5.yaml
+    - !!binary |
+      YTZlNzk5NjhlZDIzN2E3ZjA5ODJjZGMwZDhmY2YyMzFkNjNiMzhmYw==
+  - - releasenotes/notes/migrate-backup-encryption-keys-to-barbican-6f07fd48d4937b2a.yaml
+    - !!binary |
+      MzQxZGQ0NGJhNzk2ZTkzMzkyMGRhNjcxOGEyODkxZTM1ZWQ4ODUwNg==
+  - - releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml
+    - !!binary |
+      NjczOTFmMWYwZjMwMTcyMTkwODgyZTdkM2Y0YTRkZGMyNzFkZmEwMA==
+  - - releasenotes/notes/quobyte_vol-snap-cache-baf607f14d916ec7.yaml
+    - !!binary |
+      OGM3MmZjYWRhZTkyNjQwMzMxODA3ZjAyMTQwMWE3YzI1MGU1NjI4Ng==
+  - - releasenotes/notes/remove-backup-service-to-driver-mapping-4d2ed6f868a64175.yaml
+    - !!binary |
+      NDk3Y2Q0ZTNjZGJlYTdiNjFkOWJjYTQ2YTY1NTYxOTkzZTBiOWYyNg==
+  - - releasenotes/notes/remove-cinder-manage-logs-cmds-40fb8f475b37fb2f.yaml
+    - !!binary |
+      YWRmZGEyM2I2MDlhYWU0ODIyMDg5NjZlOGZkNjVmMTc2ZDRiY2Q0OQ==
+  - - releasenotes/notes/report-backend-state-in-service-list-93e9f2b204b735c0.yaml
+    - !!binary |
+      YzVhODAwMGI5Yzg1NzUyMWU4OTZlMWZjMzlhNzdmMGZjZmMxMmNjYw==
+  - - releasenotes/notes/scaleio-zeropadding-a0273c56c4d14fca.yaml
+    - !!binary |
+      N2ZlYjYyMTk3ZDM3MWFiNzI1M2RjODZhMzRhZjZmZjhiNDg0YjRkZg==
+  - - releasenotes/notes/smbfs-snapshot-attach-14742fe8f5864ac6.yaml
+    - !!binary |
+      MzJhMDhlNGQ2YTE4YmU3NDNlOTM2NDQ4ZjA1Zjk3MTEzZTgwNjE5Yw==
+  - - releasenotes/notes/storwize-hyperswap-host-site-update-621e763768fab9ee.yaml
+    - !!binary |
+      YjEzYThmODEwYjE0M2Y1ZjBmNDY1YWI0NWVhYjQ1M2MxZTY1ZGU3ZA==
+  - - releasenotes/notes/sync-bump-versions-a1e6f6359173892e.yaml
+    - !!binary |
+      M2NkMmViZDM3NTljNzZmZGY1YTI5MmU2MTIxMjcwOTRjN2FhMmIxNw==
+  - - releasenotes/notes/tpool-size-11121f78df24db39.yaml
+    - !!binary |
+      ZTU3MDQzNmQxY2NhNWNmYTg5Mzg4YWVjOGIyZGFhNjNkMDFkMDI1MA==
+  - - releasenotes/notes/unity-enable-ssl-14db2497225c4395.yaml
+    - !!binary |
+      OGFhNDk1OTljN2RmNjJkZTVhYjI1YTBhODQxMjY1MDkyZTI4ODFmNw==
+  - - releasenotes/notes/veritas_access_iscsi_driver-de642dad9e7d0890.yaml
+    - !!binary |
+      YTlmYWQzNWEyMDU3MGU2ZWNkMzc1N2VhNTBlNzk0YTA1OTJjMzkyMQ==
+  - - releasenotes/notes/vmax-retype-replicated-volumes-325be6e5fd626819.yaml
+    - !!binary |
+      OTkyNTQyYTlmYjAwZWZkZDQ3OWQyZDE4ZmQ2ZGE4NDhiMTYyYWRmOQ==
+  - - releasenotes/notes/vmware_vmdk_datastore_regex-fe7b68ad69ef7384.yaml
+    - !!binary |
+      ZjFlMjFlZTI1MjZlMzVjNjBmNWQyMjUxZDU2OTQ2OWRkZGQ0ZWZjNQ==
+  - - releasenotes/notes/vnx-perf-optimize-bd55dc3ef7584228.yaml
+    - !!binary |
+      YjU0ZTdmZjM1NzZlNDk1YzRhMWVkOTVhM2UzMDdiODk3ODYwMjA5Yg==
+  - - releasenotes/notes/vnx-revert-to-snapshot-e5494b6fb5ad5a1e.yaml
+    - !!binary |
+      MmNkNjVhYmI3MTMzODFiYmY2MTU1ZTZlMTc2MDQzZjljNDFjMDRhNw==
+  - - releasenotes/notes/windows-volume-backup-b328858a20f5a499.yaml
+    - !!binary |
+      MzAyNDAyZGYzMzBhNTJmYmU5ZTUzMWNmNTYwM2JhYmFkMGMxZjM2Nw==
   version: 13.0.0.0b1

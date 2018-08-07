@@ -176,12 +176,6 @@ volume_id_path:
   in: path
   required: true
   type: string
-volume_type_access:
-  description: |
-    The ID of Volume Type to be accessed by project.
-  in: path
-  required: true
-  type: string
 volume_type_id:
   description: |
     The UUID for an existing volume type.
@@ -415,6 +409,12 @@ active_backend_id:
   in: body
   required: false
   type: string
+add_project_access:
+  description: |
+    Adds volume type access to a project.
+  in: body
+  required: true
+  type: object
 add_volumes:
   description: |
     One or more volume UUIDs, separated by commas, to
@@ -433,6 +433,7 @@ alias:
 allow_attached_volume:
   description: |
     Whether to allow failover if any volumes are 'in-use'.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: true
   type: boolean
@@ -441,8 +442,16 @@ attach_mode:
     The attach mode of attachment, read-only ('ro') or
     read-and-write ('rw'), default is 'rw'.
   in: body
+  required: true
+  type: string
+attach_mode_1:
+  description: |
+    The attach mode of attachment, acceptable values are
+    read-only ('ro') and read-and-write ('rw').
+  in: body
   required: false
   type: string
+  min_version: 3.54
 attach_status:
   description: |
     The volume attach status.
@@ -453,7 +462,7 @@ attached_at:
   description: |
     The time when attachment is attached.
   in: body
-  required: false
+  required: true
   type: string
 attachment:
   description: |
@@ -602,6 +611,7 @@ bootable:
   description: |
     Enables or disables the bootable attribute. You
     can boot an instance from a bootable volume.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: true
   type: boolean
@@ -609,6 +619,7 @@ bootable_1:
   description: |
     Enables or disables the bootable attribute. You
     can boot an instance from a bootable volume.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -647,9 +658,9 @@ cgsnapshots:
   type: object
 cinder_id:
   description: |
-    The UUID of the snapshot in Cinder.
+    The UUID of the resource in Cinder.
   in: body
-  required: false
+  required: true
   type: string
 cipher:
   description: |
@@ -815,6 +826,7 @@ delete-volumes:
   description: |
     If set to ``true``, allows deletion of a
     group as well as all volumes in the group.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -970,11 +982,12 @@ detached_at:
   description: |
     The time when attachment is detached.
   in: body
-  required: false
+  required: true
   type: string
 disabled:
   description: |
     Filter by disabled status.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1043,7 +1056,7 @@ extra_info:
   description: |
     More information about the resource.
   in: body
-  required: false
+  required: true
   type: string
 extra_specs_volume_type_optional:
   description: |
@@ -1072,6 +1085,7 @@ force:
   description: |
     Indicates whether to backup, even if the volume
     is attached. Default is ``false``.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1093,6 +1107,7 @@ force_4:
   description: |
     Enables or disables upload of a volume that is
     attached to an instance. Default=False.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1375,7 +1390,7 @@ incremental:
   description: |
     The backup mode. A valid value is ``true`` for
     incremental backup mode or ``false`` for full backup mode. Default
-    is ``false``.
+    is ``false``. See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1402,6 +1417,7 @@ is_incremental:
 is_public_group_type_optional:
   description: |
     Whether the group type is publicly visible.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1414,6 +1430,7 @@ is_public_group_type_required:
 is_public_volume_type_optional:
   description: |
     Whether the volume type is publicly visible.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1426,6 +1443,7 @@ is_public_volume_type_required:
 is_up:
   description: |
     Filter by up/down status.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1438,7 +1456,7 @@ key:
   type: string
 key_size:
   description: |
-    Size of encryption key, in bits. For example, 128 or 256. The default value
+    Size of encryption key, in bits. This is usually 256. The default value
     is None.
   in: body
   required: false
@@ -1745,7 +1763,7 @@ multiattach_req:
     To enable this volume to attach to more than one
     server, set this value to ``true``. Default is ``false``.
     Note that support for multiattach volumes depends on the volume
-    type being used.
+    type being used. See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
@@ -1915,6 +1933,13 @@ new_type:
   in: body
   required: true
   type: string
+no_snapshots:
+  description: |
+    Transfer volume without snapshots.
+  in: body
+  required: false
+  min_version: 3.55
+  type: boolean
 object_count:
   description: |
     The number of objects in the backup.
@@ -1937,6 +1962,12 @@ os-backup-project-attr:project_id:
   required: true
   type: string
   min_version: 3.18
+os-begin_detaching:
+  description: |
+    The ``os-begin_detaching`` action.
+  in: body
+  required: true
+  type: object
 os-detach:
   description: |
     The ``os-detach`` action.
@@ -1973,6 +2004,18 @@ os-force_detach:
   in: body
   required: true
   type: object
+os-initialize_connection:
+  description: |
+    The ``os-initialize_connection`` action.
+  in: body
+  required: true
+  type: object
+os-reserve:
+  description: |
+    The ``os-reserve`` action.
+  in: body
+  required: true
+  type: object
 os-reset_status:
   description: |
     The ``os-reset_status`` action.
@@ -1982,6 +2025,12 @@ os-reset_status:
 os-retype:
   description: |
     The ``os-retype`` action.
+  in: body
+  required: true
+  type: object
+os-roll_detaching:
+  description: |
+    The ``os-roll_detaching`` action.
   in: body
   required: true
   type: object
@@ -2009,6 +2058,12 @@ os-show_image_metadata:
   in: body
   require: true
   type: object
+os-terminate_connection:
+  description: |
+    The ``os-terminate_connection`` action.
+  in: body
+  require: true
+  type: object
 os-unmanage:
   description: |
     The ``os-unmanage`` action. This action removes
@@ -2016,10 +2071,29 @@ os-unmanage:
   in: body
   required: true
   type: object
+os-unreserve:
+  description: |
+    The ``os-unreserve`` action.
+  in: body
+  required: true
+  type: object
 os-unset_image_metadata:
   description: |
     The ``os-unset_image_metadata`` action. This
     action removes the key-value pairs from the image metadata.
+  in: body
+  required: true
+  type: object
+os-update_readonly_flag:
+  description: |
+    The ``os-update_readonly_flag`` action. This action
+    enables or disables update of volume to read-only access mode.
+  in: body
+  required: true
+  type: object
+os-update_snapshot_status:
+  description: |
+    The ``os-update_snapshot_status`` action.
   in: body
   required: true
   type: object
@@ -2130,9 +2204,11 @@ properties:
 protected:
   description: |
     Whether the new image is protected. Default=False.
+    See :ref:`valid boolean values <valid-boolean-values>`
   in: body
   required: false
   type: boolean
+  min_version: 3.1
 provider:
   description: |
     The class that provides encryption support.
@@ -2157,6 +2233,12 @@ qos_specs:
   in: body
   required: true
   type: object
+qos_specs_id:
+  description: |
+    The QoS specifications ID.
+  in: body
+  required: true
+  type: string
 QoS_support:
   description: |
     The quality of service (QoS) support.
@@ -2188,11 +2270,18 @@ rate:
   in: body
   required: true
   type: array
+readonly:
+  description: |
+    Enables or disables read-only access mode.
+    This value can be True, true, False, false.
+  in: body
+  required: true
+  type: boolean
 reason_not_safe:
   description: |
     The reason why the resource can't be managed.
   in: body
-  required: false
+  required: true
   type: string
 ref:
   description: |
@@ -2215,6 +2304,12 @@ ref_1:
 reference:
   description: |
     Some information for the resource.
+  in: body
+  required: true
+  type: object
+remove_project_access:
+  description: |
+    Removes volume type access from a project.
   in: body
   required: true
   type: object
@@ -2342,7 +2437,7 @@ service_id:
     UUID for the cleanup service.
   in: body
   required: false
-  type: string
+  type: integer
 service_key:
   description: |
     The service name. Deprecated. Keeping service key
@@ -2433,6 +2528,12 @@ snapshot_id_4:
     reverts the volume with this snapshot.
   in: body
   required: true
+  type: string
+snapshot_progress:
+  description: |
+    A percentage value for snapshot build progress.
+  in: body
+  required: false
   type: string
 snapshots_number:
   description: |
@@ -2767,6 +2868,7 @@ visibility_1:
   in: body
   required: false
   type: string
+  min_version: 3.1
 volume:
   description: |
     A ``volume`` object.
@@ -2923,6 +3025,12 @@ volume_type_6:
   in: body
   required: true
   type: string
+volume_type_access:
+  description: |
+    The object contains volume type to be accessed by project.
+  in: body
+  required: true
+  type: object
 volume_type_id_body:
   description: |
     The UUID of the volume type.
