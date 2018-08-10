@@ -1,3 +1,9 @@
+cinder (2:13.0.0~rc1-0ubuntu1) cosmic; urgency=medium
+
+  * New upstream release candidate for OpenStack Rocky.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 10 Aug 2018 15:20:07 -0400
+
 cinder (2:13.0.0~b3-0ubuntu1) cosmic; urgency=medium
 
   * New upstream milestone for OpenStack Rocky.

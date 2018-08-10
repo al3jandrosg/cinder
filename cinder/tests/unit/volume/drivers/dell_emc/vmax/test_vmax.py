@@ -538,6 +538,18 @@ class VMAXCommonData(object):
                    "fba_used_capacity": 5244.7,
                    "reserved_cap_percent": 10}
 
+    array_info_wl = {'RestServerIp': '1.1.1.1', 'RestServerPort': 3448,
+                     'RestUserName': 'smc', 'RestPassword': 'smc',
+                     'SSLVerify': False, 'SerialNumber': array,
+                     'srpName': 'SRP_1', 'PortGroup': port_group_name_i,
+                     'SLO': 'Diamond', 'Workload': 'OLTP'}
+
+    array_info_no_wl = {'RestServerIp': '1.1.1.1', 'RestServerPort': 3448,
+                        'RestUserName': 'smc', 'RestPassword': 'smc',
+                        'SSLVerify': False, 'SerialNumber': array,
+                        'srpName': 'SRP_1', 'PortGroup': port_group_name_i,
+                        'SLO': 'Diamond'}
+
     volume_details = [{"cap_gb": 2,
                        "num_of_storage_groups": 1,
                        "volumeId": device_id,
@@ -574,13 +586,17 @@ class VMAXCommonData(object):
                         {"srcSnapshotGenInfo": [
                             {"snapshotHeader": {
                                 "snapshotName": "temp-1",
-                                "device": device_id},
+                                "device": device_id,
+                                "generation": "0"},
                                 "lnkSnapshotGenInfo": [
-                                    {"targetDevice": device_id2}]}]},
+                                    {"targetDevice": device_id2,
+                                     "state": "Copied"}]}]},
                         {"tgtSrcSnapshotGenInfo": {
                             "snapshotName": "temp-1",
                             "targetDevice": device_id2,
-                            "sourceDevice": device_id}}],
+                            "sourceDevice": device_id,
+                            "generation": "0",
+                            "state": "Copied"}}],
                     "snapVXSrc": 'true',
                     "snapVXTgt": 'true'},
                 "rdfInfo": {"RDFSession": [
@@ -589,11 +605,19 @@ class VMAXCommonData(object):
                      "remoteDeviceID": device_id2,
                      "remoteSymmetrixID": remote_array}]}}]}}
 
+    # Service Levels / Workloads
     workloadtype = {"workloadId": ["OLTP", "OLTP_REP", "DSS", "DSS_REP"]}
     srp_slo_details = {"serviceLevelDemand": [
         {"serviceLevelId": "None"}, {"serviceLevelId": "Diamond"},
         {"serviceLevelId": "Gold"}, {"serviceLevelId": "Optimized"}]}
     slo_details = ['None', 'Diamond', 'Gold', 'Optimized']
+    powermax_slo_details = {"sloId": ["Bronze", "Diamond", "Gold",
+                                      "Optimized", "Platinum", "Silver"]}
+    powermax_model_details = {"symmetrixId": array,
+                              "model": "PowerMax_2000",
+                              "ucode": "5978.1091.1092"}
+    vmax_slo_details = {"sloId": ["Diamond", "Optimized"]}
+    vmax_model_details = {"model": "VMAX450F"}
 
     # replication
     volume_snap_vx = {"snapshotLnks": [],
@@ -1021,6 +1045,8 @@ class FakeRequestsSession(object):
                 return_object = self.data.workloadtype
             elif 'compressionCapable' in url:
                 return_object = self.data.compression_info
+            elif 'slo' in url:
+                return_object = self.data.powermax_slo_details
 
         elif 'replication' in url:
             return_object = self._replication(url)
@@ -1351,11 +1377,9 @@ class VMAXUtilsTest(test.TestCase):
         self.assertEqual('OTHER', other_protocol)
 
     def test_get_temp_snap_name(self):
-        clone_name = "12345"
         source_device_id = self.data.device_id
-        ref_name = "temp-00001-12345"
-        snap_name = self.utils.get_temp_snap_name(
-            clone_name, source_device_id)
+        ref_name = "temp-00001-snapshot_for_clone"
+        snap_name = self.utils.get_temp_snap_name(source_device_id)
         self.assertEqual(ref_name, snap_name)
 
     def test_get_array_and_device_id(self):
@@ -1851,10 +1875,17 @@ class VMAXRestTest(test.TestCase):
             self.data.array, self.data.srp)
         self.assertEqual(ref_details, srp_details)
 
-    def test_get_slo_list(self):
-        ref_settings = self.data.slo_details
-        slo_settings = self.rest.get_slo_list(self.data.array, self.data.srp)
+    def test_get_slo_list_powermax(self):
+        ref_settings = self.data.powermax_slo_details['sloId']
+        slo_settings = self.rest.get_slo_list(self.data.array)
         self.assertEqual(ref_settings, slo_settings)
+
+    def test_get_slo_list_vmax(self):
+        ref_settings = ['Diamond']
+        with mock.patch.object(self.rest, 'get_resource',
+                               return_value=self.data.vmax_slo_details):
+            slo_settings = self.rest.get_slo_list(self.data.array)
+            self.assertEqual(ref_settings, slo_settings)
 
     def test_get_workload_settings(self):
         ref_settings = self.data.workloadtype['workloadId']
@@ -2591,6 +2622,18 @@ class VMAXRestTest(test.TestCase):
             self.rest.create_resource.assert_called_once_with(
                 self.data.array, 'replication', resource_type,
                 payload, private='/private')
+        ttl = 1
+        payload = {"deviceNameListSource": [{"name": device_id}],
+                   "bothSides": 'false', "star": 'false',
+                   "force": 'false', "timeToLive": ttl,
+                   "timeInHours": "true"}
+        with mock.patch.object(self.rest, 'create_resource',
+                               return_value=(202, self.data.job_list[0])):
+            self.rest.create_volume_snap(
+                self.data.array, snap_name, device_id, extra_specs, ttl)
+            self.rest.create_resource.assert_called_once_with(
+                self.data.array, 'replication', resource_type,
+                payload, private='/private')
 
     def test_modify_volume_snap(self):
         array = self.data.array
@@ -2606,7 +2649,8 @@ class VMAXRestTest(test.TestCase):
                    "copy": 'true', "action": "",
                    "star": 'false', "force": 'false',
                    "exact": 'false', "remote": 'false',
-                   "symforce": 'false', "nocopy": 'false'}
+                   "symforce": 'false', "nocopy": 'false',
+                   "generation": 0}
         payload_restore = {"deviceNameListSource": [{"name": source_id}],
                            "deviceNameListTarget": [{"name": source_id}],
                            "action": "Restore",
@@ -2661,9 +2705,12 @@ class VMAXRestTest(test.TestCase):
         snap_name = (self.data.volume_snap_vx
                      ['snapshotSrcs'][0]['snapshotName'])
         source_device_id = self.data.device_id
-        payload = {"deviceNameListSource": [{"name": source_device_id}]}
+        payload = {"deviceNameListSource": [{"name": source_device_id}],
+                   "generation": 0}
+        generation = 0
         with mock.patch.object(self.rest, 'delete_resource'):
-            self.rest.delete_volume_snap(array, snap_name, source_device_id)
+            self.rest.delete_volume_snap(
+                array, snap_name, source_device_id, generation)
             self.rest.delete_resource.assert_called_once_with(
                 array, 'replication', 'snapshot', snap_name,
                 payload=payload, private='/private')
@@ -2674,7 +2721,7 @@ class VMAXRestTest(test.TestCase):
                      ['snapshotSrcs'][0]['snapshotName'])
         source_device_id = self.data.device_id
         payload = {"deviceNameListSource": [{"name": source_device_id}],
-                   "restore": True}
+                   "restore": True, "generation": 0}
         with mock.patch.object(self.rest, 'delete_resource'):
             self.rest.delete_volume_snap(
                 array, snap_name, source_device_id, restored=True)
@@ -2712,9 +2759,25 @@ class VMAXRestTest(test.TestCase):
             snap = self.rest.get_volume_snap(array, device_id, snap_name)
             self.assertIsNone(snap)
 
+    def test_get_snap_linked_device_dict_list(self):
+        array = self.data.array
+        snap_name = "temp-snapshot"
+        device_id = self.data.device_id
+        snap_list = [{'linked_vols': [
+            {'target_device': device_id, 'state': "Copied"}],
+            'snap_name': snap_name, 'generation': "0"}]
+        ref_snap_list = [{'generation': '0', 'linked_vols': [
+            {'state': 'Copied', 'target_device': '00001'}]}]
+        with mock.patch.object(self.rest, '_find_snap_vx_source_sessions',
+                               return_value=snap_list):
+            snap_dict_list = self.rest._get_snap_linked_device_dict_list(
+                array, device_id, snap_name)
+            self.assertEqual(ref_snap_list, snap_dict_list)
+
     def test_get_sync_session(self):
         array = self.data.array
         source_id = self.data.device_id
+        generation = 0
         target_id = (self.data.volume_snap_vx
                      ['snapshotSrcs'][0]['linkedDevices'][0]['targetDevice'])
         snap_name = (self.data.volume_snap_vx
@@ -2722,27 +2785,33 @@ class VMAXRestTest(test.TestCase):
         ref_sync = (self.data.volume_snap_vx
                     ['snapshotSrcs'][0]['linkedDevices'][0])
         sync = self.rest.get_sync_session(
-            array, source_id, snap_name, target_id)
+            array, source_id, snap_name, target_id, generation)
         self.assertEqual(ref_sync, sync)
 
     def test_find_snap_vx_sessions(self):
         array = self.data.array
         source_id = self.data.device_id
-        ref_sessions = [{'snap_name': 'temp-1',
+        ref_sessions = [{'generation': '0',
+                         'snap_name': 'temp-1',
                          'source_vol': self.data.device_id,
-                         'target_vol_list': [self.data.device_id2]},
-                        {'snap_name': 'temp-1',
+                         'target_vol_list':
+                             [(self.data.device_id2, "Copied")]},
+                        {'generation': '0',
+                         'snap_name': 'temp-1',
                          'source_vol': self.data.device_id,
-                         'target_vol_list': [self.data.device_id2]}]
+                         'target_vol_list':
+                             [(self.data.device_id2, "Copied")]}]
         sessions = self.rest.find_snap_vx_sessions(array, source_id)
         self.assertEqual(ref_sessions, sessions)
 
     def test_find_snap_vx_sessions_tgt_only(self):
         array = self.data.array
         source_id = self.data.device_id
-        ref_sessions = [{'snap_name': 'temp-1',
+        ref_sessions = [{'generation': '0',
+                         'snap_name': 'temp-1',
                          'source_vol': self.data.device_id,
-                         'target_vol_list': [self.data.device_id2]}]
+                         'target_vol_list':
+                             [(self.data.device_id2, "Copied")]}]
         sessions = self.rest.find_snap_vx_sessions(
             array, source_id, tgt_only=True)
         self.assertEqual(ref_sessions, sessions)
@@ -3090,7 +3159,7 @@ class VMAXRestTest(test.TestCase):
         VMAXCommonData.private_vol_rest_response_iterator_second['result'])
     @mock.patch.object(
         rest.VMAXRest, 'get_resource', return_value=
-        VMAXCommonData.private_vol_rest_response_iterator_first)
+        deepcopy(VMAXCommonData.private_vol_rest_response_iterator_first))
     def test_get_private_volume_list_iterator(self, mock_get_resource,
                                               mock_iterator):
         array_id = self.data.array
@@ -3121,9 +3190,11 @@ class VMAXRestTest(test.TestCase):
             result_count = 1500
             start_position = 1
             end_position = 1000
+            max_page_size = 1000
 
             actual_response = self.rest.get_iterator_page_list(
-                iterator_id, result_count, start_position, end_position)
+                iterator_id, result_count, start_position, end_position,
+                max_page_size)
             self.assertEqual(expected_response, actual_response)
 
     def test_set_rest_credentials(self):
@@ -3140,6 +3211,23 @@ class VMAXRestTest(test.TestCase):
         self.assertTrue(self.rest.verify)
         self.assertEqual('https://10.10.10.10:8443/univmax/restapi',
                          self.rest.base_uri)
+
+    @mock.patch.object(
+        rest.VMAXRest, 'get_iterator_page_list', return_value=
+        VMAXCommonData.private_vol_rest_response_iterator_second['result'])
+    def test_list_pagination(self, mock_iter):
+        result_list = self.rest.list_pagination(
+            deepcopy(self.data.private_vol_rest_response_iterator_first))
+        # reflects sample data, 1 from first iterator page and 1 from
+        # second iterator page
+        self.assertTrue(2 == len(result_list))
+
+    def test_get_vmax_model(self):
+        reference = 'PowerMax_2000'
+        with mock.patch.object(self.rest, '_get_request',
+                               return_value=self.data.powermax_model_details):
+            self.assertEqual(self.rest.get_vmax_model(self.data.array),
+                             reference)
 
 
 class VMAXProvisionTest(test.TestCase):
@@ -3206,11 +3294,12 @@ class VMAXProvisionTest(test.TestCase):
         source_device_id = self.data.device_id
         snap_name = self.data.snap_location['snap_name']
         extra_specs = self.data.extra_specs
+        ttl = 0
         with mock.patch.object(self.provision.rest, 'create_volume_snap'):
             self.provision.create_volume_snapvx(
                 array, source_device_id, snap_name, extra_specs)
             self.provision.rest.create_volume_snap.assert_called_once_with(
-                array, snap_name, source_device_id, extra_specs)
+                array, snap_name, source_device_id, extra_specs, ttl)
 
     def test_create_volume_replica_create_snap_true(self):
         array = self.data.array
@@ -3218,6 +3307,8 @@ class VMAXProvisionTest(test.TestCase):
         target_device_id = self.data.device_id2
         snap_name = self.data.snap_location['snap_name']
         extra_specs = self.data.extra_specs
+        # TTL of 1 hours
+        ttl = 1
         with mock.patch.object(self.provision, 'create_volume_snapvx'):
             with mock.patch.object(self.provision.rest, 'modify_volume_snap'):
                 self.provision.create_volume_replica(
@@ -3227,7 +3318,7 @@ class VMAXProvisionTest(test.TestCase):
                     array, source_device_id, target_device_id, snap_name,
                     extra_specs, link=True)
                 self.provision.create_volume_snapvx.assert_called_once_with(
-                    array, source_device_id, snap_name, extra_specs)
+                    array, source_device_id, snap_name, extra_specs, ttl=ttl)
 
     def test_create_volume_replica_create_snap_false(self):
         array = self.data.array
@@ -3259,7 +3350,7 @@ class VMAXProvisionTest(test.TestCase):
                 assert_called_once_with(
                     array, source_device_id, target_device_id,
                     snap_name, extra_specs,
-                    list_volume_pairs=None, unlink=True))
+                    list_volume_pairs=None, unlink=True, generation=0))
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=test_utils.ZeroIntervalLoopingCall)
@@ -3271,7 +3362,7 @@ class VMAXProvisionTest(test.TestCase):
             mock_mod.assert_called_once_with(
                 self.data.array, self.data.device_id, self.data.device_id2,
                 self.data.snap_location['snap_name'], self.data.extra_specs,
-                list_volume_pairs=None, unlink=True)
+                list_volume_pairs=None, unlink=True, generation=0)
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=test_utils.ZeroIntervalLoopingCall)
@@ -3289,22 +3380,24 @@ class VMAXProvisionTest(test.TestCase):
         array = self.data.array
         source_device_id = self.data.device_id
         snap_name = self.data.snap_location['snap_name']
+        generation = 0
         with mock.patch.object(self.provision.rest, 'delete_volume_snap'):
             self.provision.delete_volume_snap(
                 array, snap_name, source_device_id)
             self.provision.rest.delete_volume_snap.assert_called_once_with(
-                array, snap_name, source_device_id, False)
+                array, snap_name, source_device_id, False, generation)
 
     def test_delete_volume_snap_restore(self):
         array = self.data.array
         source_device_id = self.data.device_id
         snap_name = self.data.snap_location['snap_name']
         restored = True
+        generation = 0
         with mock.patch.object(self.provision.rest, 'delete_volume_snap'):
             self.provision.delete_volume_snap(
                 array, snap_name, source_device_id, restored)
             self.provision.rest.delete_volume_snap.assert_called_once_with(
-                array, snap_name, source_device_id, True)
+                array, snap_name, source_device_id, True, generation)
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=test_utils.ZeroIntervalLoopingCall)
@@ -3638,7 +3731,8 @@ class VMAXProvisionTest(test.TestCase):
         mock_unlink.assert_called_once_with(
             self.data.array, "", "", self.data.test_snapshot_snap_name,
             self.data.extra_specs, list_volume_pairs=[
-                (self.data.device_id, VMAXCommonData.device_id2)])
+                (self.data.device_id, VMAXCommonData.device_id2)],
+            generation=0)
         mock_unlink.reset_mock()
         self.provision.delete_volume_snap_check_for_links(
             self.data.array, self.data.test_snapshot_snap_name,
@@ -3681,7 +3775,17 @@ class VMAXCommonTest(test.TestCase):
         configuration = FakeConfiguration(None, 'config_group', None, None)
         fc.VMAXFCDriver(configuration=configuration)
 
-    def test_get_slo_workload_combinations_success(self):
+    def test_get_slo_workload_combinations_powermax(self):
+        array_info = self.common.get_attributes_from_cinder_config()
+        finalarrayinfolist = self.common._get_slo_workload_combinations(
+            array_info)
+        self.assertTrue(len(finalarrayinfolist) > 1)
+
+    @mock.patch.object(rest.VMAXRest, 'get_vmax_model',
+                       return_value=VMAXCommonData.vmax_model_details['model'])
+    @mock.patch.object(rest.VMAXRest, 'get_slo_list',
+                       return_value=VMAXCommonData.vmax_slo_details['sloId'])
+    def test_get_slo_workload_combinations_vmax(self, mck_slo, mck_model):
         array_info = self.common.get_attributes_from_cinder_config()
         finalarrayinfolist = self.common._get_slo_workload_combinations(
             array_info)
@@ -3747,11 +3851,13 @@ class VMAXCommonTest(test.TestCase):
     def test_delete_snapshot(self):
         snap_name = self.data.snap_location['snap_name']
         sourcedevice_id = self.data.snap_location['source_id']
+        generation = 0
         with mock.patch.object(self.provision, 'delete_volume_snap'):
             self.common.delete_snapshot(self.data.test_snapshot,
                                         self.data.test_volume)
             self.provision.delete_volume_snap.assert_called_once_with(
-                self.data.array, snap_name, [sourcedevice_id])
+                self.data.array, snap_name, [sourcedevice_id],
+                restored=False, generation=generation)
 
     def test_delete_snapshot_not_found(self):
         with mock.patch.object(self.common, '_parse_snap_info',
@@ -4013,6 +4119,20 @@ class VMAXCommonTest(test.TestCase):
                                              100, 90, 90, 10)):
             data = self.common.update_volume_stats()
             self.assertEqual('CommonTests', data['volume_backend_name'])
+
+    def test_update_srp_stats_with_wl(self):
+        with mock.patch.object(self.rest, 'get_srp_by_name',
+                               return_value=self.data.srp_details):
+            location_info, __, __, __, __ = self.common._update_srp_stats(
+                self.data.array_info_wl)
+            self.assertEqual(location_info, '000197800123#SRP_1#Diamond#OLTP')
+
+    def test_update_srp_stats_no_wl(self):
+        with mock.patch.object(self.rest, 'get_srp_by_name',
+                               return_value=self.data.srp_details):
+            location_info, __, __, __, __ = self.common._update_srp_stats(
+                self.data.array_info_no_wl)
+            self.assertEqual(location_info, '000197800123#SRP_1#Diamond')
 
     def test_find_device_on_array_success(self):
         volume = self.data.test_volume
@@ -4347,8 +4467,10 @@ class VMAXCommonTest(test.TestCase):
 
     def test_set_vmax_extra_specs_no_srp_name(self):
         srp_record = self.common.get_attributes_from_cinder_config()
-        extra_specs = self.common._set_vmax_extra_specs({}, srp_record)
-        self.assertEqual('Optimized', extra_specs['slo'])
+        with mock.patch.object(self.rest, 'get_slo_list',
+                               return_value=[]):
+            extra_specs = self.common._set_vmax_extra_specs({}, srp_record)
+            self.assertIsNone(extra_specs['slo'])
 
     def test_set_vmax_extra_specs_compr_disabled(self):
         with mock.patch.object(self.rest, 'is_compression_capable',
@@ -4529,7 +4651,7 @@ class VMAXCommonTest(test.TestCase):
         array = self.data.array
         clone_volume = self.data.test_clone_volume
         source_device_id = self.data.device_id
-        snap_name = "temp-" + source_device_id + clone_volume.id
+        snap_name = "temp-" + source_device_id + "-snapshot_for_clone"
         ref_dict = self.data.provider_location
         with mock.patch.object(self.utils, 'get_temp_snap_name',
                                return_value=snap_name):
@@ -4538,7 +4660,7 @@ class VMAXCommonTest(test.TestCase):
                 self.data.extra_specs)
             self.assertEqual(ref_dict, clone_dict)
             self.utils.get_temp_snap_name.assert_called_once_with(
-                ('OS-' + clone_volume.id), source_device_id)
+                source_device_id)
 
     def test_create_replica_failed_cleanup_target(self):
         array = self.data.array
@@ -4581,6 +4703,7 @@ class VMAXCommonTest(test.TestCase):
         snap_name = self.data.failed_resource
         clone_name = clone_volume.name
         extra_specs = self.data.extra_specs
+        generation = 0
         with mock.patch.object(self.rest, 'get_sync_session',
                                return_value='session'):
             with mock.patch.object(self.provision,
@@ -4591,7 +4714,7 @@ class VMAXCommonTest(test.TestCase):
                 (self.provision.break_replication_relationship.
                     assert_called_with(
                         array, target_device_id, source_device_id,
-                        snap_name, extra_specs))
+                        snap_name, extra_specs, generation))
 
     def test_cleanup_target_no_sync(self):
         array = self.data.array
@@ -4625,19 +4748,22 @@ class VMAXCommonTest(test.TestCase):
         volume_name = self.data.test_volume.name
         extra_specs = self.data.extra_specs
         snap_name = 'temp-1'
+        generation = '0'
         with mock.patch.object(self.rest, 'get_volume_snap',
                                return_value=snap_name):
             self.common._sync_check(array, device_id, volume_name,
                                     extra_specs)
             mock_break.assert_called_with(
-                array, target, device_id, snap_name, extra_specs)
-            mock_delete.assert_called_with(array, snap_name, device_id)
+                array, target, device_id, snap_name, extra_specs, generation)
+            mock_delete.assert_called_with(array, snap_name,
+                                           device_id, restored=False,
+                                           generation=generation)
         # Delete legacy temp snap
         mock_delete.reset_mock()
         snap_name2 = 'EMC_SMI_12345'
         sessions = [{'source_vol': device_id,
                      'snap_name': snap_name2,
-                     'target_vol_list': []}]
+                     'target_vol_list': [], 'generation': 0}]
         with mock.patch.object(self.rest, 'find_snap_vx_sessions',
                                return_value=sessions):
             with mock.patch.object(self.rest, 'get_volume_snap',
@@ -4645,7 +4771,7 @@ class VMAXCommonTest(test.TestCase):
                 self.common._sync_check(array, device_id, volume_name,
                                         extra_specs)
                 mock_delete.assert_called_once_with(
-                    array, snap_name2, device_id)
+                    array, snap_name2, device_id, restored=False, generation=0)
 
     @mock.patch.object(
         provision.VMAXProvision,
@@ -4661,14 +4787,14 @@ class VMAXCommonTest(test.TestCase):
         extra_specs = self.data.extra_specs
         snap_name = 'OS-1'
         sessions = [{'source_vol': device_id,
-                     'snap_name': snap_name,
-                     'target_vol_list': [target]}]
+                     'snap_name': snap_name, 'generation': 0,
+                     'target_vol_list': [(target, "Copied")]}]
         with mock.patch.object(self.rest, 'find_snap_vx_sessions',
                                return_value=sessions):
             self.common._sync_check(array, device_id, volume_name,
                                     extra_specs)
             mock_break.assert_called_with(
-                array, target, device_id, snap_name, extra_specs)
+                array, target, device_id, snap_name, extra_specs, 0)
             mock_delete.assert_not_called()
 
     @mock.patch.object(
@@ -4683,6 +4809,80 @@ class VMAXCommonTest(test.TestCase):
                                return_value=None):
             self.common._sync_check(array, device_id, volume_name,
                                     extra_specs)
+            mock_break.assert_not_called()
+
+    @mock.patch.object(
+        provision.VMAXProvision,
+        'delete_volume_snap')
+    @mock.patch.object(
+        provision.VMAXProvision,
+        'break_replication_relationship')
+    def test_clone_check_cinder_snap(self, mock_break, mock_delete):
+        array = self.data.array
+        device_id = self.data.device_id
+        target = self.data.volume_details[1]['volumeId']
+        extra_specs = self.data.extra_specs
+        snap_name = 'OS-1'
+        sessions = [{'source_vol': device_id,
+                     'snap_name': snap_name, 'generation': 0,
+                     'target_vol_list': [(target, "Copied")]}]
+        with mock.patch.object(self.rest, 'is_vol_in_rep_session',
+                               return_value=(True, False, None)):
+            with mock.patch.object(self.rest, 'find_snap_vx_sessions',
+                                   return_value=sessions):
+                self.common._clone_check(array, device_id, extra_specs)
+                mock_delete.assert_not_called()
+        mock_delete.reset_mock()
+        with mock.patch.object(self.rest, 'find_snap_vx_sessions',
+                               return_value=sessions):
+            self.common._clone_check(array, device_id, extra_specs)
+            mock_break.assert_called_with(
+                array, target, device_id, snap_name, extra_specs, 0)
+
+    @mock.patch.object(
+        provision.VMAXProvision,
+        'delete_volume_snap')
+    @mock.patch.object(
+        provision.VMAXProvision,
+        'break_replication_relationship')
+    def test_clone_check_temp_snap(self, mock_break, mock_delete):
+        array = self.data.array
+        device_id = self.data.device_id
+        target = self.data.volume_details[1]['volumeId']
+        extra_specs = self.data.extra_specs
+        temp_snap_name = 'temp-' + device_id + '-' + 'snapshot_for_clone'
+        sessions = [{'source_vol': device_id,
+                     'snap_name': temp_snap_name, 'generation': 0,
+                     'target_vol_list': [(target, "Copied")]}]
+        with mock.patch.object(self.rest, 'find_snap_vx_sessions',
+                               return_value=sessions):
+            self.common._clone_check(array, device_id, extra_specs)
+            mock_break.assert_called_with(
+                array, target, device_id, temp_snap_name, extra_specs, 0)
+            mock_delete.asset_not_called()
+        sessions1 = [{'source_vol': device_id,
+                      'snap_name': temp_snap_name, 'generation': 0,
+                      'target_vol_list': [(target, "CopyInProg")]}]
+        mock_delete.reset_mock()
+        mock_break.reset_mock()
+        with mock.patch.object(self.rest, 'is_vol_in_rep_session',
+                               return_value=(False, True, None)):
+            with mock.patch.object(self.rest, 'find_snap_vx_sessions',
+                                   return_value=sessions1):
+                self.common._clone_check(array, device_id, extra_specs)
+                mock_break.assert_not_called()
+                mock_delete.asset_not_called()
+
+    @mock.patch.object(
+        provision.VMAXProvision,
+        'break_replication_relationship')
+    def test_clone_check_no_sessions(self, mock_break):
+        array = self.data.array
+        device_id = self.data.device_id
+        extra_specs = self.data.extra_specs
+        with mock.patch.object(self.rest, 'find_snap_vx_sessions',
+                               return_value=None):
+            self.common._clone_check(array, device_id, extra_specs)
             mock_break.assert_not_called()
 
     def test_manage_existing_success(self):
@@ -8078,6 +8278,13 @@ class VMAXVolumeMetadataDebugTest(test.TestCase):
     @mock.patch.object(metadata.VMAXVolumeMetadata,
                        'update_volume_info_metadata',
                        return_value={})
+    def test_capture_delete_info(self, mock_uvim):
+        self.volume_metadata.capture_delete_info(self.data.test_volume)
+        mock_uvim.assert_called_once()
+
+    @mock.patch.object(metadata.VMAXVolumeMetadata,
+                       'update_volume_info_metadata',
+                       return_value={})
     def test_capture_manage_existing(self, mock_uvim):
         self.volume_metadata.capture_manage_existing(
             self.data.test_volume, {}, self.data.device_id,
@@ -8137,7 +8344,7 @@ class VMAXVolumeMetadataDebugTest(test.TestCase):
                        return_value={})
     def test_capture_retype_info(self, mock_uvim):
         self.volume_metadata.capture_retype_info(
-            self.data.test_volume.id, 20, self.data.device_id, self.data.array,
+            self.data.test_volume, self.data.device_id, self.data.array,
             self.data.srp, self.data.slo, self.data.workload,
             self.data.storagegroup_name_target, False, None,
             False)

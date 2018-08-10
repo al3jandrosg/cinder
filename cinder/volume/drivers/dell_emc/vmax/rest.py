@@ -34,6 +34,7 @@ requests.packages.urllib3.disable_warnings(urllib_exp.InsecureRequestWarning)
 LOG = logging.getLogger(__name__)
 SLOPROVISIONING = 'sloprovisioning'
 REPLICATION = 'replication'
+SYSTEM = 'system'
 U4V_VERSION = '84'
 UCODE_5978 = '5978'
 retry_exc_tuple = (exception.VolumeBackendAPIException,)
@@ -461,20 +462,21 @@ class VMAXRest(object):
                                         resource_name=srp, params=None)
         return srp_details
 
-    def get_slo_list(self, array, srp):
+    def get_slo_list(self, array):
         """Retrieve the list of slo's from the array
 
         :param array: the array serial number
-        :param srp: return service levels associated with this srp
         :returns: slo_list -- list of service level names
         """
         slo_list = []
-        res_name = '%s/service_level_demand_report' % srp
-        slo_dict = self.get_resource(array, SLOPROVISIONING, 'srp',
-                                     resource_name=res_name, version='90')
-        if slo_dict and slo_dict.get('serviceLevelDemand'):
-            for d in slo_dict['serviceLevelDemand']:
-                slo = d.get('serviceLevelId')
+        slo_dict = self.get_resource(array, SLOPROVISIONING, 'slo',
+                                     version='90')
+        if slo_dict and slo_dict.get('sloId'):
+            if any(self.get_vmax_model(array) in x for x in
+                   utils.VMAX_AFA_MODELS):
+                if 'Optimized' in slo_dict.get('sloId'):
+                    slo_dict['sloId'].remove('Optimized')
+            for slo in slo_dict['sloId']:
                 if slo and slo not in slo_list:
                     slo_list.append(slo)
         return slo_list
@@ -493,6 +495,20 @@ class VMAXRest(object):
             if wl_details:
                 workload_setting = wl_details['workloadId']
         return workload_setting
+
+    def get_vmax_model(self, array):
+        """Get the VMAX model.
+
+        :param array: the array serial number
+        :return: the VMAX model
+        """
+        vmax_version = ''
+        system_uri = ("/%(version)s/system/symmetrix/%(array)s" % {
+            'version': U4V_VERSION, 'array': array})
+        system_info = self._get_request(system_uri, SYSTEM)
+        if system_info and system_info.get('model'):
+            vmax_version = system_info.get('model')
+        return vmax_version
 
     def is_compression_capable(self, array):
         """Check if array is compression capable.
@@ -1012,8 +1028,8 @@ class VMAXRest(object):
         device_ids = []
         volumes = self.get_resource(
             array, SLOPROVISIONING, 'volume', params=params)
+        volume_dict_list = self.list_pagination(volumes)
         try:
-            volume_dict_list = volumes['resultList']['result']
             for vol_dict in volume_dict_list:
                 device_id = vol_dict['volumeId']
                 device_ids.append(device_id)
@@ -1028,64 +1044,11 @@ class VMAXRest(object):
         :param params: filter parameters
         :returns: list -- dicts with volume information
         """
-        volumes = []
         volume_info = self.get_resource(
             array, SLOPROVISIONING, 'volume', params=params,
             private='/private')
-        try:
-            volumes = volume_info['resultList']['result']
-            iterator_id = volume_info['id']
-            volume_count = volume_info['count']
-            max_page_size = volume_info['maxPageSize']
-            start_position = volume_info['resultList']['from']
-            end_position = volume_info['resultList']['to']
-        except (KeyError, TypeError):
-            return volumes
 
-        if volume_count > max_page_size:
-            LOG.info("More entries exist in the result list, retrieving "
-                     "remainder of results from iterator.")
-
-            start_position += 1000
-            end_position += 1000
-            iterator_response = self.get_iterator_page_list(
-                iterator_id, volume_count, start_position, end_position)
-
-            volumes += iterator_response
-
-        return volumes
-
-    def get_iterator_page_list(self, iterator_id, result_count, start_position,
-                               end_position):
-        """Iterate through response if more than one page available.
-
-        :param iterator_id: the iterator ID
-        :param result_count: the amount of results in the iterator
-        :param start_position: position to begin iterator from
-        :param end_position: position to stop iterator
-        :return: list -- merged results from multiple pages
-        """
-        iterator_result = []
-        has_more_entries = True
-
-        while has_more_entries:
-            if start_position <= result_count <= end_position:
-                end_position = result_count
-                has_more_entries = False
-
-            params = {'to': start_position, 'from': end_position}
-            target_uri = ('/common/Iterator/%(iterator_id)s/page' % {
-                'iterator_id': iterator_id})
-            iterator_response = self._get_request(target_uri, 'iterator',
-                                                  params)
-            try:
-                iterator_result += iterator_response['result']
-                start_position += 1000
-                end_position += 1000
-            except (KeyError, TypeError):
-                pass
-
-        return iterator_result
+        return self.list_pagination(volume_info)
 
     def _modify_volume(self, array, device_id, payload):
         """Modify a volume (PUT operation).
@@ -1612,17 +1575,22 @@ class VMAXRest(object):
                       "for array %(array)s", {'array': array})
         return snap_capability
 
-    def create_volume_snap(self, array, snap_name, device_id, extra_specs):
+    def create_volume_snap(self, array, snap_name, device_id,
+                           extra_specs, ttl=0):
         """Create a snapVx snapshot of a volume.
 
         :param array: the array serial number
         :param snap_name: the name of the snapshot
         :param device_id: the source device id
         :param extra_specs: the extra specifications
+        :param ttl: time to live in hours, defaults to 0
         """
         payload = {"deviceNameListSource": [{"name": device_id}],
                    "bothSides": 'false', "star": 'false',
                    "force": 'false'}
+        if int(ttl) > 0:
+            payload['timeToLive'] = ttl
+            payload['timeInHours'] = 'true'
         resource_type = 'snapshot/%(snap)s' % {'snap': snap_name}
         status_code, job = self.create_resource(
             array, REPLICATION, resource_type,
@@ -1633,7 +1601,7 @@ class VMAXRest(object):
     def modify_volume_snap(self, array, source_id, target_id, snap_name,
                            extra_specs, link=False, unlink=False,
                            rename=False, new_snap_name=None, restore=False,
-                           list_volume_pairs=None):
+                           list_volume_pairs=None, generation=0):
         """Modify a snapvx snapshot
 
         :param array: the array serial number
@@ -1647,6 +1615,7 @@ class VMAXRest(object):
         :param new_snap_name: Optional new snapshot name
         :param restore: Flag to indicate action = Restore
         :param list_volume_pairs: list of volume pairs to link, optional
+        :param generation: the generation number of the snapshot
         """
         action, operation, payload = '', '', {}
         if link:
@@ -1680,7 +1649,8 @@ class VMAXRest(object):
                        "copy": 'true', "action": action,
                        "star": 'false', "force": 'false',
                        "exact": 'false', "remote": 'false',
-                       "symforce": 'false', "nocopy": 'false'}
+                       "symforce": 'false', "nocopy": 'false',
+                       "generation": generation}
 
         elif action == "Rename":
             operation = 'Rename snapVx snapshot'
@@ -1695,20 +1665,22 @@ class VMAXRest(object):
             self.wait_for_job(operation, status_code, job, extra_specs)
 
     def delete_volume_snap(self, array, snap_name,
-                           source_device_ids, restored=False):
+                           source_device_ids, restored=False, generation=0):
         """Delete the snapshot of a volume or volumes.
 
         :param array: the array serial number
         :param snap_name: the name of the snapshot
         :param source_device_ids: the source device ids
         :param restored: Flag to indicate terminate restore session
+        :param generation: the generation number of the snapshot
         """
         device_list = []
         if not isinstance(source_device_ids, list):
             source_device_ids = [source_device_ids]
         for dev in source_device_ids:
             device_list.append({"name": dev})
-        payload = {"deviceNameListSource": device_list}
+        payload = {"deviceNameListSource": device_list,
+                   "generation": int(generation)}
         if restored:
             payload.update({"restore": True})
         return self.delete_resource(
@@ -1727,12 +1699,13 @@ class VMAXRest(object):
         return self.get_resource(array, REPLICATION, 'volume',
                                  resource_name, private='/private')
 
-    def get_volume_snap(self, array, device_id, snap_name):
+    def get_volume_snap(self, array, device_id, snap_name, generation=0):
         """Given a volume snap info, retrieve the snapVx object.
 
         :param array: the array serial number
         :param device_id: the source volume device id
         :param snap_name: the name of the snapshot
+        :param generation: the generation number of the snapshot
         :returns: snapshot dict, or None
         """
         snapshot = None
@@ -1740,9 +1713,11 @@ class VMAXRest(object):
         if snap_info:
             if (snap_info.get('snapshotSrcs') and
                     bool(snap_info['snapshotSrcs'])):
-                        for snap in snap_info['snapshotSrcs']:
-                            if snap['snapshotName'] == snap_name:
-                                snapshot = snap
+                for snap in snap_info['snapshotSrcs']:
+                    if snap['snapshotName'] == snap_name:
+                        if snap['generation'] == generation:
+                            snapshot = snap
+                            break
         return snapshot
 
     def get_volume_snapshot_list(self, array, source_device_id):
@@ -1846,21 +1821,23 @@ class VMAXRest(object):
         return defined
 
     def get_sync_session(self, array, source_device_id, snap_name,
-                         target_device_id):
+                         target_device_id, generation=0):
         """Get a particular sync session.
 
         :param array: the array serial number
         :param source_device_id: source device id
         :param snap_name: the snapshot name
         :param target_device_id: the target device id
+        :param generation: the generation number of the snapshot
         :returns: sync session -- dict, or None
         """
         session = None
         linked_device_list = self.get_snap_linked_device_list(
-            array, source_device_id, snap_name)
+            array, source_device_id, snap_name, generation)
         for target in linked_device_list:
             if target_device_id == target['targetDevice']:
                 session = target
+                break
         return session
 
     def _find_snap_vx_source_sessions(self, array, source_device_id):
@@ -1875,24 +1852,67 @@ class VMAXRest(object):
         for snapshot in snapshots:
             if bool(snapshot['linkedDevices']):
                 link_info = {'linked_vols': snapshot['linkedDevices'],
-                             'snap_name': snapshot['snapshotName']}
+                             'snap_name': snapshot['snapshotName'],
+                             'generation': snapshot['generation']}
                 snap_dict_list.append(link_info)
         return snap_dict_list
 
-    def get_snap_linked_device_list(self, array, source_device_id, snap_name):
+    def get_snap_linked_device_list(self, array, source_device_id,
+                                    snap_name, generation=0, state=None):
         """Get the list of linked devices for a particular snapVx snapshot.
 
         :param array: the array serial number
         :param source_device_id: source device id
         :param snap_name: the snapshot name
-        :returns: linked_device_list
+        :param generation: the generation number of the snapshot
+        :param state: filter for state of the link
+        :returns: linked_device_list or empty list
         """
+        snap_dict_list = None
         linked_device_list = []
-        snap_list = self._find_snap_vx_source_sessions(array, source_device_id)
+        snap_dict_list = self._get_snap_linked_device_dict_list(
+            array, source_device_id, snap_name, state=state)
+        for snap_dict in snap_dict_list:
+            if generation == snap_dict['generation']:
+                linked_device_list = snap_dict['linked_vols']
+                break
+        return linked_device_list
+
+    def _get_snap_linked_device_dict_list(
+            self, array, source_device_id, snap_name, state=None):
+        """Get list of linked devices for all generations for a snapVx snapshot
+
+        :param array: the array serial number
+        :param source_device_id: source device id
+        :param snap_name: the snapshot name
+        :param state: filter for state of the link
+        :return: list of dict of generations with linked devices
+        """
+        snap_dict_list = []
+        snap_list = self._find_snap_vx_source_sessions(
+            array, source_device_id)
+        snap_state = None
         for snap in snap_list:
             if snap['snap_name'] == snap_name:
-                linked_device_list = snap['linked_vols']
-        return linked_device_list
+                for linked_vol in snap['linked_vols']:
+                    snap_state = linked_vol.get('state', None)
+                    # If state is None or
+                    # both snap_state and state are not None and are equal
+                    if not state or (snap_state and state
+                                     and snap_state == state):
+                        generation = snap['generation']
+                        found = False
+                        for snap_dict in snap_dict_list:
+                            if generation == snap_dict['generation']:
+                                snap_dict['linked_vols'].append(
+                                    linked_vol)
+                                found = True
+                                break
+                        if not found:
+                            snap_dict_list.append(
+                                {'generation': generation,
+                                 'linked_vols': [linked_vol]})
+        return snap_dict_list
 
     def find_snap_vx_sessions(self, array, device_id, tgt_only=False):
         """Find all snapVX sessions for a device (source and target).
@@ -1915,25 +1935,31 @@ class VMAXRest(object):
                     src_list = session['srcSnapshotGenInfo']
                     for src in src_list:
                         snap_name = src['snapshotHeader']['snapshotName']
-                        target_list, target_dict = [], {}
+                        generation = src['snapshotHeader']['generation']
+                        target_list, target_dict_list = [], []
                         if src.get('lnkSnapshotGenInfo'):
-                            target_dict = src['lnkSnapshotGenInfo']
-                        for tgt in target_dict:
-                            target_list.append(tgt['targetDevice'])
+                            target_dict_list = src['lnkSnapshotGenInfo']
+                        for tgt in target_dict_list:
+                            target_tup = tgt['targetDevice'], tgt['state']
+                            target_list.append(target_tup)
                         link_info = {'target_vol_list': target_list,
                                      'snap_name': snap_name,
-                                     'source_vol': device_id}
+                                     'source_vol': device_id,
+                                     'generation': generation}
                         snap_dict_list.append(link_info)
         if is_snap_tgt:
             for session in sessions:
                 if session.get('tgtSrcSnapshotGenInfo'):
                     tgt = session['tgtSrcSnapshotGenInfo']
                     snap_name = tgt['snapshotName']
-                    target_list = [tgt['targetDevice']]
+                    target_tup = tgt['targetDevice'], tgt['state']
+                    target_list = [target_tup]
                     source_vol = tgt['sourceDevice']
+                    generation = tgt['generation']
                     link_info = {'target_vol_list': target_list,
                                  'snap_name': snap_name,
-                                 'source_vol': source_vol}
+                                 'source_vol': source_vol,
+                                 'generation': generation}
                     snap_dict_list.append(link_info)
         return snap_dict_list
 
@@ -2353,3 +2379,69 @@ class VMAXRest(object):
                             'rdf_num': rdf_group_num})
         self.delete_resource(
             array, REPLICATION, 'storagegroup', resource_name=resource_name)
+
+    def list_pagination(self, list_info):
+        """Process lists under or over the maxPageSize
+
+        :param list_info: the object list information
+        :return: the result list
+        """
+        result_list = []
+        try:
+            result_list = list_info['resultList']['result']
+            iterator_id = list_info['id']
+            list_count = list_info['count']
+            max_page_size = list_info['maxPageSize']
+            start_position = list_info['resultList']['from']
+            end_position = list_info['resultList']['to']
+        except (KeyError, TypeError):
+            return result_list
+
+        if list_count > max_page_size:
+            LOG.info("More entries exist in the result list, retrieving "
+                     "remainder of results from iterator.")
+
+            start_position = end_position + 1
+            if list_count < (end_position + max_page_size):
+                end_position = list_count
+            else:
+                end_position += max_page_size
+            iterator_response = self.get_iterator_page_list(
+                iterator_id, list_count, start_position, end_position,
+                max_page_size)
+
+            result_list += iterator_response
+        return result_list
+
+    def get_iterator_page_list(self, iterator_id, result_count, start_position,
+                               end_position, max_page_size):
+        """Iterate through response if more than one page available.
+
+        :param iterator_id: the iterator ID
+        :param result_count: the amount of results in the iterator
+        :param start_position: position to begin iterator from
+        :param end_position: position to stop iterator
+        :param max_page_size: the max page size
+        :return: list -- merged results from multiple pages
+        """
+        iterator_result = []
+        has_more_entries = True
+
+        while has_more_entries:
+            if start_position <= result_count <= end_position:
+                end_position = result_count
+                has_more_entries = False
+
+            params = {'to': end_position, 'from': start_position}
+            target_uri = ('/common/Iterator/%(iterator_id)s/page' % {
+                'iterator_id': iterator_id})
+            iterator_response = self._get_request(target_uri, 'iterator',
+                                                  params)
+            try:
+                iterator_result += iterator_response['result']
+                start_position += max_page_size
+                end_position += max_page_size
+            except (KeyError, TypeError):
+                pass
+
+        return iterator_result

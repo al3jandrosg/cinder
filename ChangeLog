@@ -1,15 +1,43 @@
 CHANGES
 =======
 
+13.0.0.0rc1
+-----------
+
+* Imported Translations from Zanata
+* Fix \_attachment\_reserve to not allow attaching an invalid status volume
+* Allow extra parameters in volume\_type\_encryption
+* Fix one help description of rbd driver
+* Fix typo on Storwize release note
+* Add sphinx-feature-classification based support matrix
+* Solidfire: Avoid UnboundLocalError
+* 3PAR: Update Storage Driver docs for Rocky release
+* VMAX Docs - SSL Support Revision
+* VMAX docs - Rocky features
+* VMAX docs - Restructure of content
+* VMAX Driver - Fix for get-pools and returned Service Levels
+* VMAX driver - minor metadata additions
+* VMAX driver - replace 'data=' with 'message='
+* VMAX driver - pagination on get vols from SG list
+* Correct volume-transfers API endpoint
+* Improve messages api-ref description
+* Add ability to specify minimum value when using capacity based QoS
+* IBM XIV: fix issues for replication
+* Fix none-ascii char in doc
+
 13.0.0.0b3
 ----------
 
+* solidfire: Enable SSL with requests
+* VMAX Driver - Fix for multiple clones failure
 * Fix indentation in docs
 * VSA: Concurrent request handling in attachment
 * NetApp ONTAP: Fix driver force detach operations
 * docs: Write high availability devref
+* Consume quota when importing backup resource
 * Update volume create schema to allow 'null'
 * nimble: Fix missing ssl support
+* INFINIDAT: add host.created\_by metadata key
 * Set bootable when creating volume from snapshot
 * Update delete group snapshot API exception handling
 * tintri: Enable SSL with requests
@@ -18,9 +46,11 @@ CHANGES
 * Revert "Use Tempest scenario job to run all scenario tests"
 * Add release note for force delete MV fix
 * ActiveCluster support for Pure Storage drivers
+* Remove mox3
 * XtremIO: support multiattach
 * NEC driver: Return non-random iscsi portal in initialize
 * Update microversion number with constants
+* [Unity] Compressed volume support
 * Don't require size when creating volume from snap
 * Fix some nits in transfer volume with snapshots
 * Add keystoneauth options to list\_opts
@@ -65,6 +95,7 @@ CHANGES
 * Drop dmsetup from rootwrap
 * Remove mkdir from volume.filters
 * NetApp ONTAP: Remove NFS driver online volume extending support
+* Add policy in code documentation for os-set\_bootable API
 * Port nvmet driver to use privsep
 * DS8K: correct behavior and return value for terminate\_connection method
 * DS8K: correct the behavior for get\_pools method
@@ -79,6 +110,7 @@ CHANGES
 * [Logging] Enable filtering of trace\_api logs
 * Fix 'availability\_zones' attribute not recognized when creating volume
 * V3 jsonschema validation: Volumes
+* Enable running py36 unit tests
 * Handling type's multiattach extra specs in API task flow
 * NEC driver: Fix iscsi multipath initialize\_connection tests
 * NetApp ONTAP: Remove iSCSI/FC driver online volume extend support
@@ -89,6 +121,7 @@ CHANGES
 * Make scheduler check online\_extend\_support capability
 * Clean up unnecessary test params in test\_rbd
 * NetApp ONTAP NFS: Enable multiattach capability
+* Add policy check for type show and type list
 * Fix vmware disk type changed when volume type is eagerZeroedThick
 * Remove report of allocated\_capacity\_gb from Inspur driver
 * Fix v3 sample files
@@ -101,6 +134,7 @@ CHANGES
 * DataCore: get rid of pylint errors due to contextlib
 * Nimble: Fix tuple being passed for exception init
 * Solidfire: Fix pylint errors for class decorators
+* Infinidat: Get rid of pylint errors due to private lib
 * NetApp: Remove duplicate volume\_type kwarg
 * Increase pylint processes
 * Add v3 api-ref for updating snapshot status
@@ -111,6 +145,7 @@ CHANGES
 * Storwize: get list of all volumes for ensure\_export
 * Keep ORM names matching their VO counterparts
 * Storwize:clone volume with iogrp value as expected
+* [XtremIO] Remove provisioning factor when reporting
 * DS8K: Enable multiattach support
 * Move blockbox DB volume to home directory
 * VMAX Driver - Incorrect SSL cert verification

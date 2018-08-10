@@ -102,6 +102,7 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
                 (bp/vmax-list-manage-existing)
               - Fix for SSL verification/cert application (bug #1772924)
               - Log VMAX metadata of a volume (bp vmax-metadata)
+              - Fix for get-pools command (bug #1784856)
     """
 
     VERSION = "3.2.0"
@@ -270,7 +271,8 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
             exception_message = (_("Cannot get iSCSI ipaddresses, multipath "
                                    "flag, or hostlunid. Exception is %(e)s.")
                                  % {'e': six.text_type(e)})
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         if device_info.get('metro_ip_and_iqn'):
             LOG.debug("Volume is Metro device...")

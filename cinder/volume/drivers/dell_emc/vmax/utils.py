@@ -37,6 +37,7 @@ FC = 'fc'
 INTERVAL = 'interval'
 RETRIES = 'retries'
 VOLUME_ELEMENT_NAME_PREFIX = 'OS-'
+VMAX_AFA_MODELS = ['VMAX250F', 'VMAX450F', 'VMAX850F', 'VMAX950F']
 MAX_SRP_LENGTH = 16
 TRUNCATE_5 = 5
 TRUNCATE_27 = 27
@@ -72,6 +73,7 @@ RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
 METROBIAS = 'metro_bias'
 DEFAULT_PORT = 8443
+CLONE_SNAPSHOT_NAME = "snapshot_for_clone"
 
 # Multiattach constants
 IS_MULTIATTACH = 'multiattach'
@@ -90,6 +92,7 @@ VMAX_WORKLOAD = 'vmax_workload'
 VMAX_SRP = 'vmax_srp'
 VMAX_SERVICE_LEVEL = 'vmax_service_level'
 VMAX_PORT_GROUPS = 'vmax_port_groups'
+VMAX_SNAPVX_UNLINK_LIMIT = 'vmax_snapvx_unlink_limit'
 
 
 class VMAXUtils(object):
@@ -307,16 +310,15 @@ class VMAXUtils(object):
             max_over_sub_ratio = 20.0
         return max_over_sub_ratio
 
-    def get_temp_snap_name(self, clone_name, source_device_id):
-        """Construct a temporary snapshot name for clone operation.
+    def get_temp_snap_name(self, source_device_id):
+        """Construct a temporary snapshot name for clone operation
 
-        :param clone_name: the name of the clone
         :param source_device_id: the source device id
-        :returns: snap_name
+        :return: snap_name
         """
-        trunc_clone = self.truncate_string(clone_name, 10)
-        snap_name = ("temp-%(device)s-%(clone)s"
-                     % {'device': source_device_id, 'clone': trunc_clone})
+        snap_name = ("temp-%(device)s-%(snap_name)s"
+                     % {'device': source_device_id,
+                        'snap_name': CLONE_SNAPSHOT_NAME})
         return snap_name
 
     @staticmethod
@@ -343,7 +345,7 @@ class VMAXUtils(object):
         else:
             exception_message = (_("Source volume device ID is required."))
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         return array, device_id
 
     @staticmethod
@@ -418,7 +420,8 @@ class VMAXUtils(object):
                                    "information. Error received: %(ke)s.") %
                                  {'ke': six.text_type(ke)})
                 LOG.exception(error_message)
-                raise exception.VolumeBackendAPIException(data=error_message)
+                raise exception.VolumeBackendAPIException(
+                    message=error_message)
 
             allow_extend = target.get('allow_extend', 'false')
             if strutils.bool_from_string(allow_extend):
@@ -536,7 +539,7 @@ class VMAXUtils(object):
         else:
             msg = (_("Unable to get volume type ids."))
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise exception.VolumeBackendAPIException(message=msg)
 
         if len(arrays) != 1:
             if not arrays:
@@ -548,7 +551,7 @@ class VMAXUtils(object):
                          "associated with volume group: %(groupid)s.")
                        % {'groupid': group.id})
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise exception.VolumeBackendAPIException(message=msg)
         array = arrays.pop()
         intervals_retries_dict = {INTERVAL: interval, RETRIES: retries}
         return array, intervals_retries_dict
@@ -580,9 +583,14 @@ class VMAXUtils(object):
             if 'none' in pool['pool_name'].lower():
                 extra_pools.append(pool)
         for pool in extra_pools:
-            slo = pool['pool_name'].split('+')[0]
-            srp = pool['pool_name'].split('+')[2]
-            array = pool['pool_name'].split('+')[3]
+            try:
+                slo = pool['pool_name'].split('+')[0]
+                srp = pool['pool_name'].split('+')[2]
+                array = pool['pool_name'].split('+')[3]
+            except IndexError:
+                slo = pool['pool_name'].split('+')[0]
+                srp = pool['pool_name'].split('+')[1]
+                array = pool['pool_name'].split('+')[2]
             new_pool_name = ('%(slo)s+%(srp)s+%(array)s'
                              % {'slo': slo, 'srp': srp, 'array': array})
             new_pool = deepcopy(pool)

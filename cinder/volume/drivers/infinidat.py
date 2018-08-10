@@ -48,7 +48,7 @@ try:
     from infi.dtypes import wwn
     import infinisdk
 except ImportError:
-    capacity = None
+    from oslo_utils import units as capacity
     infinisdk = None
     iqn = None
     wwn = None
@@ -197,17 +197,19 @@ class InfiniboxVolumeDriver(san.SanISCSIDriver):
         return 'openstack-group-snap-%s' % cinder_group_snap.id
 
     def _set_cinder_object_metadata(self, infinidat_object, cinder_object):
-        data = dict(system="openstack",
-                    openstack_version=version.version_info.release_string(),
-                    cinder_id=cinder_object.id,
-                    cinder_name=cinder_object.name)
+        data = {"system": "openstack",
+                "openstack_version": version.version_info.release_string(),
+                "cinder_id": cinder_object.id,
+                "cinder_name": cinder_object.name,
+                "host.created_by": _INFINIDAT_CINDER_IDENTIFIER}
         infinidat_object.set_metadata_from_dict(data)
 
     def _set_host_metadata(self, infinidat_object):
-        data = dict(system="openstack",
-                    openstack_version=version.version_info.release_string(),
-                    hostname=socket.gethostname(),
-                    platform=platform.platform())
+        data = {"system": "openstack",
+                "openstack_version": version.version_info.release_string(),
+                "hostname": socket.gethostname(),
+                "platform": platform.platform(),
+                "host.created_by": _INFINIDAT_CINDER_IDENTIFIER}
         infinidat_object.set_metadata_from_dict(data)
 
     def _get_infinidat_volume_by_name(self, name):

@@ -2,6 +2,44 @@
 cinder
 ======
 
+.. _cinder_13.0.0.0rc1:
+
+13.0.0.0rc1
+===========
+
+.. _cinder_13.0.0.0rc1_New Features:
+
+New Features
+------------
+
+.. releasenotes/notes/capacity-based-qos-minimum-values-b24a5f49c986f11d.yaml @ b'37f2bdcdec85f27651b91a9a2d0fddb66e7bfe8a'
+
+- Cinder now allows for a minimum value when using the capacity based QoS in order to make sure small volumes can get a minimum allocation for them to be usable.
+  The newly added QoS specs are `read_iops_sec_per_gb_min`, `write_iops_sec_per_gb_min`, `total_iops_sec_per_gb_min`, `read_bytes_sec_per_gb_min`, `write_bytes_sec_per_gb_min` and `total_bytes_sec_per_gb_min`
+
+.. releasenotes/notes/unity-compressed-volume-support-4998dee84534a324.yaml @ b'2da949da1f79a0121d75c50eecdd102382287bda'
+
+- Dell EMC Unity driver: Add compressed volume support.
+
+
+.. _cinder_13.0.0.0rc1_Bug Fixes:
+
+Bug Fixes
+---------
+
+.. releasenotes/notes/bug-1773725-xtremio-remove-provisioning-factor-y7r5uy3489yd9pbf.yaml @ b'c157b547067389e697d6eea021de7e71535a62c9'
+
+- The XtremIO driver has been fixed to correctly report the "free_capacity_gb" size.
+
+.. releasenotes/notes/fix-import-backup-quota-issue-8yh69hd19u7tuu23.yaml @ b'4b4fbd35da26c7d697ddf18d3f0487f9ea817224'
+
+- Cinder will now consume quota when importing new backup resource.
+
+.. releasenotes/notes/policy-for-type-list-and-show-apis-rt56uy78crt5e378.yaml @ b'44b4e5462a5652a58b141e7409f50431a12a7299'
+
+- Two new policies "volume_extension:type_get" and "volume_extension:type_get_all" have been added to control type show and type list APIs.
+
+
 .. _cinder_13.0.0.0b3:
 
 13.0.0.0b3
@@ -703,9 +741,9 @@ Bug Fixes
   creation time for the first volume generated for this given snapshot.
   The ``quobyte_volume_from_snapshot_cache`` option is off by default.
 
-.. releasenotes/notes/storwize-hyperswap-host-site-update-621e763768fab9ee.yaml @ b'b13a8f810b143f5f0f465ab45eab453c1e65de7d'
+.. releasenotes/notes/storwize-hyperswap-host-site-update-621e763768fab9ee.yaml @ b'b47b199c4f53870880299137c5bb5a079c8a7440'
 
-- Updated the parameter storwzie_preferred_host_site from StrOpt to DictOpt
+- Updated the parameter storwize_preferred_host_site from StrOpt to DictOpt
   in cinder back-end configuration, and removed it from volume type
   configuration.
 

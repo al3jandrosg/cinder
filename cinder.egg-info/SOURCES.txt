@@ -1343,6 +1343,7 @@ cinder/volume/drivers/dell_emc/vmax/metadata.py
 cinder/volume/drivers/dell_emc/vmax/provision.py
 cinder/volume/drivers/dell_emc/vmax/rest.py
 cinder/volume/drivers/dell_emc/vmax/utils.py
+cinder/volume/drivers/dell_emc/vmax/releasenotes/notes/578486-25a01f1aa0e2308e.yaml
 cinder/volume/drivers/dell_emc/vnx/__init__.py
 cinder/volume/drivers/dell_emc/vnx/adapter.py
 cinder/volume/drivers/dell_emc/vnx/client.py
@@ -1813,6 +1814,8 @@ doc/source/install/figures/network1-services.png
 doc/source/install/figures/network2-services.png
 doc/source/man/cinder-manage.rst
 doc/source/reference/README.rst
+doc/source/reference/support-matrix.ini
+doc/source/reference/support-matrix.rst
 doc/source/user/README.rst
 etc/cinder/README-cinder.conf.sample
 etc/cinder/README-policy.generate.md
@@ -1941,7 +1944,9 @@ releasenotes/notes/bug-1765182-bcafd577f4b81eb6.yaml
 releasenotes/notes/bug-1765182-de132ba52167800b.yaml
 releasenotes/notes/bug-1765610-qnap-fix-volume-snapshot-create-fail-2bb785eafdb87fb6.yaml
 releasenotes/notes/bug-1766768-qnap-fix-upload-volume-detach-fail-33cbee59f1381bda.yaml
+releasenotes/notes/bug-1773725-xtremio-remove-provisioning-factor-y7r5uy3489yd9pbf.yaml
 releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml
+releasenotes/notes/capacity-based-qos-minimum-values-b24a5f49c986f11d.yaml
 releasenotes/notes/capacity-headroom-4b07701f1df9e5c4.yaml
 releasenotes/notes/castellan-backend-0c49591a54821c45.yaml
 releasenotes/notes/cg-scheduler-change-180a36b77e8cc26b.yaml
@@ -2022,6 +2027,7 @@ releasenotes/notes/fix-extend-volume-939e30f2e9e516bc.yaml
 releasenotes/notes/fix-extend-volume-in-thin-pools-57a3d53be4d47704.yaml
 releasenotes/notes/fix-hnas-clone-with-different-volume-type-b969897cba2610cc.yaml
 releasenotes/notes/fix-hnas-stats-reporting-1335e582e46ff440.yaml
+releasenotes/notes/fix-import-backup-quota-issue-8yh69hd19u7tuu23.yaml
 releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
 releasenotes/notes/fix-reserve-volume-policy-31790a8d865ee0a1.yaml
 releasenotes/notes/fix-vol-image-metadata-endpoints-returning-none-ba0590e6c6757b0c.yaml
@@ -2162,6 +2168,7 @@ releasenotes/notes/os-brick-lock-dir-35bdd8ec0c0ef46d.yaml
 releasenotes/notes/per-backend-az-28727aca360a1cc8.yaml
 releasenotes/notes/period-task-clean-reservation-0e0617a7905df923.yaml
 releasenotes/notes/permit_volume_type_operations-b2e130fd7088f335.yaml
+releasenotes/notes/policy-for-type-list-and-show-apis-rt56uy78crt5e378.yaml
 releasenotes/notes/policy-in-code-226f71562ab28195.yaml
 releasenotes/notes/privsep-rocky-35bdfe70ed62a826.yaml
 releasenotes/notes/prophetstor-generic-groups-c7136c32b2f75c0a.yaml
@@ -2326,6 +2333,7 @@ releasenotes/notes/tpool-size-11121f78df24db39.yaml
 releasenotes/notes/transfer-snapshots-with-volume-a7763570a807c742.yaml
 releasenotes/notes/type-extra-spec-policies-b7742b0ac2732864.yaml
 releasenotes/notes/unity-backup-via-snapshot-81a2d5a118c97042.yaml
+releasenotes/notes/unity-compressed-volume-support-4998dee84534a324.yaml
 releasenotes/notes/unity-enable-ssl-14db2497225c4395.yaml
 releasenotes/notes/unity-fast-clone-02ae88ba8fdef145.yaml
 releasenotes/notes/unity-force-detach-7c89e72105f9de61.yaml

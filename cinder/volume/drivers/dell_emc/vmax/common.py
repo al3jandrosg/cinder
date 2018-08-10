@@ -61,6 +61,12 @@ vmax_opts = [
                default=200,
                help='Use this value to specify '
                     'number of retries.'),
+    cfg.IntOpt(utils.VMAX_SNAPVX_UNLINK_LIMIT,
+               default=3,
+               help='Use this value to specify '
+                    'the maximum number of unlinks '
+                    'for the temporary snapshots '
+                    'before a clone operation.'),
     cfg.BoolOpt('initiator_check',
                 default=False,
                 help='Use this value to enable '
@@ -149,6 +155,8 @@ class VMAXCommon(object):
         """Get relevent details from configuration file."""
         self.interval = self.configuration.safe_get('interval')
         self.retries = self.configuration.safe_get('retries')
+        self.snapvx_unlink_limit = self.configuration.safe_get(
+            utils.VMAX_SNAPVX_UNLINK_LIMIT)
         self.pool_info['backend_name'] = (
             self.configuration.safe_get('volume_backend_name'))
         mosr = volume_utils.get_max_over_subscription_ratio(
@@ -207,35 +215,44 @@ class VMAXCommon(object):
         """
         try:
             array = array_info['SerialNumber']
-            srp = array_info['srpName']
             if self.failover:
                 array = self.active_backend_id
-            # Get the srp slo & workload settings
-            slo_settings = self.rest.get_slo_list(array, srp)
-            # Remove 'None' from the list (so a 'None' slo is not combined
-            # with a workload, which is not permitted)
+
+            slo_settings = self.rest.get_slo_list(array)
+            # Remove 'None' and 'Optimized from SL list, they cannot be mixed
+            # with workloads so will be added later again
             slo_list = [x for x in slo_settings
                         if x.lower() not in ['none', 'optimized']]
             workload_settings = self.rest.get_workload_settings(array)
             workload_settings.append("None")
-            slo_workload_set = set(
-                ['%(slo)s:%(workload)s' % {'slo': slo, 'workload': workload}
-                 for slo in slo_list for workload in workload_settings])
-            # Add back in in the only allowed 'None' slo/ workload combination
-            slo_workload_set.add('None:None')
-            for x in slo_settings:
-                if 'optimized' == x.lower():
-                    slo_workload_set.add('Optimized:None')
-                    break
+            slo_workload_set = set()
+
+            if self.rest.is_next_gen_array(array):
+                for slo in slo_list:
+                    slo_workload_set.add(slo)
+                slo_workload_set.add('None')
+                slo_workload_set.add('Optimized')
+            else:
+                slo_workload_set = set(
+                    ['%(slo)s:%(workload)s' % {'slo': slo,
+                                               'workload': workload}
+                     for slo in slo_list for workload in workload_settings])
+                slo_workload_set.add('None:None')
+
+            if not any(self.rest.get_vmax_model(array) in x for x in
+                       utils.VMAX_AFA_MODELS) and not \
+                    self.rest.is_next_gen_array(array):
+                slo_workload_set.add('Optimized:None')
 
             finalarrayinfolist = []
             for sloWorkload in slo_workload_set:
-                # Doing a shallow copy will work as we are modifying
-                # only strings
                 temparray_info = array_info.copy()
-                slo, workload = sloWorkload.split(':')
-                temparray_info['SLO'] = slo
-                temparray_info['Workload'] = workload
+                try:
+                    slo, workload = sloWorkload.split(':')
+                    temparray_info['SLO'] = slo
+                    temparray_info['Workload'] = workload
+                except ValueError:
+                    temparray_info['SLO'] = sloWorkload
                 finalarrayinfolist.append(temparray_info)
         except Exception as e:
             exception_message = (_(
@@ -243,7 +260,7 @@ class VMAXCommon(object):
                 "Exception received was %(e)s") % {'e': six.text_type(e)})
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         return finalarrayinfolist
 
     def create_volume(self, volume):
@@ -419,6 +436,7 @@ class VMAXCommon(object):
         LOG.info("Deleting Volume: %(volume)s",
                  {'volume': volume.name})
         volume_name = self._delete_volume(volume)
+        self.volume_metadata.capture_delete_info(volume)
         LOG.info("Leaving delete_volume: %(volume_name)s.",
                  {'volume_name': volume_name})
 
@@ -753,7 +771,7 @@ class VMAXCommon(object):
                 masking_view_dict[utils.ARRAY], volume,
                 masking_view_dict[utils.DEVICE_ID], rollback_dict)
             raise exception.VolumeBackendAPIException(
-                data=error_message)
+                message=error_message)
 
         return device_info_dict, rollback_dict[utils.PORTGROUPNAME]
 
@@ -788,7 +806,8 @@ class VMAXCommon(object):
                                    "Extend operation.  Exiting....")
                                  % {'volume_name': volume_name})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         __, snapvx_src, __ = self.rest.is_vol_in_rep_session(array, device_id)
         if snapvx_src:
             if not self.rest.is_next_gen_array(array):
@@ -799,7 +818,7 @@ class VMAXCommon(object):
                       "onwards. Exiting...") % {'volume': volume_name})
                 LOG.error(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
         if int(original_vol_size) > int(new_size):
             exception_message = (_(
@@ -808,7 +827,8 @@ class VMAXCommon(object):
                 % {'original_vol_size': original_vol_size,
                    'new_size': new_size})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         LOG.info("Extending volume %(volume)s to %(new_size)d GBs",
                  {'volume': volume_name,
                   'new_size': int(new_size)})
@@ -859,21 +879,35 @@ class VMAXCommon(object):
                      provisioned_capacity_gb, array_reserve_percent])
             else:
                 already_queried = True
-            pool_name = ("%(slo)s+%(workload)s+%(srpName)s+%(array)s"
-                         % {'slo': array_info['SLO'],
-                            'workload': array_info['Workload'],
-                            'srpName': array_info['srpName'],
-                            'array': array_info['SerialNumber']})
+            try:
+                pool_name = ("%(slo)s+%(workload)s+%(srpName)s+%(array)s"
+                             % {'slo': array_info['SLO'],
+                                'workload': array_info['Workload'],
+                                'srpName': array_info['srpName'],
+                                'array': array_info['SerialNumber']})
+            except KeyError:
+                pool_name = ("%(slo)s+%(srpName)s+%(array)s"
+                             % {'slo': array_info['SLO'],
+                                'srpName': array_info['srpName'],
+                                'array': array_info['SerialNumber']})
 
             if already_queried:
                 # The dictionary will only have one key per VMAX
                 # Construct the location info
-                temp_location_info = (
-                    ("%(arrayName)s#%(srpName)s#%(slo)s#%(workload)s"
-                     % {'arrayName': array_info['SerialNumber'],
-                        'srpName': array_info['srpName'],
-                        'slo': array_info['SLO'],
-                        'workload': array_info['Workload']}))
+                try:
+                    temp_location_info = (
+                        ("%(arrayName)s#%(srpName)s#%(slo)s#%(workload)s"
+                         % {'arrayName': array_info['SerialNumber'],
+                            'srpName': array_info['srpName'],
+                            'slo': array_info['SLO'],
+                            'workload': array_info['Workload']}))
+                except KeyError:
+                    temp_location_info = (
+                        ("%(arrayName)s#%(srpName)s#%(slo)s"
+                         % {'arrayName': array_info['SerialNumber'],
+                            'srpName': array_info['srpName'],
+                            'slo': array_info['SLO']}))
+
                 pool = {'pool_name': pool_name,
                         'total_capacity_gb':
                             arrays[array_info['SerialNumber']][0],
@@ -970,11 +1004,17 @@ class VMAXCommon(object):
                   'free_capacity_gb': remainingManagedSpaceGbs,
                   'provisioned_capacity_gb': provisionedManagedSpaceGbs})
 
-        location_info = ("%(arrayName)s#%(srpName)s#%(slo)s#%(workload)s"
-                         % {'arrayName': array_info['SerialNumber'],
-                            'srpName': array_info['srpName'],
-                            'slo': array_info['SLO'],
-                            'workload': array_info['Workload']})
+        try:
+            location_info = ("%(arrayName)s#%(srpName)s#%(slo)s#%(workload)s"
+                             % {'arrayName': array_info['SerialNumber'],
+                                'srpName': array_info['srpName'],
+                                'slo': array_info['SLO'],
+                                'workload': array_info['Workload']})
+        except KeyError:
+            location_info = ("%(arrayName)s#%(srpName)s#%(slo)s"
+                             % {'arrayName': array_info['SerialNumber'],
+                                'srpName': array_info['srpName'],
+                                'slo': array_info['SLO']})
 
         return (location_info, totalManagedSpaceGbs,
                 remainingManagedSpaceGbs, provisionedManagedSpaceGbs,
@@ -1198,7 +1238,7 @@ class VMAXCommon(object):
                     "configuration and note that the xml file is no longer "
                     "supported."))
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
             self.rest.set_rest_credentials(array_info)
 
@@ -1210,7 +1250,8 @@ class VMAXCommon(object):
                 "Unable to get configuration information necessary to "
                 "create a volume: %(errorMessage)s.")
                 % {'errorMessage': sys.exc_info()[1]})
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         return extra_specs
 
     def _populate_masking_dict(self, volume, connector,
@@ -1308,11 +1349,11 @@ class VMAXCommon(object):
                 "SnapVx feature is not licensed on %(array)s.")
                 % {'array': array})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
-        # Check if source is currently a snap target. Wait for sync if true.
-        self._sync_check(array, source_device_id, source_volume.name,
-                         extra_specs, tgt_only=True)
+        # Perform any snapvx cleanup if required before creating the clone
+        self._clone_check(array, source_device_id, extra_specs)
 
         if not is_snapshot:
             clone_dict = self._create_replica(
@@ -1397,7 +1438,8 @@ class VMAXCommon(object):
                                  % {'vol': source_device_id,
                                     'e': six.text_type(e)})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         snap_dict = {'snap_name': snap_name, 'source_id': source_device_id}
         return snap_dict
 
@@ -1419,7 +1461,8 @@ class VMAXCommon(object):
             return volume_name
 
         array = extra_specs[utils.ARRAY]
-        # Check if volume is snap source
+        # Check if the volume being deleted is a
+        # source or target for copy session
         self._sync_check(array, device_id, volume_name, extra_specs)
         # Remove from any storage groups and cleanup replication
         self._remove_vol_and_cleanup_replication(
@@ -1450,7 +1493,8 @@ class VMAXCommon(object):
                 % {'slo': extra_specs[utils.SLO],
                    'workload': extra_specs[utils.WORKLOAD]})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         LOG.debug("Create Volume: %(volume)s  Srp: %(srp)s "
                   "Array: %(array)s "
@@ -1515,7 +1559,7 @@ class VMAXCommon(object):
                                "portgroups in the cinder.conf associated with "
                                "this backend."))
             LOG.exception(error_message)
-            raise exception.VolumeBackendAPIException(data=error_message)
+            raise exception.VolumeBackendAPIException(message=error_message)
 
         extra_specs[utils.INTERVAL] = self.interval
         LOG.debug("The interval is set at: %(intervalInSecs)s.",
@@ -1546,8 +1590,7 @@ class VMAXCommon(object):
                       'wl': workload_from_extra_spec})
 
         else:
-            slo_list = self.rest.get_slo_list(
-                pool_record['SerialNumber'], extra_specs[utils.SRP])
+            slo_list = self.rest.get_slo_list(pool_record['SerialNumber'])
             if 'Optimized' in slo_list:
                 slo_from_extra_spec = 'Optimized'
             elif 'Diamond' in slo_list:
@@ -1589,6 +1632,7 @@ class VMAXCommon(object):
             self.version_dict = (
                 self.volume_metadata.gather_version_info(
                     extra_specs[utils.ARRAY]))
+
         return extra_specs
 
     def _delete_from_srp(self, array, device_id, volume_name,
@@ -1618,7 +1662,7 @@ class VMAXCommon(object):
                              {'volume_name': volume_name,
                               'e': six.text_type(e)})
             LOG.exception(error_message)
-            raise exception.VolumeBackendAPIException(data=error_message)
+            raise exception.VolumeBackendAPIException(message=error_message)
 
     def _remove_vol_and_cleanup_replication(
             self, array, device_id, volume_name, extra_specs, volume):
@@ -1780,8 +1824,7 @@ class VMAXCommon(object):
             LOG.info("The target device id is: %(device_id)s.",
                      {'device_id': target_device_id})
             if not snap_name:
-                snap_name = self.utils.get_temp_snap_name(
-                    clone_name, source_device_id)
+                snap_name = self.utils.get_temp_snap_name(source_device_id)
                 create_snap = True
             self.provision.create_volume_replica(
                 array, source_device_id, target_device_id,
@@ -1801,7 +1844,7 @@ class VMAXCommon(object):
 
     def _cleanup_target(
             self, array, target_device_id, source_device_id,
-            clone_name, snap_name, extra_specs):
+            clone_name, snap_name, extra_specs, generation=0):
         """Cleanup target volume on failed clone/ snapshot creation.
 
         :param array: the array serial number
@@ -1809,13 +1852,14 @@ class VMAXCommon(object):
         :param source_device_id: the source device ID
         :param clone_name: the name of the clone volume
         :param extra_specs: the extra specifications
+        :param generation: the generation number of the snapshot
         """
         snap_session = self.rest.get_sync_session(
-            array, source_device_id, snap_name, target_device_id)
+            array, source_device_id, snap_name, target_device_id, generation)
         if snap_session:
             self.provision.break_replication_relationship(
                 array, target_device_id, source_device_id,
-                snap_name, extra_specs)
+                snap_name, extra_specs, generation)
         self._delete_from_srp(
             array, target_device_id, clone_name, extra_specs)
 
@@ -1828,6 +1872,7 @@ class VMAXCommon(object):
         :param volume_name: volume name
         :param tgt_only: Flag - return only sessions where device is target
         :param extra_specs: extra specifications
+        :param is_clone: Flag to specify if it is a clone operation
         """
         get_sessions = False
         snapvx_tgt, snapvx_src, __ = self.rest.is_vol_in_rep_session(
@@ -1840,17 +1885,21 @@ class VMAXCommon(object):
             snap_vx_sessions = self.rest.find_snap_vx_sessions(
                 array, device_id, tgt_only)
             if snap_vx_sessions:
+                snap_vx_sessions.sort(
+                    key=lambda k: k['generation'], reverse=True)
                 for session in snap_vx_sessions:
                     source = session['source_vol']
                     snap_name = session['snap_name']
                     targets = session['target_vol_list']
+                    generation = session['generation']
+                    # Break the replication relationship
                     for target in targets:
-                        # Break the replication relationship
                         LOG.debug("Unlinking source from target. Source: "
                                   "%(volume)s, Target: %(target)s.",
-                                  {'volume': volume_name, 'target': target})
+                                  {'volume': source, 'target': target[0]})
                         self.provision.break_replication_relationship(
-                            array, target, source, snap_name, extra_specs)
+                            array, target[0], source, snap_name,
+                            extra_specs, generation)
                     # The snapshot name will only have 'temp' (or EMC_SMI for
                     # legacy volumes) if it is a temporary volume.
                     # Only then is it a candidate for deletion.
@@ -1858,8 +1907,72 @@ class VMAXCommon(object):
                         @coordination.synchronized("emc-source-{source}")
                         def do_delete_temp_volume_snap(source):
                             self.provision.delete_temp_volume_snap(
-                                array, snap_name, source)
+                                array, snap_name, source, generation)
                         do_delete_temp_volume_snap(source)
+
+    def _clone_check(self, array, device_id, extra_specs):
+        """Perform any snapvx cleanup before creating clones or snapshots
+
+        :param array: the array serial
+        :param device_id: the device ID of the volume
+        :param extra_specs: extra specifications
+        """
+        snapvx_tgt, snapvx_src, __ = self.rest.is_vol_in_rep_session(
+            array, device_id)
+        if snapvx_src or snapvx_tgt:
+            snap_vx_sessions = self.rest.find_snap_vx_sessions(
+                array, device_id)
+            if snap_vx_sessions:
+                snap_vx_sessions.sort(
+                    key=lambda k: k['generation'], reverse=True)
+                count = 0
+                for session in snap_vx_sessions:
+                    source = session['source_vol']
+                    snap_name = session['snap_name']
+                    targets = session['target_vol_list']
+                    generation = session['generation']
+                    # Only unlink a set number of targets
+                    if count == self.snapvx_unlink_limit:
+                        break
+                    is_temp = False
+                    is_temp = 'temp' in snap_name or 'EMC_SMI' in snap_name
+                    if utils.CLONE_SNAPSHOT_NAME in snap_name:
+                        is_temp = False
+                    for target in targets:
+                        if snapvx_src:
+                            if not is_temp and target[1] == "Copied":
+                                # Break the replication relationship
+                                LOG.debug("Unlinking source from "
+                                          "target. Source: %(volume)s, "
+                                          "Target: %(target)s.",
+                                          {'volume': source,
+                                           'target': target[0]})
+                                self.provision.break_replication_relationship(
+                                    array, target[0], source, snap_name,
+                                    extra_specs, generation)
+                                count = count + 1
+                        elif snapvx_tgt:
+                            # If our device is a target, we need to wait
+                            # and then unlink
+                            LOG.debug("Unlinking source from "
+                                      "target. Source: %(volume)s, "
+                                      "Target: %(target)s.",
+                                      {'volume': source,
+                                       'target': target[0]})
+                            self.provision.break_replication_relationship(
+                                array, target[0], source, snap_name,
+                                extra_specs, generation)
+                            # For older styled temp snapshots for clone
+                            # do a delete as well
+                            if is_temp:
+
+                                @coordination.synchronized(
+                                    "emc-source-{source}")
+                                def do_delete_temp_volume_snap(source):
+                                    self.provision.delete_temp_volume_snap(
+                                        array, snap_name, source, generation)
+
+                                do_delete_temp_volume_snap(source)
 
     def manage_existing(self, volume, external_ref):
         """Manages an existing VMAX Volume (import to Cinder).
@@ -2053,7 +2166,7 @@ class VMAXCommon(object):
                   "%(snapshot)s is already managed by Cinder.") %
                 {'snapshot': snap_name})
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         if self.utils.is_volume_failed_over(volume):
             exception_message = (
@@ -2062,7 +2175,7 @@ class VMAXCommon(object):
                    "volume.") % {'name': volume.id}))
             LOG.exception(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         if not self.rest.get_volume_snap(array, device_id, snap_name):
             exception_message = (
@@ -2073,7 +2186,7 @@ class VMAXCommon(object):
                 % {'device_id': device_id, 'snap_name': snap_name})
             LOG.exception(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         snap_backend_name = self.utils.modify_snapshot_prefix(
             snap_name, manage=True)
@@ -2089,7 +2202,8 @@ class VMAXCommon(object):
                   "possible to add the OS- prefix. Error Message: %(e)s.")
                 % {'snap_name': snap_name, 'e': six.text_type(e)})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         prov_loc = {'source_id': device_id, 'snap_name': snap_backend_name}
 
@@ -2138,7 +2252,7 @@ class VMAXCommon(object):
 
             LOG.exception(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         new_snap_backend_name = self.utils.modify_snapshot_prefix(
             snap_name, unmanage=True)
@@ -2154,7 +2268,8 @@ class VMAXCommon(object):
                   "message is: %(e)s.")
                 % {'snap_name': snap_name, 'e': six.text_type(e)})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         self._sync_check(array, device_id, volume.name, extra_specs)
 
@@ -2520,7 +2635,7 @@ class VMAXCommon(object):
                 rep_mode, is_rep_enabled, target_extra_specs)
 
         self.volume_metadata.capture_retype_info(
-            volume.id, volume.size, device_id, array, srp, target_slo,
+            volume, device_id, array, srp, target_slo,
             target_workload, target_sg_name, is_rep_enabled, rep_mode,
             is_compression_disabled)
 
@@ -2806,7 +2921,8 @@ class VMAXCommon(object):
                   'rdf management group - the exception received was: %(e)s')
                 % {'vol': volume_name, 'e': six.text_type(e)})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
     def cleanup_lun_replication(self, volume, volume_name,
                                 device_id, extra_specs):
@@ -2871,7 +2987,8 @@ class VMAXCommon(object):
                   'your administrator.')
                 % {'volume': volume_name, 'e': six.text_type(e)})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
     def _cleanup_remote_target(
             self, array, volume, remote_array, device_id, target_device,
@@ -2945,7 +3062,7 @@ class VMAXCommon(object):
                     'volume_backend_name')})
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
     def _cleanup_replication_source(
             self, array, volume, volume_name, volume_dict, extra_specs):
@@ -2986,7 +3103,8 @@ class VMAXCommon(object):
                                  {'backend': self.configuration.safe_get(
                                      'volume_backend_name')})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         remote_array = self.rep_config['array']
         rdf_group_label = self.rep_config['rdf_group_label']
@@ -3000,7 +3118,7 @@ class VMAXCommon(object):
                                  {'RDFGroup': rdf_group_label})
             LOG.exception(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         LOG.info("Found RDF group number: %(RDFGroup)s.",
                  {'RDFGroup': rdf_group_no})
@@ -3250,7 +3368,7 @@ class VMAXCommon(object):
                                      {'e': e})
                 LOG.exception(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
         else:
             exception_message = (_(
@@ -3258,7 +3376,8 @@ class VMAXCommon(object):
                 "backend. Please contact your administrator. Note that "
                 "you cannot extend SRDF/Metro protected volumes."))
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
     def enable_rdf(self, array, volume, device_id, rdf_group_no, rep_config,
                    target_name, remote_array, target_device, extra_specs):
@@ -3317,7 +3436,8 @@ class VMAXCommon(object):
                                    " %(e)s")
                                  % {'e': six.text_type(e)})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         return rdf_dict
 
@@ -3348,7 +3468,7 @@ class VMAXCommon(object):
                                  % {'e': six.text_type(e)})
             LOG.exception(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         self.masking.add_volume_to_storage_group(
             array, device_id, storagegroup_name, volume_name, extra_specs)
@@ -3459,7 +3579,8 @@ class VMAXCommon(object):
                                    " %(volGrpName)s.")
                                  % {'volGrpName': vol_grp_name})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         return model_update
 
@@ -3639,7 +3760,8 @@ class VMAXCommon(object):
                                  % {'volGrpName': grp_id,
                                     'e': six.text_type(e)})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         for snapshot in snapshots:
             src_dev_id = self._get_src_device_id_for_group_snap(snapshot)
@@ -3683,7 +3805,7 @@ class VMAXCommon(object):
                 _("Cannot find generic volume group %(group_id)s.") %
                 {'group_id': source_group.id})
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         self.provision.create_group_replica(
             array, vol_grp_name,
             snap_name, interval_retries_dict)
@@ -3734,7 +3856,7 @@ class VMAXCommon(object):
                     _("Cannot find generic volume group %(grp_id)s.") %
                     {'group_id': source_group.id})
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
             # Check if the snapshot exists
             if 'snapVXSnapshots' in volume_group:
                 if snap_name in volume_group['snapVXSnapshots']:
@@ -3863,7 +3985,8 @@ class VMAXCommon(object):
                                  % {'volGrpName': group.id,
                                     'ex': ex})
             LOG.exception(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         self.volume_metadata.capture_modify_group(
             vol_grp_name, group.id, add_vols, remove_volumes, array)
@@ -3943,7 +4066,7 @@ class VMAXCommon(object):
             exception_message = (_("Must supply either group snapshot or "
                                    "a source group."))
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
         tgt_name = self.utils.update_volume_group_name(group)
         rollback_dict = {}
@@ -3959,7 +4082,7 @@ class VMAXCommon(object):
                            "from the array.")
                          % {'grp_id': actual_source_grp.id})
             LOG.error(error_msg)
-            raise exception.VolumeBackendAPIException(data=error_msg)
+            raise exception.VolumeBackendAPIException(message=error_msg)
 
         LOG.debug("Enter VMAX create_volume group_from_src. Group to be "
                   "created: %(grpId)s, Source : %(SourceGrpId)s.",
@@ -4014,7 +4137,8 @@ class VMAXCommon(object):
                         _("Cannot retrieve source snapshot %(snap_id)s "
                           "from the array.") % {'snap_id': source_id})
                     LOG.error(error_msg)
-                    raise exception.VolumeBackendAPIException(data=error_msg)
+                    raise exception.VolumeBackendAPIException(
+                        message=error_msg)
             # Link and break the snapshot to the source group
             self.provision.link_and_break_replica(
                 array, src_grp_name, tgt_name, snap_name,
@@ -4036,7 +4160,8 @@ class VMAXCommon(object):
             if array is not None:
                 LOG.info("Attempting rollback for the create group from src.")
                 self._rollback_create_group_from_src(array, rollback_dict)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         return model_update, volumes_model_update
 
@@ -4399,7 +4524,7 @@ class VMAXCommon(object):
             LOG.error("No snapshot found on the array")
             exception_message = (_(
                 "Failed to revert the volume to the snapshot"))
-            raise exception.VolumeDriverException(data=exception_message)
+            raise exception.VolumeDriverException(message=exception_message)
         self._sync_check(array, sourcedevice_id, volume.name, extra_specs)
         try:
             LOG.info("Reverting device: %(deviceid)s "
@@ -4416,7 +4541,7 @@ class VMAXCommon(object):
             LOG.debug("Terminating restore session")
             # This may throw an exception if restore_complete is False
             self.provision.delete_volume_snap(
-                array, snap_name, sourcedevice_id, restored=True)
+                array, snap_name, sourcedevice_id, restored=True, generation=0)
             # Revert volume to snapshot is successful if termination was
             # successful - possible even if restore_complete was False
             # when we checked last.
