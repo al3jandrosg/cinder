@@ -418,10 +418,11 @@ Depends:
  ${misc:Depends},
  ${python3:Depends},
 Suggests:
- python3-ceph,
  python3-googleapi (>= 1.4.2),
  python3-hp3parclient,
  python3-oauth2client (>= 1.5.0),
+ python3-rados,
+ python3-rbd,
  python3-rtslib-fb,
 Conflicts:
  python-cinder,

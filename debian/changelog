@@ -1,3 +1,10 @@
+cinder (2:13.0.0~rc1-0ubuntu2) cosmic; urgency=medium
+
+  * d/control: Correct Suggests for python3-cinder from python3-ceph ->
+    python3-{rbd,rados}, as python3-ceph does not exist.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 17 Aug 2018 07:59:43 +0100
+
 cinder (2:13.0.0~rc1-0ubuntu1) cosmic; urgency=medium
 
   * New upstream release candidate for OpenStack Rocky.
