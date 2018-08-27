@@ -1,3 +1,16 @@
+cinder (2:13.0.0~rc1-0ubuntu3) cosmic; urgency=medium
+
+  * Additional support for Python 3:
+    - d/control, d/cinder-*: Move common files to cinder-common. Only have
+      python(3)-cinder depend on cinder-common. Other packages that used to
+      depend on cinder-common now depend on python-cinder | python3-cinder.
+    - d/control: Drop python(3)-cinder conflicts on each other.
+    - d/python(3)-cinder.postinst: Ensure alternatives priority is 300
+      for Py2 and 200 for Py3.
+    - d/tests/control: Run Py3 tests first due to alternatives priority.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 27 Aug 2018 13:07:52 -0400
+
 cinder (2:13.0.0~rc1-0ubuntu2) cosmic; urgency=medium
 
   * d/control: Correct Suggests for python3-cinder from python3-ceph ->

@@ -186,8 +186,8 @@ Package: cinder-api
 Architecture: all
 Depends:
  apache2 | httpd,
- cinder-common (= ${binary:Version}),
  libapache2-mod-wsgi | libapache2-mod-wsgi-py3,
+ python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
  ${misc:Depends},
 Description: Cinder storage service - API server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
@@ -202,7 +202,7 @@ Description: Cinder storage service - API server
 Package: cinder-backup
 Architecture: all
 Depends:
- cinder-common (= ${binary:Version}),
+ python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
  ${misc:Depends},
 Description: Cinder storage service - Scheduler server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
@@ -214,28 +214,10 @@ Description: Cinder storage service - Scheduler server
  .
  This package contains the Cinder backup service.
 
-Package: cinder-common
-Architecture: all
-Depends:
- adduser,
- python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
- ${misc:Depends},
-Recommends:
- ${misc:Recommends},
-Description: Cinder storage service - common files
- OpenStack is a reliable cloud infrastructure. Its mission is to produce
- the ubiquitous cloud computing platform that will meet the needs of public
- and private cloud providers regardless of size, by being simple to implement
- and massively scalable.
- .
- Cinder is the OpenStack Block storage service.
- .
- This package contains commons components for Cinder.
-
 Package: cinder-scheduler
 Architecture: all
 Depends:
- cinder-common (= ${binary:Version}),
+ python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
  ${misc:Depends},
 Description: Cinder storage service - Scheduler server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
@@ -250,15 +232,11 @@ Description: Cinder storage service - Scheduler server
 Package: cinder-volume
 Architecture: all
 Depends:
- cinder-common (= ${binary:Version}),
  lvm2,
+ python-cinder (= ${binary:Version}) | python3-cinder (= ${binary:Version}),
  qemu-utils,
  tgt,
  ${misc:Depends},
-Breaks:
- cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 ),
-Replaces:
- cinder-common ( <= 2012.2~rc1~20120907.1154-0ubuntu1 ),
 Description: Cinder storage service - Volume server
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -273,6 +251,7 @@ Package: python-cinder
 Section: python
 Architecture: all
 Depends:
+ cinder-common (= ${binary:Version}),
  python-babel (>= 2.3.4),
  python-barbicanclient (>= 4.5.2),
  python-castellan (>= 0.16.0),
@@ -341,8 +320,6 @@ Suggests:
  python-hp3parclient,
  python-oauth2client (>= 1.5.0),
  python-rtslib-fb,
-Conflicts:
- python3-cinder,
 Description: Cinder Python 2 libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -357,6 +334,7 @@ Package: python3-cinder
 Section: python
 Architecture: all
 Depends:
+ cinder-common (= ${binary:Version}),
  python3-babel (>= 2.3.4),
  python3-barbicanclient (>= 4.5.2),
  python3-castellan (>= 0.16.0),
@@ -424,8 +402,6 @@ Suggests:
  python3-rados,
  python3-rbd,
  python3-rtslib-fb,
-Conflicts:
- python-cinder,
 Description: Cinder Python 3 libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
@@ -435,3 +411,30 @@ Description: Cinder Python 3 libraries
  Cinder is the OpenStack Block storage service.
  .
  This package contains the Python 3 library for Cinder.
+
+Package: cinder-common
+Architecture: all
+Depends:
+ adduser,
+ ${misc:Depends},
+Recommends:
+ ${misc:Recommends},
+Breaks:
+ cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
+Replaces:
+ cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
+Description: Cinder storage service - common files
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains commons components for Cinder.
