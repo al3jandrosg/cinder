@@ -1,6 +1,19 @@
 CHANGES
 =======
 
+13.0.0.0rc3
+-----------
+
+* Remove deprecated sio\_allow\_non\_padded\_thick\_volumes
+
+13.0.0.0rc2
+-----------
+
+* ScaleIO: Deprecate sio\_allow\_non\_padded\_thick\_volumes
+* ScaleIO: Disable volume creation without padding
+* Update UPPER\_CONSTRAINTS\_FILE for stable/rocky
+* Update .gitreview for stable/rocky
+
 13.0.0.0rc1
 -----------
 

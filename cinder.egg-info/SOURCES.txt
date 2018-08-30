@@ -1945,6 +1945,7 @@ releasenotes/notes/bug-1765182-de132ba52167800b.yaml
 releasenotes/notes/bug-1765610-qnap-fix-volume-snapshot-create-fail-2bb785eafdb87fb6.yaml
 releasenotes/notes/bug-1766768-qnap-fix-upload-volume-detach-fail-33cbee59f1381bda.yaml
 releasenotes/notes/bug-1773725-xtremio-remove-provisioning-factor-y7r5uy3489yd9pbf.yaml
+releasenotes/notes/bug-1784871-7f67402eb13abca7.yaml
 releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml
 releasenotes/notes/capacity-based-qos-minimum-values-b24a5f49c986f11d.yaml
 releasenotes/notes/capacity-headroom-4b07701f1df9e5c4.yaml
