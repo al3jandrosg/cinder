@@ -2,12 +2,12 @@
 cinder
 ======
 
-.. _cinder_13.0.0.0rc2:
+.. _cinder_13.0.0:
 
-13.0.0.0rc2
-===========
+13.0.0
+======
 
-.. _cinder_13.0.0.0rc2_Security Issues:
+.. _cinder_13.0.0_Security Issues:
 
 Security Issues
 ---------------

@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-13.0.0.0rc3
------------
+13.0.0
+------
 
 * Remove deprecated sio\_allow\_non\_padded\_thick\_volumes
 

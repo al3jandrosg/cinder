@@ -17,4 +17,4 @@ notes:
   - - releasenotes/notes/bug-1784871-7f67402eb13abca7.yaml
     - !!binary |
       M2EzOWQwOTE2NmJmNmQxYzdkMmJhZTYzY2FmM2UyYTk1NDMyODg2Mg==
-  version: 13.0.0.0rc2
+  version: 13.0.0
