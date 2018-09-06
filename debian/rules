@@ -32,6 +32,7 @@ endif
 
 override_dh_auto_install:
 	pkgos-dh_auto_install
+	rm -rf $(CURDIR)/debian/python*-cinder/usr/etc
 
 override_dh_install:
 	dh_install --fail-missing -Xbin/cinder-all -Xusr/bin/cinder-api

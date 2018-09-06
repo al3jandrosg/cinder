@@ -1,3 +1,10 @@
+cinder (2:13.0.0-0ubuntu2) cosmic; urgency=medium
+
+  * d/rules: Ensure /usr/etc is purged from python{3}-cinder packages
+    to resolve issues with co-installability.
+
+ -- James Page <james.page@ubuntu.com>  Thu, 06 Sep 2018 10:24:56 +0100
+
 cinder (2:13.0.0-0ubuntu1) cosmic; urgency=medium
 
   * New upstream release for OpenStack Rocky.
@@ -11,7 +18,7 @@ cinder (2:13.0.0~rc3-0ubuntu1) cosmic; urgency=medium
     right dependencies) rather than as part of the -common base package.
   * New upstream release candidate.
 
- -- James Page <james.page@ubuntu.com>  Thu, 30 Aug 2018 14:24:47 +0100
+ -- James Page <james.page@ubuntu.com>  Thu, 30 Aug 2018 14:25:13 +0100
 
 cinder (2:13.0.0~rc1-0ubuntu3) cosmic; urgency=medium
 
