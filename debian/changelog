@@ -1,3 +1,9 @@
+cinder (2:13.0.0-0ubuntu3) cosmic; urgency=medium
+
+  * d/cinder-common.install: Install /etc/cinder/resource_filters.json
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 25 Sep 2018 09:42:11 -0400
+
 cinder (2:13.0.0-0ubuntu2) cosmic; urgency=medium
 
   * d/rules: Ensure /usr/etc is purged from python{3}-cinder packages
