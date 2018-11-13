@@ -1,18 +1,232 @@
 CHANGES
 =======
 
-13.0.0
-------
-
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Improve/Clean api-ref parameters
+* [Trivial Fix] Correct spelling error of "bandwidth"
+* Add test coverage to manage existing flow
+* Update docs landing page to follow guideline
+* Fix a typo in multiattach doc
+* Remove setup.py check from pep8 job
+* [Trivial] Fix typo in comment in delete\_volume
+* Update backup flow for CephBackupDriver
+* Imported Translations from Zanata
+* Handle rbd.OSError on broken RBD image
+* Fix non iSCSI attach serialization
+* Set user message on volume create failure
+* Imported Translations from Zanata
+* Raise the ImageTooBig exception when found it
+* hpe 3par driver initialization failure
+* api-ref: cleanup status conditions for backup/restore APIs
+* PY3: Ensure rados.Object.read/write use byte data
+* Forbidden to revert volume to a different size snapshot
+* Fix debug message for \_copy\_volume\_data
+* Allow using forward slashes in metadata
+* Fix unexpected behavior in \_clone\_image\_volume
+* Remove scsi\_id from rootwrap filter
+* Remove mount from volume.filters
+* Drop drv\_cfg from rootwrap filters
+* Remove touch command from volume.filters
+* Imported Translations from Zanata
+* cinder-manage online\_data\_migrations fixes
+* Handling unexpected python error "NoneType object is not iterable"
+* Base framework for cinder-status upgrade check
+* api-ref: add missing fields in volume group types
+* Update sphinx extension logging
+* Restructure Huawei driver
+* VMAX: set faked max\_oversubscription\_ratio
+* Move cinder-manage page to cli doc subtree
+* api-ref: fix some inconsistencies in snapshot API
+* Add test-requirements to pylint reqs
+* Rename cinder.privsep.utils to cinder.privsep.path
+* Adding regression test for update\_group
+* DS8K: correct the usage for ssl method(SSLContext.wrap\_socket)
+* Imported Translations from Zanata
+* Fix for field type error
+* fix misspelling of available
+* Imported Translations from Zanata
+* Increment versioning with pbr instruction
+* Mark Veritas HyperScale Driver Unsupported
+* Cinder Backup: object\_count value incorrect
+* Extract volume image metadata into volume utils
+* Extract \_get\_image\_metadata into volume utils
+* Use tempest-pg-full
+* Remove the ITRI DISCO driver
+* NFS Backup: Avoid TypeError in os-brick when not configured
+* [minifix] Update reno formatting on Quobyte driver defaults change
+* api-ref: totalSnapshotsUsed in limits response should be integer
+* Add column only when it doesn't exist
+* Remove volume:get policy from test policy file
+* Replace openSUSE experimental check with newer version
+* Fix for cinder-manage db purge
+* api-ref: Add response fields and response example for snapshot manage
+* api-ref: remove created\_at from response example of list-transfer
+* Handle drivers that do not support list manageable
+* Fix doc output examples
+* Fix: UnboundLocalError variable referenced before assignment
+* api-ref: Add response fields and response example for volume manage
+* api\_ref: total\_capacity and free\_capacity can be float
+* Stop using deprecated rpc\_backend option
+* Don't quote {posargs} in tox.ini
+* Imported Translations from Zanata
+* api-ref: qos and extra\_spec are optional in types view
+* Fix wrong uuid recognized when create group
+* api-ref: Fix namespace parameter for backend capabilities
+* Imported Translations from Zanata
+* SF ensure the correct volume is deleted
+* Mark the Nexenta Edge driver unsupported
+* Mark the Tintri driver unsupported
+* Remove source\_replica info from api-ref
+* Remove sg\_scan
+* Update unit test debug instructions
+* API-REF:os-quota-sets v2 API reference has the wrong parameters
+* VMAX docs - Replace serial\_number
+* Remove the HGST Flash Storage Driver
+* Add missing 'is\_public' volume type parameter
+* nimble storage: support for force detach
+* nimble storage: retype support
+* Use Tempest slow job to run all slow tests
+* api-ref: Change extensions updated type to updated\_at
+* api-ref: remove encryption from Show-an-encryption-type
+* hosts api ref: all fields should be of type string
+* Remove systool from rootwrap
+* Add tests for multiattach check in cinder.objects
+* Clean up the deprecated description in doc
+* Fix wrong NotFound in get\_by\_name\_or\_id
+* api-ref: add missing response body for groups
+* Fix CLI output examples
+* Fix multiattach set to false after retype
+* Update Dell EMC Driver's multi-attach Support
+* Fix backup driver configuration examples in the documetation
+* api-ref: add missing fields in volume types
+* api-ref: total/free\_capacity should be with postfix \_gb
+* api-ref: namespace in extensions is optional
+* Fix pylint warning
+* Exclude disabled API versions from listing
+* Enable split logging for cinder-keystoneclient interaction
+* Remove unecessary pass
+* VMAX Driver - Fix for manage volume if volume is part of SG
+* api-ref: clarify volume\_type param in volume create API
+* api-ref: fix req/resp params for v3 os-quota-class-sets
+* api-ref: mark name as optional in volume create API
+* Fix DRBD volume driver creating a 2-volume resource
+* ZFSSA iSCSI implement get\_manageable\_volumes()
+* Get rid of keys() usage
+* Imported Translations from Zanata
+* Fix bug of renaming volume with same name
+* Fix some inconsistencies in qos-specs api ref
+* Propose example volume protection tests
+* services api ref: fix field enum value and add missing field
+* ZFSSA iSCSI driver doc fix - allow\_rename auth/o
+* ZFSSA handle manage nonexistent volume
+* Adding variable for total gigabytes used by snapshot param
+* [Optimize] Use OVO when retrieve volume object
+* Add microversion history to api-ref
+* Dell PS Driver moves to maintenance mode
+* Remove udevadm from rootwrap
+* VMAX Rocky doc - version information
+* Fix some inconsistencies in messages api ref
+* Fix typos in volume api ref doc
+* Remove aoe-revalidate, aoe-discover, aoe-flush
+* VMAX Driver - Rollback for manage existing volume
+* ZFSSA volume driver REST client python3 fixes
+* Fix image volume cache max size and max count limits
+* Move hscli to privsep
+* Imported Translations from Zanata
+* 3PAR: Update Storage Driver docs
+* Imported Translations from Zanata
+* EMC ScaleIO driver does not honor create from snapshot volume size
+* Link to the in-tree driver support matrix from multiattach docs
+* Imported Translations from Zanata
+* api-ref: document no\_snapshots default for volume transfer API
+* api-ref: add preconditions for volume transfer APIs
+* Add comment to online data migration command
+* Rename devstack-plugin-ceph jobs
+* Fix wrong filter of backups in db api
+* Fix indentation in docs
+* Remove resolve\_hostname
+* Imported Translations from Zanata
+* Clean up bare raised pylint warning
+* Fix pylint warnings for "unnecessary not"
+* Update Zuul configuration
+* add python 3.6 unit test job
+* switch documentation job to new PTI
+* import zuul job settings from project-config
+* Ds8k: Mock evenlet.sleep calls
+* Fujitsu DX: Add retries for busy error
+* Ensure VNX unit tests don't sleep
+* Simplify running pylint
+* NetApp SolidFire: Fix CG snapshot deletion
+* Imported Translations from Zanata
+* Modify Pure driver to configure PG/Pod names
+* Move check\_encryption\_provider to volume utils
+* Imported Translations from Zanata
+* Move release note to the releasenotes/notes dir
+* NetApp SolidFire: Fix force\_detach
+* fix misspelling of 'configuration'
+* Remove deprecated HPE Lefthand config opts
+* VMware: Fix revert-to-snapshot
+* VMware: Remove member initialization in properties
+* Move sphinx-feature-classification to docs reqs
+* Imported Translations from Zanata
+* tintri: Remove \_resolve\_hostname
+* trival: Fix some spacing issues
+* Fix typo
+* Update doc for get-pools API
+* Avoid using dict.get() in assertions
+* Imported Translations from Zanata
+* Remove auth\_uri usage
+* 3PAR: Added retries on volume deletion
+* VMAX Driver - Initiator retrieval short hostname fix
+* SIO: Clean up padded volume comments
+* Add test case: create volume from source volume
+* Fix IPv6 for Cinder NetApp ONTAP drivers
+* Remove cinder-tox-compliance job
+* Correct the link of 'OpenStack Documentation Contributor Guide'
+* Fixed invalid number of arguments bug in ScaleIO driver
+* LVM: Disable multiattach for LIO iSCSI target
+* Replace assertRaisesRegexp with assertRaisesRegex
+* Fix deprecation warnings
+* VMAX doc - important known issue
+* Drop legacy backup service support
+* Changed default behaviour of nas\_secure\_file\_\* for Quobyte driver
+* Imported Translations from Zanata
+* api-ref: add docs for os-migrate\_volume API
 * Remove deprecated sio\_allow\_non\_padded\_thick\_volumes
-
-13.0.0.0rc2
------------
-
+* Remove flashsystem\_multipath\_enabled opt
+* Dell EMC: Added excluded\_domain\_ips ListOpt to SC driver
+* Remove WindowsDriver mapping
+* Remove deprecated iSCSI target config opts
+* Imported Translations from Zanata
+* Remove os-image-create API extension
+* Make divisibility py3 compatible in DRBD driver
+* Xtremio: Remove unused constant
+* Raise HTTPUnsupportedMediaType when content type is unsupported
+* Add 'volume\_attachment' to volume expected attributes
 * ScaleIO: Deprecate sio\_allow\_non\_padded\_thick\_volumes
+* Make solidfire code py3-compatible
+* Imported Translations from Zanata
+* Add api-ref for mv 3.55 volume transfer
+* Fix support indicator for rbd extend attached
 * ScaleIO: Disable volume creation without padding
-* Update UPPER\_CONSTRAINTS\_FILE for stable/rocky
-* Update .gitreview for stable/rocky
+* Add policy granularity to the encryption API
+* Fix api-ref title levels and index
+* Fix XTREMIO driver name
+* Add False check when do \_retype\_error
+* Add retry to LVM deactivation
+* [Docs] Update some links for Gerrit of Code Reviews
+* Optimizing code (wrap\_socket())
+* Save the backup.service just before \_run\_backup
+* Make code py3-compatible (global callable())
+* Update document for metadata show API
+* Reserve 3 migrations for DB backports
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* NetApp SolidFire: Fix NetApp SolidFire SSL option
+* Imported Translations from Zanata
+* Remove the CoprHD driver
+* Update reno for stable/rocky
 
 13.0.0.0rc1
 -----------
@@ -20,9 +234,14 @@ CHANGES
 * Imported Translations from Zanata
 * Fix \_attachment\_reserve to not allow attaching an invalid status volume
 * Allow extra parameters in volume\_type\_encryption
+* Default functional tests to use v3 API
+* Add retries to delete a volume in the Nimble Driver
+* Add volume create schema enforcement unit tests
 * Fix one help description of rbd driver
 * Fix typo on Storwize release note
+* Note max API version for Rocky
 * Add sphinx-feature-classification based support matrix
+* VMAX driver - releasenote fix
 * Solidfire: Avoid UnboundLocalError
 * 3PAR: Update Storage Driver docs for Rocky release
 * VMAX Docs - SSL Support Revision
@@ -52,6 +271,7 @@ CHANGES
 * nimble: Fix missing ssl support
 * INFINIDAT: add host.created\_by metadata key
 * Set bootable when creating volume from snapshot
+* Handle multiattach attribute when managing volumes
 * Update delete group snapshot API exception handling
 * tintri: Enable SSL with requests
 * Fix remotefs driver report wrong value
@@ -91,7 +311,9 @@ CHANGES
 * NetApp ONTAP iSCSI/FCP: Enable multiattach capability
 * Remove note about mox
 * Unity: add thick volume support
+* LVM: Enhance option descriptions
 * api-ref: Update notes on encryption key size
+* Ceph backup: set close\_fds on Popen
 * Use ensure\_tree instead of mkdir when creating paths
 * RemoteFS: Use summarize option for "du"
 * Remove hus-cmd from rootwrap volume.filters
@@ -114,6 +336,7 @@ CHANGES
 * DS8K: correct the behavior for get\_pools method
 * Correct Pure Storage configuration documentation
 * INFINIDAT: change create\_child to create\_snapshot
+* Adds Overlay Volumes Created from Snapshots to Quobyte
 * Fix RBD incremental backup
 * Add blueprints and releasenotes link to README
 * Fix parameter description in volume and snapshot manage extension
@@ -134,6 +357,7 @@ CHANGES
 * Make scheduler check online\_extend\_support capability
 * Clean up unnecessary test params in test\_rbd
 * NetApp ONTAP NFS: Enable multiattach capability
+* Adds more validations in create\_snapshot
 * Add policy check for type show and type list
 * Fix vmware disk type changed when volume type is eagerZeroedThick
 * Remove report of allocated\_capacity\_gb from Inspur driver
@@ -210,6 +434,7 @@ CHANGES
 * Replace os.makedirs to avoid process race
 * Implement privsep boilerplate in cinder
 * Default tox jobs to python3
+* Fix group availability zone-backend host mismatch
 * Mark Disco driver unsupported
 * Mark the HGST Driver unsupported
 * Move driver config opts out of catchall page
@@ -217,6 +442,7 @@ CHANGES
 * IBM XIV: Report backend state in service list
 * IBM DS8K: Report backend state
 * Add note about multiattach not supporting encryption to docs
+* Fix Dell EMC Xtremeio drivers report wrong value
 * Fix documentation error
 * Correct S-Series to DS-Series systems
 * Remove the deprecated config option
@@ -268,6 +494,7 @@ CHANGES
 * Fix NVMET minor log message issues
 * Fix google backup driver
 * V3 jsonschema validation: os-services
+* Update auth\_uri option to www\_authenticate\_uri
 * Huawei driver supports create\_group\_from\_src
 * Disallow multiattach for encrypted volumes
 * NetApp ONTAP iSCSI: Force exception on online extend
@@ -398,6 +625,7 @@ CHANGES
 * V3 jsonschema validation: volume actions
 * fixs grammar problems and unify format in api-ref
 * Clarify volume migration CLI reference
+* Add delete snapshot preconditions
 * Handle migrating encryption key IDs in Backup table
 * Dell EMC SC: dell-storagecenter-driver docs updated
 * Doc: Add inspur driver doc to toctree
@@ -415,6 +643,7 @@ CHANGES
 * Imported Translations from Zanata
 * Fix doc format errors in module docstrings
 * Remove unused doc extensions
+* Allow extension of volumes with snapshots for VZstorage driver
 * 3PAR: Report backend state in service list
 * Storwize: self assign the SCSI lun id for volume attaching
 * ScaleIO: Prevent usage of unsafe volumes

@@ -31,7 +31,6 @@ Driver Configuration Reference
    drivers/lvm-volume-driver
    drivers/nfs-volume-driver
    drivers/sheepdog-driver
-   drivers/coprhd-driver
    drivers/datacore-volume-driver
    drivers/datera-volume-driver
    drivers/dell-equallogic-driver
@@ -43,7 +42,6 @@ Driver Configuration Reference
    drivers/emc-xtremio-driver
    drivers/drbd-driver
    drivers/fujitsu-eternus-dx-driver
-   drivers/hgst-driver
    drivers/hpe-3par-driver
    drivers/hpe-lefthand-driver
    drivers/hp-msa-driver
@@ -54,7 +52,6 @@ Driver Configuration Reference
    drivers/ibm-storwize-svc-driver
    drivers/infinidat-volume-driver
    drivers/inspur-instorage-driver
-   drivers/itri-disco-driver
    drivers/kaminario-driver
    drivers/lenovo-driver
    drivers/nec-storage-m-series-driver

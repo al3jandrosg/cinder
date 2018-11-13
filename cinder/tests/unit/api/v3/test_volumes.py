@@ -277,7 +277,6 @@ class VolumeApiTest(test.TestCase):
         get_snapshot.side_effect = v2_fakes.fake_snapshot_get
         volume_type_get.side_effect = v2_fakes.fake_volume_type_get
 
-        self.ext_mgr.extensions = {'os-image-create': 'fake'}
         vol = self._vol_in_request_body(
             image_id="b0a599e0-41d7-3582-b260-769f443c862a")
 
@@ -508,7 +507,14 @@ class VolumeApiTest(test.TestCase):
               (mv.get_prior_version(mv.GROUP_VOLUME),
                {'name': ' test name ',
                 'description': ' test desc ',
-                'size': 1}))
+                'size': 1}),
+              ('3.0',
+               {'name': 'test name',
+                'description': 'test desc',
+                'size': 1,
+                'user_id': 'teapot',
+                'project_id': 'kettle',
+                'status': 'confused'}))
     @ddt.unpack
     def test_volume_create(self, max_ver, volume_body):
         self.mock_object(volume_api.API, 'get', v2_fakes.fake_volume_get)
@@ -529,6 +535,28 @@ class VolumeApiTest(test.TestCase):
                          res_dict['volume']['name'])
         self.assertEqual(ex['volume']['description'],
                          res_dict['volume']['description'])
+
+    def test_volume_create_extra_params(self):
+        self.mock_object(volume_api.API, 'get', v2_fakes.fake_volume_get)
+        self.mock_object(volume_api.API, "create",
+                         v2_fakes.fake_volume_api_create)
+        self.mock_object(db.sqlalchemy.api, '_volume_type_get_full',
+                         v2_fakes.fake_volume_type_get)
+
+        req = fakes.HTTPRequest.blank('/v3/volumes')
+        req.api_version_request = mv.get_api_version(
+            mv.SUPPORT_VOLUME_SCHEMA_CHANGES)
+
+        body = {'volume': {
+                'name': 'test name',
+                'description': 'test desc',
+                'size': 1,
+                'user_id': 'teapot',
+                'project_id': 'kettle',
+                'status': 'confused'}}
+        self.assertRaises(exception.ValidationError,
+                          self.controller.create,
+                          req, body=body)
 
     @ddt.data(mv.get_prior_version(mv.VOLUME_DELETE_FORCE),
               mv.VOLUME_DELETE_FORCE)
@@ -758,20 +786,22 @@ class VolumeApiTest(test.TestCase):
         else:
             self.assertNotIn('provider_id', res_dict['volume'])
 
-    def _fake_create_volume(self):
+    def _fake_create_volume(self, size=1):
         vol = {
             'display_name': 'fake_volume1',
-            'status': 'available'
+            'status': 'available',
+            'size': size
         }
         volume = objects.Volume(context=self.ctxt, **vol)
         volume.create()
         return volume
 
-    def _fake_create_snapshot(self, volume_id):
+    def _fake_create_snapshot(self, volume_id, volume_size=1):
         snap = {
             'display_name': 'fake_snapshot1',
             'status': 'available',
-            'volume_id': volume_id
+            'volume_id': volume_id,
+            'volume_size': volume_size
         }
         snapshot = objects.Snapshot(context=self.ctxt, **snap)
         snapshot.create()
@@ -841,6 +871,24 @@ class VolumeApiTest(test.TestCase):
         self.assertRaises(webob.exc.HTTPConflict, self.controller.revert,
                           req, fake_volume['id'], {'revert': {'snapshot_id':
                                                    fake_snapshot['id']}})
+
+    @mock.patch.object(objects.Volume, 'get_latest_snapshot')
+    @mock.patch.object(volume_api.API, 'get_volume')
+    def test_volume_revert_with_not_equal_size(self, mock_volume,
+                                               mock_latest):
+        fake_volume = self._fake_create_volume(size=2)
+        fake_snapshot = self._fake_create_snapshot(fake_volume['id'],
+                                                   volume_size=1)
+        mock_volume.return_value = fake_volume
+        mock_latest.return_value = fake_snapshot
+        req = fakes.HTTPRequest.blank('/v3/volumes/%s/revert'
+                                      % fake_volume['id'])
+        req.headers = mv.get_mv_header(mv.VOLUME_REVERT)
+        req.api_version_request = mv.get_api_version(
+            mv.VOLUME_REVERT)
+        self.assertRaises(webob.exc.HTTPBadRequest, self.controller.revert,
+                          req, fake_volume['id'],
+                          {'revert': {'snapshot_id': fake_snapshot['id']}})
 
     def test_view_get_attachments(self):
         fake_volume = self._fake_create_volume()

@@ -53,5 +53,19 @@ matrix we include the list of required functions here for reference.
   Since the above functions are required their support is assumed and the
   matrix only includes support for optional functionality.
 
+.. _driver_support_matrix:
+
 .. support_matrix:: support-matrix.ini
 
+Driver Removal History
+~~~~~~~~~~~~~~~~~~~~~~
+
+The section will be used to track driver removal starting from the Rocky
+release.
+
+* Rocky
+   * CoprHD Storage Driver (FC, iSCSI, ScaleIO)
+
+* Stein
+   * HGST Flash Storage Suite Driver (vgc)
+   * ITRI DISCO Driver

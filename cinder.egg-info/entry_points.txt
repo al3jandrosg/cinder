@@ -26,6 +26,7 @@ cinder-manage = cinder.cmd.manage:main
 cinder-rootwrap = oslo_rootwrap.cmd:main
 cinder-rtstool = cinder.cmd.rtstool:main
 cinder-scheduler = cinder.cmd.scheduler:main
+cinder-status = cinder.cmd.status:main
 cinder-volume = cinder.cmd.volume:main
 cinder-volume-usage-audit = cinder.cmd.volume_usage_audit:main
 

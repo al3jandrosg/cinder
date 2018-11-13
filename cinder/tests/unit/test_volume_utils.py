@@ -38,6 +38,7 @@ from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_group
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import utils as test_utils
 from cinder import utils
 from cinder.volume import throttling
 from cinder.volume import utils as volume_utils
@@ -1093,3 +1094,95 @@ class VolumeUtilsTestCase(test.TestCase):
         ret = volume_utils.make_initiator_target_all2all_map(initiator_wwpns,
                                                              target_wwpns)
         self.assertEqual(ret, expected)
+
+    @ddt.data({'cipher': 'aes-xts-plain64',
+               'provider': 'luks'},
+              {'cipher': 'aes-xts-plain64',
+               'provider': 'nova.volume.encryptors.luks.LuksEncryptor'})
+    def test_check_encryption_provider(self, encryption_metadata):
+        ctxt = context.get_admin_context()
+        type_ref = volume_types.create(ctxt, "type1")
+        encryption = db.volume_type_encryption_create(
+            ctxt, type_ref['id'], encryption_metadata)
+        with mock.patch(
+                'cinder.db.sqlalchemy.api.volume_encryption_metadata_get',
+                return_value=encryption):
+            volume_data = {'id': fake.VOLUME_ID,
+                           'volume_type_id': type_ref['id']}
+            ctxt = context.get_admin_context()
+            volume = fake_volume.fake_volume_obj(ctxt, **volume_data)
+
+            ret = volume_utils.check_encryption_provider(
+                db,
+                volume,
+                mock.sentinel.context)
+            self.assertEqual('aes-xts-plain64', ret['cipher'])
+
+    def test_check_encryption_provider_invalid(self):
+        encryption_metadata = {'cipher': 'aes-xts-plain64',
+                               'provider': 'invalid'}
+        ctxt = context.get_admin_context()
+        type_ref = volume_types.create(ctxt, "type1")
+        encryption = db.volume_type_encryption_create(
+            ctxt, type_ref['id'], encryption_metadata)
+        with mock.patch(
+                'cinder.db.sqlalchemy.api.volume_encryption_metadata_get',
+                return_value=encryption):
+            volume_data = {'id': fake.VOLUME_ID,
+                           'volume_type_id': type_ref['id']}
+            ctxt = context.get_admin_context()
+            volume = fake_volume.fake_volume_obj(ctxt, **volume_data)
+
+            self.assertRaises(exception.VolumeDriverException,
+                              volume_utils.check_encryption_provider,
+                              db,
+                              volume,
+                              mock.sentinel.context)
+
+    def test_check_image_metadata(self):
+        image_meta = {'id': 1, 'min_disk': 3, 'status': 'active',
+                      'size': 1 * units.Gi}
+        vol_size = 2
+        res = self.assertRaises(exception.InvalidInput,
+                                volume_utils.check_image_metadata,
+                                image_meta,
+                                vol_size)
+        self.assertIn("Volume size 2GB cannot be smaller than the image "
+                      "minDisk size 3GB.", six.text_type(res))
+
+        image_meta['size'] = 3 * units.Gi
+        res = self.assertRaises(exception.InvalidInput,
+                                volume_utils.check_image_metadata,
+                                image_meta,
+                                vol_size)
+        self.assertIn("Size of specified image 3GB is larger than volume "
+                      "size 2GB.", six.text_type(res))
+
+        image_meta['status'] = 'error'
+        res = self.assertRaises(exception.InvalidInput,
+                                volume_utils.check_image_metadata,
+                                image_meta,
+                                vol_size)
+        self.assertIn("Image 1 is not active.", six.text_type(res))
+
+    def test_enable_volume_bootable(self):
+        ctxt = context.get_admin_context()
+        volume = test_utils.create_volume(ctxt, bootable=False)
+        volume_utils.enable_bootable_flag(volume)
+        self.assertTrue(volume.bootable)
+
+    def test_get_volume_image_metadata(self):
+        common_meta = {'container_format': 'fake_type',
+                       'disk_format': 'fake_format',
+                       'min_disk': 3,
+                       'min_ram': 1,
+                       'size': 1 * units.Gi}
+        image_meta = {'id': fake.IMAGE_ID, 'other_metada': 'fake'}
+        image_meta.update(common_meta)
+
+        expected = {'image_id': image_meta['id']}
+        expected.update(common_meta)
+
+        self.assertEqual(
+            expected,
+            volume_utils.get_volume_image_metadata(fake.IMAGE_ID, image_meta))

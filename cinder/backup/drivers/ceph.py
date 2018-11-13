@@ -136,7 +136,7 @@ class VolumeMetadataBackup(object):
             msg = _("Metadata backup object '%s' already exists") % self.name
             raise exception.VolumeMetadataBackupExists(msg)
 
-        meta_obj.write(json_meta)
+        meta_obj.write(json_meta.encode('utf-8'))
 
     def get(self):
         """Get metadata backup object.
@@ -149,7 +149,7 @@ class VolumeMetadataBackup(object):
             LOG.debug("Metadata backup object %s does not exist", self.name)
             return None
 
-        return meta_obj.read()
+        return meta_obj.read().decode('utf-8')
 
     def remove_if_exists(self):
         meta_obj = eventlet.tpool.Proxy(rados.Object(self._client.ioctx,
@@ -545,7 +545,8 @@ class CephBackupDriver(driver.BackupDriver):
 
         try:
             p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                  stderr=subprocess.PIPE,
+                                  close_fds=True)
         except OSError as e:
             LOG.error("Pipe1 failed - %s ", e)
             raise
@@ -559,7 +560,8 @@ class CephBackupDriver(driver.BackupDriver):
         try:
             p2 = subprocess.Popen(cmd2, stdin=p1.stdout,
                                   stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                  stderr=subprocess.PIPE,
+                                  close_fds=True)
         except OSError as e:
             LOG.error("Pipe2 failed - %s ", e)
             raise

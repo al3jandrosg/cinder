@@ -278,10 +278,10 @@ class DrbdManageBaseDriver(driver.VolumeDriver):
 
     # DRBDmanage works in kiB units; Cinder uses GiB.
     def _vol_size_to_dm(self, size):
-        return size * units.Gi / units.Ki
+        return size * units.Gi // units.Ki
 
     def _vol_size_to_cinder(self, size):
-        return size * units.Ki / units.Gi
+        return size * units.Ki // units.Gi
 
     def is_clean_volume_name(self, name, prefix):
         try:
@@ -527,8 +527,7 @@ class DrbdManageBaseDriver(driver.VolumeDriver):
         if not drbd_vol:
             props = self._priv_hash_from_volume(volume)
             # TODO(PM): properties - redundancy, etc
-            res = self.call_or_reconnect(self.odm.create_volume,
-                                         d_res_name,
+            res = self.odm.create_volume(d_res_name,
                                          self._vol_size_to_dm(volume['size']),
                                          props)
             self._check_result(res)
@@ -895,7 +894,7 @@ class DrbdManageDrbdDriver(DrbdManageBaseDriver):
         return {
             'driver_volume_type': 'drbd',
             'data': {
-                'provider_location': ' '.join('drbd', nodename),
+                'provider_location': ' '.join(('drbd', nodename)),
                 'device': volume_path,
                 # TODO(pm): consistency groups
                 'devices': [volume_path],

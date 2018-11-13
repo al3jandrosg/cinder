@@ -53,7 +53,9 @@ volume_opts = [
                     'this requires lvm_mirrors + 2 PVs with available space'),
     cfg.StrOpt('lvm_type',
                default='auto',
-               choices=['default', 'thin', 'auto'],
+               choices=[('default', 'Thick-provisioned LVM.'),
+                        ('thin', 'Thin-provisioned LVM.'),
+                        ('auto', 'Defaults to thin when supported.')],
                help='Type of LVM volumes to deploy; (default, thin, or auto). '
                     'Auto defaults to thin if thin is supported.'),
     cfg.StrOpt('lvm_conf_file',
@@ -242,6 +244,10 @@ class LVMVolumeDriver(driver.VolumeDriver):
         # This includes volumes and snapshots.
         total_volumes = len(self.vg.get_volumes())
 
+        supports_multiattach = True
+        if self.configuration.target_helper == 'lioadm':
+            supports_multiattach = False
+
         # Skip enabled_pools setting, treat the whole backend as one pool
         # XXX FIXME if multipool support is added to LVM driver.
         single_pool = {}
@@ -260,7 +266,7 @@ class LVMVolumeDriver(driver.VolumeDriver):
             total_volumes=total_volumes,
             filter_function=self.get_filter_function(),
             goodness_function=self.get_goodness_function(),
-            multiattach=True,
+            multiattach=supports_multiattach,
             backend_state='up'
         ))
         data["pools"].append(single_pool)

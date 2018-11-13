@@ -1,3 +1,18 @@
+cinder (2:14.0.0~b1~git20181113.f0aa3665e-0ubuntu1) disco; urgency=medium
+
+  * New upstream snapshot for OpenStack Stein.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/rados-read-write-byte-data.patch: Dropped. Fixed in upstream snapshot.
+  * d/rules: Ensure python3 shebangs are set to /usr/bin/python3.
+  * d/rules: Enable Python 3.7 tests.
+  * d/rules: Update PBR_VERSION to handle ~git versioning.
+  * d/p/skip-taskflow-tests-py37.patch: Skip tests that are failing for
+    Python 3.7 due to taskflow StopIteration issue.
+  * d/t/cinder-shebangs-py3: Update shebang for Python 3.7.
+  * d/watch: Scope to 14.x series.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 13 Nov 2018 12:09:27 -0500
+
 cinder (2:13.0.0-0ubuntu4) cosmic; urgency=medium
 
   * d/p/rados-read-write-byte-data.patch: Cherry-picked from upstream gerrit

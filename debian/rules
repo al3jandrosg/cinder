@@ -4,7 +4,7 @@
 #export DH_VERBOSE=1
 
 DEBVERS ?= $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
-VERSION ?= $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/~/./g')
+VERSION ?= $(shell echo '$(DEBVERS)' | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/[+].*//' -e 's/~git.*//g' -e 's/~/./g')
 export PBR_VERSION=$(VERSION)
 
 include /usr/share/openstack-pkg-tools/pkgos.make
@@ -14,20 +14,7 @@ include /usr/share/openstack-pkg-tools/pkgos.make
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
-	# NOTE(coreycb) Skip Py3.7 tests until they run successfully upstream:
-	# https://bugs.launchpad.net/bugs/1780823
-	# pkgos-dh_auto_test
-	echo "===> Running tests"
-	set -ex ; for i in 2.7 3.6 ; do \
-		PYMAJOR=`echo $$i | cut -d'.' -f1` ; \
-		echo "===> Testing with python$$i (python$$PYMAJOR)" ; \
-		rm -rf .stestr ; \
-		TEMP_REZ=`mktemp -t` ; \
-		PYTHONPATH=$(CURDIR) PYTHON=python$$i python$$PYMAJOR-stestr run --subunit | tee $$TEMP_REZ | subunit2pyunit ; \
-		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats ; \
-		rm -f $$TEMP_REZ ; \
-		rm -rf .stestr ; \
-	done
+	pkgos-dh_auto_test
 endif
 
 override_dh_auto_install:
@@ -48,3 +35,6 @@ override_dh_clean:
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -rf .eggs .testrepository
+
+override_dh_python3:
+	dh_python3 --shebang=/usr/bin/python3
