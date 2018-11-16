@@ -1,7 +1,13 @@
 CHANGES
 =======
 
+* api-ref: document encryption type provider choices
 * Imported Translations from Zanata
+* api-ref: volume summary is available from v3.12
+* Revert "Remove mount from volume.filters"
+* lvm: Avoid premature calls to terminate\_connection for muiltiattach vols
+* Imported Translations from Zanata
+* api-ref: fix response code and data type for volume interfaces
 * Imported Translations from Zanata
 * Improve/Clean api-ref parameters
 * [Trivial Fix] Correct spelling error of "bandwidth"

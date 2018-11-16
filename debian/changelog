@@ -1,3 +1,11 @@
+cinder (2:14.0.0~b1~git2018111617.4529b193d-0ubuntu1) disco; urgency=medium
+
+  * New upstream snapshot for OpenStack Stein.
+  * d/control, d/rules, d/python(3)-cinder.*, d/tests/*: Drop Python 2
+    support.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 16 Nov 2018 17:24:41 -0500
+
 cinder (2:14.0.0~b1~git20181113.f0aa3665e-0ubuntu1) disco; urgency=medium
 
   * New upstream snapshot for OpenStack Stein.

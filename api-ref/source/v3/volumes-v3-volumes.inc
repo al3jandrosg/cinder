@@ -516,7 +516,7 @@ Response codes
 
 .. rest_status_code:: success ../status.yaml
 
-   - 202
+   - 200
 
 
 Request
@@ -759,7 +759,8 @@ Get volumes summary
 
 .. rest_method::  GET /v3/{project_id}/volumes/summary
 
-Display volumes summary with total number of volumes and total size in GB
+Display volumes summary with total number of volumes and total size in GB.
+Available since API microversion 3.12.
 
 
 Response codes
@@ -785,7 +786,7 @@ Response Parameters
 
    - volume-summary: volume-summary
    - total_size: total_size
-   - total_count: total_count
+   - total_count: total_count_int
    - metadata: summary_metadata
 
 
