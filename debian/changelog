@@ -1,3 +1,9 @@
+cinder (2:14.0.0~b1~git2018111617.4529b193d-0ubuntu2) disco; urgency=medium
+
+  * d/py3dist-overrides: Added based on recently dropped pydist-overrides.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 20 Nov 2018 10:09:20 -0500
+
 cinder (2:14.0.0~b1~git2018111617.4529b193d-0ubuntu1) disco; urgency=medium
 
   * New upstream snapshot for OpenStack Stein.
