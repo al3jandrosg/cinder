@@ -1,18 +1,32 @@
 CHANGES
 =======
 
+* Imported Translations from Zanata
+* Change openstack-dev to openstack-discuss
+* Stop cleaning images to be deleted in remotefs driver
+* Correct default policy file
+* PowerMax driver doc - removing support for VMAX2
+* Imported Translations from Zanata
 * api-ref: document encryption type provider choices
 * Imported Translations from Zanata
 * api-ref: volume summary is available from v3.12
 * Revert "Remove mount from volume.filters"
+* doc: Change variable name DEFAULT\_API\_VERSION to \_MIN\_API\_VERSION
 * lvm: Avoid premature calls to terminate\_connection for muiltiattach vols
+* api-ref: Adding backup create response example
+* Add policy test for volume GET\_ALL\_POLICY
 * Imported Translations from Zanata
+* Set right attach mode after migration
+* Make lower constraints CI works well
 * api-ref: fix response code and data type for volume interfaces
 * Imported Translations from Zanata
 * Improve/Clean api-ref parameters
 * [Trivial Fix] Correct spelling error of "bandwidth"
 * Add test coverage to manage existing flow
 * Update docs landing page to follow guideline
+* Add policy test for volume:force\_delete
+* add missing comma
+* Simplify the policy test case
 * Fix a typo in multiattach doc
 * Remove setup.py check from pep8 job
 * [Trivial] Fix typo in comment in delete\_volume
@@ -28,6 +42,7 @@ CHANGES
 * PY3: Ensure rados.Object.read/write use byte data
 * Forbidden to revert volume to a different size snapshot
 * Fix debug message for \_copy\_volume\_data
+* [Trivial] Replace 'action' with 'command' in cinder-status doc
 * Allow using forward slashes in metadata
 * Fix unexpected behavior in \_clone\_image\_volume
 * Remove scsi\_id from rootwrap filter

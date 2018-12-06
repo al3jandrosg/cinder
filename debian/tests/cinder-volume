@@ -7,11 +7,6 @@ apt-get install -y cinder-volume cinder-backup 2>&1 > /dev/null
 DAEMONS=('cinder-volume' 'cinder-backup')
 failure=false
 
-if grep -qE "^(sql_)?connection.*sqlite.*" /etc/cinder/cinder.conf
-then
-    su -s /bin/sh -c 'cinder-manage db sync' cinder
-fi
-
 for daemon in "${DAEMONS[@]}"; do
     systemctl restart $daemon
 done

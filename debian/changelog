@@ -1,3 +1,14 @@
+cinder (2:14.0.0~b1~git2018120609.2cd694046-0ubuntu1) disco; urgency=medium
+
+  * d/tests/control, d/tests/cinder-daemons, d/tests/cinder-volume: Switch to
+    using mysql-server databases in autopkgtests.
+  * New upstream snapshot for OpenStack Stein.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/control: Ensure python3-migrate version is compatable with sqlite>=3.26
+    (LP: #1807262).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 06 Dec 2018 09:27:58 -0500
+
 cinder (2:14.0.0~b1~git2018111617.4529b193d-0ubuntu2) disco; urgency=medium
 
   * d/py3dist-overrides: Added based on recently dropped pydist-overrides.

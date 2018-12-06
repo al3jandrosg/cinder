@@ -6,10 +6,17 @@ set -e
 DAEMONS=('apache2' 'cinder-scheduler')
 failure=false
 
-if grep -qE "^(sql_)?connection.*sqlite.*" /etc/cinder/cinder.conf
-then
-    su -s /bin/sh -c 'cinder-manage db sync' cinder
-fi
+mysql -u root << EOF
+CREATE DATABASE cinder;
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' \
+  IDENTIFIED BY 'changeme';
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' \
+  IDENTIFIED BY 'changeme';
+EOF
+
+sed -i -e 's!connection = sqlite.*cinder.sqlite!connection = mysql://cinder:changeme@localhost/cinder!g' /etc/cinder/cinder.conf
+
+su -s /bin/sh -c 'cinder-manage db sync' cinder
 
 for daemon in "${DAEMONS[@]}"; do
     systemctl restart $daemon

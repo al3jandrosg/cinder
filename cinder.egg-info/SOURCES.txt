@@ -1928,6 +1928,7 @@ releasenotes/notes/bug-1773446-984d76ed29445c9b.yaml
 releasenotes/notes/bug-1773725-xtremio-remove-provisioning-factor-y7r5uy3489yd9pbf.yaml
 releasenotes/notes/bug-1783790-multiattach-none-when-manage-volume-yu7du8yth78i0e6b.yaml
 releasenotes/notes/bug-1784871-7f67402eb13abca7.yaml
+releasenotes/notes/bug-1805550-default-policy-file-db15eaa76fefa115.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
 releasenotes/notes/bug-reno-69539ecb9b0b5464.yaml
 releasenotes/notes/bugfix-netapp-driver-cinder-ipv6-c3c4d0d6a7d0de91.yaml
