@@ -42,6 +42,7 @@ Alexandru Muresan <amuresan@cloudbasesolutions.com>
 Alexei Kornienko <akornienko@mirantis.com>
 Alexey Khodos <alexey.khodos@nexenta.com>
 Alexey Yelistratov <ayelistratov@mirantis.com>
+Alexis RIES <ries.alexis@gmail.com>
 Alfredo Moralejo <amoralej@redhat.com>
 Alon Marx <alonma@il.ibm.com>
 Alyson Rosa <alyson.rodrigues.rosa@gmail.com>
@@ -177,6 +178,7 @@ Dai Dang Van <daikk115@gmail.com>
 Daisuke Fujita <fuzita.daisuke@jp.fujitsu.com>
 Dan Prince <dprince@redhat.com>
 Dan Radez <dradez@redhat.com>
+Dan Smith <dansmith@redhat.com>
 Daniel Allegood <daniel.allegood@hp.com>
 Daniel Gollub <d.gollub@telekom.de>
 Daniel Gonzalez <daniel@gonzalez-nothnagel.de>
@@ -190,6 +192,7 @@ Davanum Srinivas <davanum@gmail.com>
 Davanum Srinivas <dims@linux.vnet.ibm.com>
 Dave Chen <wei.d.chen@intel.com>
 Dave McCowan <dmccowan@cisco.com>
+David Hill <dhill@redhat.com>
 David Medberry <openstack@medberry.net>
 David Pineau <dav.pineau@gmail.com>
 David Rabel <rabel@b1-systems.de>
@@ -209,6 +212,7 @@ Dietmar Noll <dnoll@de.ibm.com>
 Digvijay Ukirde <digvijay.ukirde@in.ibm.com>
 Dima Shulyak <dshulyak@mirantis.com>
 Dina Belova <dbelova@mirantis.com>
+Dinesh Bhor <bhordinesh07@gmail.com>
 Dinesh Bhor <dinesh.bhor@nttdata.com>
 Dinesh Subhraveti <dineshs@us.ibm.com>
 Dirk Mueller <dirk@dmllr.de>
@@ -273,6 +277,7 @@ Florent Flament <florent.flament-ext@cloudwatt.com>
 Florian Haas <florian@hastexo.com>
 Forest Romain <romain.forest@thalesgroup.com>
 Francis Moorehead <francis.moorehead@hp.com>
+Francois Deppierraz <francois@ctrlaltdel.ch>
 Frederic Lepied <frederic.lepied@enovance.com>
 Furuta Tomonori <furuta.tomonori@jp.fujitsu.com>
 GaoZqiang <gaozhiqiang2@huawei.com>
@@ -285,6 +290,7 @@ Geraint North <geraint.north@uk.ibm.com>
 Gerald McBrearty <gfm@us.ibm.com>
 Gerard Garcia <nouboh@gmail.com>
 Ghanshyam Mann <gmann@ghanshyammann.com>
+Ghanshyan Mann <gmann@ghanshyammann.com>
 Ghe Rivero <ghe@debian.org>
 Giulio Fidente <gfidente@redhat.com>
 Glenn M. Gobeli <Glenn.Gobeli@netapp.com>
@@ -327,9 +333,11 @@ Ildiko Vancsa <ildiko.vancsa@gmail.com>
 Ilya Shakhat <shakhat@gmail.com>
 Ilya Tyaptin <ityaptin@mirantis.com>
 Inhye Park <inhye.park@samsung.com>
+Irina Mihai <irina.mihai@windriver.com>
 Isaac Beckman <isaacb@il.ibm.com>
 Ivan Kolodyazhny <e0ne@e0ne.info>
 Ivan Kolodyazhny <ikolodyazhny@mirantis.com>
+Ivaylo Mitev <imitev@vmware.com>
 Ivy Zhang <shzyu@cn.ibm.com>
 Jack Lu <renxlu@cisco.com>
 Jacob Gregor <jgregor@us.ibm.com>
@@ -427,6 +435,7 @@ Ken'ichi Ohmichi <oomichi@mxs.nes.nec.co.jp>
 Kendall Nelson <kennelson11@gmail.com>
 Kendall Nelson <kjnelson@us.ibm.com>
 Kenji Yasui <k-yasui@ti.jp.nec.com>
+Kevin Carter <kevin@cloudnull.com>
 Kevin Fox <kevin@efox.cc>
 Kien Ha <kienha9922@gmail.com>
 Koert van der Veer <koert@cloudvps.com>
@@ -445,6 +454,7 @@ Lakshmi Narayana <Lakshmi.Narayana.ctr@kaminario.com>
 Lance Bragstad <lbragstad@gmail.com>
 Larry Matter <lmatter@coraid.com>
 LarryLiu <liminliu@cn.ibm.com>
+Laura Sofia Enriquez <lsofia.enriquez@gmail.com>
 Lee <jessy1092@gmail.com>
 Lee Yarwood <lyarwood@redhat.com>
 Lena Novokshonova <enovokshonova@mirantis.com>
@@ -477,6 +487,7 @@ Luong Anh Tuan <tuanla@vn.fujitsu.com>
 Lynxzh <jmzhang@cn.ibm.com>
 MENJO, Takashi <menjo.takashi@lab.ntt.co.jp>
 MORITA Kazutaka <morita.kazutaka@gmail.com>
+Maciej Szwed <maciej.szwed@intel.com>
 Mandell Degerness <mdegerne@gmail.com>
 Manjeet Singh Bhatia <manjeet.s.bhatia@intel.com>
 Manojkiran <manojkiran@localhost.localdomain>
@@ -583,6 +594,7 @@ OmarM <omar.muhtaseb@exalt.ps>
 Ondřej Nový <ondrej.novy@firma.seznam.cz>
 OpenStack Release Bot <infra-root@openstack.org>
 Ory Jonay <ojonay@infinidat.com>
+Ovidiu Poncea <ovidiu.poncea@windriver.com>
 Pablo Caruana <pcaruana@redhat.com>
 Pablo Iranzo Gómez <Pablo.Iranzo@gmail.com>
 Pascal Wehrle <p.wehrle@oodrive.com>
@@ -698,6 +710,7 @@ Sergey Skripnick <sskripnick@mirantis.com>
 Sergey Vilgelm <sergey@vilgelm.info>
 Sergey Vilgelm <svilgelm@mirantis.com>
 Sergio Cazzolato <sergio.j.cazzolato@intel.com>
+Serhii Rusin <serhii_rusin@jabil.com>
 Shane Wang <shane.wang@intel.com>
 ShangXiao <shangxiaobj@inspur.com>
 Shao Kai Li <lshaokai@cn.ibm.com>
@@ -781,6 +794,7 @@ Tomas Hancock <tom.hancock@hp.com>
 TommyLike <tommylikehu@gmail.com>
 Tomoki Sekiyama <tomoki.sekiyama.qu@hitachi.com>
 Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+Tony Breeds <tony@bakeyournoodle.com>
 Tony Xu <hhktony@gmail.com>
 Tovin Seven <vinhnt@vn.fujitsu.com>
 Tristan Cacqueray <tristan.cacqueray@enovance.com>
@@ -827,6 +841,7 @@ Wenjun Wang <wenjun_dev@163.com>
 WenjunWang1992 <10191230@zte.com.cn>
 William Durairaj <william.dur.sandanaraj@hpe.com>
 Wilson Liu <liuxinguo@huawei.com>
+Woojay Poynter <woojay@linbit.com>
 Wu Wenxiang <wu.wenxiang@99cloud.net>
 Xavier Queralt <xqueralt@redhat.com>
 Xi Yang <xi.yang@emc.com>
@@ -874,6 +889,7 @@ Yun Mao <yunmao@gmail.com>
 Yuriy Nesenenko <ynesenenko@mirantis.com>
 Yuriy Taraday <yorik.sar@gmail.com>
 Yuriy Zveryanskyy <yzveryanskyy@mirantis.com>
+Yury Kulazhenkov <yury.kulazhenkov@emc.com>
 Yusuke Hayashi <hayashi-yusuke@jp.fujitsu.com>
 Yuzlikeev Eduard <eyuzlikeev@mirantis.com>
 Zhang Jinnan <zhang.jinnan@99cloud.net>
@@ -931,10 +947,12 @@ chenzongliang <chenzongliang@huawei.com>
 chhagarw <chhagarw@in.ibm.com>
 clayg <clay.gerrard@gmail.com>
 daisy-ycguo <daisy.ycguo@gmail.com>
+dhinesh <dhinesh@hedviginc.com>
 diem_tran <diem.tran@oracle.com>
 digvijay2016 <digvijay.ukirde@in.ibm.com>
 dineshbhor <dinesh.bhor@nttdata.com>
 dongdongpei <peidongdong121@163.com>
+doubletao <futaotao@huawei.com>
 eduardBM <cubusbacau@yahoo.com>
 enriquetaso <lsofia.enriquez@gmail.com>
 erikzaadi <erik.zaadi@gmail.com>
@@ -978,6 +996,7 @@ jessewu <jessewu@synology.com>
 jiamin <shljia@cn.ibm.com>
 jianghua wang <jianghua.wang@citrix.com>
 jiansong <jian.song@easystack.cn>
+jiaohaolin <jiaohaolin@inspur.com>
 jking-6 <jking@internap.com>
 john-griffith <john.griffith@solidfire.com>
 john.griffith8@gmail.com <john.griffith8@gmail.com>
@@ -1118,6 +1137,7 @@ wanghui <wang_hui@inspur.com>
 wangpeng <wangpww@cn.ibm.com>
 wangqi <wang.qi@99cloud.net>
 wangqiangbj <wangqiangbj@inspur.com>
+wangwei <wangwei@navercorp.com>
 wangxiyuan <wangxiyuan1007@gmail.com>
 wangxiyuan <wangxiyuan@huawei.com>
 wangzhenyu <wangzy@fiberhome.com>
@@ -1172,6 +1192,7 @@ zhaoqin <chaochin@gmail.com>
 zheng yin <yin.zheng@easystack.cn>
 zhengyao1 <zheng.yao1@zte.com.cn>
 zhongjun <jun.zhongjun@huawei.com>
+zhouxinyong <zhouxinyong@inspur.com>
 zhu.boxiang <zhu.boxiang@99cloud.net>
 zhu.fanglei <zhu.fanglei@zte.com.cn>
 zhu.rong <zhu.rong@99cloud.net>

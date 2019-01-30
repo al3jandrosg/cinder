@@ -38,6 +38,7 @@ from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_group
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit.image import fake as fake_image
 from cinder.tests.unit import utils as test_utils
 from cinder import utils
 from cinder.volume import throttling
@@ -1095,50 +1096,6 @@ class VolumeUtilsTestCase(test.TestCase):
                                                              target_wwpns)
         self.assertEqual(ret, expected)
 
-    @ddt.data({'cipher': 'aes-xts-plain64',
-               'provider': 'luks'},
-              {'cipher': 'aes-xts-plain64',
-               'provider': 'nova.volume.encryptors.luks.LuksEncryptor'})
-    def test_check_encryption_provider(self, encryption_metadata):
-        ctxt = context.get_admin_context()
-        type_ref = volume_types.create(ctxt, "type1")
-        encryption = db.volume_type_encryption_create(
-            ctxt, type_ref['id'], encryption_metadata)
-        with mock.patch(
-                'cinder.db.sqlalchemy.api.volume_encryption_metadata_get',
-                return_value=encryption):
-            volume_data = {'id': fake.VOLUME_ID,
-                           'volume_type_id': type_ref['id']}
-            ctxt = context.get_admin_context()
-            volume = fake_volume.fake_volume_obj(ctxt, **volume_data)
-
-            ret = volume_utils.check_encryption_provider(
-                db,
-                volume,
-                mock.sentinel.context)
-            self.assertEqual('aes-xts-plain64', ret['cipher'])
-
-    def test_check_encryption_provider_invalid(self):
-        encryption_metadata = {'cipher': 'aes-xts-plain64',
-                               'provider': 'invalid'}
-        ctxt = context.get_admin_context()
-        type_ref = volume_types.create(ctxt, "type1")
-        encryption = db.volume_type_encryption_create(
-            ctxt, type_ref['id'], encryption_metadata)
-        with mock.patch(
-                'cinder.db.sqlalchemy.api.volume_encryption_metadata_get',
-                return_value=encryption):
-            volume_data = {'id': fake.VOLUME_ID,
-                           'volume_type_id': type_ref['id']}
-            ctxt = context.get_admin_context()
-            volume = fake_volume.fake_volume_obj(ctxt, **volume_data)
-
-            self.assertRaises(exception.VolumeDriverException,
-                              volume_utils.check_encryption_provider,
-                              db,
-                              volume,
-                              mock.sentinel.context)
-
     def test_check_image_metadata(self):
         image_meta = {'id': 1, 'min_disk': 3, 'status': 'active',
                       'size': 1 * units.Gi}
@@ -1186,3 +1143,25 @@ class VolumeUtilsTestCase(test.TestCase):
         self.assertEqual(
             expected,
             volume_utils.get_volume_image_metadata(fake.IMAGE_ID, image_meta))
+
+    @ddt.data(True, False)
+    def test_copy_image_to_volume(self, is_encrypted):
+        ctxt = context.get_admin_context()
+        fake_driver = mock.MagicMock()
+        key = fake.ENCRYPTION_KEY_ID if is_encrypted else None
+        volume = fake_volume.fake_volume_obj(ctxt, encryption_key_id=key)
+
+        fake_image_service = fake_image.FakeImageService()
+        image_id = fake.IMAGE_ID
+        image_meta = {'id': image_id}
+        image_location = 'abc'
+
+        volume_utils.copy_image_to_volume(fake_driver, ctxt, volume,
+                                          image_meta, image_location,
+                                          fake_image_service)
+        if is_encrypted:
+            fake_driver.copy_image_to_encrypted_volume.assert_called_once_with(
+                ctxt, volume, fake_image_service, image_id)
+        else:
+            fake_driver.copy_image_to_volume.assert_called_once_with(
+                ctxt, volume, fake_image_service, image_id)

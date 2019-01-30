@@ -1609,6 +1609,7 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
 
 @handle_db_data_error
 @require_context
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_create(context, values):
     values['volume_metadata'] = _metadata_refs(values.get('metadata'),
                                                models.VolumeMetadata)
@@ -2221,11 +2222,15 @@ def volume_get_all(context, marker=None, limit=None, sort_keys=None,
 
 
 @require_context
-def get_volume_summary(context, project_only):
+def get_volume_summary(context, project_only, filters=None):
     """Retrieves all volumes summary.
 
     :param context: context to query under
     :param project_only: limit summary to project volumes
+    :param filters: dictionary of filters; values that are in lists, tuples,
+                    or sets cause an 'IN' operation, while exact matching
+                    is used for other values, see _process_volume_filters
+                    function for more information
     :returns: volume summary
     """
     if not (project_only or is_admin_context(context)):
@@ -2234,6 +2239,9 @@ def get_volume_summary(context, project_only):
                         func.sum(models.Volume.size), read_deleted="no")
     if project_only:
         query = query.filter_by(project_id=context.project_id)
+
+    if filters:
+        query = _process_volume_filters(query, filters)
 
     if query is None:
         return []
@@ -3356,6 +3364,40 @@ def snapshot_update(context, snapshot_id, values):
         raise exception.SnapshotNotFound(snapshot_id=snapshot_id)
 
 
+@require_context
+def get_snapshot_summary(context, project_only, filters=None):
+    """Retrieves all snapshots summary.
+
+    :param context: context to query under
+    :param project_only: limit summary to snapshots
+    :param filters: dictionary of filters; values that are in lists, tuples,
+                    or sets cause an 'IN' operation, while exact matching
+                    is used for other values, see _process_snaps_filters
+                    function for more information
+    :returns: snapshots summary
+    """
+
+    if not (project_only or is_admin_context(context)):
+        raise exception.AdminRequired()
+
+    query = model_query(context, func.count(models.Snapshot.id),
+                        func.sum(models.Snapshot.volume_size),
+                        read_deleted="no")
+
+    if project_only:
+        query = query.filter_by(project_id=context.project_id)
+
+    if filters:
+        query = _process_snaps_filters(query, filters)
+
+    if query is None:
+        return []
+
+    result = query.first()
+
+    return result[0] or 0, result[1] or 0
+
+
 ####################
 
 
@@ -4158,6 +4200,11 @@ def volume_type_destroy(context, id):
             filter_by(id=id).\
             update(updated_values)
         model_query(context, models.VolumeTypeExtraSpecs, session=session).\
+            filter_by(volume_type_id=id).\
+            update({'deleted': True,
+                    'deleted_at': utcnow,
+                    'updated_at': literal_column('updated_at')})
+        model_query(context, models.Encryption, session=session).\
             filter_by(volume_type_id=id).\
             update({'deleted': True,
                     'deleted_at': utcnow,
@@ -5425,7 +5472,8 @@ def transfer_get(context, transfer_id):
 
 def _translate_transfers(transfers):
     fields = ('id', 'volume_id', 'display_name', 'created_at', 'deleted',
-              'no_snapshots')
+              'no_snapshots', 'source_project_id', 'destination_project_id',
+              'accepted')
     return [{k: transfer[k] for k in fields} for transfer in transfers]
 
 
@@ -5577,7 +5625,9 @@ def transfer_accept(context, transfer_id, user_id, project_id,
          .filter_by(id=transfer_id)
          .update({'deleted': True,
                   'deleted_at': timeutils.utcnow(),
-                  'updated_at': literal_column('updated_at')}))
+                  'updated_at': literal_column('updated_at'),
+                  'destination_project_id': project_id,
+                  'accepted': True}))
 
 
 ###############################
@@ -6935,6 +6985,7 @@ def _worker_set_updated_at_field(values):
     values['updated_at'] = updated_at
 
 
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def worker_create(context, **values):
     """Create a worker entry from optional arguments."""
     _worker_set_updated_at_field(values)
@@ -6971,6 +7022,7 @@ def _orm_worker_update(worker, values):
         setattr(worker, key, value)
 
 
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def worker_update(context, id, filters=None, orm_worker=None, **values):
     """Update a worker with given values."""
     filters = filters or {}
@@ -6989,6 +7041,7 @@ def worker_update(context, id, filters=None, orm_worker=None, **values):
     return result
 
 
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def worker_claim_for_cleanup(context, claimer_id, orm_worker):
     """Claim a worker entry for cleanup."""
     # We set updated_at value so we are sure we update the DB entry even if the

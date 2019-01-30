@@ -17,7 +17,6 @@ Build-Depends:
  python3-setuptools,
  python3-sphinx (>= 1.6.2),
 Build-Depends-Indep:
- python3-babel (>= 2.3.4),
  python3-barbicanclient (>= 4.5.2),
  python3-castellan (>= 0.16.0),
  python3-coverage (>= 4.0),
@@ -55,7 +54,7 @@ Build-Depends-Indep:
  python3-oslo.log (>= 3.36.0),
  python3-oslo.messaging (>= 6.4.0),
  python3-oslo.middleware (>= 3.31.0),
- python3-oslo.policy (>= 1.30.0),
+ python3-oslo.policy (>= 1.44.1),
  python3-oslo.privsep (>= 1.23.0),
  python3-oslo.reports (>= 1.18.0),
  python3-oslo.rootwrap (>= 5.8.0),
@@ -81,7 +80,6 @@ Build-Depends-Indep:
  python3-retrying (>= 1.2.3),
  python3-routes (>= 2.3.1),
  python3-rtslib-fb (>= 2.1.65),
- python3-simplejson (>= 3.5.1),
  python3-six (>= 1.10.0),
  python3-sqlalchemy (>= 1.0.10),
  python3-stestr,
@@ -135,6 +133,33 @@ Description: Cinder storage service - Scheduler server
  .
  This package contains the Cinder backup service.
 
+Package: cinder-common
+Architecture: all
+Depends:
+ adduser,
+ ${misc:Depends},
+Recommends:
+ ${misc:Recommends},
+Breaks:
+ cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
+Replaces:
+ cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
+ cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
+Description: Cinder storage service - common files
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ Cinder is the OpenStack Block storage service.
+ .
+ This package contains commons components for Cinder.
+
 Package: cinder-scheduler
 Architecture: all
 Depends:
@@ -173,7 +198,6 @@ Section: python
 Architecture: all
 Depends:
  cinder-common (= ${binary:Version}),
- python3-babel (>= 2.3.4),
  python3-barbicanclient (>= 4.5.2),
  python3-castellan (>= 0.16.0),
  python3-cryptography (>= 2.1),
@@ -202,7 +226,7 @@ Depends:
  python3-oslo.log (>= 3.36.0),
  python3-oslo.messaging (>= 6.4.0),
  python3-oslo.middleware (>= 3.31.0),
- python3-oslo.policy (>= 1.30.0),
+ python3-oslo.policy (>= 1.44.1),
  python3-oslo.privsep (>= 1.23.0),
  python3-oslo.reports (>= 1.18.0),
  python3-oslo.rootwrap (>= 5.8.0),
@@ -222,7 +246,6 @@ Depends:
  python3-requests (>= 2.14.2),
  python3-retrying (>= 1.2.3),
  python3-routes (>= 2.3.1),
- python3-simplejson (>= 3.5.1),
  python3-six (>= 1.10.0),
  python3-sqlalchemy (>= 1.0.10),
  python3-stevedore (>= 1:1.20.0),
@@ -250,30 +273,3 @@ Description: Cinder Python 3 libraries
  Cinder is the OpenStack Block storage service.
  .
  This package contains the Python 3 library for Cinder.
-
-Package: cinder-common
-Architecture: all
-Depends:
- adduser,
- ${misc:Depends},
-Recommends:
- ${misc:Recommends},
-Breaks:
- cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
-Replaces:
- cinder-api (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-backup (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-scheduler (<< 2:13.0.0~rc1-0ubuntu3~),
- cinder-volume (<< 2:13.0.0~rc1-0ubuntu3~),
-Description: Cinder storage service - common files
- OpenStack is a reliable cloud infrastructure. Its mission is to produce
- the ubiquitous cloud computing platform that will meet the needs of public
- and private cloud providers regardless of size, by being simple to implement
- and massively scalable.
- .
- Cinder is the OpenStack Block storage service.
- .
- This package contains commons components for Cinder.

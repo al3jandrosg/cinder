@@ -31,10 +31,10 @@ from castellan import key_manager as castellan_key_manager
 import eventlet
 from eventlet import tpool
 from keystoneauth1 import loading as ks_loading
-from os_brick import encryptors
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
 from oslo_utils import units
@@ -968,7 +968,7 @@ def clone_encryption_key(context, key_manager, encryption_key_id):
     return clone_key_id
 
 
-def is_replicated_str(str):
+def is_boolean_str(str):
     spec = (str or '').split()
     return (len(spec) == 2 and
             spec[0] == '<is>' and strutils.bool_from_string(spec[1]))
@@ -976,12 +976,12 @@ def is_replicated_str(str):
 
 def is_replicated_spec(extra_specs):
     return (extra_specs and
-            is_replicated_str(extra_specs.get('replication_enabled')))
+            is_boolean_str(extra_specs.get('replication_enabled')))
 
 
 def is_multiattach_spec(extra_specs):
     return (extra_specs and
-            is_replicated_str(extra_specs.get('multiattach')))
+            is_boolean_str(extra_specs.get('multiattach')))
 
 
 def group_get_by_id(group_id):
@@ -1053,28 +1053,6 @@ def make_initiator_target_all2all_map(initiator_wwpns, target_wwpns):
     return i_t_map
 
 
-def check_encryption_provider(db, volume, context):
-    """Check that this is a LUKS encryption provider.
-
-    :returns: encryption dict
-    """
-
-    encryption = db.volume_encryption_metadata_get(context, volume.id)
-    provider = encryption['provider']
-    if provider in encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP:
-        provider = encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP[provider]
-    if provider != encryptors.LUKS:
-        message = _("Provider %s not supported.") % provider
-        raise exception.VolumeDriverException(message=message)
-
-    if 'cipher' not in encryption or 'key_size' not in encryption:
-        msg = _('encryption spec must contain "cipher" and '
-                '"key_size"')
-        raise exception.VolumeDriverException(message=msg)
-
-    return encryption
-
-
 def check_image_metadata(image_meta, vol_size):
     """Validates the image metadata."""
     # Check whether image is active
@@ -1141,3 +1119,57 @@ def get_volume_image_metadata(image_id, image_meta):
     volume_metadata = dict(property_metadata)
     volume_metadata.update(base_metadata)
     return volume_metadata
+
+
+def copy_image_to_volume(driver, context, volume, image_meta, image_location,
+                         image_service):
+    """Downloads Glance image to the specified volume."""
+    image_id = image_meta['id']
+    LOG.debug("Attempting download of %(image_id)s (%(image_location)s)"
+              " to volume %(volume_id)s.",
+              {'image_id': image_id, 'volume_id': volume.id,
+               'image_location': image_location})
+    try:
+        image_encryption_key = image_meta.get('cinder_encryption_key_id')
+
+        if volume.encryption_key_id and image_encryption_key:
+            # If the image provided an encryption key, we have
+            # already cloned it to the volume's key in
+            # _get_encryption_key_id, so we can do a direct copy.
+            driver.copy_image_to_volume(
+                context, volume, image_service, image_id)
+        elif volume.encryption_key_id:
+            # Creating an encrypted volume from a normal, unencrypted,
+            # image.
+            driver.copy_image_to_encrypted_volume(
+                context, volume, image_service, image_id)
+        else:
+            driver.copy_image_to_volume(
+                context, volume, image_service, image_id)
+    except processutils.ProcessExecutionError as ex:
+        LOG.exception("Failed to copy image %(image_id)s to volume: "
+                      "%(volume_id)s",
+                      {'volume_id': volume.id, 'image_id': image_id})
+        raise exception.ImageCopyFailure(reason=ex.stderr)
+    except exception.ImageUnacceptable as ex:
+        LOG.exception("Failed to copy image to volume: %(volume_id)s",
+                      {'volume_id': volume.id})
+        raise exception.ImageUnacceptable(ex)
+    except exception.ImageTooBig as ex:
+        with excutils.save_and_reraise_exception():
+            LOG.exception("Failed to copy image %(image_id)s to volume: "
+                          "%(volume_id)s",
+                          {'volume_id': volume.id, 'image_id': image_id})
+    except Exception as ex:
+        LOG.exception("Failed to copy image %(image_id)s to "
+                      "volume: %(volume_id)s",
+                      {'volume_id': volume.id, 'image_id': image_id})
+        if not isinstance(ex, exception.ImageCopyFailure):
+            raise exception.ImageCopyFailure(reason=ex)
+        else:
+            raise
+
+    LOG.debug("Downloaded image %(image_id)s (%(image_location)s)"
+              " to volume %(volume_id)s successfully.",
+              {'image_id': image_id, 'volume_id': volume.id,
+               'image_location': image_location})

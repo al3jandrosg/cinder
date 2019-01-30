@@ -410,6 +410,13 @@ absolute:
   in: body
   required: true
   type: object
+accepted:
+  description: |
+    Records if this transfer was accepted or not.
+  in: body
+  required: false
+  type: boolean
+  min_version: 3.57
 active_backend_id:
   description: |
     The ID of active storage backend. Only in ``cinder-volume`` service.
@@ -967,6 +974,13 @@ description_volume_type_required:
   in: body
   required: true
   type: string
+destination_project_id:
+  description: |
+    Records the destination project_id after volume transfer.
+  in: body
+  required: false
+  type: string
+  min_version: 3.57
 detached_at:
   description: |
     The time when attachment is detached.
@@ -1141,6 +1155,12 @@ group_id:
     The ID of the group.
   in: body
   required: true
+  type: string
+group_id_optional:
+  description: |
+    The ID of the group.
+  in: body
+  required: false
   type: string
 group_name:
   description: |
@@ -1498,6 +1518,12 @@ links_vol:
     The volume links.
   in: body
   required: true
+  type: array
+links_vol_optional:
+  description: |
+    The volume links.
+  in: body
+  required: false
   type: array
 location:
   description: |
@@ -2044,21 +2070,21 @@ os-vol-host-attr:host:
     Current back-end of the volume.
     Host format is ``host@backend#pool``.
   in: body
-  required: true
+  required: false
   type: string
 os-vol-mig-status-attr:migstat:
   description: |
     The status of this volume migration (None means
     that a migration is not currently in progress).
   in: body
-  required: true
+  required: false
   type: string
 os-vol-mig-status-attr:name_id:
   description: |
     The volume ID that this volume name on the back-
     end is based on.
   in: body
-  required: true
+  required: false
   type: string
 os-vol-tenant-attr:tenant_id:
   description: |
@@ -2439,6 +2465,7 @@ service_uuid:
   in: body
   required: true
   type: string
+  min_version: 3.48
 services:
   description: |
     A list of service objects.
@@ -2452,6 +2479,7 @@ shared_targets:
   in: body
   required: true
   type: boolean
+  min_version: 3.48
 size:
   description: |
     The size of the volume, in gibibytes (GiB).
@@ -2557,6 +2585,13 @@ source_group_id_req:
   in: body
   required: true
   type: string
+source_project_id:
+  description: |
+    Records the source project_id before volume transfer.
+  in: body
+  required: false
+  type: string
+  min_version: 3.57
 source_reference:
   description: |
     The snapshot's origin volume information.
@@ -2766,6 +2801,13 @@ user_id:
   in: body
   required: true
   type: string
+user_id_backup:
+  description: |
+    The UUID of the project owner.
+  in: body
+  required: true
+  type: string
+  min_version: 3.56
 user_id_min:
   description: |
     The UUID of the user.
@@ -2928,10 +2970,10 @@ volume_type:
   type: object
 volume_type_access:
   description: |
-    The object contains volume type to be accessed by project.
+    List of objects containing volume type to be accessed by project.
   in: body
   required: true
-  type: object
+  type: array
 volume_type_detail:
   description: |
     The volume type (either name or ID). To create an environment with

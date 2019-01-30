@@ -77,6 +77,8 @@ from cinder.volume.drivers.datacore import iscsi as \
     cinder_volume_drivers_datacore_iscsi
 from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
+from cinder.volume.drivers.dell_emc.powermax import common as \
+    cinder_volume_drivers_dell_emc_powermax_common
 from cinder.volume.drivers.dell_emc import ps as \
     cinder_volume_drivers_dell_emc_ps
 from cinder.volume.drivers.dell_emc.sc import storagecenter_common as \
@@ -85,8 +87,6 @@ from cinder.volume.drivers.dell_emc.scaleio import driver as \
     cinder_volume_drivers_dell_emc_scaleio_driver
 from cinder.volume.drivers.dell_emc.unity import driver as \
     cinder_volume_drivers_dell_emc_unity_driver
-from cinder.volume.drivers.dell_emc.vmax import common as \
-    cinder_volume_drivers_dell_emc_vmax_common
 from cinder.volume.drivers.dell_emc.vnx import common as \
     cinder_volume_drivers_dell_emc_vnx_common
 from cinder.volume.drivers.dell_emc import xtremio as \
@@ -119,6 +119,8 @@ from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_fc as \
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_iscsi as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvciscsi
 from cinder.volume.drivers import infinidat as cinder_volume_drivers_infinidat
+from cinder.volume.drivers.inspur.as13000 import as13000_driver as \
+    cinder_volume_drivers_inspur_as13000_as13000driver
 from cinder.volume.drivers.inspur.instorage import instorage_common as \
     cinder_volume_drivers_inspur_instorage_instoragecommon
 from cinder.volume.drivers.inspur.instorage import instorage_iscsi as \
@@ -127,6 +129,8 @@ from cinder.volume.drivers.kaminario import kaminario_common as \
     cinder_volume_drivers_kaminario_kaminariocommon
 from cinder.volume.drivers.lenovo import lenovo_common as \
     cinder_volume_drivers_lenovo_lenovocommon
+from cinder.volume.drivers import linstordrv as \
+    cinder_volume_drivers_linstordrv
 from cinder.volume.drivers import lvm as cinder_volume_drivers_lvm
 from cinder.volume.drivers.netapp import options as \
     cinder_volume_drivers_netapp_options
@@ -165,6 +169,7 @@ from cinder.volume.drivers.zfssa import zfssaiscsi as \
 from cinder.volume.drivers.zfssa import zfssanfs as \
     cinder_volume_drivers_zfssa_zfssanfs
 from cinder.volume import manager as cinder_volume_manager
+from cinder.volume.targets import spdknvmf as cinder_volume_targets_spdknvmf
 from cinder.wsgi import eventlet_server as cinder_wsgi_eventletserver
 from cinder.zonemanager.drivers.brocade import brcd_fabric_opts as \
     cinder_zonemanager_drivers_brocade_brcdfabricopts
@@ -247,6 +252,9 @@ def list_opts():
                 cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_datacore_driver.datacore_opts,
                 cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
+                cinder_volume_drivers_fusionstorage_dsware.volume_opts,
+                cinder_volume_drivers_inspur_as13000_as13000driver.
+                inspur_as13000_opts,
                 cinder_volume_drivers_inspur_instorage_instoragecommon.
                 instorage_mcs_opts,
                 cinder_volume_drivers_inspur_instorage_instorageiscsi.
@@ -277,18 +285,17 @@ def list_opts():
                 cinder_volume_driver.iser_opts,
                 cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_datera_dateraiscsi.d_opts,
+                cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
                 cinder_volume_drivers_dell_emc_ps.eqlx_opts,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
                 common_opts,
                 cinder_volume_drivers_dell_emc_scaleio_driver.scaleio_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
-                cinder_volume_drivers_dell_emc_vmax_common.vmax_opts,
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_drbdmanagedrv.drbd_opts,
                 cinder_volume_drivers_fujitsu_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
-                cinder_volume_drivers_fusionstorage_dsware.volume_opts,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
                 cinder_volume_drivers_hpe_hpelefthandiscsi.hpelefthand_opts,
                 cinder_volume_drivers_huawei_common.huawei_opts,
@@ -310,6 +317,7 @@ def list_opts():
                 kaminario_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.common_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.iscsi_opts,
+                cinder_volume_drivers_linstordrv.linstor_opts,
                 cinder_volume_drivers_lvm.volume_opts,
                 cinder_volume_drivers_netapp_options.netapp_proxy_opts,
                 cinder_volume_drivers_netapp_options.netapp_connection_opts,
@@ -318,7 +326,6 @@ def list_opts():
                 cinder_volume_drivers_netapp_options.netapp_cluster_opts,
                 cinder_volume_drivers_netapp_options.netapp_provisioning_opts,
                 cinder_volume_drivers_netapp_options.netapp_img_cache_opts,
-                cinder_volume_drivers_netapp_options.netapp_eseries_opts,
                 cinder_volume_drivers_netapp_options.netapp_nfs_extra_opts,
                 cinder_volume_drivers_netapp_options.netapp_san_opts,
                 cinder_volume_drivers_netapp_options.netapp_replication_opts,
@@ -353,6 +360,7 @@ def list_opts():
                 cinder_volume_drivers_zfssa_zfssaiscsi.ZFSSA_OPTS,
                 cinder_volume_drivers_zfssa_zfssanfs.ZFSSA_OPTS,
                 cinder_volume_manager.volume_backend_opts,
+                cinder_volume_targets_spdknvmf.spdk_opts,
             )),
         ('nova',
             itertools.chain(

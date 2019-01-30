@@ -1,29 +1,146 @@
 CHANGES
 =======
 
+* api-ref: Add cipher to update an encryption type interface
+* VMAX driver doc - clarify PowerMax rebrand release note
+* Fix "import xxx as xxx" grammar
+* Add missing ws seperator between words
+* Huawei driver refactor(1/10)
+* Report msg error when cannot revert to snapshot
+* Pass image\_id to ImageDownloadFailed
+* Update FusionStorage Cinder Driver by using REST API
+* Correct default policy\_file in the sample config
+* LinstorDrv : Fix wrong key using when getting device path
+* Refactor on policy in code
+* Add policy test for volume extend/retype/update\_ro policy
+* Add policy test for volume metadata policy
+* Add policy test for volume action policy
+* Add policy test for volume update/del policy
+* VMware: Implement retype
+* VMware: Release notes for vmware\_storage\_profile
+* Temporary solution for fixing gate test\_tpool\_size
+* Improve volume transfer records
 * Imported Translations from Zanata
+* Implement volume capacity stats for VMware
+* Switch ietadm to use olso.privsep
+* Enable some tests in the cinder.tests.unit.test\_cmd module for MacOS
+* Initiating Cinder Volume Manager with large number of volumes
+* Avoid using 'truncate' on Windows
+* PowerMax driver - rebranding VMAX to PowerMax
+* [Doc] Fix typos
+* Fix for CI information in SPDK volume driver
+* Add test case: extend non-exist volume
+* Add test case: delete snapshot when driver not initialized
+* Automate generation of API versions api-ref samples
+* NetApp Doc: Enhance 'netapp\_storage\_protocol' description
+* SPDK drivers documentation
+* Fixup some issues of Inspur AS13000 cinder driver
+* add resource filters to the included data\_files
+* LINBIT DRBDManage driver moves to maintenance mode
+* Fix Xtremio driver configuration ordering
+* Support deferred deletion in RBD
+* Remove those copy words occured twice times in dell-emc-vmax-driver.rst
+* Add new LINSTOR volume driver
+* Hedvig Cinder driver implementation
+* cinder-volume: Stop masking IOError different than ENOSPC
+* Add missing backup status in API doc
+* Fix CI failed: test\_get\_volume\_filter\_options\_using\_config
+* QNAP: Support QES FW on TDS series NAS
+* ScaleIO: Fix Extra Spec parameter name in driver doc
+* Remove support for NetApp E-Series systems
+* Adding SPDK volume driver
+* Delete related encryption provider when a volume type is deleting
+* Fix retype notifier test case (BackupNFSTestCase)
+* Handle string status codes in logging
+* VMAX Driver - Failover Unisphere Support
+* Remove umount from volume.filters
+* Add x\_project\_id, accepted to transfers
+* Add policy test for volume create policy
+* Ignore migration 127 error on MariaDB
+* Use renamed template 'integrated-gate-py3'
+* Allow to use \_max qos option together with per\_gb
+* Driver reinitialization after failure
+* Correct the use of assertTrue
+* Revert "Synchronize all LVM operations"
+* Update IBM storwise svc driver doc
+* api-ref: volume\_type\_access should be array instead of object
+* Fix \_per\_gb\_min usage with \_per\_gb
+* Set message property in ImageDownloadFailed
+* Fix A/A 'resource\_backend' when scheduling volumes
+* Add irrelevant-files for integrated test jobs
+* Handle image download and conversion errors
+* Synchronize all LVM operations
+* Rename BackupNFSSwiftBasedTestCase
+* Cinder volume driver for Inspur AS13000 series
+* Add user\_id in backup list and show API
+* Fix permissions with NFS-backed snapshots and backups
+* VMware: Storage policy support
+* VMware: Add support for vStorageObject snapshots
+* Make policy config docs consistent
+* Revert "Ceph driver should respect the \`--incremental\` option for backups"
+* api-ref: add response body for set-image-metadata-for-a-volume
+* Revert "Move check\_encryption\_provider to volume utils"
+* VMAX Driver - VMAX OS Upgrade Bug
+* PowerMax driver doc - clarifying SE and Unisphere support
+* Doc: Remove unnecessary note
+* Extract copy\_image\_to\_volume into volume utils
+* Ensure image utils don't block greenthreads
+* Adding missing Volume states to VolumeStatus enum
+* Automate generation of api-ref samples
+* Add policy test for TENANT\_ATTRIBUTE\_POLICY
+* Imported Translations from Zanata
+* Add missing ws seperator between words
+* Tests : notifier problem with backup
 * Change openstack-dev to openstack-discuss
+* Add secret=true to fixed\_key configuration parameter
+* Cleanup code duplication in cinder.cmd.backup module
+* Fix the problem of the scheduler status
+* Check Volume Status on attahcment create/update
 * Stop cleaning images to be deleted in remotefs driver
+* Retry on DBDeadLock affecting worker updates
+* Add test case: clone volume with bad size
+* Remove deprecated query\_volume\_filters config option
 * Correct default policy file
+* VMAX Driver - Place volume in SG as part of unmanage volume
 * PowerMax driver doc - removing support for VMAX2
+* Ceph driver should respect the \`--incremental\` option for backups
+* api-ref: fix some issues in volumes interfaces
+* VMware: Check empty provider location
+* Ignore updated stable release note
+* [Doc] Fix status and parameters of vol connection api
 * Imported Translations from Zanata
+* An alternate way to fix retype notifier test case
 * api-ref: document encryption type provider choices
 * Imported Translations from Zanata
 * api-ref: volume summary is available from v3.12
 * Revert "Remove mount from volume.filters"
+* Adding SPDK NVMe-oF target driver
 * doc: Change variable name DEFAULT\_API\_VERSION to \_MIN\_API\_VERSION
+* Block broken requests 2.20.0
+* [api-ref] Fix the value of project\_id
+* NetApp SolidFire: Revert volume to snapshot
 * lvm: Avoid premature calls to terminate\_connection for muiltiattach vols
+* api-ref: fix succeed code and add field for update-backup
+* api-ref: add missing volumes\_links in list-volume interfaces
 * api-ref: Adding backup create response example
 * Add policy test for volume GET\_ALL\_POLICY
 * Imported Translations from Zanata
 * Set right attach mode after migration
+* api-ref: fix response example of list-backups
 * Make lower constraints CI works well
 * api-ref: fix response code and data type for volume interfaces
 * Imported Translations from Zanata
 * Improve/Clean api-ref parameters
 * [Trivial Fix] Correct spelling error of "bandwidth"
 * Add test coverage to manage existing flow
+* VMAX driver - allow for a clean system with no initiator groups
+* Drop simplejson usage
+* Remove Babel from requirements
 * Update docs landing page to follow guideline
+* Increase the length of resource property in quota\_usages
+* Remove DeprecationWarning of "decodestring()"
+* VMAX Driver - Fix for invalid device id length
+* Remove out-of-date configurations in setup.cfg
 * Add policy test for volume:force\_delete
 * add missing comma
 * Simplify the policy test case
@@ -37,11 +154,14 @@ CHANGES
 * Set user message on volume create failure
 * Imported Translations from Zanata
 * Raise the ImageTooBig exception when found it
+* Move tgt targets to privsep
+* Fix and Optimize : retype tests
 * hpe 3par driver initialization failure
 * api-ref: cleanup status conditions for backup/restore APIs
 * PY3: Ensure rados.Object.read/write use byte data
 * Forbidden to revert volume to a different size snapshot
 * Fix debug message for \_copy\_volume\_data
+* Remove scstadmin from rootwrap
 * [Trivial] Replace 'action' with 'command' in cinder-status doc
 * Allow using forward slashes in metadata
 * Fix unexpected behavior in \_clone\_image\_volume
@@ -54,6 +174,7 @@ CHANGES
 * Handling unexpected python error "NoneType object is not iterable"
 * Base framework for cinder-status upgrade check
 * api-ref: add missing fields in volume group types
+* Huawei: Simplify wait\_for\_condition calls
 * Update sphinx extension logging
 * Restructure Huawei driver
 * VMAX: set faked max\_oversubscription\_ratio
@@ -63,6 +184,7 @@ CHANGES
 * Rename cinder.privsep.utils to cinder.privsep.path
 * Adding regression test for update\_group
 * DS8K: correct the usage for ssl method(SSLContext.wrap\_socket)
+* Fix: storage\_pools key in Huawei Driver
 * Imported Translations from Zanata
 * Fix for field type error
 * fix misspelling of available
@@ -78,9 +200,11 @@ CHANGES
 * [minifix] Update reno formatting on Quobyte driver defaults change
 * api-ref: totalSnapshotsUsed in limits response should be integer
 * Add column only when it doesn't exist
+* VNX: Add constraints for async migration
 * Remove volume:get policy from test policy file
 * Replace openSUSE experimental check with newer version
 * Fix for cinder-manage db purge
+* Follow Up: Generalizing is\_replicated\_str to is\_boolean\_str
 * api-ref: Add response fields and response example for snapshot manage
 * api-ref: remove created\_at from response example of list-transfer
 * Handle drivers that do not support list manageable
@@ -178,6 +302,7 @@ CHANGES
 * Fujitsu DX: Add retries for busy error
 * Ensure VNX unit tests don't sleep
 * Simplify running pylint
+* Tintri: Inherit tests from BaseDriverTestCase
 * NetApp SolidFire: Fix CG snapshot deletion
 * Imported Translations from Zanata
 * Modify Pure driver to configure PG/Pod names
@@ -190,6 +315,7 @@ CHANGES
 * VMware: Fix revert-to-snapshot
 * VMware: Remove member initialization in properties
 * Move sphinx-feature-classification to docs reqs
+* Simplify hostname lookup
 * Imported Translations from Zanata
 * tintri: Remove \_resolve\_hostname
 * trival: Fix some spacing issues
@@ -1382,7 +1508,6 @@ CHANGES
 * 3PAR: Cinder volume revert to snapshot support
 * Compact Newton database migrations
 * Add indexes to SQLAlchemy models
-* Updated from global requirements
 * [policy in code] Add support for attachment resource
 * Api-ref: fix v2/v3 hosts extension api doc
 * nimble: fix for parent volume delete

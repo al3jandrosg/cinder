@@ -56,7 +56,6 @@ from cinder.volume import rpcapi
 CONF = cfg.CONF
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderApiCmd(test.TestCase):
     """Unit test cases for python modules under cinder/cmd."""
 
@@ -90,35 +89,11 @@ class TestCinderApiCmd(test.TestCase):
         launcher.wait.assert_called_once_with()
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderBackupCmd(test.TestCase):
 
     def setUp(self):
         super(TestCinderBackupCmd, self).setUp()
         sys.argv = ['cinder-backup']
-
-    @mock.patch('cinder.cmd.backup._launch_backup_process')
-    @mock.patch('cinder.service.wait')
-    @mock.patch('cinder.service.serve')
-    @mock.patch('cinder.service.Service.create')
-    @mock.patch('cinder.utils.monkey_patch')
-    @mock.patch('oslo_log.log.setup')
-    def test_main(self, log_setup, monkey_patch, service_create, service_serve,
-                  service_wait, launch_mock):
-        server = service_create.return_value
-
-        cinder_backup.main()
-
-        self.assertEqual('cinder', CONF.project)
-        self.assertEqual(CONF.version, version.version_string())
-        log_setup.assert_called_once_with(CONF, "cinder")
-        monkey_patch.assert_called_once_with()
-        service_create.assert_called_once_with(binary='cinder-backup',
-                                               coordination=True,
-                                               process_number=1)
-        service_serve.assert_called_once_with(server)
-        service_wait.assert_called_once_with()
-        launch_mock.assert_not_called()
 
     @mock.patch('cinder.service.get_launcher')
     @mock.patch('cinder.service.Service.create')
@@ -145,7 +120,6 @@ class TestCinderBackupCmd(test.TestCase):
         launcher.wait.assert_called_once_with()
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderSchedulerCmd(test.TestCase):
 
     def setUp(self):
@@ -172,7 +146,6 @@ class TestCinderSchedulerCmd(test.TestCase):
         service_wait.assert_called_once_with()
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderVolumeCmdPosix(test.TestCase):
 
     def setUp(self):
@@ -352,7 +325,6 @@ class TestCinderVolumeCmdWin32(test.TestCase):
 
 
 @ddt.ddt
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderManageCmd(test.TestCase):
 
     def setUp(self):
@@ -1797,7 +1769,6 @@ class TestCinderRtstoolCmd(test.TestCase):
         self.assertEqual(0, rc)
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderVolumeUsageAuditCmd(test.TestCase):
 
     def setUp(self):
@@ -2246,7 +2217,6 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         ])
 
 
-@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
     """Unit tests for cinder.db.api.service_*."""
 

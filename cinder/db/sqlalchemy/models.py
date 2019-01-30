@@ -631,7 +631,7 @@ class QuotaUsage(BASE, CinderBase):
     id = Column(Integer, primary_key=True)
 
     project_id = Column(String(255), index=True)
-    resource = Column(String(255), index=True)
+    resource = Column(String(300), index=True)
 
     in_use = Column(Integer)
     reserved = Column(Integer)
@@ -831,6 +831,9 @@ class Transfer(BASE, CinderBase):
     crypt_hash = Column(String(255))
     expires_at = Column(DateTime)
     no_snapshots = Column(Boolean, default=False)
+    source_project_id = Column(String(255), nullable=True)
+    destination_project_id = Column(String(255), nullable=True)
+    accepted = Column(Boolean, default=False)
     volume = relationship(Volume, backref="transfer",
                           foreign_keys=volume_id,
                           primaryjoin='and_('

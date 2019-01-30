@@ -34,6 +34,7 @@ import tempfile
 import cryptography
 from cursive import exception as cursive_exception
 from cursive import signature_utils
+from eventlet import tpool
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -235,7 +236,23 @@ def _convert_image(prefix, source, dest, out_format,
                                 passphrase_file=passphrase_file)
 
     start_time = timeutils.utcnow()
-    utils.execute(*cmd, run_as_root=run_as_root)
+
+    # If there is not enough space on the conversion partition, include
+    # the partitions's name in the error message.
+    try:
+        utils.execute(*cmd, run_as_root=run_as_root)
+    except processutils.ProcessExecutionError as ex:
+        if "No space left" in ex.stderr and CONF.image_conversion_dir in dest:
+            conversion_dir = CONF.image_conversion_dir
+            while not os.path.ismount(conversion_dir):
+                conversion_dir = os.path.dirname(conversion_dir)
+
+            message = _("Insufficient free space on %(location)s for image "
+                        "conversion.") % {'location': conversion_dir}
+            LOG.error(message)
+
+        raise
+
     duration = timeutils.delta_seconds(start_time, timeutils.utcnow())
 
     # NOTE(jdg): use a default of 1, mostly for unit test, but in
@@ -288,6 +305,19 @@ def resize_image(source, size, run_as_root=False):
     utils.execute(*cmd, run_as_root=run_as_root)
 
 
+def _verify_image(img_file, verifier):
+    # This methods must be called from a native thread, as the file I/O may
+    # not yield to other greenthread in some cases, and since the update and
+    # verify operations are CPU bound there would not be any yielding either,
+    # which could lead to thread starvation.
+    while True:
+        chunk = img_file.read(1024)
+        if not chunk:
+            break
+        verifier.update(chunk)
+    verifier.verify()
+
+
 def verify_glance_image_signature(context, image_service, image_id, path):
     verifier = None
     image_meta = image_service.show(context, image_id)
@@ -328,13 +358,7 @@ def verify_glance_image_signature(context, image_service, image_id, path):
         with fileutils.remove_path_on_error(path):
             with open(path, "rb") as tem_file:
                 try:
-                    while True:
-                        chunk = tem_file.read(1024)
-                        if chunk:
-                            verifier.update(chunk)
-                        else:
-                            break
-                    verifier.verify()
+                    tpool.execute(_verify_image, tem_file, verifier)
                     LOG.info('Image signature verification succeeded '
                              'for image: %s', image_id)
                     return True
@@ -365,7 +389,8 @@ def fetch(context, image_service, image_id, path, _user_id, _project_id):
     with fileutils.remove_path_on_error(path):
         with open(path, "wb") as image_file:
             try:
-                image_service.download(context, image_id, image_file)
+                image_service.download(context, image_id,
+                                       tpool.Proxy(image_file))
             except IOError as e:
                 if e.errno == errno.ENOSPC:
                     params = {'path': os.path.dirname(path),
@@ -376,6 +401,12 @@ def fetch(context, image_service, image_id, path, _user_id, _project_id):
                     LOG.exception(reason)
                     raise exception.ImageTooBig(image_id=image_id,
                                                 reason=reason)
+
+                reason = ("IOError: %(errno)s %(strerror)s" %
+                          {'errno': e.errno, 'strerror': e.strerror})
+                LOG.error(reason)
+                raise exception.ImageDownloadFailed(image_href=image_id,
+                                                    reason=reason)
 
     duration = timeutils.delta_seconds(start_time, timeutils.utcnow())
 
@@ -581,11 +612,13 @@ def upload_volume(context, image_service, image_meta, volume_path,
                   image_id, volume_format, image_meta['disk_format'])
         if os.name == 'nt' or os.access(volume_path, os.R_OK):
             with open(volume_path, 'rb') as image_file:
-                image_service.update(context, image_id, {}, image_file)
+                image_service.update(context, image_id, {},
+                                     tpool.Proxy(image_file))
         else:
             with utils.temporary_chown(volume_path):
                 with open(volume_path, 'rb') as image_file:
-                    image_service.update(context, image_id, {}, image_file)
+                    image_service.update(context, image_id, {},
+                                         tpool.Proxy(image_file))
         return
 
     with temporary_file() as tmp:
@@ -617,7 +650,8 @@ def upload_volume(context, image_service, image_meta, volume_path,
                 {'f1': out_format, 'f2': data.file_format})
 
         with open(tmp, 'rb') as image_file:
-            image_service.update(context, image_id, {}, image_file)
+            image_service.update(context, image_id, {},
+                                 tpool.Proxy(image_file))
 
 
 def check_virtual_size(virtual_size, volume_size, image_id):

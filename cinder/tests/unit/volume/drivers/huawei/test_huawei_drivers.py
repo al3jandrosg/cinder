@@ -2110,28 +2110,33 @@ class FakeHuaweiConf(huawei_conf.HuaweiConf):
         setattr(self.conf, 'metro_san_password', 'Admin@storage1')
         setattr(self.conf, 'metro_domain_name', 'hypermetro_test')
 
-        iscsi_info = {'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                      'TargetIP': '192.0.2.2',
-                      'CHAPinfo': 'mm-user;mm-user@storage',
-                      'ALUA': '1',
-                      'TargetPortGroup': 'portgroup-test', }
-        setattr(self.conf, 'iscsi_info', [iscsi_info])
+        iscsi_info = {
+            'default_target_ips': '192.0.2.2',
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                    'TargetPortGroup': 'portgroup-test',
+                }
+            }
+        }
+        setattr(self.conf, 'iscsi_info', iscsi_info)
 
-        rmt_iscsi_info = ('{ Name: iqn.1993-08.debian:01:ec2bff7acxxx;\n'
-                          'TargetIP:1.1.1.1;CHAPinfo:mm-user#mm-user@storage;'
-                          'ALUA:1; TargetPortGroup:portgroup-test};\t\n '
-                          '{ Name: iqn.1993-08.debian:01:ec2bff7acyyy;\n'
-                          'TargetIP:2.2.2.2;CHAPinfo:nn-user#nn-user@storage;'
-                          'ALUA:0; TargetPortGroup:portgroup-test1}\t\n')
+        rmt_iscsi_info = {'Name': 'iqn.1993-08.debian:01:ec2bff7acxxx',
+                          'TargetIP': '1.1.1.1',
+                          'CHAPinfo': 'mm-user;mm-user@storage',
+                          'ALUA': '1',
+                          'TargetPortGroup': 'portgroup-test'}
 
-        targets = [{'backend_id': REPLICA_BACKEND_ID,
-                    'storage_pool': 'OpenStack_Pool',
-                    'san_address':
-                        'https://192.0.2.69:8088/deviceManager/rest/',
-                    'san_user': 'admin',
-                    'san_password': 'Admin@storage1',
-                    'iscsi_info': rmt_iscsi_info}]
-        setattr(self.conf, 'replication_device', targets)
+        target = {'backend_id': REPLICA_BACKEND_ID,
+                  'storage_pool': 'OpenStack_Pool',
+                  'san_address':
+                      'https://192.0.2.69:8088/deviceManager/rest/',
+                  'san_user': 'admin',
+                  'san_password': 'Admin@storage1',
+                  'iscsi_info': rmt_iscsi_info}
+        setattr(self.conf, 'replication', target)
 
         setattr(self.conf, 'safe_get', self.safe_get)
 
@@ -2298,6 +2303,12 @@ class HuaweiTestBase(test.TestCase):
 
         self.group = fake_group.fake_group_obj(
             admin_contex, id=ID, status='available')
+
+        constants.DEFAULT_REPLICA_WAIT_INTERVAL = .1
+        constants.DEFAULT_REPLICA_WAIT_TIMEOUT = .5
+        constants.DEFAULT_WAIT_INTERVAL = .1
+        constants.DEFAULT_WAIT_TIMEOUT = .5
+        constants.MIGRATION_WAIT_INTERVAL = .1
 
     def test_encode_name(self):
         lun_name = huawei_utils.encode_name(self.volume.id)
@@ -2539,25 +2550,13 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         self.driver.client.login()
 
     def test_parse_rmt_iscsi_info(self):
-        rmt_devs = self.driver.huawei_conf.get_replication_devices()
-        iscsi_info = rmt_devs[0]['iscsi_info']
-        expected_iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7acxxx',
-                                'TargetIP': '1.1.1.1',
-                                'CHAPinfo': 'mm-user;mm-user@storage',
-                                'ALUA': '1',
-                                'TargetPortGroup': 'portgroup-test'},
-                               {'Name': 'iqn.1993-08.debian:01:ec2bff7acyyy',
-                                'TargetIP': '2.2.2.2',
-                                'CHAPinfo': 'nn-user;nn-user@storage',
-                                'ALUA': '0',
-                                'TargetPortGroup': 'portgroup-test1'}]
-        self.assertEqual(expected_iscsi_info, iscsi_info)
-
-    def test_parse_rmt_iscsi_info_without_iscsi_configuration(self):
-        self.configuration.replication_device[0]['iscsi_info'] = ''
-        rmt_devs = self.driver.huawei_conf.get_replication_devices()
-        iscsi_info = rmt_devs[0]['iscsi_info']
-        self.assertEqual([], iscsi_info)
+        rmt_dev = self.driver.configuration.replication
+        expected_iscsi_info = {'Name': 'iqn.1993-08.debian:01:ec2bff7acxxx',
+                               'TargetIP': '1.1.1.1',
+                               'CHAPinfo': 'mm-user;mm-user@storage',
+                               'ALUA': '1',
+                               'TargetPortGroup': 'portgroup-test'}
+        self.assertDictEqual(expected_iscsi_info, rmt_dev['iscsi_info'])
 
     def test_login_success(self):
         device_id = self.driver.client.login()
@@ -2843,7 +2842,7 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         temp_connector = copy.deepcopy(FakeConnector)
         temp_connector['multipath'] = True
         self.mock_object(rest_client.RestClient, 'get_tgt_port_group',
-                         return_value = '11')
+                         return_value='11')
         iscsi_properties = self.driver.initialize_connection(self.volume,
                                                              temp_connector)
         self.assertEqual([1, 1], iscsi_properties['data']['target_luns'])
@@ -2852,22 +2851,28 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         temp_connector = copy.deepcopy(FakeConnector)
         temp_connector['multipath'] = True
         self.mock_object(rest_client.RestClient, 'get_tgt_port_group',
-                         return_value = '12')
+                         return_value='12')
         self.mock_object(rest_client.RestClient, '_get_tgt_ip_from_portgroup',
-                         return_value = [])
+                         return_value=[])
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.initialize_connection,
                           self.volume, temp_connector)
 
     def test_initialize_connection_success_multipath_targetip(self):
-        iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                       'TargetIP': '192.0.2.2',
-                       'CHAPinfo': 'mm-user;mm-user@storage',
-                       'ALUA': '1'}]
+        iscsi_info = {
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'TargetIP': '192.0.2.2',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                }
+            }
+        }
 
-        configuration = mock.Mock(spec = conf.Configuration)
+        configuration = mock.Mock(spec=conf.Configuration)
         configuration.hypermetro_devices = hypermetro_devices
-        driver = FakeISCSIStorage(configuration = self.configuration)
+        driver = FakeISCSIStorage(configuration=self.configuration)
         driver.do_setup()
         driver.configuration.iscsi_info = iscsi_info
         driver.client.iscsi_info = iscsi_info
@@ -2878,14 +2883,20 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         self.assertEqual([1], iscsi_properties['data']['target_luns'])
 
     def test_initialize_connection_fail_multipath_targetip(self):
-        iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                       'TargetIP': '192.0.2.6',
-                       'CHAPinfo': 'mm-user;mm-user@storage',
-                       'ALUA': '1'}]
+        iscsi_info = {
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'TargetIP': '192.0.2.6',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                }
+            }
+        }
 
-        configuration = mock.Mock(spec = conf.Configuration)
+        configuration = mock.Mock(spec=conf.Configuration)
         configuration.hypermetro_devices = hypermetro_devices
-        driver = FakeISCSIStorage(configuration = self.configuration)
+        driver = FakeISCSIStorage(configuration=self.configuration)
         driver.do_setup()
         driver.configuration.iscsi_info = iscsi_info
         driver.client.iscsi_info = iscsi_info
@@ -2896,18 +2907,23 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
                           self.volume, temp_connector)
 
     def test_initialize_connection_success_multipath_defaultip(self):
-        iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                       'CHAPinfo': 'mm-user;mm-user@storage',
-                       'ALUA': '1'}]
-        default_target_ip = ['192.0.2.2']
-        configuration = mock.Mock(spec = conf.Configuration)
+        iscsi_info = {
+            'default_target_ips': ['192.0.2.2'],
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                }
+            }
+        }
+
+        configuration = mock.Mock(spec=conf.Configuration)
         configuration.hypermetro_devices = hypermetro_devices
-        driver = FakeISCSIStorage(configuration = self.configuration)
+        driver = FakeISCSIStorage(configuration=self.configuration)
         driver.do_setup()
         driver.configuration.iscsi_info = iscsi_info
         driver.client.iscsi_info = iscsi_info
-        driver.configuration.iscsi_default_target_ip = default_target_ip
-        driver.client.iscsi_default_target_ip = default_target_ip
         temp_connector = copy.deepcopy(FakeConnector)
         temp_connector['multipath'] = True
         iscsi_properties = driver.initialize_connection(self.volume,
@@ -2915,19 +2931,23 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         self.assertEqual([1], iscsi_properties['data']['target_luns'])
 
     def test_initialize_connection_fail_multipath_defaultip(self):
-        iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                       'CHAPinfo': 'mm-user;mm-user@storage',
-                       'ALUA': '1'}]
+        iscsi_info = {
+            'default_target_ips': ['192.0.2.6'],
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                }
+            },
+        }
 
-        default_target_ip = ['192.0.2.6']
-        configuration = mock.Mock(spec = conf.Configuration)
+        configuration = mock.Mock(spec=conf.Configuration)
         configuration.hypermetro_devices = hypermetro_devices
-        driver = FakeISCSIStorage(configuration = self.configuration)
+        driver = FakeISCSIStorage(configuration=self.configuration)
         driver.do_setup()
         driver.configuration.iscsi_info = iscsi_info
         driver.client.iscsi_info = iscsi_info
-        driver.configuration.iscsi_default_target_ip = default_target_ip
-        driver.client.iscsi_default_target_ip = default_target_ip
         temp_connector = copy.deepcopy(FakeConnector)
         temp_connector['multipath'] = True
         self.assertRaises(exception.VolumeBackendAPIException,
@@ -2946,17 +2966,23 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
                           self.volume, temp_connector)
 
     def test_initialize_connection_fail_multipath_no_ip(self):
-        iscsi_info = [{'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
-                       'CHAPinfo': 'mm-user;mm-user@storage',
-                       'ALUA': '1'}]
-        configuration = mock.Mock(spec = conf.Configuration)
+        iscsi_info = {
+            'default_target_ips': [],
+            'initiators': {
+                'iqn.1993-08.debian:01:ec2bff7ac3a3': {
+                    'Name': 'iqn.1993-08.debian:01:ec2bff7ac3a3',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                    'ALUA': '1',
+                }
+            }
+        }
+
+        configuration = mock.Mock(spec=conf.Configuration)
         configuration.hypermetro_devices = hypermetro_devices
-        driver = FakeISCSIStorage(configuration = self.configuration)
+        driver = FakeISCSIStorage(configuration=self.configuration)
         driver.do_setup()
         driver.configuration.iscsi_info = iscsi_info
         driver.client.iscsi_info = iscsi_info
-        driver.configuration.iscsi_default_target_ip = None
-        driver.client.iscsi_default_target_ip = None
         temp_connector = copy.deepcopy(FakeConnector)
         temp_connector['multipath'] = True
         self.assertRaises(exception.VolumeBackendAPIException,
@@ -3076,25 +3102,31 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         self.assertEqual(self.target_ips, target_ip)
 
     def test_find_chap_info(self):
-        tmp_dict = {}
-        tmp_dict['Name'] = 'iqn.1993-08.debian:01:ec2bff7ac3a3'
-        tmp_dict['CHAPinfo'] = 'mm-user;mm-user@storage'
-        iscsi_info = [tmp_dict]
-        initiator_name = FakeConnector['initiator']
-        chapinfo = self.driver.client.find_chap_info(iscsi_info,
-                                                     initiator_name)
+        iscsi_info = {
+            'initiators': {
+                'fake.iqn': {
+                    'Name': 'fake.iqn',
+                    'CHAPinfo': 'mm-user;mm-user@storage',
+                }
+            }
+        }
+
+        chapinfo = self.driver.client.find_chap_info(iscsi_info, 'fake.iqn')
         chap_username, chap_password = chapinfo.split(';')
         self.assertEqual('mm-user', chap_username)
         self.assertEqual('mm-user@storage', chap_password)
 
     def test_find_alua_info(self):
-        tmp_dict = {}
-        tmp_dict['Name'] = 'iqn.1993-08.debian:01:ec2bff7ac3a3'
-        tmp_dict['ALUA'] = '1'
-        iscsi_info = [tmp_dict]
-        initiator_name = FakeConnector['initiator']
-        type = self.driver.client._find_alua_info(iscsi_info,
-                                                  initiator_name)
+        iscsi_info = {
+            'initiators': {
+                'fake.iqn': {
+                    'Name': 'fake.iqn',
+                    'ALUA': '1',
+                }
+            }
+        }
+
+        type = self.driver.client._find_alua_info(iscsi_info, 'fake.iqn')
         self.assertEqual('1', type)
 
     def test_get_pool_info(self):
@@ -4117,7 +4149,7 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         replica.wait_volume_online(self.driver.client, lun_info)
 
         with mock.patch.object(rest_client.RestClient, 'get_lun_info',
-                               offline_status):
+                               return_value=offline_status):
             self.assertRaises(exception.VolumeBackendAPIException,
                               replica.wait_volume_online,
                               self.driver.client,
@@ -4131,16 +4163,11 @@ class HuaweiISCSIDriverTestCase(HuaweiTestBase):
         common_driver = replication.ReplicaCommonDriver(self.configuration, op)
         self.mock_object(replication.PairOp, 'get_replica_info',
                          return_value={'SECRESACCESS': access_ro})
-        self.mock_object(huawei_utils.time, 'time',
-                         side_effect=utils.generate_timeout_series(
-                             constants.DEFAULT_REPLICA_WAIT_TIMEOUT))
 
         common_driver.wait_second_access(pair_id, access_ro)
         self.assertRaises(exception.VolumeBackendAPIException,
                           common_driver.wait_second_access, pair_id, access_rw)
 
-    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
-                new=utils.ZeroIntervalLoopingCall)
     def test_wait_replica_ready(self):
         normal_status = {
             'RUNNINGSTATUS': constants.REPLICA_RUNNING_STATUS_NORMAL,
@@ -5621,6 +5648,46 @@ class HuaweiConfTestCase(test.TestCase):
         else:
             self.assertRaises(expect_result,
                               self.huawei_conf._lun_type, xml_root)
+
+    @ddt.data(
+        [{
+            'backend_id': "default",
+            'san_address': 'https://192.0.2.69:8088/deviceManager/rest/',
+            'san_user': 'admin',
+            'san_password': '123456',
+            'storage_pool': 'OpenStack_Pool',
+            'iscsi_info': '{Name:iqn;CHAPinfo:user#pwd;ALUA:1}'
+        }]
+    )
+    def test_get_replication_devices(self, config):
+        self.mock_object(self.conf,
+                         'safe_get',
+                         mock.Mock(return_value=config)
+                         )
+
+        self.huawei_conf._replication_devices(None)
+        expected = {
+            'backend_id': 'default',
+            'san_address': ['https://192.0.2.69:8088/deviceManager/rest/'],
+            'san_password': '123456',
+            'san_user': 'admin',
+            'storage_pools': ['OpenStack_Pool'],
+            'vstore_name': None,
+            'iscsi_info': {
+                'initiators': {
+                    'iqn': {'ALUA': '1',
+                            'CHAPinfo': 'user;pwd',
+                            'Name': 'iqn'}
+                },
+                'default_target_ips': [],
+            },
+            'fc_info': {
+                'initiators': {},
+                'default_target_ips': [],
+            },
+        }
+
+        self.assertDictEqual(expected, self.conf.replication)
 
 
 @ddt.ddt

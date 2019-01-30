@@ -185,6 +185,21 @@ Request Example
    :language: javascript
 
 
+Response Parameters
+-------------------
+
+.. rest_parameters:: parameters.yaml
+
+   - metadata: metadata_image
+
+
+Response Example
+----------------
+
+.. literalinclude:: ./samples/volume-image-metadata-update-response.json
+   :language: javascript
+
+
 Remove image metadata from a volume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -821,7 +836,7 @@ Request
    - project_id: project_id_path
    - volume_id: volume_id_path
    - os-terminate_connection: os-terminate_connection
-   - connector: connector
+   - connector: connector_required
 
 Request Example
 ---------------
@@ -844,7 +859,7 @@ Response codes
 
 .. rest_status_code:: success ../status.yaml
 
-   - 202
+   - 200
 
 
 Request
@@ -855,7 +870,7 @@ Request
    - project_id: project_id_path
    - volume_id: volume_id_path
    - os-initialize_connection: os-initialize_connection
-   - connector: connector
+   - connector: connector_required
 
 Request Example
 ---------------

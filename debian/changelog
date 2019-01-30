@@ -1,3 +1,10 @@
+cinder (2:14.0.0~b1~git2019013028.45f967ef9-0ubuntu1) disco; urgency=medium
+
+  * New upstream snapshot for OpenStack Stein.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- James Page <james.page@ubuntu.com>  Wed, 30 Jan 2019 15:42:10 +0000
+
 cinder (2:14.0.0~b1~git2018120609.2cd694046-0ubuntu1) disco; urgency=medium
 
   * d/tests/control, d/tests/cinder-daemons, d/tests/cinder-volume: Switch to

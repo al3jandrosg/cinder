@@ -27,7 +27,7 @@ possible:
 +-----------------+---------------------------------------------+
 | restoring       | The backup is being restored to a volume.   |
 +-----------------+---------------------------------------------+
-| error_restoring | A backup restoration error occurred.        |
+| error_deleting  | An error occurred while deleting the backup.|
 +-----------------+---------------------------------------------+
 
 
@@ -97,6 +97,7 @@ Response Parameters
    - os-backup-project-attr:project_id: os-backup-project-attr:project_id
    - count: count
    - metadata: metadata_backup
+   - user_id: user_id_backup
 
 Response Example
 ----------------
@@ -155,6 +156,7 @@ Response Parameters
    - snapshot_id: snapshot_id_source_vol
    - os-backup-project-attr:project_id: os-backup-project-attr:project_id
    - metadata: metadata_backup
+   - user_id: user_id_backup
 
 Response Example
 ----------------
@@ -329,7 +331,7 @@ Response codes
 
 .. rest_status_code:: success ../status.yaml
 
-   - 202
+   - 200
 
 .. rest_status_code:: error ../status.yaml
 
@@ -362,6 +364,7 @@ Response Parameters
    - id: id_backup
    - links: links_backup
    - name: name_backup
+   - metadata: metadata_backup
 
 Response Example
 ----------------

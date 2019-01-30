@@ -82,7 +82,7 @@ volume_opts = [
     cfg.IntOpt('volume_clear_size',
                default=0,
                max=1024,
-               help='Size in MiB to wipe at start of old volumes. 1024 MiB'
+               help='Size in MiB to wipe at start of old volumes. 1024 MiB '
                     'at max. 0 => all'),
     cfg.StrOpt('volume_clear_ionice',
                help='The flag to pass to ionice to alter the i/o priority '
@@ -91,12 +91,13 @@ volume_opts = [
     cfg.StrOpt('target_helper',
                default='tgtadm',
                choices=['tgtadm', 'lioadm', 'scstadmin', 'iscsictl',
-                        'ietadm', 'nvmet', 'fake'],
+                        'ietadm', 'nvmet', 'spdk-nvmeof', 'fake'],
                help='Target user-land tool to use. tgtadm is default, '
                     'use lioadm for LIO iSCSI support, scstadmin for SCST '
                     'target support, ietadm for iSCSI Enterprise Target, '
                     'iscsictl for Chelsio iSCSI Target, nvmet for NVMEoF '
-                    'support, or fake for testing.'),
+                    'support, spdk-nvmeof for SPDK NVMe-oF, '
+                    'or fake for testing.'),
     cfg.StrOpt('volumes_dir',
                default='$state_path/volumes',
                help='Volume configuration file storage '
@@ -284,7 +285,7 @@ volume_opts = [
 iser_opts = [
     cfg.IntOpt('num_iser_scan_tries',
                default=3,
-               help='The maximum number of times to rescan iSER target'
+               help='The maximum number of times to rescan iSER target '
                     'to find volume'),
     cfg.StrOpt('iser_target_prefix',
                default='iqn.2010-10.org.openstack:',
@@ -408,7 +409,8 @@ class BaseVD(object):
             'tgtadm': 'cinder.volume.targets.tgt.TgtAdm',
             'scstadmin': 'cinder.volume.targets.scst.SCSTAdm',
             'iscsictl': 'cinder.volume.targets.cxt.CxtAdm',
-            'nvmet': 'cinder.volume.targets.nvmet.NVMET'}
+            'nvmet': 'cinder.volume.targets.nvmet.NVMET',
+            'spdk-nvmeof': 'cinder.volume.targets.spdknvmf.SpdkNvmf'}
 
         # set True by manager after successful check_for_setup
         self._initialized = False
