@@ -1,16 +1,103 @@
 CHANGES
 =======
 
+* Adds revert to snapshot feature to support matrix
+* Use excutils.save\_and\_reraise\_exception instead of reraise
+* PowerMax driver -  test fixes for \_sanity\_port\_group\_check
+* Add get\_driver\_options method
+* docs: mark rbd driver support for extending an in-use volume
+* Revert "Remove truncate from rootwrap filters"
+* Revert "Use native python truncate for privsep"
+* NetApp SolidFire: Fix multi-attach volume deletion
+* Update required version of taskflow
+* Update minimal acceptable glanceclient
+* Create volume attachments status check
+* Add project\_id in group snapshots list and show API
+* Use 'target\_helper' config opt in linstor driver
+* Update oslo.privsep minimum requirement
+* Use new target\_\* options in documentation
+* Remove py35 from setup.cfg
+* Add oslo.privsep to config-generator list
+* Fix typo in the comment
+* Use config-table for dynamic config documentation
+* Drop py35 jobs
+* VNX: update sg in cache
+* Disable etcd3 for lio-barbican job
+* Extend timeout for database migration tests
+* Improve documentation of goodness/filter function
+* api-ref: add qos\_specs\_id to show default volume type response
+* Update support matrix of Huawei driver
+* Define single place for irrelevant-files
+* Fix Snapshot object metadata loading
+* Use native python truncate for privsep
+* Fix python3 compatibility of rbd get\_fsid
+* Remove truncate from rootwrap filters
+* Trim test list for lio-barbican job
+* Tests: Fix up migrate notify tests
+* Pylint: Filter out cinder.objects and requests E1101
+* Fix version return incorrect when endpoint url end without /
+* Update section 'When do i need a new Microversion?'
+* docs: Add os-migrate\_volume\_completion api-ref
+* Doc8: Stop skipping D001: Line too long
+* Include .inc files in doc8 linting
+* NetApp SolidFire: Thin provisioning scheduler support
+* REST connector for Brocade zone driver
+* Fix for auth version change in Brcd HTTP
+* Remove drbdadm from filters
+* Replace 'lvconvert' from rootwrap
+* PowerMax Driver - Unit Test Refactoring
+* PowerMax driver - do an rdf\_group check earlier
+* Limit RBD discard to 32 bit chunks
+* Fix incorrect replication info for RBD
+* Remove LOCI publishing from the post pipeline
+* Add empty check before using zone driver
+* VNX Driver: delete\_hba() instead of remove\_hba()
+* PowerMax driver - handle special case where IG exists
+* PowerMax driver -  move pagination code to request
+* PowerMax driver - do the portgroup check earlier
+* PowerMax driver - solve issue of concurrent snapvx operations
+* Compact DB migrations to Ocata
+* Fix some miscapitalizations of VMware
+* RBD: add support for multiattach
+* PowerMax Driver - Storage-assisted in-use retype support
+* Use oslo.privsep for 'lvcreate'
+* Add Python 3.6 version in setup.cfg
+* Update install docs to match default NFS config
+* Update rbd thin-provisioning in support-matrix
+* Remove legacy-tempest-dsvm-full-drbd-devstack job
+* Drop nova-multiattach job
+* Declare multiattach support for HPE MSA
+* Remove 'tgtadm' from rootwrap
+* Huawei driver refactor(2/10)
+* Adding microversion in releasenote "project\_id response in groups"
+* Support transfer pagination
+* Switch tempest-slow to be run on python 3
+* Remove LIO multiattach release note
+* Fix HPE3PAR not returning cached stats
+* Add project\_id in group list and show API
+* Return WWN for validation in Pure Storage drivers
+* PowerMax Driver - Replication Settings Fix
+* PowerMax driver -  code cleanup and minor improvements
+* QNAP: Add support for QTS 4.4.0
 * api-ref: Add cipher to update an encryption type interface
 * VMAX driver doc - clarify PowerMax rebrand release note
+* Fix keystone auth config in install doc
 * Fix "import xxx as xxx" grammar
 * Add missing ws seperator between words
+* Add check\_encryption\_provider to volume utils
+* fast8 improvements
 * Huawei driver refactor(1/10)
+* Cleanup rootwrap filters
+* Fix gigabytes usage error when deleting snapshot group
 * Report msg error when cannot revert to snapshot
+* Fix for HPE MSA 2050 login failures
 * Pass image\_id to ImageDownloadFailed
 * Update FusionStorage Cinder Driver by using REST API
+* Move Fujitsu ETERNUS DX related file
 * Correct default policy\_file in the sample config
+* Remove 'lvrename' from rootwrap
 * LinstorDrv : Fix wrong key using when getting device path
+* Create new image volume cache entry when cloning fails
 * Refactor on policy in code
 * Add policy test for volume extend/retype/update\_ro policy
 * Add policy test for volume metadata policy
@@ -20,6 +107,9 @@ CHANGES
 * VMware: Release notes for vmware\_storage\_profile
 * Temporary solution for fixing gate test\_tpool\_size
 * Improve volume transfer records
+* PowerMax driver -  changing from 8.4 to 9.0 REST endpoints
+* Handle 'is\_public' filter in volume-type list
+* Automate generation of volumes api-ref samples
 * Imported Translations from Zanata
 * Implement volume capacity stats for VMware
 * Switch ietadm to use olso.privsep
@@ -30,6 +120,8 @@ CHANGES
 * [Doc] Fix typos
 * Fix for CI information in SPDK volume driver
 * Add test case: extend non-exist volume
+* Reset snapshot status available
+* Add test case: retype volume when driver not initialized
 * Add test case: delete snapshot when driver not initialized
 * Automate generation of API versions api-ref samples
 * NetApp Doc: Enhance 'netapp\_storage\_protocol' description
@@ -44,6 +136,9 @@ CHANGES
 * Hedvig Cinder driver implementation
 * cinder-volume: Stop masking IOError different than ENOSPC
 * Add missing backup status in API doc
+* Using wrong parameter in test\_backup\_ceph
+* Move 'attach.end' notify to attachment\_complete
+* Mask passwords in utils.trace for func params
 * Fix CI failed: test\_get\_volume\_filter\_options\_using\_config
 * QNAP: Support QES FW on TDS series NAS
 * ScaleIO: Fix Extra Spec parameter name in driver doc
@@ -51,12 +146,17 @@ CHANGES
 * Adding SPDK volume driver
 * Delete related encryption provider when a volume type is deleting
 * Fix retype notifier test case (BackupNFSTestCase)
+* [api-ref] Fix the parameter of image metadata
 * Handle string status codes in logging
 * VMAX Driver - Failover Unisphere Support
+* Remove vgc-cluster
+* Remove 'ln' command from rootwrap filter
+* Add policy configuration howto
 * Remove umount from volume.filters
 * Add x\_project\_id, accepted to transfers
 * Add policy test for volume create policy
 * Ignore migration 127 error on MariaDB
+* [Unity] Storage-assisted migration support
 * Use renamed template 'integrated-gate-py3'
 * Allow to use \_max qos option together with per\_gb
 * Driver reinitialization after failure
@@ -90,6 +190,7 @@ CHANGES
 * Add policy test for TENANT\_ATTRIBUTE\_POLICY
 * Imported Translations from Zanata
 * Add missing ws seperator between words
+* Change a function name of swift backup
 * Tests : notifier problem with backup
 * Change openstack-dev to openstack-discuss
 * Add secret=true to fixed\_key configuration parameter
@@ -137,6 +238,7 @@ CHANGES
 * Drop simplejson usage
 * Remove Babel from requirements
 * Update docs landing page to follow guideline
+* api-ref: Correct response body type for show host details
 * Increase the length of resource property in quota\_usages
 * Remove DeprecationWarning of "decodestring()"
 * VMAX Driver - Fix for invalid device id length
@@ -659,6 +761,7 @@ CHANGES
 * NEC driver: Delete max volumes per pool limit
 * [ci][rally] make the job inherit the right parent
 * Make config-table display list defaults in list format
+* api-ref: modify 'keys' description
 * QNAP: driver fails to detach while uploading volume to image
 * Remove static config option table for Infinidat
 * Remove zonemanager static config option tables
@@ -794,6 +897,7 @@ CHANGES
 * 3PAR: Report backend state in service list
 * Storwize: self assign the SCSI lun id for volume attaching
 * ScaleIO: Prevent usage of unsafe volumes
+* Skip masking of command output over ssh
 * Move openstackdocstheme to extensions in api-ref
 * Unity: Enable ssl verification
 * Storwize: check flashcopy\_rate before mkfcmap

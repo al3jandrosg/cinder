@@ -63,7 +63,8 @@ CONF.register_opts(qnap_opts, group=configuration.SHARED_CONF_GROUP)
 class QnapISCSIDriver(san.SanISCSIDriver):
     """QNAP iSCSI based cinder driver
 
-    .. code-block:: default
+
+    .. code-block:: none
 
       Version History:
         1.0.0:
@@ -77,6 +78,8 @@ class QnapISCSIDriver(san.SanISCSIDriver):
               Add support for QES fw 2.1.0.
         1.2.004:
               Add support for QES fw on TDS series NAS model.
+        1.2.005:
+              Add support for QTS fw 4.4.0.
 
     NOTE: Set driver_ssl_cert_verify as True under backend section to
           enable SSL verification.
@@ -85,7 +88,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "QNAP_CI"
 
-    VERSION = '1.2.004'
+    VERSION = '1.2.005'
 
     TIME_INTERVAL = 3
 
@@ -102,6 +105,10 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         self.target_iqn = ''
         self.target_iqns = []
         self.nasInfoCache = {}
+
+    @staticmethod
+    def get_driver_options():
+        return qnap_opts
 
     def _check_config(self):
         """Ensure that the flags we care about are set."""
@@ -187,7 +194,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
         ]
         LOG.debug('fw_version: %s', fw_version)
         if model_type in ts_model_types:
-            if (fw_version >= "4.2") and (fw_version <= "4.4"):
+            if (fw_version >= "4.2") and (fw_version <= "4.4.9999"):
                 LOG.debug('Create TS API Executor')
                 # modify the pool name to pool index
                 self.configuration.qnap_poolname = (
@@ -201,7 +208,7 @@ class QnapISCSIDriver(san.SanISCSIDriver):
                     verify_ssl=self.configuration.driver_ssl_cert_verify))
         elif model_type in tes_model_types:
             if 'TS' in internal_model_name:
-                if (fw_version >= "4.2") and (fw_version <= "4.4"):
+                if (fw_version >= "4.2") and (fw_version <= "4.4.9999"):
                     LOG.debug('Create TS API Executor')
                     # modify the pool name to poole index
                     self.configuration.qnap_poolname = (
@@ -1817,6 +1824,7 @@ class QnapAPIExecutorTS(QnapAPIExecutor):
                 poolID=pool_name,
                 lv_ifssd='yes' if ssd_cache else 'no',
                 LUNCapacity=volume['size'],
+                LUNSectorSize='512',
                 lv_threshold='80',
                 sid=self.sid)
         finally:

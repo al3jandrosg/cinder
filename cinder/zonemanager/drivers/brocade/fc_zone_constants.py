@@ -1,4 +1,4 @@
-#    (c) Copyright 2016 Brocade Communications Systems Inc.
+#    (c) Copyright 2019 Brocade, a Broadcom Company
 #    All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -58,6 +58,8 @@ POST_METHOD = "POST"
 SECINFO_BEGIN = "--BEGIN SECINFO"
 SECINFO_END = "--END SECINFO"
 RANDOM = "RANDOM"
+AUTHVERSION = "AUTHVERSION"
+IDENTIFIER = "Identifier"
 AUTH_STRING = "Custom_Basic "  # Trailing space is required, do not remove
 AUTHEN_BEGIN = "--BEGIN AUTHENTICATE"
 AUTHEN_END = "--END AUTHENTICATE"
@@ -86,10 +88,8 @@ ZONE_END_DELIM = "\x05&saveonly="
 IFA_DELIM = "\x06"
 ACTIVE_CFG_DELIM = "\x07"
 DEFAULT_CFG = "d__efault__Cfg"
-NS_PAGE = "/nsinfo.htm"
-NSINFO_BEGIN = "--BEGIN NS INFO"
-NSINFO_END = "--END NS INFO"
-NS_DELIM = ";N    ;"
+NS_PAGE = "/nsinfo.htm?format=1&type=all"
+NS_DELIM = "deviceport.portwwn="
 ZONE_TX_BEGIN = "--BEGIN ZONE_TXN_INFO"
 ZONE_TX_END = "--END ZONE_TXN_INFO"
 ZONE_ERROR_CODE = "errorCode"
@@ -102,3 +102,5 @@ ZONE_TX_STATUS = "status"
 SESSION_LF_ID = "sessionLFId"
 HTTP = "http"
 HTTPS = "https"
+REST_HTTP = "rest_http"
+REST_HTTPS = "rest_https"

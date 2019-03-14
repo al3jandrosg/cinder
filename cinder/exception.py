@@ -971,6 +971,11 @@ class PureRetryableException(VolumeBackendAPIException):
     message = _("Retryable Pure Storage Exception encountered")
 
 
+# RBD
+class RBDDriverException(VolumeDriverException):
+    message = _("RBD Cinder driver failure: %(reason)s")
+
+
 # SolidFire
 class SolidFireAPIException(VolumeBackendAPIException):
     message = _("Bad response from SolidFire API")
@@ -1083,6 +1088,10 @@ class BrocadeZoningCliException(CinderException):
 
 class BrocadeZoningHttpException(CinderException):
     message = _("Brocade Fibre Channel Zoning HTTP error: %(reason)s")
+
+
+class BrocadeZoningRestException(CinderException):
+    message = _("Brocade Fibre Channel Zoning REST error: %(reason)s")
 
 
 class CiscoZoningCliException(CinderException):

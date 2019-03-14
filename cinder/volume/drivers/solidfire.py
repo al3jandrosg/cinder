@@ -95,7 +95,15 @@ sf_opts = [
 
     cfg.BoolOpt('sf_enable_vag',
                 default=False,
-                help='Utilize volume access groups on a per-tenant basis.')]
+                help='Utilize volume access groups on a per-tenant basis.'),
+    cfg.StrOpt('sf_provisioning_calc',
+               default='maxProvisionedSpace',
+               choices=['maxProvisionedSpace', 'usedSpace'],
+               help='Change how SolidFire reports used space and '
+                    'provisioning calculations. If this parameter is set to '
+                    '\'usedSpace\', the  driver will report correct '
+                    'values as expected by Cinder '
+                    'thin provisioning.')]
 
 CONF = cfg.CONF
 CONF.register_opts(sf_opts, group=configuration.SHARED_CONF_GROUP)
@@ -283,6 +291,10 @@ class SolidFireDriver(san.SanISCSIDriver):
             self.template_account_id = self._create_template_account(account)
 
         self._set_cluster_pairs()
+
+    @staticmethod
+    def get_driver_options():
+        return sf_opts
 
     def __getattr__(self, attr):
         if hasattr(self.target_driver, attr):
@@ -1541,12 +1553,15 @@ class SolidFireDriver(san.SanISCSIDriver):
                         self._issue_api_request('PurgeDeletedVolume', params,
                                                 endpoint=cluster['endpoint'])
 
+            # The multiattach volumes are only removed from the VAG on
+            # deletion.
+            if volume.get('multiattach'):
+                self._remove_volume_from_vags(sf_vol['volumeID'])
+
             if sf_vol['status'] == 'active':
                 params = {'volumeID': sf_vol['volumeID']}
                 self._issue_api_request('DeleteVolume', params)
                 self._issue_api_request('PurgeDeletedVolume', params)
-            if volume.get('multiattach'):
-                self._remove_volume_from_vags(sf_vol['volumeID'])
         else:
             LOG.error("Volume ID %s was not found on "
                       "the SolidFire Cluster while attempting "
@@ -1872,6 +1887,7 @@ class SolidFireDriver(san.SanISCSIDriver):
             except exception.SolidFireAPIException:
                 pass
 
+        LOG.debug("SolidFire cluster_stats: %s", self.cluster_stats)
         return self.cluster_stats
 
     def extend_volume(self, volume, new_size):
@@ -1893,6 +1909,17 @@ class SolidFireDriver(san.SanISCSIDriver):
         }
         self._issue_api_request('ModifyVolume',
                                 params, version='5.0')
+
+    def _get_provisioned_capacity(self):
+        response = self._issue_api_request('ListVolumes', {}, version='8.0')
+        volumes = response['result']['volumes']
+
+        LOG.debug("%s volumes present in cluster", len(volumes))
+        provisioned = 0
+        for vol in volumes:
+            provisioned += vol['totalSize']
+
+        return provisioned
 
     def _update_cluster_status(self):
         """Retrieve status info for the Cluster."""
@@ -1923,11 +1950,22 @@ class SolidFireDriver(san.SanISCSIDriver):
             return
 
         results = results['result']['clusterCapacity']
-        free_capacity = (
-            results['maxProvisionedSpace'] - results['usedSpace'])
 
-        data['total_capacity_gb'] = (
-            float(results['maxProvisionedSpace'] / units.Gi))
+        if self.configuration.sf_provisioning_calc == 'usedSpace':
+            free_capacity = (
+                results['maxUsedSpace'] - results['usedSpace'])
+            data['total_capacity_gb'] = results['maxUsedSpace'] / units.Gi
+            data['thin_provisioning_support'] = True
+            data['provisioned_capacity_gb'] = (
+                self._get_provisioned_capacity() / units.Gi)
+            data['max_over_subscription_ratio'] = (
+                self.configuration.max_over_subscription_ratio
+            )
+        else:
+            free_capacity = (
+                results['maxProvisionedSpace'] - results['usedSpace'])
+            data['total_capacity_gb'] = (
+                results['maxProvisionedSpace'] / units.Gi)
 
         data['free_capacity_gb'] = float(free_capacity / units.Gi)
         data['compression_percent'] = (

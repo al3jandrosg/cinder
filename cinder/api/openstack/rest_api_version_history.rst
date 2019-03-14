@@ -429,10 +429,10 @@ volume APIs.
     it will raise badRequest error.
 
 - Update volume API
-    Before 3.53, even if user doesn't pass any valid parameters in the request body,
-    the volume was updated.
-    But in 3.53, user will need to pass at least one valid parameter in the request
-    body otherwise it will return 400 error.
+    Before 3.53, even if user doesn't pass any valid parameters in the request
+    body, the volume was updated.
+    But in 3.53, user will need to pass at least one valid parameter in the
+    request body otherwise it will return 400 error.
 
 3.54
 ----
@@ -452,3 +452,14 @@ backup detail APIs.
 Expanded volume transfer record details by adding ``source_project_id``,
 ``destination_project_id`` and ``accepted`` fields to ``transfer`` table and
 related api (create/show/list detail transfer APIs) responses.
+
+3.58
+----
+Add ``project_id`` attribute to response body of list groups with detail,
+list group snapshots with detail, show group detail and show group snapshot
+detail APIs.
+
+3.59
+----
+Support volume transfer pagination.
+

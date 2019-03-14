@@ -1,4 +1,4 @@
-#    (c) Copyright 2016 Brocade Communications Systems Inc.
+#    (c) Copyright 2019 Brocade, a Broadcom Company
 #    All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -27,6 +27,7 @@ add_connection and delete_connection interfaces.
 :zone_name_prefix: Used by: class: 'FCZoneDriver'. Defaults to 'openstack'
 """
 
+import string
 
 from oslo_concurrency import lockutils
 from oslo_config import cfg
@@ -34,7 +35,6 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import importutils
 import six
-import string
 
 from cinder import exception
 from cinder.i18n import _
@@ -65,16 +65,19 @@ class BrcdFCZoneDriver(fc_zone_driver.FCZoneDriver):
     OpenStack Fibre Channel zone driver to manage FC zoning in
     Brocade SAN fabrics.
 
-    Version history:
+    .. code-block:: none
+
+      Version history:
         1.0 - Initial Brocade FC zone driver
         1.1 - Implements performance enhancements
         1.2 - Added support for friendly zone name
         1.3 - Added HTTP connector support
         1.4 - Adds support to zone in Virtual Fabrics
         1.5 - Initiator zoning updates through zoneadd/zoneremove
+        1.6 - Add REST connector
     """
 
-    VERSION = "1.5"
+    VERSION = "1.6"
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Brocade_OpenStack_CI"
@@ -109,6 +112,10 @@ class BrcdFCZoneDriver(fc_zone_driver.FCZoneDriver):
             if fabric_names:
                 self.fabric_configs = fabric_opts.load_fabric_configurations(
                     fabric_names)
+
+    @staticmethod
+    def get_driver_options():
+        return brcd_opts
 
     @lockutils.synchronized('brcd', 'fcfabric-', True)
     def add_connection(self, fabric, initiator_target_map, host_name=None,
@@ -226,7 +233,8 @@ class BrcdFCZoneDriver(fc_zone_driver.FCZoneDriver):
                     LOG.debug("Zones updated successfully: %(updatemap)s",
                               {'updatemap': zone_update_map})
             except (exception.BrocadeZoningCliException,
-                    exception.BrocadeZoningHttpException) as brocade_ex:
+                    exception.BrocadeZoningHttpException,
+                    exception.BrocadeZoningRestException) as brocade_ex:
                 raise exception.FCZoneDriverException(brocade_ex)
             except Exception:
                 msg = _("Failed to add or update zoning configuration.")
@@ -373,7 +381,8 @@ class BrcdFCZoneDriver(fc_zone_driver.FCZoneDriver):
                         zone_name_string, zone_activate,
                         cfgmap_from_fabric)
             except (exception.BrocadeZoningCliException,
-                    exception.BrocadeZoningHttpException) as brocade_ex:
+                    exception.BrocadeZoningHttpException,
+                    exception.BrocadeZoningRestException) as brocade_ex:
                 raise exception.FCZoneDriverException(brocade_ex)
             except Exception:
                 msg = _("Failed to update or delete zoning "

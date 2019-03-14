@@ -41,7 +41,7 @@ Request
 Request Example
 ---------------
 
-.. literalinclude:: ./samples/volume-type-access-add-request.json
+.. literalinclude:: ./samples/volume_type/volume-type-access-add-request.json
    :language: javascript
 
 
@@ -80,7 +80,8 @@ Request Example
 List private volume type access detail
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. rest_method::  GET /v3/{project_id}/types/{volume_type}/os-volume-type-access
+.. rest_method::
+   GET /v3/{project_id}/types/{volume_type}/os-volume-type-access
 
 Lists project IDs that have access to private volume type.
 
@@ -115,5 +116,5 @@ Response Parameters
 Response Example
 ----------------
 
-.. literalinclude:: ./samples/volume-type-access-list-response.json
+.. literalinclude:: ./samples/volume_type/volume-type-access-list-response.json
    :language: javascript

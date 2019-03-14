@@ -78,6 +78,7 @@ class SolidFireVolumeTestCase(test.TestCase):
         self.configuration.sf_volume_prefix = 'UUID-'
         self.configuration.sf_enable_vag = False
         self.configuration.replication_device = []
+        self.configuration.max_over_subscription_ratio = 2
 
         super(SolidFireVolumeTestCase, self).setUp()
         self.mock_object(solidfire.SolidFireDriver,
@@ -151,7 +152,8 @@ class SolidFireVolumeTestCase(test.TestCase):
                                          'usedSpace': 1073741824,
                                          'compressionPercent': 100,
                                          'deDuplicationPercent': 100,
-                                         'thinProvisioningPercent': 100}}}
+                                         'thinProvisioningPercent': 100,
+                                         'maxUsedSpace': 53687091200}}}
             return data
 
         elif method is 'GetClusterInfo':
@@ -265,10 +267,12 @@ class SolidFireVolumeTestCase(test.TestCase):
                              'attributes': {'uuid': f_uuid[1]},
                              'qos': None,
                              'iqn': test_name}]}}
-            for v in result['result']['volumes']:
-                if int(v['volumeID']) == int(params['startVolumeID']):
-                    break
-            return v
+            if params and params['startVolumeID']:
+                volumes = result['result']['volumes']
+                selected_volumes = [v for v in volumes if v.get('volumeID')
+                                    != params['startVolumeID']]
+                result['result']['volumes'] = selected_volumes
+            return result
         elif method is 'DeleteSnapshot':
             return {'result': {}}
         elif method is 'GetClusterVersionInfo':
@@ -727,6 +731,49 @@ class SolidFireVolumeTestCase(test.TestCase):
             id=vol_id,
             display_name='test_volume',
             provider_id='1 5 None',
+            multiattach=False)
+
+        fake_sfaccounts = [{'accountID': 5,
+                            'name': 'testprjid',
+                            'targetSecret': 'shhhh',
+                            'username': 'john-wayne'}]
+
+        get_vol_result = {'volumeID': 5,
+                          'name': 'test_volume',
+                          'accountID': 25,
+                          'sliceCount': 1,
+                          'totalSize': 1 * units.Gi,
+                          'enable512e': True,
+                          'access': "readWrite",
+                          'status': "active",
+                          'attributes': {},
+                          'qos': None,
+                          'iqn': 'super_fake_iqn'}
+
+        mod_conf = self.configuration
+        mod_conf.sf_enable_vag = True
+        sfv = solidfire.SolidFireDriver(configuration=mod_conf)
+        with mock.patch.object(sfv,
+                               '_get_sfaccounts_for_tenant',
+                               return_value=fake_sfaccounts), \
+            mock.patch.object(sfv,
+                              '_get_sfvol_by_cinder_vref',
+                              return_value=get_vol_result), \
+            mock.patch.object(sfv,
+                              '_issue_api_request'), \
+            mock.patch.object(sfv,
+                              '_remove_volume_from_vags') as rem_vol:
+
+            sfv.delete_volume(testvol)
+            rem_vol.not_called(get_vol_result['volumeID'])
+
+    def test_delete_multiattach_volume(self):
+        vol_id = 'a720b3c0-d1f0-11e1-9b23-0800200c9a66'
+        testvol = test_utils.create_volume(
+            self.ctxt,
+            id=vol_id,
+            display_name='test_volume',
+            provider_id='1 5 None',
             multiattach=True)
 
         fake_sfaccounts = [{'accountID': 5,
@@ -1018,6 +1065,25 @@ class SolidFireVolumeTestCase(test.TestCase):
         sfv._update_cluster_status()
         self.assertEqual(99.0, sfv.cluster_stats['free_capacity_gb'])
         self.assertEqual(100.0, sfv.cluster_stats['total_capacity_gb'])
+
+        sfv.configuration.sf_provisioning_calc = 'usedSpace'
+        sfv._update_cluster_status()
+        self.assertEqual(49.0, sfv.cluster_stats['free_capacity_gb'])
+        self.assertEqual(50.0, sfv.cluster_stats['total_capacity_gb'])
+        self.assertTrue(sfv.cluster_stats['thin_provisioning_support'])
+        self.assertEqual(self.configuration.max_over_subscription_ratio,
+                         sfv.cluster_stats['max_over_subscription_ratio'])
+
+    def test_get_provisioned_capacity(self):
+        self.mock_object(solidfire.SolidFireDriver,
+                         '_issue_api_request',
+                         self.fake_issue_api_request)
+
+        sfv = solidfire.SolidFireDriver(configuration=self.configuration)
+        prov_cap = sfv._get_provisioned_capacity()
+        # Sum of totalSize of the volumes mocked is
+        # (int(1.75 * units.Gi)) * 2 = 3758096384
+        self.assertEqual(3758096384, prov_cap)
 
     def test_update_cluster_status_mvip_unreachable(self):
         self.mock_object(solidfire.SolidFireDriver,
@@ -1927,8 +1993,7 @@ class SolidFireVolumeTestCase(test.TestCase):
 
     def test_delete_cgsnapshot_by_name_rainy(self):
         sfv = solidfire.SolidFireDriver(configuration=self.configuration)
-        with mock.patch.object(sfv,
-                               '_get_group_snapshot_by_name',
+        with mock.patch.object(sfv, '_get_group_snapshot_by_name',
                                return_value=None):
             self.assertRaises(exception.SolidFireDriverException,
                               sfv._delete_cgsnapshot_by_name,

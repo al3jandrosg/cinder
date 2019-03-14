@@ -64,6 +64,7 @@ Andrey Pavlov <andrey-mp@yandex.ru>
 Andrey Volkov <avolkov@mirantis.com>
 Andy Grover <agrover@redhat.com>
 Angela Smith <aallen@brocade.com>
+Angela Smith <angela.smith@broadcom.com>
 Angus Lees <gus@inodes.org>
 Anh Tran <anhtt@vn.fujitsu.com>
 Anish Bhatt <anish@chelsio.com>
@@ -93,6 +94,7 @@ Avishay Traeger <avishay@stratoscale.com>
 Bala Gopal Raj <balagopalraj@techpatron.co.in>
 Bardia Keyoumarsi <bardia.keyoumarsi@cohodata.com>
 Bartek Zurawski <bartek.zurawski@ovh.net>
+Ben Nemec <bnemec@redhat.com>
 Ben Nemec <openstack@nemebean.com>
 Ben Swartzlander <ben@swartzlander.org>
 Ben Swartzlander <bswartz@netapp.com>
@@ -199,6 +201,7 @@ David Rabel <rabel@b1-systems.de>
 David Ripton <dripton@redhat.com>
 David Rosales <darosale@us.ibm.com>
 David Sariel <dsariel@redhat.com>
+David Vallee Delisle <dvd@redhat.com>
 Deepak C Shetty <deepakcs@redhat.com>
 Deepti Ramakrishna <deepti.ramakrishna@intel.com>
 Deliang Fan <fandeliang@letv.com>
@@ -500,6 +503,7 @@ Marga Millet <marga.sfo@gmail.com>
 Margarita Shakhova <shakhova.margarita@gmail.com>
 Marian Horban <mhorban@mirantis.com>
 Mark Giles <mark.giles@oracle.com>
+Mark Goddard <mark@stackhpc.com>
 Mark McLoughlin <markmc@redhat.com>
 Mark Sturdevant <mark.sturdevant@hp.com>
 Mark T. Voelker <mvoelker@vmware.com>
@@ -551,6 +555,7 @@ Mike Rooney <mrooneyunc@gmail.com>
 Mike Rooney <rooneym@netapp.com>
 Mikhail Khodos <hodosmb@gmail.com>
 Mikhail Khodos <mikhail.khodos@nexenta.com>
+Mingyue Qian <qianmy.fnst@cn.fujitsu.com>
 Miriam Yumi <miriam.peixoto@fit-tecnologia.org.br>
 Mitsuhiro SHIGEMATSU <shigematsu.mitsuhiro@lab.ntt.co.jp>
 Mitsuhiro Tanino <mitsuhiro.tanino@hds.com>
@@ -586,6 +591,7 @@ Nilesh Bhosale <nilesh.bhosale@in.ibm.com>
 Nirmal Ranganathan <rnirmal@gmail.com>
 Nishant Kumar <nishant.e.kumar@ericsson.com>
 Nitin Madhok <nmadhok@g.clemson.edu>
+Nolwenn Cauchois <nolwenn.cauchois@cloudwatt.com>
 Olga Kopylova <olkonami@gmail.com>
 Olivier Pilotte <opilotte@iweb.com>
 Ollie Leahy <oliver.leahy@hp.com>
@@ -769,6 +775,7 @@ TaoBai <baitaosh@cn.ibm.com>
 Teruaki Ishizaki <ishizaki.teruaki@lab.ntt.co.jp>
 Thang Pham <thang.g.pham@gmail.com>
 Thelo Gaultier <thelo.gaultier@gmail.com>
+Thiago Correa <thiagoc@netapp.com>
 Thierry Carrez <thierry@openstack.org>
 Thomas Bechtold <tbechtold@suse.com>
 Thomas Bechtold <thomasbechtold@jpberlin.de>
@@ -829,6 +836,7 @@ Vivek Agrawal <vivek.agrawal@veritas.com>
 Vivek Dhayaal <vivekdhayaal@gmail.com>
 Vivek Soni <vivek.soni@hpe.com>
 Vivek Soni <viveksoni31390@gmail.com>
+Vlad Gusev <vlad.esten@gmail.com>
 Vladimir Popovski <vladimir@zadarastorage.com>
 Vladislav Kuzmin <vkuzmin@mirantis.com>
 Vu Cong Tuan <tuanvc@vn.fujitsu.com>
@@ -1183,6 +1191,8 @@ zhangdebo1987 <zhangdebo@inspur.com>
 zhangguoqing <zhang.guoqing@99cloud.net>
 zhangni <zhangni@huawei.com>
 zhangsong <zhangsong@cmss.chinamobile.com>
+zhangxiaohan <zmj1981123@163.com>
+zhangyang <zhangyang1@chinatelecom.cn>
 zhangyanxian <zhang.yanxian@zte.com.cn>
 zhangyanzi <zhangyanzi@huawei.com>
 zhangyi <yi.zhang@easystack.cn>
@@ -1199,4 +1209,5 @@ zhu.rong <zhu.rong@99cloud.net>
 zhubx007 <zhu.boxiang@99cloud.net>
 zhufl <zhu.fanglei@zte.com.cn>
 zhulingjie <easyzlj@gmail.com>
+zhurong <aaronzhu1121@gmail.com>
 zhuzhubj <zhuzhubj@cn.ibm.com>

@@ -2,8 +2,7 @@
 # This file should be owned by (and only-writeable by) the root user
 
 [Filters]
-# cinder/volume/iscsi.py: iscsi_helper '--op' ...
-tgtadm: CommandFilter, tgtadm, root
+# cinder/volume/targets/iscsi.py: target_helper '--op' ...
 iscsictl: CommandFilter, iscsictl, root
 cinder-rtstool: CommandFilter, cinder-rtstool, root
 
@@ -41,14 +40,6 @@ privsep-rootwrap: RegExpFilter, privsep-helper, root, privsep-helper, --config-f
 # Privsep calls within cinder iteself
 privsep-rootwrap-sys_admin: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, cinder.privsep.sys_admin_pctxt, --privsep_sock_path, /tmp/.*
 
-# The following and any cinder/brick/* entries should all be obsoleted
-# by privsep, and may be removed once the os-brick version requirement
-# is updated appropriately.
-drbdadm: CommandFilter, drbdadm, root
-
-# cinder/brick/local_dev/lvm.py: 'vgcreate', vg_name, pv_list
-vgcreate: CommandFilter, vgcreate, root
-
 # cinder/brick/local_dev/lvm.py: 'lvcreate', '-L', sizestr, '-n', volume_name,..
 # cinder/brick/local_dev/lvm.py: 'lvcreate', '-L', ...
 lvcreate: EnvFilter, env, root, LC_ALL=C, lvcreate
@@ -62,9 +53,6 @@ dd: CommandFilter, dd, root
 # cinder/volume/driver.py: 'lvremove', '-f', %s/%s % ...
 lvremove: CommandFilter, lvremove, root
 
-# cinder/volume/driver.py: 'lvrename', '%(vg)s', '%(orig)s' '(new)s'...
-lvrename: CommandFilter, lvrename, root
-
 # cinder/brick/local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(lv_name)s' ...
 # cinder/brick/local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(thin_pool)s' ...
 lvextend: EnvFilter, env, root, LC_ALL=C, lvextend
@@ -74,9 +62,6 @@ lvextend_lvmconf_fdwarn: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, LVM_SU
 
 # cinder/brick/local_dev/lvm.py: 'lvchange -a y -K <lv>'
 lvchange: CommandFilter, lvchange, root
-
-# cinder/brick/local_dev/lvm.py: 'lvconvert', '--merge', snapshot_name
-lvconvert: CommandFilter, lvconvert, root
 
 # cinder/volume/driver.py: 'iscsiadm', '-m', 'discovery', '-t',...
 # cinder/volume/driver.py: 'iscsiadm', '-m', 'node', '-T', ...
@@ -91,9 +76,6 @@ ionice_2: ChainingRegExpFilter, ionice, root, ionice, -c[0-3]
 
 # cinder/volume/utils.py: setup_blkio_cgroup()
 cgexec: ChainingRegExpFilter, cgexec, root, cgexec, -g, blkio:\S+
-
-# cinder/volume/driver.py
-ln: CommandFilter, ln, root
 
 # cinder/image/image_utils.py
 qemu-img: EnvFilter, env, root, LC_ALL=C, qemu-img
@@ -139,8 +121,6 @@ mmlsfileset: CommandFilter, mmlsfileset, root
 mmlinkfileset: CommandFilter, mmlinkfileset, root
 mmunlinkfileset: CommandFilter, mmunlinkfileset, root
 mmdelfileset: CommandFilter, mmdelfileset, root
-mmcrsnapshot: CommandFilter, mmcrsnapshot, root
-mmdelsnapshot: CommandFilter, mmdelsnapshot, root
 
 # cinder/volume/drivers/ibm/gpfs.py
 # cinder/volume/drivers/ibm/ibmnas.py
@@ -148,9 +128,6 @@ find_maxdepth_inum: RegExpFilter, find, root, find, ^[/]*([^/\0]+(/+)?)*$, -maxd
 
 #cinder/backup/services/tsm.py
 dsmc:CommandFilter,/usr/bin/dsmc,root
-
-# cinder/volume/drivers/hgst.py
-vgc-cluster: CommandFilter, vgc-cluster, root
 
 # cinder/volume/drivers/vzstorage.py
 pstorage-mount: CommandFilter, pstorage-mount, root

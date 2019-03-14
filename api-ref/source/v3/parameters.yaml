@@ -271,6 +271,17 @@ limit_group_snapshot:
   required: false
   type: integer
   min_version: 3.29
+limit_transfer:
+  description: |
+    Requests a page size of items. Returns a number
+    of items up to a limit value. Use the ``limit`` parameter to make
+    an initial limited request and use the ID of the last-seen item
+    from the response as the ``marker`` parameter value in a
+    subsequent limited request.
+  in: query
+  required: false
+  type: integer
+  min_version: 3.59
 marker:
   description: |
     The ID of the last-seen item. Use the ``limit``
@@ -290,6 +301,16 @@ marker_group_snapshot:
   required: false
   type: string
   min_version: 3.29
+marker_transfer:
+  description: |
+    The ID of the last-seen item. Use the ``limit``
+    parameter to make an initial limited request and use the ID of the
+    last-seen item from the response as the ``marker`` parameter value
+    in a subsequent limited request.
+  in: query
+  required: false
+  type: string
+  min_version: 3.59
 metadata_query:
   description: |
     Filters results by a metadata key and value pair.
@@ -324,6 +345,14 @@ offset_group_snapshot:
   required: false
   type: integer
   min_version: 3.29
+offset_transfer:
+  description: |
+    Used in conjunction with ``limit`` to return a slice of items. ``offset``
+    is where to start in the list.
+  in: query
+  required: false
+  type: integer
+  min_version: 3.59
 resource:
   description: |
     Filter for resource name.
@@ -355,6 +384,15 @@ sort_dir_group_snapshot:
   required: false
   type: string
   min_version: 3.29
+sort_dir_transfer:
+  description: |
+    Sorts by one or more sets of attribute and sort
+    direction combinations. If you omit the sort direction in a set,
+    default is ``desc``.
+  in: query
+  required: false
+  type: string
+  min_version: 3.59
 sort_key:
   description: |
     Sorts by an attribute. A valid value is ``name``,
@@ -376,6 +414,15 @@ sort_key_group_snapshot:
   required: false
   type: string
   min_version: 3.29
+sort_key_transfer:
+  description: |
+    Sorts by an attribute. Default is
+    ``created_at``. The API uses the natural sorting direction of the
+    ``sort_key`` attribute value.
+  in: query
+  required: false
+  type: string
+  min_version: 3.59
 status_query:
   description: |
     Filters results by a status. Default=None.
@@ -1446,8 +1493,7 @@ key_size:
   type: integer
 keys:
   description: |
-    List of Keys. For example, CryptsetupEncryptor, LuksEncryptor or
-    NoOpEncryptor.
+    List of Keys.
   in: body
   required: true
   type: array
@@ -1727,6 +1773,12 @@ migrate_lock_volume:
   in: body
   required: false
   type: boolean
+migration_completion_error:
+  description: |
+    Used to indicate if an error has occured elsewhere that requires clean up.
+  in: body
+  required: false
+  type: boolean
 # NOTE(mriedem): We can update the migration_policy retype note about encrypted
 # in-use volumes not being supported once
 # https://bugzilla.redhat.com/show_bug.cgi?id=760547 is fixed.
@@ -1898,6 +1950,12 @@ new_type:
   in: body
   required: true
   type: string
+new_volume:
+  description: |
+    The UUID of the new volume.
+  in: body
+  required: true
+  type: string
 no_snapshots:
   description: |
     Transfer volume without snapshots. Defaults to False if not specified.
@@ -1936,24 +1994,24 @@ os-detach:
   in: body
   required: true
   type: object
+os-ext-snap-attr:progress:
+  description: |
+    A percentage value for the build progress.
+  in: body
+  required: true
+  type: string
+os-ext-snap-attr:project_id:
+  description: |
+    The UUID of the owning project.
+  in: body
+  required: true
+  type: string
 os-extend:
   description: |
     The ``os-extend`` action.
   in: body
   required: true
   type: object
-os-extended-snapshot-attributes:progress:
-  description: |
-    A percentage value for the build progress.
-  in: body
-  required: true
-  type: string
-os-extended-snapshot-attributes:project_id:
-  description: |
-    The UUID of the owning project.
-  in: body
-  required: true
-  type: string
 os-force_delete:
   description: |
     The ``os-force_delete`` action.
@@ -1975,6 +2033,12 @@ os-initialize_connection:
 os-migrate_volume:
   description: |
     The ``os-migrate_volume`` action.
+  in: body
+  required: true
+  type: object
+os-migrate_volume_completion:
+  description: |
+    The ``os-migrate_volume_completion`` action.
   in: body
   required: true
   type: object
@@ -2148,6 +2212,20 @@ project_id:
   in: body
   required: true
   type: string
+project_id_group:
+  description: |
+    The UUID of the volume group project.
+  in: body
+  required: false
+  type: string
+  min_version: 3.58
+project_id_group_snapshot:
+  description: |
+    The UUID of the volume group snapshot project.
+  in: body
+  required: false
+  type: string
+  min_version: 3.58
 project_id_host:
   description: |
     The Project ID which the host resource belongs to.
@@ -2731,6 +2809,12 @@ totalGigabytesUsed:
   in: body
   required: true
   type: integer
+totalGigabytesUsedStr:
+  description: |
+    The total number of gibibytes (GiB) used.
+  in: body
+  required: true
+  type: string
 totalSnapGigabytesUsed:
   description: |
     The total number of gibibytes (GiB) used by snapshots.

@@ -54,13 +54,17 @@ db_opts = [
     cfg.StrOpt('snapshot_name_template',
                default='snapshot-%s',
                help='Template string to be used to generate snapshot names'),
+]
+
+backup_opts = [
     cfg.StrOpt('backup_name_template',
                default='backup-%s',
-               help='Template string to be used to generate backup names'), ]
-
+               help='Template string to be used to generate backup names'),
+]
 
 CONF = cfg.CONF
 CONF.register_opts(db_opts)
+CONF.register_opts(backup_opts)
 db_options.set_defaults(CONF)
 
 _BACKEND_MAPPING = {'sqlalchemy': 'cinder.db.sqlalchemy.api'}
@@ -1269,14 +1273,22 @@ def transfer_get(context, transfer_id):
     return IMPL.transfer_get(context, transfer_id)
 
 
-def transfer_get_all(context):
+def transfer_get_all(context, marker=None, limit=None, sort_keys=None,
+                     sort_dirs=None, filters=None, offset=None):
     """Get all volume transfer records."""
-    return IMPL.transfer_get_all(context)
+    return IMPL.transfer_get_all(context, marker=marker, limit=limit,
+                                 sort_keys=sort_keys, sort_dirs=sort_dirs,
+                                 filters=filters, offset=offset)
 
 
-def transfer_get_all_by_project(context, project_id):
+def transfer_get_all_by_project(context, project_id, marker=None,
+                                limit=None, sort_keys=None,
+                                sort_dirs=None, filters=None, offset=None):
     """Get all volume transfer records for specified project."""
-    return IMPL.transfer_get_all_by_project(context, project_id)
+    return IMPL.transfer_get_all_by_project(context, project_id, marker=marker,
+                                            limit=limit, sort_keys=sort_keys,
+                                            sort_dirs=sort_dirs,
+                                            filters=filters, offset=offset)
 
 
 def transfer_create(context, values):

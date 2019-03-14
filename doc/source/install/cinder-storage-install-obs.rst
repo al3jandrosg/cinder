@@ -162,8 +162,8 @@ Install and configure components
         auth_url = http://controller:5000
         memcached_servers = controller:11211
         auth_type = password
-        project_domain_id = default
-        user_domain_id = default
+        project_domain_name = default
+        user_domain_name = default
         project_name = service
         username = cinder
         password = CINDER_PASS
@@ -205,8 +205,8 @@ Install and configure components
         # ...
         volume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver
         volume_group = cinder-volumes
-        iscsi_protocol = iscsi
-        iscsi_helper = tgtadm
+        target_protocol = iscsi
+        target_helper = tgtadm
 
      .. end
 

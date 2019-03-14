@@ -23,8 +23,9 @@ from oslo_utils import units
 import requests
 import requests.auth
 import requests.exceptions as r_exc
-import requests.packages.urllib3.exceptions as urllib_exp
+# pylint: disable=E0401
 import requests.packages.urllib3.util.retry as requests_retry
+
 import six
 
 from cinder import coordination
@@ -33,13 +34,11 @@ from cinder.i18n import _
 from cinder.utils import retry
 from cinder.volume.drivers.dell_emc.powermax import utils
 
-requests.packages.urllib3.disable_warnings(urllib_exp.InsecureRequestWarning)
-
 LOG = logging.getLogger(__name__)
 SLOPROVISIONING = 'sloprovisioning'
 REPLICATION = 'replication'
 SYSTEM = 'system'
-U4V_VERSION = '84'
+U4V_VERSION = '90'
 UCODE_5978 = '5978'
 retry_exc_tuple = (exception.VolumeBackendAPIException,)
 # HTTP constants
@@ -187,7 +186,7 @@ class PowerMaxRest(object):
                     "Cinder Volume service to revert back to the primary "
                     "Unisphere instance.")
             self.u4p_failover_lock = False
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise exception.VolumeBackendAPIException(message=msg)
 
     def request(self, target_uri, method, params=None, request_object=None,
                 u4p_check=False, retry=False):
@@ -288,8 +287,8 @@ class PowerMaxRest(object):
             LOG.exception(msg, {'method': method, 'url': url,
                                 'e': six.text_type(e)})
             raise exception.VolumeBackendAPIException(
-                data=(msg, {'method': method, 'url': url,
-                            'e': six.text_type(e)}))
+                message=(msg, {'method': method, 'url': url,
+                               'e': six.text_type(e)}))
 
         return status_code, message
 
@@ -327,7 +326,7 @@ class PowerMaxRest(object):
                 exception_message = (_("Issue encountered waiting for job."))
                 LOG.exception(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
             if retries > int(extra_specs[utils.RETRIES]):
                 LOG.error("_wait_for_job_complete failed after "
@@ -390,7 +389,7 @@ class PowerMaxRest(object):
                     'operation': operation, 'sc': status_code,
                     'message': message})
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
 
     def wait_for_job(self, operation, status_code, job, extra_specs):
         """Check if call is async, wait for it to complete.
@@ -414,7 +413,7 @@ class PowerMaxRest(object):
                         'error': six.text_type(result), 'status': status})
                 LOG.error(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
         return task
 
     @staticmethod
@@ -457,6 +456,7 @@ class PowerMaxRest(object):
                       {'e': e})
         if sc == STATUS_200:
             resource_object = message
+            resource_object = self.list_pagination(resource_object)
         return resource_object
 
     def get_resource(self, array, category, resource_type,
@@ -890,15 +890,17 @@ class PowerMaxRest(object):
         :param name_id: name id - used in host_assisted migration, optional
         :returns: found_device_id
         """
-        element_name = self.utils.get_volume_element_name(volume_id)
         found_device_id = None
+        if not device_id:
+            return found_device_id
+        element_name = self.utils.get_volume_element_name(volume_id)
         vol_details = self.get_volume(array, device_id)
         if vol_details:
             vol_identifier = vol_details.get('volume_identifier', None)
             LOG.debug('Element name = %(en)s, Vol identifier = %(vi)s, '
-                      'Device id = %(di)s, vol details = %(vd)s',
+                      'Device id = %(di)s',
                       {'en': element_name, 'vi': vol_identifier,
-                       'di': device_id, 'vd': vol_details})
+                       'di': device_id})
             if vol_identifier == element_name:
                 found_device_id = device_id
             elif name_id:
@@ -1027,7 +1029,7 @@ class PowerMaxRest(object):
                     'dv': qos_unit})
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         return property_dict
 
     @staticmethod
@@ -1046,7 +1048,7 @@ class PowerMaxRest(object):
                     'dl': dynamic_list})
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         return property_dict
 
     def set_storagegroup_srp(
@@ -1136,7 +1138,8 @@ class PowerMaxRest(object):
             exception_message = (_("Volume %(deviceID)s not found.")
                                  % {'deviceID': device_id})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         return volume_dict
 
     def _get_private_volume(self, array, device_id):
@@ -1153,12 +1156,13 @@ class PowerMaxRest(object):
             volume_info = self.get_resource(
                 array, SLOPROVISIONING, 'volume', params=params,
                 private='/private')
-            volume_dict = volume_info['resultList']['result'][0]
+            volume_dict = volume_info[0]
         except (KeyError, TypeError):
             exception_message = (_("Volume %(deviceID)s not found.")
                                  % {'deviceID': device_id})
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         return volume_dict
 
     def get_volume_list(self, array, params):
@@ -1171,9 +1175,8 @@ class PowerMaxRest(object):
         :returns: device_ids -- list
         """
         device_ids = []
-        volumes = self.get_resource(
+        volume_dict_list = self.get_resource(
             array, SLOPROVISIONING, 'volume', params=params)
-        volume_dict_list = self.list_pagination(volumes)
         try:
             for vol_dict in volume_dict_list:
                 device_id = vol_dict['volumeId']
@@ -1189,11 +1192,9 @@ class PowerMaxRest(object):
         :param params: filter parameters
         :returns: list -- dicts with volume information
         """
-        volume_info = self.get_resource(
+        return self.get_resource(
             array, SLOPROVISIONING, 'volume', params=params,
             private='/private')
-
-        return self.list_pagination(volume_info)
 
     def _modify_volume(self, array, device_id, payload):
         """Modify a volume (PUT operation).
@@ -1409,7 +1410,7 @@ class PowerMaxRest(object):
 
         resource_name = ('%(directorId)s/port/%(port_number)s'
                          % {'directorId': dir_id, 'port_number': port_no})
-        return self.get_resource(array, SLOPROVISIONING, 'director',
+        return self.get_resource(array, SYSTEM, 'director',
                                  resource_name=resource_name)
 
     def get_iscsi_ip_address_and_iqn(self, array, port_id):
@@ -1476,9 +1477,8 @@ class PowerMaxRest(object):
         :param params: dict of optional params
         :returns: list of initiators
         """
-        version = '90' if self.is_next_gen_array(array) else U4V_VERSION
         init_dict = self.get_resource(array, SLOPROVISIONING, 'initiator',
-                                      params=params, version=version)
+                                      params=params)
         try:
             init_list = init_dict['initiatorId']
         except (KeyError, TypeError):
@@ -1611,7 +1611,8 @@ class PowerMaxRest(object):
         else:
             exception_message = (_("Error retrieving masking group."))
             LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
         return element
 
     def get_common_masking_views(self, array, portgroup_name, ig_name):
@@ -1818,6 +1819,8 @@ class PowerMaxRest(object):
                    "generation": int(generation)}
         if restored:
             payload.update({"restore": True})
+        LOG.debug("The payload is %(payload)s.",
+                  {'payload': payload})
         return self.delete_resource(
             array, REPLICATION, 'snapshot', snap_name, payload=payload,
             private='/private')
@@ -1846,9 +1849,9 @@ class PowerMaxRest(object):
         snapshot = None
         snap_info = self.get_volume_snap_info(array, device_id)
         if snap_info:
-            if (snap_info.get('snapshotSrcs') and
-                    bool(snap_info['snapshotSrcs'])):
-                for snap in snap_info['snapshotSrcs']:
+            if (snap_info.get('snapshotSrc') and
+                    bool(snap_info['snapshotSrc'])):
+                for snap in snap_info['snapshotSrc']:
                     if snap['snapshotName'] == snap_name:
                         if snap['generation'] == generation:
                             snapshot = snap
@@ -1865,8 +1868,8 @@ class PowerMaxRest(object):
         snapshot_list = []
         snap_info = self.get_volume_snap_info(array, source_device_id)
         if snap_info:
-            if bool(snap_info['snapshotSrcs']):
-                snapshot_list = snap_info['snapshotSrcs']
+            if bool(snap_info['snapshotSrc']):
+                snapshot_list = snap_info['snapshotSrc']
         return snapshot_list
 
     def is_vol_in_rep_session(self, array, device_id):
@@ -1922,7 +1925,7 @@ class PowerMaxRest(object):
                                        "synchronization."))
                 LOG.exception(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
             if kwargs['retries'] > int(extra_specs[utils.RETRIES]):
                 LOG.error("_wait_for_sync failed after %(retries)d "
@@ -1985,11 +1988,14 @@ class PowerMaxRest(object):
         snap_dict_list = []
         snapshots = self.get_volume_snapshot_list(array, source_device_id)
         for snapshot in snapshots:
-            if bool(snapshot['linkedDevices']):
-                link_info = {'linked_vols': snapshot['linkedDevices'],
-                             'snap_name': snapshot['snapshotName'],
-                             'generation': snapshot['generation']}
-                snap_dict_list.append(link_info)
+            try:
+                if bool(snapshot['linkedDevices']):
+                    link_info = {'linked_vols': snapshot['linkedDevices'],
+                                 'snap_name': snapshot['snapshotName'],
+                                 'generation': snapshot['generation']}
+                    snap_dict_list.append(link_info)
+            except KeyError:
+                pass
         return snap_dict_list
 
     def get_snap_linked_device_list(self, array, source_device_id,
@@ -2182,7 +2188,7 @@ class PowerMaxRest(object):
                 exception_message = _("Issue encountered waiting for job.")
                 LOG.exception(exception_message)
                 raise exception.VolumeBackendAPIException(
-                    data=exception_message)
+                    message=exception_message)
 
             if retries > int(extra_specs[utils.RETRIES]):
                 LOG.error("_wait_for_consistent_state failed after "
@@ -2531,8 +2537,7 @@ class PowerMaxRest(object):
             start_position = list_info['resultList']['from']
             end_position = list_info['resultList']['to']
         except (KeyError, TypeError):
-            return result_list
-
+            return list_info
         if list_count > max_page_size:
             LOG.info("More entries exist in the result list, retrieving "
                      "remainder of results from iterator.")

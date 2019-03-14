@@ -93,8 +93,8 @@ from cinder.volume.drivers.dell_emc import xtremio as \
     cinder_volume_drivers_dell_emc_xtremio
 from cinder.volume.drivers import drbdmanagedrv as \
     cinder_volume_drivers_drbdmanagedrv
-from cinder.volume.drivers.fujitsu import eternus_dx_common as \
-    cinder_volume_drivers_fujitsu_eternusdxcommon
+from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_common as \
+    cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon
 from cinder.volume.drivers.fusionstorage import dsware as \
     cinder_volume_drivers_fusionstorage_dsware
 from cinder.volume.drivers.hpe import hpe_3par_common as \
@@ -208,9 +208,9 @@ def list_opts():
                 cinder_api_common.api_common_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
                 cinder_api_views_versions.versions_opts,
-                cinder_backup_api.backup_api_opts,
-                cinder_backup_chunkeddriver.chunkedbackup_service_opts,
-                cinder_backup_driver.service_opts,
+                cinder_backup_api.backup_opts,
+                cinder_backup_chunkeddriver.backup_opts,
+                cinder_backup_driver.backup_opts,
                 cinder_backup_drivers_ceph.service_opts,
                 cinder_backup_drivers_gcs.gcsbackup_service_opts,
                 cinder_backup_drivers_glusterfs.glusterfsbackup_service_opts,
@@ -221,15 +221,20 @@ def list_opts():
                 cinder_backup_manager.backup_manager_opts,
                 [cinder_cmd_backup.backup_workers_opt],
                 [cinder_cmd_volume.cluster_opt],
+                cinder_common_config.api_opts,
                 cinder_common_config.core_opts,
+                cinder_common_config.auth_opts,
+                cinder_common_config.backup_opts,
+                cinder_common_config.image_opts,
                 cinder_common_config.global_opts,
                 cinder.compute.compute_opts,
                 cinder_context.context_opts,
                 cinder_db_api.db_opts,
+                cinder_db_api.backup_opts,
                 [cinder_db_base.db_driver_opt],
-                cinder_image_glance.glance_opts,
+                cinder_image_glance.image_opts,
                 cinder_image_glance.glance_core_properties_opts,
-                cinder_image_imageutils.image_helper_opts,
+                cinder_image_imageutils.image_opts,
                 cinder_message_api.messages_opts,
                 cinder_quota.quota_opts,
                 cinder_scheduler_driver.scheduler_driver_opts,
@@ -250,6 +255,9 @@ def list_opts():
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
                 cinder_volume_driver.nvmet_opts,
+                cinder_volume_driver.scst_opts,
+                cinder_volume_driver.backup_opts,
+                cinder_volume_driver.image_opts,
                 cinder_volume_drivers_datacore_driver.datacore_opts,
                 cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
                 cinder_volume_drivers_fusionstorage_dsware.volume_opts,
@@ -284,6 +292,8 @@ def list_opts():
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
                 cinder_volume_driver.nvmet_opts,
+                cinder_volume_driver.scst_opts,
+                cinder_volume_driver.image_opts,
                 cinder_volume_drivers_datera_dateraiscsi.d_opts,
                 cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
                 cinder_volume_drivers_dell_emc_ps.eqlx_opts,
@@ -294,7 +304,7 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_drbdmanagedrv.drbd_opts,
-                cinder_volume_drivers_fujitsu_eternusdxcommon.
+                cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
                 cinder_volume_drivers_hpe_hpelefthandiscsi.hpelefthand_opts,
