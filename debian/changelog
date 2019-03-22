@@ -1,3 +1,10 @@
+cinder (2:14.0.0~rc1-0ubuntu1) disco; urgency=medium
+
+  * New upstream release candidate for OpenStack Stein.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 22 Mar 2019 09:34:08 +0000
+
 cinder (2:14.0.0~b1~git2019031444.b347f9e31-0ubuntu1) disco; urgency=medium
 
   * New upstream snapshot for OpenStack Stein.

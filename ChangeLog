@@ -1,9 +1,19 @@
 CHANGES
 =======
 
+14.0.0.0rc1
+-----------
+
+* Fix Support Matrix - Pure does support Multiattach
+* Gate Fix: Bumping versions in lower-constraints.txt
+* Fix VolumeAttachment is not bound to a Session
+* Modify the configuration mode of FusionStorage Cinder Driver
+* Automate generation of snapshots api-ref samples
 * Adds revert to snapshot feature to support matrix
+* PowerMax docs -  changing cinder tags to powermax
 * Use excutils.save\_and\_reraise\_exception instead of reraise
 * PowerMax driver -  test fixes for \_sanity\_port\_group\_check
+* NetApp SolidFire: Fix misbehavior on account creation
 * Add get\_driver\_options method
 * docs: mark rbd driver support for extending an in-use volume
 * Revert "Remove truncate from rootwrap filters"
@@ -45,6 +55,8 @@ CHANGES
 * Fix for auth version change in Brcd HTTP
 * Remove drbdadm from filters
 * Replace 'lvconvert' from rootwrap
+* PowerMax Driver - Unmanage Snapshot Improvements
+* PowerMax driver - performance improvements
 * PowerMax Driver - Unit Test Refactoring
 * PowerMax driver - do an rdf\_group check earlier
 * Limit RBD discard to 32 bit chunks
@@ -57,6 +69,7 @@ CHANGES
 * PowerMax driver - do the portgroup check earlier
 * PowerMax driver - solve issue of concurrent snapvx operations
 * Compact DB migrations to Ocata
+* Automate generation of volume actions api-ref samples
 * Fix some miscapitalizations of VMware
 * RBD: add support for multiattach
 * PowerMax Driver - Storage-assisted in-use retype support
@@ -153,6 +166,7 @@ CHANGES
 * Remove 'ln' command from rootwrap filter
 * Add policy configuration howto
 * Remove umount from volume.filters
+* Refactor for Veritas iSCSI driver
 * Add x\_project\_id, accepted to transfers
 * Add policy test for volume create policy
 * Ignore migration 127 error on MariaDB
@@ -1612,6 +1626,7 @@ CHANGES
 * 3PAR: Cinder volume revert to snapshot support
 * Compact Newton database migrations
 * Add indexes to SQLAlchemy models
+* Updated from global requirements
 * [policy in code] Add support for attachment resource
 * Api-ref: fix v2/v3 hosts extension api doc
 * nimble: fix for parent volume delete
