@@ -1,3 +1,9 @@
+cinder (2:14.0.0~rc2-0ubuntu1) disco; urgency=medium
+
+  * New upstream release candidate for OpenStack Stein.
+
+ -- Sahid Orentino Ferdjaoui <sahid.ferdjaoui@canonical.com>  Fri, 05 Apr 2019 11:52:10 +0200
+
 cinder (2:14.0.0~rc1-0ubuntu1) disco; urgency=medium
 
   * New upstream release candidate for OpenStack Stein.

@@ -1,6 +1,14 @@
 CHANGES
 =======
 
+14.0.0.0rc2
+-----------
+
+* Handling filters in Generalized Filtering API
+* Replace openstack.org git:// URLs with https://
+* Update UPPER\_CONSTRAINTS\_FILE for stable/stein
+* Update .gitreview for stable/stein
+
 14.0.0.0rc1
 -----------
 
