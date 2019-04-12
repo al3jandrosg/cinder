@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-14.0.0.0rc2
------------
+14.0.0
+------
 
 * Handling filters in Generalized Filtering API
 * Replace openstack.org git:// URLs with https://

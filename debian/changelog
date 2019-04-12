@@ -1,3 +1,9 @@
+cinder (2:14.0.0-0ubuntu1) disco; urgency=medium
+
+  * New upstream release for OpenStack Stein.
+
+ -- James Page <james.page@ubuntu.com>  Fri, 12 Apr 2019 08:44:29 +0100
+
 cinder (2:14.0.0~rc2-0ubuntu1) disco; urgency=medium
 
   * New upstream release candidate for OpenStack Stein.
