@@ -263,13 +263,14 @@ class DbQuotaDriver(object):
         """
 
         # Filter resources
-        if has_sync:
-            sync_filt = lambda x: hasattr(x, 'sync')
-        else:
-            sync_filt = lambda x: not hasattr(x, 'sync')
+        def sync_filt(x, has_sync):
+            if has_sync:
+                return hasattr(x, 'sync')
+            else:
+                return not hasattr(x, 'sync')
         desired = set(keys)
         sub_resources = {k: v for k, v in resources.items()
-                         if k in desired and sync_filt(v)}
+                         if k in desired and sync_filt(v, has_sync)}
 
         # Make sure we accounted for all of them...
         if len(keys) != len(sub_resources):
@@ -452,6 +453,12 @@ class DbQuotaDriver(object):
 
 
 class NestedDbQuotaDriver(DbQuotaDriver):
+
+    def __init__(self, *args, **kwargs):
+        super(NestedDbQuotaDriver, self).__init__(*args, **kwargs)
+        LOG.warning('The NestedDbQuotaDriver is deprecated and will be '
+                    'removed in the "U" release.')
+
     def validate_nested_setup(self, ctxt, resources, project_tree,
                               fix_allocated_quotas=False):
         """Ensures project_tree has quotas that make sense as nested quotas.
@@ -1230,6 +1237,7 @@ class GroupQuotaEngine(QuotaEngine):
 
     def register_resources(self, resources):
         raise NotImplementedError(_("Cannot register resources"))
+
 
 QUOTAS = VolumeTypeQuotaEngine()
 CGQUOTAS = CGQuotaEngine()

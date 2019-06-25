@@ -417,12 +417,12 @@ class ApiSampleTestBase(functional_helpers._FunctionalTestBase):
 
     def _get_regexes(self):
         text = r'(\\"|[^"])*'
-        isotime_re = '\d{4}-[0,1]\d-[0-3]\dT\d{2}:\d{2}:\d{2}Z'
-        strtime_re = '\d{4}-[0,1]\d-[0-3]\dT\d{2}:\d{2}:\d{2}\.\d{6}'
+        isotime_re = r'\d{4}-[0,1]\d-[0-3]\dT\d{2}:\d{2}:\d{2}Z'
+        strtime_re = r'\d{4}-[0,1]\d-[0-3]\dT\d{2}:\d{2}:\d{2}\.\d{6}'
         extension_update = (
-            '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}')
-        strtime_url_re = ('\d{4}-[0,1]\d-[0-3]\d'
-                          '\+\d{2}\%3A\d{2}\%3A\d{2}\.\d{6}')
+            r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}')
+        strtime_url_re = (r'\d{4}-[0,1]\d-[0-3]\d'
+                          r'\+\d{2}\%3A\d{2}\%3A\d{2}\.\d{6}')
 
         return {
             'isotime': isotime_re,
@@ -436,7 +436,7 @@ class ApiSampleTestBase(functional_helpers._FunctionalTestBase):
                     '-[0-9a-f]{4}-[0-9a-f]{12}',
             'request_id': 'req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}'
                           '-[0-9a-f]{4}-[0-9a-f]{12}',
-            'host': 'https?://[0-9]+(?:\.[0-9]+){3}:[0-9]+',
+            'host': r'https?://[0-9]+(?:\.[0-9]+){3}:[0-9]+',
             'host_name': r'\w+',
             'glance_host': self._get_glance_host(),
             'os-vol-host-attr:host': self.volume.host,
@@ -448,7 +448,8 @@ class ApiSampleTestBase(functional_helpers._FunctionalTestBase):
             'versioned_volume_endpoint': self._get_versioned_volume_endpoint(),
             'name': text,
             'description': text,
-            'extension_update': extension_update
+            'extension_update': extension_update,
+            'auth_key': '[a-z0-9]{16}'
         }
 
     def _get_volume_endpoint(self):
@@ -488,7 +489,7 @@ class ApiSampleTestBase(functional_helpers._FunctionalTestBase):
             body = self._read_template(name) % self.subs
             sample = self._get_sample(name)
             if self.generate_samples and not os.path.exists(sample):
-                    self._write_sample(name, body)
+                self._write_sample(name, body)
         return self._get_response(url, method, body, headers=headers)
 
     def _do_put(self, url, name=None, subs=None, headers=None):

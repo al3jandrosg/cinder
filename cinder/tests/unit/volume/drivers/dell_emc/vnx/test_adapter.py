@@ -211,9 +211,9 @@ class TestCommonAdapter(test_base.TestCase):
             vnx_common.do_create_cg_from_cgsnap(
                 cg_id, cg_host, volumes, cgsnap_id, snaps))
         self.assertIsNone(model_update)
-        self.assertIsNotNone(
-            re.findall('id^12',
-                       volume_updates[0]['provider_location']))
+        provider_location = re.findall(r'id\^12',
+                                       volume_updates[0]['provider_location'])
+        self.assertEqual(1, len(provider_location))
 
     @res_mock.patch_common_adapter
     def test_create_cloned_cg(self, common, _):
@@ -270,9 +270,9 @@ class TestCommonAdapter(test_base.TestCase):
         model_update, volume_updates = vnx_common.do_clone_cg(
             cg_id, cg_host, volumes, src_cg_id, src_volumes)
         self.assertIsNone(model_update)
-        self.assertIsNotNone(
-            re.findall('id^12',
-                       volume_updates[0]['provider_location']))
+        provider_location = re.findall(r'id\^12',
+                                       volume_updates[0]['provider_location'])
+        self.assertEqual(1, len(provider_location))
 
     @res_mock.patch_common_adapter
     def test_parse_pools(self, vnx_common, mocked):
@@ -442,6 +442,31 @@ class TestCommonAdapter(test_base.TestCase):
         vnx_common.delete_volume(volume)
         lun = vnx_common.client.vnx.get_lun()
         lun.delete.assert_called_with(force_detach=True, detach_from_sg=True)
+
+    @res_mock.mock_driver_input
+    @res_mock.patch_common_adapter
+    def test_delete_async_volume_not_from_snapshot(self, vnx_common, mocked,
+                                                   mocked_input):
+        volume = mocked_input['volume']
+        volume.metadata = {'async_migrate': 'True'}
+        vnx_common.force_delete_lun_in_sg = True
+        vnx_common.delete_volume(volume)
+        lun = vnx_common.client.vnx.get_lun()
+        lun.delete.assert_called_with(force_detach=True, detach_from_sg=True)
+
+    @res_mock.mock_driver_input
+    @res_mock.patch_common_adapter
+    def test_delete_async_volume_from_snapshot(self, vnx_common, mocked,
+                                               mocked_input):
+        volume = mocked_input['volume']
+        volume.metadata = {'async_migrate': 'True'}
+        volume.snapshot_id = 'snap'
+        vnx_common.force_delete_lun_in_sg = True
+        vnx_common.delete_volume(volume)
+        lun = vnx_common.client.vnx.get_lun()
+        lun.delete.assert_called_with(force_detach=True, detach_from_sg=True)
+        snap = vnx_common.client.vnx.get_snap()
+        snap.delete.assert_called_with()
 
     @utils.patch_extra_specs_validate(side_effect=exception.InvalidVolumeType(
         reason='fake_reason'))

@@ -676,10 +676,6 @@ class ImageLimitExceeded(QuotaError):
     message = _("Image quota exceeded")
 
 
-class DuplicateSfVolumeNames(Duplicate):
-    message = _("Detected more than one volume with name %(vol_name)s")
-
-
 class VolumeTypeCreateFailed(CinderException):
     message = _("Cannot create volume_type with "
                 "name %(name)s and specs %(extra_specs)s")
@@ -952,57 +948,6 @@ class VolumeDeviceNotFound(CinderException):
     message = _('Volume device not found at %(device)s.')
 
 
-# Driver specific exceptions
-# Dell
-class DellDriverRetryableException(VolumeBackendAPIException):
-    message = _("Retryable Dell Exception encountered")
-
-
-class DellDriverUnknownSpec(VolumeDriverException):
-    message = _("Dell driver failure: %(reason)s")
-
-
-# Pure Storage
-class PureDriverException(VolumeDriverException):
-    message = _("Pure Storage Cinder driver failure: %(reason)s")
-
-
-class PureRetryableException(VolumeBackendAPIException):
-    message = _("Retryable Pure Storage Exception encountered")
-
-
-# RBD
-class RBDDriverException(VolumeDriverException):
-    message = _("RBD Cinder driver failure: %(reason)s")
-
-
-# SolidFire
-class SolidFireAPIException(VolumeBackendAPIException):
-    message = _("Bad response from SolidFire API")
-
-
-class SolidFireDriverException(VolumeDriverException):
-    message = _("SolidFire Cinder Driver exception")
-
-
-class SolidFireAPIDataException(SolidFireAPIException):
-    message = _("Error in SolidFire API response: data=%(data)s")
-
-
-class SolidFireAccountNotFound(SolidFireDriverException):
-    message = _("Unable to locate account %(account_name)s on "
-                "Solidfire device")
-
-
-class SolidFireRetryableException(VolumeBackendAPIException):
-    message = _("Retryable SolidFire Exception encountered")
-
-
-# HP 3Par
-class Invalid3PARDomain(VolumeDriverException):
-    message = _("Invalid 3PAR Domain: %(err)s")
-
-
 # RemoteFS drivers
 class RemoteFSException(VolumeDriverException):
     message = _("Unknown RemoteFS exception")
@@ -1038,33 +983,6 @@ class NfsNoSuitableShareFound(RemoteFSNoSuitableShareFound):
     message = _("There is no share which can host %(volume_size)sG")
 
 
-# Smbfs driver
-class SmbfsException(RemoteFSException):
-    message = _("Unknown SMBFS exception.")
-
-
-class SmbfsNoSharesMounted(RemoteFSNoSharesMounted):
-    message = _("No mounted SMBFS shares found.")
-
-
-class SmbfsNoSuitableShareFound(RemoteFSNoSuitableShareFound):
-    message = _("There is no share which can host %(volume_size)sG.")
-
-
-# Virtuozzo Storage Driver
-
-class VzStorageException(RemoteFSException):
-    message = _("Unknown Virtuozzo Storage exception")
-
-
-class VzStorageNoSharesMounted(RemoteFSNoSharesMounted):
-    message = _("No mounted Virtuozzo Storage shares found")
-
-
-class VzStorageNoSuitableShareFound(RemoteFSNoSuitableShareFound):
-    message = _("There is no share which can host %(volume_size)sG")
-
-
 # Fibre Channel Zone Manager
 class ZoneManagerException(CinderException):
     message = _("Fibre Channel connection control failure: %(reason)s")
@@ -1080,36 +998,6 @@ class FCSanLookupServiceException(CinderException):
 
 class ZoneManagerNotInitialized(CinderException):
     message = _("Fibre Channel Zone Manager not initialized")
-
-
-class BrocadeZoningCliException(CinderException):
-    message = _("Brocade Fibre Channel Zoning CLI error: %(reason)s")
-
-
-class BrocadeZoningHttpException(CinderException):
-    message = _("Brocade Fibre Channel Zoning HTTP error: %(reason)s")
-
-
-class BrocadeZoningRestException(CinderException):
-    message = _("Brocade Fibre Channel Zoning REST error: %(reason)s")
-
-
-class CiscoZoningCliException(CinderException):
-    message = _("Cisco Fibre Channel Zoning CLI error: %(reason)s")
-
-
-class NetAppDriverException(VolumeDriverException):
-    message = _("NetApp Cinder Driver exception.")
-
-
-class EMCVnxCLICmdError(VolumeBackendAPIException):
-    message = _("EMC VNX Cinder Driver CLI exception: %(cmd)s "
-                "(Return Code: %(rc)s) (Output: %(out)s).")
-
-
-class EMCSPUnavailableException(EMCVnxCLICmdError):
-    message = _("EMC VNX Cinder Driver SPUnavailableException: %(cmd)s "
-                "(Return Code: %(rc)s) (Output: %(out)s).")
 
 
 # ConsistencyGroup
@@ -1156,11 +1044,6 @@ class InvalidGroupSnapshotStatus(Invalid):
     message = _("Invalid GroupSnapshot Status: %(reason)s")
 
 
-# Datera driver
-class DateraAPIException(VolumeBackendAPIException):
-    message = _("Bad response from Datera API")
-
-
 # Target drivers
 class ISCSITargetCreateFailed(CinderException):
     message = _("Failed to create iscsi target for volume %(volume_id)s.")
@@ -1194,99 +1077,6 @@ class BadResetResourceStatus(CinderException):
     message = _("Bad reset resource status : %(reason)s")
 
 
-# ZADARA STORAGE VPSA driver exception
-class ZadaraServerCreateFailure(VolumeDriverException):
-    message = _("Unable to create server object for initiator %(name)s")
-
-
-class ZadaraServerNotFound(NotFound):
-    message = _("Unable to find server object for initiator %(name)s")
-
-
-class ZadaraVPSANoActiveController(VolumeDriverException):
-    message = _("Unable to find any active VPSA controller")
-
-
-class ZadaraAttachmentsNotFound(NotFound):
-    message = _("Failed to retrieve attachments for volume %(name)s")
-
-
-class ZadaraInvalidAttachmentInfo(Invalid):
-    message = _("Invalid attachment info for volume %(name)s: %(reason)s")
-
-
-class ZadaraVolumeNotFound(VolumeDriverException):
-    message = "%(reason)s"
-
-
-# ZFSSA NFS driver exception.
-class WebDAVClientError(VolumeDriverException):
-    message = _("The WebDAV request failed. Reason: %(msg)s, "
-                "Return code/reason: %(code)s, Source Volume: %(src)s, "
-                "Destination Volume: %(dst)s, Method: %(method)s.")
-
-
-# XtremIO Drivers
-class XtremIOAlreadyMappedError(VolumeDriverException):
-    message = _("Volume to Initiator Group mapping already exists")
-
-
-class XtremIOArrayBusy(VolumeDriverException):
-    message = _("System is busy, retry operation.")
-
-
-class XtremIOSnapshotsLimitExceeded(VolumeDriverException):
-    message = _("Exceeded the limit of snapshots per volume")
-
-
-# StorPool driver
-class StorPoolConfigurationInvalid(CinderException):
-    message = _("Invalid parameter %(param)s in the %(section)s section "
-                "of the /etc/storpool.conf file: %(error)s")
-
-
-# DOTHILL drivers
-class DotHillInvalidBackend(VolumeDriverException):
-    message = _("Backend doesn't exist (%(backend)s)")
-
-
-class DotHillConnectionError(VolumeDriverException):
-    message = "%(message)s"
-
-
-class DotHillAuthenticationError(VolumeDriverException):
-    message = "%(message)s"
-
-
-class DotHillNotEnoughSpace(VolumeDriverException):
-    message = _("Not enough space on backend (%(backend)s)")
-
-
-class DotHillRequestError(VolumeDriverException):
-    message = "%(message)s"
-
-
-class DotHillNotTargetPortal(VolumeDriverException):
-    message = _("No active iSCSI portals with supplied iSCSI IPs")
-
-
-class DotHillDriverNotSupported(VolumeDriverException):
-    message = _("The Dot Hill driver is no longer supported.")
-
-
-# Sheepdog
-class SheepdogError(VolumeBackendAPIException):
-    message = _("An error has occurred in SheepdogDriver. "
-                "(Reason: %(reason)s)")
-
-
-class SheepdogCmdError(SheepdogError):
-    message = _("(Command: %(cmd)s) "
-                "(Return Code: %(exit_code)s) "
-                "(Stdout: %(stdout)s) "
-                "(Stderr: %(stderr)s)")
-
-
 class MetadataAbsent(CinderException):
     message = _("There is no metadata in DB object.")
 
@@ -1296,80 +1086,9 @@ class NotSupportedOperation(Invalid):
     code = 405
 
 
-# NexentaStor driver exception
-class NexentaException(VolumeDriverException):
-    message = "%(reason)s"
-
-
-# Google Cloud Storage(GCS) backup driver
-class GCSConnectionFailure(BackupDriverException):
-    message = _("Google Cloud Storage connection failure: %(reason)s")
-
-
-class GCSApiFailure(BackupDriverException):
-    message = _("Google Cloud Storage api failure: %(reason)s")
-
-
-class GCSOAuth2Failure(BackupDriverException):
-    message = _("Google Cloud Storage oauth2 failure: %(reason)s")
-
-
-# Kaminario K2
-class KaminarioCinderDriverException(VolumeDriverException):
-    message = _("KaminarioCinderDriver failure: %(reason)s")
-
-
-class KaminarioRetryableException(VolumeDriverException):
-    message = _("Kaminario retryable exception: %(reason)s")
-
-
-# Synology driver
-class SynoAPIHTTPError(VolumeDriverException):
-    message = _("HTTP exit code: [%(code)s]")
-
-
-class SynoAuthError(VolumeDriverException):
-    message = _("Synology driver authentication failed: %(reason)s.")
-
-
-class SynoLUNNotExist(VolumeDriverException):
-    message = _("LUN not found by UUID: %(uuid)s.")
-
-
 class AttachmentSpecsNotFound(NotFound):
     message = _("Attachment %(attachment_id)s has no "
                 "key %(specs_key)s.")
-
-
-class InvalidAttachment(Invalid):
-    message = _("Invalid attachment: %(reason)s")
-
-
-# Veritas driver
-class UnableToExecuteHyperScaleCmd(VolumeDriverException):
-    message = _("Failed HyperScale command for '%(command)s'")
-
-
-class UnableToProcessHyperScaleCmdOutput(VolumeDriverException):
-    message = _("Failed processing command output '%(cmd_out)s'"
-                " for HyperScale command")
-
-
-class ErrorInFetchingConfiguration(VolumeDriverException):
-    message = _("Error in fetching configuration for '%(persona)s'")
-
-
-class ErrorInSendingMsg(VolumeDriverException):
-    message = _("Error in sending message '%(cmd_error)s'")
-
-
-class ErrorInHyperScaleVersion(VolumeDriverException):
-    message = _("Error in getting HyperScale version '%(cmd_error)s'")
-
-
-# GPFS driver
-class GPFSDriverUnsupportedOperation(VolumeBackendAPIException):
-    message = _("GPFS driver unsupported operation: %(msg)s")
 
 
 class InvalidName(Invalid):
@@ -1380,17 +1099,3 @@ class ServiceUserTokenNoAuth(CinderException):
     message = _("The [service_user] send_service_user_token option was "
                 "requested, but no service auth could be loaded. Please check "
                 "the [service_user] configuration section.")
-
-
-class UnsupportedNVMETProtocol(Invalid):
-    message = _("An invalid 'target_protocol' "
-                "value was provided: %(protocol)s")
-
-
-# NVMET driver
-class NVMETTargetAddError(CinderException):
-    message = "Failed to add subsystem: %(subsystem)s"
-
-
-class NVMETTargetDeleteError(CinderException):
-    message = "Failed to delete subsystem: %(subsystem)s"

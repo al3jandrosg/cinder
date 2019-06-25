@@ -19,8 +19,8 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 import six
 
-from cinder import exception
 from cinder.privsep import hscli
+from cinder.volume.drivers.veritas import exception
 from cinder.volume.drivers.veritas import hs_constants as constants
 
 LOG = logging.getLogger(__name__)
@@ -261,8 +261,8 @@ def get_configuration(persona):
     except (exception.ErrorInSendingMsg,
             exception.UnableToExecuteHyperScaleCmd,
             exception.UnableToProcessHyperScaleCmdOutput):
-            LOG.exception("Failed to get configuration from controller")
-            raise exception.ErrorInFetchingConfiguration(persona=persona)
+        LOG.exception("Failed to get configuration from controller")
+        raise exception.ErrorInFetchingConfiguration(persona=persona)
 
     return configuration
 

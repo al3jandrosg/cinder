@@ -106,7 +106,7 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
             msg = _('No pools are available for provisioning volumes. '
                     'Ensure that the configuration option '
                     'netapp_pool_name_search_pattern is set correctly.')
-            raise exception.NetAppDriverException(msg)
+            raise na_utils.NetAppDriverException(msg)
         self._add_looping_tasks()
         super(NetAppBlockStorageCmodeLibrary, self).check_for_setup_error()
 
@@ -390,29 +390,6 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
         msg = 'Deleted LUN with name %(name)s and QoS info %(qos)s'
         LOG.debug(msg, {'name': volume['name'], 'qos': qos_policy_group_info})
 
-    def _get_preferred_target_from_list(self, target_details_list,
-                                        filter=None):
-        # cDOT iSCSI LIFs do not migrate from controller to controller
-        # in failover.  Rather, an iSCSI LIF must be configured on each
-        # controller and the initiator has to take responsibility for
-        # using a LIF that is UP.  In failover, the iSCSI LIF on the
-        # downed controller goes DOWN until the controller comes back up.
-        #
-        # Currently Nova only accepts a single target when obtaining
-        # target details from Cinder, so we pass back the first portal
-        # with an UP iSCSI LIF.  There are plans to have Nova accept
-        # and try multiple targets.  When that happens, we can and should
-        # remove this filter and return all targets since their operational
-        # state could change between the time we test here and the time
-        # Nova uses the target.
-
-        operational_addresses = (
-            self.zapi_client.get_operational_lif_addresses())
-
-        return (super(NetAppBlockStorageCmodeLibrary, self)
-                ._get_preferred_target_from_list(target_details_list,
-                                                 filter=operational_addresses))
-
     def _setup_qos_for_volume(self, volume, extra_specs):
         try:
             qos_policy_group_info = na_utils.get_valid_qos_policy_group_info(
@@ -529,31 +506,31 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
         except Exception as ex:
             err_msg = (_("Create group snapshot failed (%s).") % ex)
             LOG.exception(err_msg, resource=group_snapshot)
-            raise exception.NetAppDriverException(err_msg)
+            raise na_utils.NetAppDriverException(err_msg)
 
         return None, None
 
     def _create_consistent_group_snapshot(self, group_snapshot, snapshots):
-            flexvols = set()
-            for snapshot in snapshots:
-                flexvols.add(volume_utils.extract_host(
-                    snapshot['volume']['host'], level='pool'))
+        flexvols = set()
+        for snapshot in snapshots:
+            flexvols.add(volume_utils.extract_host(
+                snapshot['volume']['host'], level='pool'))
 
-            self.zapi_client.create_cg_snapshot(flexvols, group_snapshot['id'])
+        self.zapi_client.create_cg_snapshot(flexvols, group_snapshot['id'])
 
-            for snapshot in snapshots:
-                self._clone_lun(snapshot['volume']['name'], snapshot['name'],
-                                source_snapshot=group_snapshot['id'])
+        for snapshot in snapshots:
+            self._clone_lun(snapshot['volume']['name'], snapshot['name'],
+                            source_snapshot=group_snapshot['id'])
 
-            for flexvol in flexvols:
-                try:
-                    self.zapi_client.wait_for_busy_snapshot(
-                        flexvol, group_snapshot['id'])
-                    self.zapi_client.delete_snapshot(
-                        flexvol, group_snapshot['id'])
-                except exception.SnapshotIsBusy:
-                    self.zapi_client.mark_snapshot_for_deletion(
-                        flexvol, group_snapshot['id'])
+        for flexvol in flexvols:
+            try:
+                self.zapi_client.wait_for_busy_snapshot(
+                    flexvol, group_snapshot['id'])
+                self.zapi_client.delete_snapshot(
+                    flexvol, group_snapshot['id'])
+            except exception.SnapshotIsBusy:
+                self.zapi_client.mark_snapshot_for_deletion(
+                    flexvol, group_snapshot['id'])
 
     def delete_group_snapshot(self, group_snapshot, snapshots):
         """Delete LUNs backing each snapshot in the group snapshot.

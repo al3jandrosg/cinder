@@ -127,6 +127,12 @@ test_delete_async_volume:
 test_delete_async_volume_migrating:
   volume: *volume_base
 
+test_delete_async_volume_not_from_snapshot:
+  volume: *volume_base
+
+test_delete_async_volume_from_snapshot:
+  volume: *volume_base
+
 test_retype_need_migration_when_host_changed:
   volume: *volume_base
   host:
@@ -565,6 +571,9 @@ test_calc_migrate_and_provision_image_cache:
   volume: *volume_base
 
 test_calc_migrate_and_provision:
+  volume: *volume_base
+
+test_calc_migrate_and_provision_default:
   volume: *volume_base
 
 test_get_backend_qos_specs:

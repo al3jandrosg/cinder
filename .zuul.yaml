@@ -2,7 +2,7 @@
     templates:
       - openstack-lower-constraints-jobs
       - openstack-python-jobs
-      - openstack-python36-jobs
+      - openstack-python3-train-jobs
       - publish-openstack-docs-pti
       - periodic-stable-jobs
       - check-requirements
@@ -24,6 +24,7 @@
               - ^contrib/block-box.*$
               - ^doc/.*$
               - ^releasenotes/.*$
+              - ^.zuul\.yaml$
         - cinder-rally-task:
             voting: false
         - openstack-tox-pylint:
@@ -34,8 +35,10 @@
             voting: false
             irrelevant-files: &gate-irrelevant-files
               - ^(test-|)requirements.txt$
+              - ^lower-constraints.txt$
               - ^.*\.rst$
               - ^api-ref/.*$
+              - ^cinder/cmd/status\.py$
               - ^cinder/hacking/.*$
               - ^cinder/locale/.*$
               - ^cinder/tests/functional.*$
@@ -46,6 +49,7 @@
               - ^setup.cfg$
               - ^tools/.*$
               - ^tox.ini$
+              - ^.zuul\.yaml$
         - openstack-tox-functional:
             voting: false
             irrelevant-files: *functional-irrelevant-files
@@ -83,8 +87,6 @@
       jobs:
         - tempest-cinder-v2-api:
             irrelevant-files: *gate-irrelevant-files
-        - legacy-tempest-dsvm-full-sheepdog-src-os-brick:
-            irrelevant-files: *gate-irrelevant-files
         - legacy-tempest-dsvm-zeromq-multibackend:
             irrelevant-files: *gate-irrelevant-files
         - legacy-tempest-dsvm-multibackend-matrix:
@@ -99,8 +101,6 @@
             irrelevant-files: *gate-irrelevant-files
         - tempest-full-py3-opensuse150:
             irrelevant-files: *gate-irrelevant-files
-        - legacy-tempest-dsvm-full-sheepdog:
-            irrelevant-files: *gate-irrelevant-files
 
 - job:
     # Previously named legacy-tempest-dsvm-full-lio
@@ -110,8 +110,9 @@
     post-run: playbooks/legacy/cinder-tempest-dsvm-lvm-lio-barbican/post.yaml
     timeout: 10800
     required-projects:
-      - openstack-infra/devstack-gate
+      - openstack/devstack-gate
       - openstack/barbican
+      - openstack/cinderlib
       - openstack/python-barbicanclient
       - openstack/tempest
       - openstack/os-brick
@@ -133,8 +134,12 @@
     parent: rally-task-cinder
     timeout: 7800
     vars:
+      devstack_localrc:
+        OSPROFILER_COLLECTOR: redis
       devstack_plugins:
-        rally-openstack: https://git.openstack.org/openstack/rally-openstack
+        osprofiler: https://opendev.org/openstack/osprofiler
+        rally-openstack: https://opendev.org/openstack/rally-openstack
       rally_task: rally-jobs/cinder.yaml
     required-projects:
       - openstack/rally-openstack
+      - openstack/osprofiler

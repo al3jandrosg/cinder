@@ -309,8 +309,7 @@ class LVMVolumeDriver(driver.VolumeDriver):
 
         vg_list = volutils.get_all_volume_groups(
             self.configuration.volume_group)
-        vg_dict = \
-            next(vg for vg in vg_list if vg['name'] == self.vg.vg_name)
+        vg_dict = next(vg for vg in vg_list if vg['name'] == self.vg.vg_name)
         if vg_dict is None:
             message = (_("Volume Group %s does not exist") %
                        self.configuration.volume_group)
@@ -854,7 +853,8 @@ class LVMVolumeDriver(driver.VolumeDriver):
         # attachments on the same host are still accessing the volume.
         attachments = volume.volume_attachment
         if volume.multiattach:
-            if sum(1 for a in attachments if a.connector == connector) > 1:
+            if sum(1 for a in attachments if a.connector and
+                    a.connector['initiator'] == connector['initiator']) > 1:
                 return True
 
         self.target_driver.terminate_connection(volume, connector, **kwargs)

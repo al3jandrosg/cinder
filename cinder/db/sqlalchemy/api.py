@@ -20,6 +20,12 @@
 
 
 import collections
+
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
+
 import datetime as dt
 import functools
 import itertools
@@ -96,6 +102,7 @@ def get_session(use_slave=False, **kwargs):
 
 def dispose_engine():
     get_engine().dispose()
+
 
 _DEFAULT_QUOTA_NAME = 'default'
 
@@ -622,7 +629,8 @@ def volume_service_uuids_online_data_migration(context, max_count):
 
     updated = 0
     query = model_query(context,
-                        models.Volume).filter_by(service_uuid=None)
+                        models.Volume).filter_by(service_uuid=None).\
+        filter(models.Volume.host.isnot(None))
     total = query.count()
     vol_refs = query.limit(max_count).all()
 
@@ -4273,7 +4281,7 @@ def _volume_type_access_query(context, session=None):
 
 def _group_type_access_query(context, session=None):
     return model_query(context, models.GroupTypeProjects, session=session,
-                       read_deleted="int_no")
+                       read_deleted="no")
 
 
 @require_admin_context
@@ -7183,7 +7191,7 @@ def condition_db_filter(model, field, value):
     """
     orm_field = getattr(model, field)
     # For values that must match and are iterables we use IN
-    if (isinstance(value, collections.Iterable) and
+    if (isinstance(value, Iterable) and
             not isinstance(value, six.string_types)):
         # We cannot use in_ when one of the values is None
         if None not in value:
@@ -7209,7 +7217,7 @@ def condition_not_db_filter(model, field, value, auto_none=True):
     result = ~condition_db_filter(model, field, value)
 
     if (auto_none
-            and ((isinstance(value, collections.Iterable) and
+            and ((isinstance(value, Iterable) and
                   not isinstance(value, six.string_types)
                   and None not in value)
                  or (value is not None))):

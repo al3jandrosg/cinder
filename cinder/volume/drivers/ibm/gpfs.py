@@ -121,6 +121,10 @@ CONF.register_opts(gpfs_opts, group=configuration.SHARED_CONF_GROUP)
 CONF.register_opts(gpfs_remote_ssh_opts, group=configuration.SHARED_CONF_GROUP)
 
 
+class GPFSDriverUnsupportedOperation(exception.VolumeBackendAPIException):
+    message = _("GPFS driver unsupported operation: %(msg)s")
+
+
 def _different(difference_tuple):
     """Return true if two elements of a tuple are different."""
     if difference_tuple:
@@ -479,8 +483,7 @@ class GPFSDriver(driver.CloneableImageVD,
             # Check if GPFS is mounted
             self._verify_gpfs_path_state(directory)
 
-            filesystem, fslevel = \
-                self._get_gpfs_fs_release_level(directory)
+            filesystem, fslevel = self._get_gpfs_fs_release_level(directory)
             if fslevel < GPFS_CLONE_MIN_RELEASE:
                 msg = (_('The GPFS filesystem %(fs)s is not at the required '
                          'release level.  Current level is %(cur)s, must be '
@@ -1268,7 +1271,7 @@ class GPFSDriver(driver.CloneableImageVD,
                                  add_volumes=None, remove_volumes=None):
         msg = _('Updating a consistency group is not supported.')
         LOG.error(msg)
-        raise exception.GPFSDriverUnsupportedOperation(msg=msg)
+        raise GPFSDriverUnsupportedOperation(msg=msg)
 
     def _create_consistencygroup_from_src(self, context, group, volumes,
                                           cgsnapshot=None, snapshots=None,
@@ -1276,7 +1279,7 @@ class GPFSDriver(driver.CloneableImageVD,
         msg = _('Creating a consistency group from any source consistency '
                 'group or consistency group snapshot is not supported.')
         LOG.error(msg)
-        raise exception.GPFSDriverUnsupportedOperation(msg=msg)
+        raise GPFSDriverUnsupportedOperation(msg=msg)
 
     def create_group(self, ctxt, group):
         """Creates a group.

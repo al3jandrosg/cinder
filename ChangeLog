@@ -1,22 +1,146 @@
 CHANGES
 =======
 
-14.0.0
-------
-
-* Handling filters in Generalized Filtering API
+* Add Contributor Docs for Upgrade Checks
+* Update QoS and add Accuracy Note
+* Remove the DRBDManage Driver
+* Add OS-SCH-HNT in extensions list
+* Cinder RSD Driver
+* Replace assert to raise AssertionError
+* VMware: Enable thin volume from image on VVol
+* Remove unused CG volume manager constants
+* Enable osprofiler for rally job
+* Small doc updates: canonical URLs, rally doc, etc
+* Re-enable new pycodestyle errors
+* Mark Veritas Access Driver Unsupported
+* Mark Prophetstor Driver Unsupported
+* Bump hacking version to 1.1.x
+* Update Python 3 test runtimes for Train
+* PowerMax docs - known issues with metro
+* Make py37 unit tests voting
+* move Dell EMC SC driver exceptions
+* Add Upgrade Check for Drivers Removed in Stein
+* Add upgrade check for Windows iSCSI driver
+* move kaminario driver exceptions
+* Deprecate NestedDbQuotaDriver for nested quotas
+* move dothill exceptions
+* move purestorage driver exceptions
+* move Hyperscale exceptions to driver
+* move storpool exception
+* Remove Sheepdog tests from zuul config
+* Drop use git.openstack.org for tox deps
+* Fix "connector=None" issue in Kaminario drivers
+* move cisco zonemanager exception
+* move vzstorage exceptions
+* move zadara exceptions
+* Bump bandit version
+* Move RBD driver exception to driver
+* LOG \_init\_vendor\_properites
+* HPE 3PAR-Added support for multiattach feature in hpe3par cinder driver
+* Pure Storage FlashArray iSCSI driver target CIDR support
+* [VNX] Fix test case issue
+* Cap sphinx for py2 to match global reqs
+* Handle collections.abc deprecations
+* move zfssa exception
+* Update NEC driver manual and support matrix
+* Correct typo in api-ref
+* Glob volume driver docs to auto sort
+* move netapp exception
+* move Nexenta exception
+* move NVMEOF exception to target file
+* move brocade zone manager exceptions
+* move 3par exception
+* move xtremio exceptions
+* Update doc for missed quotation marks
+* Remove driver requirements of removed drivers
+* Remove confusing annotation
+* VMware: Filter out datastore with 0 capacity
+* move solidfire driver exceptions
+* move smbfs exceptions
+* api-ref: mark migration\_status parameter as optional
+* Add python37 job
+* Removes python-linstor as a requirement for LINSTOR driver
+* Make sure we install cinder requirements during the correct tox phase
+* remove unused exceptions
+* move datera exception
+* move sheepdog exception
+* Use assertNotIn to check dict item
+* move Google backup exceptions
+* Removes drbdmanage as a requirement for drbdmanage driver
+* move synology driver exceptions
+* Remove unused exception
+* Move NVMET driver exceptions to driver file
+* [Trivial fix]Remove unnecessary slash
+* Do not use 'self' in classmethod
+* [Unity] Update doc for compressed volume support
+* Allow filtering on size for volume list
+* move GPFS driver exception to driver file
+* Compact DB migrations to Queens
+* Remove unneeded comment
+* Update Brocade FCZM driver's driver options
+* Fix invalid function name
+* Add user messages for some volume snapshot actions
+* Remove obsolete get\_backup\_driver functions
+* Fix swift backup driver crashing during service startup
+* Correct and optimize hpe3par tests
+* lvm: Only use initiators when comparing connector dicts
+* Update unit test debugging instructions for stestr
+* OpenDev Migration Patch
+* Start release cycle checklist documentation
+* Remove docs for --allow-multiattach
+* Add missing ws seperator between words
+* PowerMax docs - add information on new and existing functionality
+* 3PAR: Provide an option duing creation of volume from snapshot
+* NFS: Log exception when update\_migrated\_volume fails
+* Drop use of git.openstack.org
+* Fix missing print format error
+* Rollback the volume\_types table when failed to update quota\_usages
+* Uncap jsonschema
+* Fix cinder-manage args --max\_count in docs
+* Use proper casing in backup\_compression\_algorithm doc
+* Remove DataCore volume drivers
+* Introduce config to supplement periodic\_interval
+* VNX: add option vnx\_async\_migrate
+* add libpq-dev to build psycopg2
+* Tests: Fix up test\_volume notify tests
+* Update the min version of tox
+* Update gate-irrelevant-files
+* Add upgrade check for presence of policy.json file
+* Allow reset-state to detach volume as per policy
+* Fix deprecation escape sequence errors under 3.6
+* Document behavior of message.create
+* Reserve migrations for DB backports
+* VNX: delete the LUN from VNX backend
+* Add upgrade checker for backup driver path
+* Remove non-exception from EXCEPTION\_DETAIL\_MAPPINGS
+* Remove scanning upgrade checker from opts generation
+* Fix code-block JSON format issues
+* Replace HTTP numeric codes with constants
+* Remove doc for Nova option that doesn't exist
+* Unity: Add consistent group support
+* Add NetApp E-Series Driver to Removal List
+* Doc: Mark last Stein API microversion
+* Raise eventlet lower-constraint to 0.22.0
 * Replace openstack.org git:// URLs with https://
-* Update UPPER\_CONSTRAINTS\_FILE for stable/stein
-* Update .gitreview for stable/stein
+* PowerMax Driver - In-Use Retype Path Fix
+* Run cinderlib functional tests on LVM-LIO job
+* Imported Translations from Zanata
+* Fix service\_uuid migration for volumes with no host
+* Update master for stable/stein
+* Synology: Add support for UC-Series model
 
 14.0.0.0rc1
 -----------
 
+* Handling filters in Generalized Filtering API
+* Automate generation of volume transfer api-ref samples
+* [NetApp] Casting block\_count to int before calling ONTAP API
 * Fix Support Matrix - Pure does support Multiattach
 * Gate Fix: Bumping versions in lower-constraints.txt
 * Fix VolumeAttachment is not bound to a Session
 * Modify the configuration mode of FusionStorage Cinder Driver
 * Automate generation of snapshots api-ref samples
+* Refactored NexentaStor5 driver
 * Adds revert to snapshot feature to support matrix
 * PowerMax docs -  changing cinder tags to powermax
 * Use excutils.save\_and\_reraise\_exception instead of reraise
@@ -30,6 +154,7 @@ CHANGES
 * Update required version of taskflow
 * Update minimal acceptable glanceclient
 * Create volume attachments status check
+* Allow setting Pure host personality
 * Add project\_id in group snapshots list and show API
 * Use 'target\_helper' config opt in linstor driver
 * Update oslo.privsep minimum requirement
@@ -41,6 +166,7 @@ CHANGES
 * Drop py35 jobs
 * VNX: update sg in cache
 * Disable etcd3 for lio-barbican job
+* Enable service capabilities update at less than 60 seconds
 * Extend timeout for database migration tests
 * Improve documentation of goodness/filter function
 * api-ref: add qos\_specs\_id to show default volume type response
@@ -103,6 +229,7 @@ CHANGES
 * api-ref: Add cipher to update an encryption type interface
 * VMAX driver doc - clarify PowerMax rebrand release note
 * Fix keystone auth config in install doc
+* Fix the misspelling of "volumes"
 * Fix "import xxx as xxx" grammar
 * Add missing ws seperator between words
 * Add check\_encryption\_provider to volume utils
@@ -115,6 +242,7 @@ CHANGES
 * Pass image\_id to ImageDownloadFailed
 * Update FusionStorage Cinder Driver by using REST API
 * Move Fujitsu ETERNUS DX related file
+* Refresh the Service.service\_id after re-spawning children
 * Correct default policy\_file in the sample config
 * Remove 'lvrename' from rootwrap
 * LinstorDrv : Fix wrong key using when getting device path
@@ -144,6 +272,7 @@ CHANGES
 * Reset snapshot status available
 * Add test case: retype volume when driver not initialized
 * Add test case: delete snapshot when driver not initialized
+* NetApp: Return all iSCSI targets-portals
 * Automate generation of API versions api-ref samples
 * NetApp Doc: Enhance 'netapp\_storage\_protocol' description
 * SPDK drivers documentation
@@ -232,6 +361,7 @@ CHANGES
 * Ignore updated stable release note
 * [Doc] Fix status and parameters of vol connection api
 * Imported Translations from Zanata
+* sqlalchemy: GroupTypeProjects.deleted is boolean
 * An alternate way to fix retype notifier test case
 * api-ref: document encryption type provider choices
 * Imported Translations from Zanata

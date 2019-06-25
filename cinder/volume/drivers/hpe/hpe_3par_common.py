@@ -138,6 +138,10 @@ QUEUE_LENGTH = 'queue_length'
 AVG_BUSY_PERC = 'avg_busy_perc'
 
 
+class Invalid3PARDomain(exception.VolumeDriverException):
+    message = _("Invalid 3PAR Domain: %(err)s")
+
+
 class HPE3PARCommon(object):
     """Class that contains common code for the 3PAR drivers.
 
@@ -273,11 +277,13 @@ class HPE3PARCommon(object):
         4.0.9 - Set proper backend on subsequent operation, after group
                 failover. bug #1773069
         4.0.10 - Added retry in delete_volume. bug #1783934
+        4.0.11 - Added extra spec hpe3par:convert_to_base
+        4.0.12 - Added multiattach support
 
 
     """
 
-    VERSION = "4.0.10"
+    VERSION = "4.0.12"
 
     stats = {}
 
@@ -331,7 +337,8 @@ class HPE3PARCommon(object):
                     'priority']
     qos_priority_level = {'low': 1, 'normal': 2, 'high': 3}
     hpe3par_valid_keys = ['cpg', 'snap_cpg', 'provisioning', 'persona', 'vvs',
-                          'flash_cache', 'compression', 'group_replication']
+                          'flash_cache', 'compression', 'group_replication',
+                          'convert_to_base']
 
     def __init__(self, config, active_backend_id=None):
         self.config = config
@@ -1412,7 +1419,7 @@ class HPE3PARCommon(object):
         except hpeexceptions.HTTPBadRequest as e:
             if 'must be in the same domain' in e.get_description():
                 LOG.error(e.get_description())
-                raise exception.Invalid3PARDomain(err=e.get_description())
+                raise Invalid3PARDomain(err=e.get_description())
             else:
                 raise exception.VolumeBackendAPIException(
                     data=e.get_description())
@@ -1609,7 +1616,7 @@ class HPE3PARCommon(object):
                     AVG_BUSY_PERC: stat_capabilities[AVG_BUSY_PERC],
                     'filter_function': filter_function,
                     'goodness_function': goodness_function,
-                    'multiattach': False,
+                    'multiattach': True,
                     'consistent_group_snapshot_enabled': True,
                     'compression': compression_support,
                     'consistent_group_replication_enabled':
@@ -1796,6 +1803,16 @@ class HPE3PARCommon(object):
             return hpe3par_keys[key]
         else:
             return default
+
+    def _get_boolean_key_value(self, hpe3par_keys, key, default=False):
+        value = self._get_key_value(
+            hpe3par_keys, key, default)
+        if isinstance(value, six.string_types):
+            if value.lower() == 'true':
+                value = True
+            else:
+                value = False
+        return value
 
     def _get_qos_value(self, qos, key, default=None):
         if key in qos:
@@ -2086,6 +2103,10 @@ class HPE3PARCommon(object):
         hpe3par_tiramisu = (
             self._get_key_value(hpe3par_keys, 'group_replication'))
 
+        # by default, set convert_to_base to False
+        convert_to_base = self._get_boolean_key_value(
+            hpe3par_keys, 'convert_to_base')
+
         # if provisioning is not set use thin
         default_prov = self.valid_prov_values[0]
         prov_value = self._get_key_value(hpe3par_keys, 'provisioning',
@@ -2121,7 +2142,8 @@ class HPE3PARCommon(object):
                 'vvs_name': vvs_name, 'qos': qos,
                 'tpvv': tpvv, 'tdvv': tdvv,
                 'volume_type': volume_type,
-                'group_replication': hpe3par_tiramisu}
+                'group_replication': hpe3par_tiramisu,
+                'convert_to_base': convert_to_base}
 
     def get_volume_settings_from_type(self, volume, host=None):
         """Get 3PAR volume settings given a volume.
@@ -2624,13 +2646,23 @@ class HPE3PARCommon(object):
 
             self.client.createSnapshot(volume_name, snap_name, optional)
 
-            # Convert snapshot volume to base volume type
-            LOG.debug('Converting to base volume type: %s.',
-                      volume['id'])
-            model_update = self._convert_to_base_volume(volume)
+            # by default, set convert_to_base to False
+            convert_to_base = self._get_boolean_key_value(
+                hpe3par_keys, 'convert_to_base')
 
-            # Grow the snapshot if needed
+            LOG.debug("convert_to_base: %(convert)s",
+                      {'convert': convert_to_base})
+
             growth_size = volume['size'] - snapshot['volume_size']
+            LOG.debug("growth_size: %(size)s", {'size': growth_size})
+            if growth_size > 0 or convert_to_base:
+                # Convert snapshot volume to base volume type
+                LOG.debug('Converting to base volume type: %(id)s.',
+                          {'id': volume['id']})
+                model_update = self._convert_to_base_volume(volume)
+            else:
+                LOG.debug("volume is created as child of snapshot")
+
             if growth_size > 0:
                 try:
                     growth_size_mib = growth_size * units.Gi / units.Mi
@@ -2926,6 +2958,37 @@ class HPE3PARCommon(object):
                                     "can't be deleted at this time.")
                             raise exception.SnapshotIsBusy(message=msg)
 
+                    if snap.startswith('osv-'):
+                        LOG.info(
+                            "Found a volume %(name)s",
+                            {'name': snap})
+
+                        # Get details of original volume v1
+                        # These details would be required to form v2
+                        s1_detail = self.client.getVolume(snap_name)
+                        v1_name = s1_detail.get('copyOf')
+                        v1 = self.client.getVolume(v1_name)
+
+                        # Get details of volume v2,
+                        # which is child of snapshot s1
+                        v2_name = snap
+                        v2 = self.client.getVolume(v2_name)
+
+                        # Update v2 object as required for
+                        # _convert_to_base function
+                        v2['volume_type_id'] = (
+                            self._get_3par_vol_comment_value(
+                                v1['comment'], 'volume_type_id'))
+
+                        v2['id'] = self._get_3par_vol_comment_value(
+                            v2['comment'], 'volume_id')
+
+                        v2['host'] = '#' + v1['userCPG']
+
+                        LOG.debug('Converting to base volume type: '
+                                  '%(id)s.', {'id': v2['id']})
+                        self._convert_to_base_volume(v2)
+
                 try:
                     self.client.deleteVolume(snap_name)
                 except Exception:
@@ -3148,11 +3211,11 @@ class HPE3PARCommon(object):
         domain = self.get_domain(old_cpg)
         if domain != self.get_domain(new_cpg):
             reason = (_('Cannot retype to a CPG in a different domain.'))
-            raise exception.Invalid3PARDomain(reason)
+            raise Invalid3PARDomain(reason)
 
         if domain != self.get_domain(new_snap_cpg):
             reason = (_('Cannot retype to a snap CPG in a different domain.'))
-            raise exception.Invalid3PARDomain(reason)
+            raise Invalid3PARDomain(reason)
 
     def _retype(self, volume, volume_name, new_type_name, new_type_id, host,
                 new_persona, old_cpg, new_cpg, old_snap_cpg, new_snap_cpg,
@@ -3460,9 +3523,9 @@ class HPE3PARCommon(object):
         # Check to see if the user requested to failback.
         if (secondary_backend_id and
            secondary_backend_id == self.FAILBACK_VALUE):
-                failover = False
-                target_id = None
-                group_target_id = self.FAILBACK_VALUE
+            failover = False
+            target_id = None
+            group_target_id = self.FAILBACK_VALUE
         else:
             # Find the failover target.
             failover_target = None
@@ -4073,11 +4136,11 @@ class HPE3PARCommon(object):
             if not retype:
                 self.client.deleteVolume(vol_name)
         except hpeexceptions.HTTPConflict as ex:
-                if ex.get_code() == 34:
-                    # This is a special case which means the
-                    # volume is part of a volume set.
-                    self._delete_vvset(volume)
-                    self.client.deleteVolume(vol_name)
+            if ex.get_code() == 34:
+                # This is a special case which means the
+                # volume is part of a volume set.
+                self._delete_vvset(volume)
+                self.client.deleteVolume(vol_name)
         except Exception:
             pass
 

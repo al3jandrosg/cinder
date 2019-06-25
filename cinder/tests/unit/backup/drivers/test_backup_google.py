@@ -49,17 +49,17 @@ class FakeMD5(object):
         pass
 
     @classmethod
-    def digest(self):
+    def digest(cls):
         return 'gcscindermd5'
 
     @classmethod
-    def hexdigest(self):
+    def hexdigest(cls):
         return 'gcscindermd5'
 
 
 class FakeObjectName(object):
     @classmethod
-    def _fake_generate_object_name_prefix(self, backup):
+    def _fake_generate_object_name_prefix(cls, backup):
         az = 'az_fake'
         backup_name = '%s_backup_%s' % (az, backup.id)
         volume = 'volume_%s' % (backup.volume_id)
@@ -427,7 +427,7 @@ class GoogleBackupDriverTestCase(test.TestCase):
                                               container=container_name)
         service = google_dr.GoogleBackupDriver(self.ctxt)
         self.volume_file.seek(0)
-        self.assertRaises(exception.GCSApiFailure,
+        self.assertRaises(google_dr.GCSApiFailure,
                           service.backup,
                           backup, self.volume_file)
 
@@ -439,7 +439,7 @@ class GoogleBackupDriverTestCase(test.TestCase):
                                               container=container_name)
         service = google_dr.GoogleBackupDriver(self.ctxt)
         self.volume_file.seek(0)
-        self.assertRaises(exception.GCSOAuth2Failure,
+        self.assertRaises(google_dr.GCSOAuth2Failure,
                           service.backup,
                           backup, self.volume_file)
 
@@ -507,7 +507,7 @@ class GoogleBackupDriverTestCase(test.TestCase):
         service = google_dr.GoogleBackupDriver(self.ctxt)
 
         with tempfile.NamedTemporaryFile() as volume_file:
-            self.assertRaises(exception.GCSConnectionFailure,
+            self.assertRaises(google_dr.GCSConnectionFailure,
                               service.restore,
                               backup, volume_id, volume_file)
 

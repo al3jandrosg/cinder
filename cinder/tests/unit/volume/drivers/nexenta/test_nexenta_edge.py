@@ -23,6 +23,7 @@ from cinder import exception
 from cinder import test
 from cinder.volume import configuration as conf
 from cinder.volume.drivers.nexenta.nexentaedge import iscsi
+from cinder.volume.drivers.nexenta import utils
 
 NEDGE_BUCKET = 'c/t/bk'
 NEDGE_SERVICE = 'isc'
@@ -113,11 +114,11 @@ class TestNexentaEdgeISCSIDriver(test.TestCase):
         ]
 
         def my_side_effect(*args, **kwargs):
-                return {'data': {
-                    'X-ISCSI-TargetName': ISCSI_TARGET_NAME,
-                    'X-ISCSI-TargetID': 1,
-                    'X-VIPS': json.dumps(vips)}
-                }
+            return {'data': {
+                'X-ISCSI-TargetName': ISCSI_TARGET_NAME,
+                'X-ISCSI-TargetID': 1,
+                'X-VIPS': json.dumps(vips)}
+            }
 
         self.mock_api.side_effect = my_side_effect
         self.driver.do_setup(self.context)
@@ -131,14 +132,14 @@ class TestNexentaEdgeISCSIDriver(test.TestCase):
         ]
 
         def my_side_effect(*args, **kwargs):
-                return {'data': {
-                    'X-ISCSI-TargetName': ISCSI_TARGET_NAME,
-                    'X-ISCSI-TargetID': 1,
-                    'X-VIPS': json.dumps(vips)}
-                }
+            return {'data': {
+                'X-ISCSI-TargetName': ISCSI_TARGET_NAME,
+                'X-ISCSI-TargetID': 1,
+                'X-VIPS': json.dumps(vips)}
+            }
 
         self.mock_api.side_effect = my_side_effect
-        self.assertRaises(exception.NexentaException,
+        self.assertRaises(utils.NexentaException,
                           self.driver.do_setup, self.context)
 
     def check_for_setup_error(self):

@@ -71,10 +71,6 @@ from cinder import ssh_utils as cinder_sshutils
 from cinder.transfer import api as cinder_transfer_api
 from cinder.volume import api as cinder_volume_api
 from cinder.volume import driver as cinder_volume_driver
-from cinder.volume.drivers.datacore import driver as \
-    cinder_volume_drivers_datacore_driver
-from cinder.volume.drivers.datacore import iscsi as \
-    cinder_volume_drivers_datacore_iscsi
 from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell_emc.powermax import common as \
@@ -91,8 +87,6 @@ from cinder.volume.drivers.dell_emc.vnx import common as \
     cinder_volume_drivers_dell_emc_vnx_common
 from cinder.volume.drivers.dell_emc import xtremio as \
     cinder_volume_drivers_dell_emc_xtremio
-from cinder.volume.drivers import drbdmanagedrv as \
-    cinder_volume_drivers_drbdmanagedrv
 from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_common as \
     cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon
 from cinder.volume.drivers.fusionstorage import dsware as \
@@ -239,7 +233,7 @@ def list_opts():
                 cinder_quota.quota_opts,
                 cinder_scheduler_driver.scheduler_driver_opts,
                 cinder_scheduler_hostmanager.host_manager_opts,
-                [cinder_scheduler_manager.scheduler_driver_opt],
+                cinder_scheduler_manager.scheduler_manager_opts,
                 [cinder_scheduler_scheduleroptions.
                     scheduler_json_config_location_opt],
                 cinder_scheduler_weights_capacity.capacity_weight_opts,
@@ -258,8 +252,6 @@ def list_opts():
                 cinder_volume_driver.scst_opts,
                 cinder_volume_driver.backup_opts,
                 cinder_volume_driver.image_opts,
-                cinder_volume_drivers_datacore_driver.datacore_opts,
-                cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
                 cinder_volume_drivers_fusionstorage_dsware.volume_opts,
                 cinder_volume_drivers_inspur_as13000_as13000driver.
                 inspur_as13000_opts,
@@ -303,7 +295,6 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
-                cinder_volume_drivers_drbdmanagedrv.drbd_opts,
                 cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,

@@ -4,7 +4,7 @@ amqp==2.2.2
 appdirs==1.4.3
 asn1crypto==0.24.0
 automaton==1.14.0
-bandit==1.1.0
+bandit==1.6.0
 bcrypt==3.1.4
 cachetools==2.0.1
 castellan==0.16.0
@@ -17,7 +17,7 @@ contextlib2==0.5.5
 coverage==4.0
 cryptography==2.1
 cursive==0.2.1
-ddt==1.0.1
+ddt==1.2.1
 debtcollector==1.19.0
 decorator==3.4.0
 defusedxml==0.5.0
@@ -26,7 +26,7 @@ dogpile.cache==0.6.5
 dulwich==0.19.0
 enum-compat==0.0.2
 enum34==1.0.4;python_version=='2.7' or python_version=='2.6' or python_version=='3.3' # BSD
-eventlet==0.18.2
+eventlet==0.22.0
 extras==1.0.0
 fasteners==0.14.1
 fixtures==3.0.0
@@ -37,7 +37,7 @@ gitdb2==2.0.3
 GitPython==2.1.8
 google-api-python-client==1.4.2
 greenlet==0.4.10
-hacking==0.12.0
+hacking==1.1.0
 httplib2==0.9.1
 idna==2.6
 imagesize==1.0.0
@@ -100,6 +100,7 @@ psycopg2==2.7
 pyasn1-modules==0.2.1
 pyasn1==0.4.2
 pycadf==2.7.0
+pycodestyle==2.5.0
 pycparser==2.18
 pyflakes==0.8.1
 Pygments==2.2.0

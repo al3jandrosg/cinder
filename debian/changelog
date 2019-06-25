@@ -1,3 +1,10 @@
+cinder (2:15.0.0~b1~git2019061315.6cbc53b71-0ubuntu1) eoan; urgency=medium
+
+  * New upstream release 15.0.0~b1.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Sahid Orentino Ferdjaoui <sahid.ferdjaoui@canonical.com>  Tue, 25 Jun 2019 10:25:06 +0100
+
 cinder (2:14.0.0-0ubuntu1) disco; urgency=medium
 
   * New upstream release for OpenStack Stein.

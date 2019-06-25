@@ -84,9 +84,13 @@ class VNXDriver(driver.ManageableVD,
           13.0.0 - Fix bug https://bugs.launchpad.net/cinder/+bug/1817385 to
                    make sure sg can be created again after it was destroyed
                    under `destroy_empty_stroage_group` setting to `True`
+          14.0.0 - Fix bug 1794646: failed to delete LUNs from backend due to
+                   the temporary snapshots on them wasn't deleted.
+          14.0.1 - Fix bug 1796825, add an option to set default value for
+                   `async_migrate`.
     """
 
-    VERSION = '13.00.00'
+    VERSION = '14.00.01'
     VENDOR = 'Dell EMC'
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "EMC_VNX_CI"

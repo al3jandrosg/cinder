@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: cinder
-Version: 14.0.0
+Version: 14.1.0.dev253
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -32,16 +32,16 @@ Description: ========================
         
         If you'd like to run from the master branch, you can clone the git repo:
         
-            git clone https://git.openstack.org/openstack/cinder.git
+            git clone https://opendev.org/openstack/cinder
         
         For developer information please see
-        `HACKING.rst <https://git.openstack.org/cgit/openstack/cinder/plain/HACKING.rst>`_
+        `HACKING.rst <https://opendev.org/openstack/cinder/src/branch/master/HACKING.rst>`_
         
         You can raise bugs here https://bugs.launchpad.net/cinder
         
         Python client
         -------------
-        https://git.openstack.org/cgit/openstack/python-cinderclient
+        https://opendev.org/openstack/python-cinderclient
         
         
 Platform: UNKNOWN
@@ -55,3 +55,4 @@ Classifier: Programming Language :: Python :: 2
 Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7

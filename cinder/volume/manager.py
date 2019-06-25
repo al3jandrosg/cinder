@@ -89,27 +89,16 @@ from cinder.volume import volume_types
 LOG = logging.getLogger(__name__)
 
 QUOTAS = quota.QUOTAS
-CGQUOTAS = quota.CGQUOTAS
 GROUP_QUOTAS = quota.GROUP_QUOTAS
-VALID_REMOVE_VOL_FROM_CG_STATUS = (
-    'available',
-    'in-use',
-    'error',
-    'error_deleting')
 VALID_REMOVE_VOL_FROM_GROUP_STATUS = (
     'available',
     'in-use',
     'error',
     'error_deleting')
-VALID_ADD_VOL_TO_CG_STATUS = (
-    'available',
-    'in-use')
 VALID_ADD_VOL_TO_GROUP_STATUS = (
     'available',
     'in-use')
-VALID_CREATE_CG_SRC_SNAP_STATUS = (fields.SnapshotStatus.AVAILABLE,)
 VALID_CREATE_GROUP_SRC_SNAP_STATUS = (fields.SnapshotStatus.AVAILABLE,)
-VALID_CREATE_CG_SRC_CG_STATUS = ('available',)
 VALID_CREATE_GROUP_SRC_GROUP_STATUS = ('available',)
 VA_LIST = objects.VolumeAttachmentList
 
@@ -137,6 +126,13 @@ volume_manager_opts = [
                     'Query results will be obtained in batches from the '
                     'database and not in one shot to avoid extreme memory '
                     'usage. Set 0 to turn off this functionality.'),
+    cfg.IntOpt('backend_stats_polling_interval',
+               default=60,
+               min=3,
+               help='Time in seconds between requests for usage statistics '
+                    'from the backend.  Be aware that generating usage '
+                    'statistics is expensive for some backends, so setting '
+                    'this value too low may adversely affect performance.'),
 ]
 
 volume_backend_opts = [
@@ -1149,10 +1145,17 @@ class VolumeManager(manager.CleanableManager,
                 snapshot.update(model_update)
                 snapshot.save()
 
-        except Exception:
+        except Exception as create_error:
             with excutils.save_and_reraise_exception():
                 snapshot.status = fields.SnapshotStatus.ERROR
                 snapshot.save()
+                self.message_api.create(
+                    context,
+                    action=message_field.Action.SNAPSHOT_CREATE,
+                    resource_type=message_field.Resource.VOLUME_SNAPSHOT,
+                    resource_uuid=snapshot['id'],
+                    exception=create_error,
+                    detail=message_field.Detail.SNAPSHOT_CREATE_ERROR)
 
         vol_ref = self.db.volume_get(context, snapshot.volume_id)
         if vol_ref.bootable:
@@ -1172,6 +1175,14 @@ class VolumeManager(manager.CleanableManager,
                               resource=snapshot)
                 snapshot.status = fields.SnapshotStatus.ERROR
                 snapshot.save()
+                self.message_api.create(
+                    context,
+                    action=message_field.Action.SNAPSHOT_CREATE,
+                    resource_type=message_field.Resource.VOLUME_SNAPSHOT,
+                    resource_uuid=snapshot['id'],
+                    exception=ex,
+                    detail=message_field.Detail.SNAPSHOT_UPDATE_METADATA_FAILED
+                )
                 raise exception.MetadataCopyFailure(reason=six.text_type(ex))
 
         snapshot.status = fields.SnapshotStatus.AVAILABLE
@@ -1213,16 +1224,29 @@ class VolumeManager(manager.CleanableManager,
                 self.driver.unmanage_snapshot(snapshot)
             else:
                 self.driver.delete_snapshot(snapshot)
-        except exception.SnapshotIsBusy:
+        except exception.SnapshotIsBusy as busy_error:
             LOG.error("Delete snapshot failed, due to snapshot busy.",
                       resource=snapshot)
             snapshot.status = fields.SnapshotStatus.AVAILABLE
             snapshot.save()
+            self.message_api.create(
+                context,
+                action=message_field.Action.SNAPSHOT_DELETE,
+                resource_type=message_field.Resource.VOLUME_SNAPSHOT,
+                resource_uuid=snapshot['id'],
+                exception=busy_error)
             return
-        except Exception:
+        except Exception as delete_error:
             with excutils.save_and_reraise_exception():
                 snapshot.status = fields.SnapshotStatus.ERROR_DELETING
                 snapshot.save()
+                self.message_api.create(
+                    context,
+                    action=message_field.Action.SNAPSHOT_DELETE,
+                    resource_type=message_field.Resource.VOLUME_SNAPSHOT,
+                    resource_uuid=snapshot['id'],
+                    exception=delete_error,
+                    detail=message_field.Detail.SNAPSHOT_DELETE_ERROR)
 
         # Get reservations
         reservations = None
@@ -1743,40 +1767,42 @@ class VolumeManager(manager.CleanableManager,
         This method calls the driver initialize_connection and returns
         it to the caller.  The connector parameter is a dictionary with
         information about the host that will connect to the volume in the
-        following format::
+        following format:
 
-          .. code:: json
+        .. code:: json
 
-            {
-                'ip': ip,
-                'initiator': initiator,
-            }
+          {
+             "ip": "<ip>",
+             "initiator": "<initiator>"
+          }
 
-        ip: the ip address of the connecting machine
+        ip:
+            the ip address of the connecting machine
 
-        initiator: the iscsi initiator name of the connecting machine.
-        This can be None if the connecting machine does not support iscsi
-        connections.
+        initiator:
+            the iscsi initiator name of the connecting machine. This can be
+            None if the connecting machine does not support iscsi connections.
 
         driver is responsible for doing any necessary security setup and
-        returning a connection_info dictionary in the following format::
+        returning a connection_info dictionary in the following format:
 
-          .. code:: json
+        .. code:: json
 
-            {
-                'driver_volume_type': driver_volume_type,
-                'data': data,
-            }
+          {
+             "driver_volume_type": "<driver_volume_type>",
+             "data": "<data>"
+          }
 
-        driver_volume_type: a string to identify the type of volume.  This
-                           can be used by the calling code to determine the
-                           strategy for connecting to the volume. This could
-                           be 'iscsi', 'rbd', 'sheepdog', etc.
+        driver_volume_type:
+            a string to identify the type of volume.  This can be used by the
+            calling code to determine the strategy for connecting to the
+            volume. This could be 'iscsi', 'rbd', 'sheepdog', etc.
 
-        data: this is the data that the calling code will use to connect
-              to the volume. Keep in mind that this will be serialized to
-              json in various places, so it should not contain any non-json
-              data types.
+        data:
+            this is the data that the calling code will use to connect to the
+            volume. Keep in mind that this will be serialized to json in
+            various places, so it should not contain any non-json data types.
+
         """
         # NOTE(flaper87): Verify the driver is enabled
         # before going forward. The exception will be caught
@@ -2625,7 +2651,7 @@ class VolumeManager(manager.CleanableManager,
 
         return volume_stats
 
-    @periodic_task.periodic_task
+    @periodic_task.periodic_task(spacing=CONF.backend_stats_polling_interval)
     def publish_service_capabilities(self, context):
         """Collect driver status and then publish."""
         self._report_driver_status(context)
@@ -4095,8 +4121,8 @@ class VolumeManager(manager.CleanableManager,
                 new_volume.update(model_update_new)
                 new_volume.save()
         with volume.obj_as_admin():
-                volume.update(model_update_default)
-                volume.save()
+            volume.update(model_update_default)
+            volume.save()
 
     # Replication V2.1 and a/a method
     def failover(self, context, secondary_backend_id=None):
@@ -4921,31 +4947,29 @@ class VolumeManager(manager.CleanableManager,
         .. code:: json
 
           {
-              'replication_targets': [
+              "replication_targets": [
                   {
-                      'backend_id': 'vendor-id-1',
-                      'unique_key': 'val1',
-                      ......
+                      "backend_id": "vendor-id-1",
+                      "unique_key": "val1"
                   },
                   {
-                      'backend_id': 'vendor-id-2',
-                      'unique_key': 'val2',
-                      ......
+                      "backend_id": "vendor-id-2",
+                      "unique_key": "val2"
                   }
                ]
           }
 
         Response example for non-admin:
 
-        .. code json
+        .. code:: json
 
           {
-              'replication_targets': [
+              "replication_targets": [
                   {
-                      'backend_id': 'vendor-id-1'
+                      "backend_id": "vendor-id-1"
                   },
                   {
-                      'backend_id': 'vendor-id-2'
+                      "backend_id": "vendor-id-2"
                   }
                ]
           }

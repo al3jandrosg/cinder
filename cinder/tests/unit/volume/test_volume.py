@@ -319,7 +319,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
         self.assert_notify_called(mock_notify,
                                   (['INFO', 'volume.create.start'],
-                                   ['INFO', 'volume.create.end']))
+                                   ['INFO', 'volume.create.end']),
+                                  any_order=True)
         self.assertEqual({'_pool0': {'allocated_capacity_gb': 1}},
                          self.volume.stats['pools'])
 
@@ -332,7 +333,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                   (['INFO', 'volume.create.start'],
                                    ['INFO', 'volume.create.end'],
                                    ['INFO', 'volume.delete.start'],
-                                   ['INFO', 'volume.delete.end']))
+                                   ['INFO', 'volume.delete.end']),
+                                  any_order=True)
         self.assertEqual({'_pool0': {'allocated_capacity_gb': 0}},
                          self.volume.stats['pools'])
 
@@ -2001,14 +2003,14 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                 self.volume.driver, 'delete_volume') as mock_driver_delete,\
                 mock.patch.object(
                     self.volume, '_copy_volume_data') as mock_copy:
-                temp_volume = tests_utils.create_volume(self.context,
-                                                        status='available')
-                mock_temp.return_value = temp_volume
-                self.volume._revert_to_snapshot_generic(
-                    self.context, fake_volume, fake_snapshot)
-                mock_copy.assert_called_once_with(
-                    self.context, temp_volume, fake_volume)
-                mock_driver_delete.assert_called_once_with(temp_volume)
+            temp_volume = tests_utils.create_volume(self.context,
+                                                    status='available')
+            mock_temp.return_value = temp_volume
+            self.volume._revert_to_snapshot_generic(
+                self.context, fake_volume, fake_snapshot)
+            mock_copy.assert_called_once_with(
+                self.context, temp_volume, fake_volume)
+            mock_driver_delete.assert_called_once_with(temp_volume)
 
     @ddt.data({'driver_error': True},
               {'driver_error': False})

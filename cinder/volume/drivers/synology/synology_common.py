@@ -20,6 +20,7 @@ import json
 import math
 from os import urandom
 from random import randint
+import re
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -79,6 +80,18 @@ LOG = logging.getLogger(__name__)
 
 CONF = cfg.CONF
 CONF.register_opts(cinder_opts, group=configuration.SHARED_CONF_GROUP)
+
+
+class SynoAPIHTTPError(exception.VolumeDriverException):
+    message = _("HTTP exit code: [%(code)s]")
+
+
+class SynoAuthError(exception.VolumeDriverException):
+    message = _("Synology driver authentication failed: %(reason)s.")
+
+
+class SynoLUNNotExist(exception.VolumeDriverException):
+    message = _("LUN not found by UUID: %(uuid)s.")
 
 
 class AESCipher(object):
@@ -171,7 +184,7 @@ class Session(object):
             if one_time_pass and not device_id:
                 self._did = result['data']['did']
         else:
-            raise exception.SynoAuthError(reason=_('Login failed.'))
+            raise SynoAuthError(reason=_('Login failed.'))
 
     def _random_AES_passphrase(self, length):
         available = ('0123456789'
@@ -283,7 +296,7 @@ def _connection_checker(func):
         for attempts in range(2):
             try:
                 return func(self, *args, **kwargs)
-            except exception.SynoAuthError as e:
+            except SynoAuthError as e:
                 if attempts < 1:
                     LOG.debug('Session might have expired.'
                               ' Trying to relogin')
@@ -382,8 +395,7 @@ class APIRequest(object):
 
         if ('error' in result and 'code' in result["error"]
                 and result['error']['code'] == 105):
-            raise exception.SynoAuthError(reason=_('Session might have '
-                                                   'expired.'))
+            raise SynoAuthError(reason=_('Session might have expired.'))
 
         return result
 
@@ -812,7 +824,7 @@ class SynoCommon(object):
         message = ''
 
         if code == LUN_BAD_LUN_UUID:
-            exc = exception.SynoLUNNotExist(**kwargs)
+            exc = SynoLUNNotExist(**kwargs)
             message = 'Bad LUN UUID'
         elif code == LUN_NO_SUCH_SNAPSHOT:
             exc = exception.SnapshotNotFound(**kwargs)
@@ -856,17 +868,26 @@ class SynoCommon(object):
                                               reason=_('data not found'))
         firmware_version = out['data']['firmware_ver']
 
-        # e.g. 'DSM 6.1-7610', 'DSM 6.0.1-7370', 'DSM 6.0-7321 update 3'
-        version = firmware_version.split()[1].split('-')[0]
-        versions = version.split('.')
-        major, minor, hotfix = (versions[0],
-                                versions[1],
-                                versions[2] if len(versions) is 3 else '0')
+        # e.g. 'DSM 6.1-7610', 'DSM 6.0.1-7321 update 3', 'DSM UC 1.0-6789'
+        pattern = re.compile(r"^(.*) (\d+)\.(\d+)(?:\.(\d+))?-(\d+)"
+                             r"(?: [uU]pdate (\d+))?$")
+        matches = pattern.match(firmware_version)
 
-        major, minor, hotfix = (int(major), int(minor), int(hotfix))
+        if not matches:
+            m = (_('DS version %s is not supported') %
+                 firmware_version)
+            raise exception.VolumeDriverException(message=m)
 
-        if (6 > major) or (major is 6 and minor is 0 and hotfix < 2):
-            m = (_('DS version %s is not supperted') %
+        os_name = matches.group(1)
+        major = int(matches.group(2))
+        minor = int(matches.group(3))
+        hotfix = int(matches.group(4)) if matches.group(4) else 0
+
+        if os_name == 'DSM UC':
+            return
+        elif (os_name == 'DSM' and
+                ((6 > major) or (major is 6 and minor is 0 and hotfix < 2))):
+            m = (_('DS version %s is not supported') %
                  firmware_version)
             raise exception.VolumeDriverException(message=m)
 
@@ -934,7 +955,7 @@ class SynoCommon(object):
         result = self.synoexec(api, method, version, **kwargs)
 
         if 'http_status' in result and 200 != result['http_status']:
-            raise exception.SynoAPIHTTPError(code=result['http_status'])
+            raise SynoAPIHTTPError(code=result['http_status'])
 
         result['api_info'] = {'api': api,
                               'method': method,
@@ -1075,7 +1096,7 @@ class SynoCommon(object):
 
             self.check_response(out)
 
-        except exception.SynoLUNNotExist:
+        except SynoLUNNotExist:
             LOG.warning('LUN does not exist')
         except Exception:
             with excutils.save_and_reraise_exception():

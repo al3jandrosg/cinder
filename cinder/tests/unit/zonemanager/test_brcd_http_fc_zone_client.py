@@ -23,10 +23,10 @@ import mock
 from mock import patch
 import six
 
-from cinder import exception
 from cinder import test
 from cinder.zonemanager.drivers.brocade import (brcd_http_fc_zone_client
                                                 as client)
+from cinder.zonemanager.drivers.brocade import exception as b_exception
 import cinder.zonemanager.drivers.brocade.fc_zone_constants as zone_constant
 
 
@@ -104,7 +104,8 @@ zone_string_to_post_no_activate = "zonecfginfo=openstack_cfg "\
     "&saveonly=true"
 zone_string_to_post_invalid_request = "zonecfginfo=openstack_cfg "\
     "openstack50060b0000c26604201900051ee8e32900000000000000000000000000;"\
-    "zone1;zone2 openstack50060b0000c26604201900051ee8e329000000000000000000000"\
+    "zone1;zone2 "\
+    "openstack50060b0000c26604201900051ee8e329000000000000000000000"\
     "00000 50:06:0b:00:00:c2:66:04;20:19:00:05:1e:e8:e3:29 "\
     "zone1 20:01:00:05:33:0e:96:15;20:00:00:05:33:0e:93:11 "\
     "zone2 20:01:00:05:33:0e:96:14;20:00:00:05:33:0e:93:11 &saveonly=true"
@@ -496,7 +497,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
     def test_authenticate_failed(self, connect_mock):
         connect_mock.return_value = un_authenticate_resp
         self.assertRaises(
-            exception.BrocadeZoningHttpException, self.authenticate)
+            b_exception.BrocadeZoningHttpException, self.authenticate)
 
     def test_get_parsed_data(self):
         valid_delimiter1 = zone_constant.SWITCHINFO_BEGIN
@@ -504,12 +505,12 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         invalid_delimiter = "--END SWITCH INFORMATION1"
         self.assertEqual(parsed_value, self.get_parsed_data(
             switch_page_resp, valid_delimiter1, valid_delimiter2))
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.get_parsed_data,
                           switch_page_resp,
                           valid_delimiter1,
                           invalid_delimiter)
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.get_parsed_data,
                           switch_page_resp,
                           invalid_delimiter,
@@ -521,7 +522,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         self.assertEqual(
             "v7.3.0b_rc1_bld06", self.get_nvp_value(parsed_value,
                                                     valid_keyname))
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.get_nvp_value,
                           parsed_value,
                           invalid_keyname)
@@ -530,7 +531,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         manageable_list = ['2', '128']
         self.assertEqual(
             manageable_list, self.get_managable_vf_list(session_info_vf))
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.get_managable_vf_list, session_info_AD)
 
     @mock.patch.object(client.BrcdHTTPFCZoneClient, 'is_vf_enabled')
@@ -538,7 +539,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         is_vf_enabled_mock.return_value = (True, session_info_vf)
         self.vfid = None
         self.assertRaises(
-            exception.BrocadeZoningHttpException,
+            b_exception.BrocadeZoningHttpException,
             self.check_change_vf_context)
         self.vfid = "2"
         with mock.patch.object(self, 'change_vf_context') \
@@ -552,7 +553,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         is_vf_enabled_mock.return_value = (False, session_info_AD)
         self.vfid = "128"
         self.assertRaises(
-            exception.BrocadeZoningHttpException,
+            b_exception.BrocadeZoningHttpException,
             self.check_change_vf_context)
 
     @mock.patch.object(client.BrcdHTTPFCZoneClient, 'get_managable_vf_list')
@@ -575,7 +576,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
                                               get_managable_vf_list_mock):
         get_managable_vf_list_mock.return_value = ['2', '128']
         connect_mock.return_value = session_info_vf_not_changed
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.change_vf_context, "2", session_info_vf)
         data = zone_constant.CHANGE_VF.format(vfid="2")
         headers = {zone_constant.AUTH_HEADER: self.auth_header}
@@ -587,7 +588,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
     def test_change_vf_context_vfid_not_managaed(self,
                                                  get_managable_vf_list_mock):
         get_managable_vf_list_mock.return_value = ['2', '128']
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.change_vf_context, "12", session_info_vf)
 
     @patch.object(client.BrcdHTTPFCZoneClient, 'connect')
@@ -655,7 +656,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
                               '20:19:00:05:1e:e8:e3:29']
                           }
         self.assertRaises(
-            exception.BrocadeZoningHttpException,
+            b_exception.BrocadeZoningHttpException,
             self.add_zones, add_zones_info, False)
 
     @patch.object(client.BrcdHTTPFCZoneClient, 'post_zone_data')
@@ -714,7 +715,7 @@ class TestBrcdHttpFCZoneClient(client.BrcdHTTPFCZoneClient, test.TestCase):
         self.ifas = ifas.copy()
         self.active_cfg = active_cfg
         delete_zones_info = 'openstack50060b0000c26604201900051ee8e32'
-        self.assertRaises(exception.BrocadeZoningHttpException,
+        self.assertRaises(b_exception.BrocadeZoningHttpException,
                           self.delete_zones, delete_zones_info, False)
 
     @patch.object(time, 'sleep')

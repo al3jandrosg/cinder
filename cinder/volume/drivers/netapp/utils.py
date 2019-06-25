@@ -60,6 +60,10 @@ DEFAULT_CHAP_USER_NAME = 'NetApp_iSCSI_CHAP_Username'
 API_TRACE_PATTERN = '(.*)'
 
 
+class NetAppDriverException(exception.VolumeDriverException):
+    message = _("NetApp Cinder Driver exception.")
+
+
 def validate_instantiation(**kwargs):
     """Checks if a driver is instantiated other than by the unified driver.
 
@@ -165,18 +169,29 @@ def log_extra_spec_warnings(extra_specs):
                                  'new': DEPRECATED_SSC_SPECS[spec]})
 
 
-def get_iscsi_connection_properties(lun_id, volume, iqn,
-                                    address, port):
+def get_iscsi_connection_properties(lun_id, volume, iqns,
+                                    addresses, ports):
     # literal ipv6 address
-    if netutils.is_valid_ipv6(address):
-        address = netutils.escape_ipv6(address)
+    addresses = [netutils.escape_ipv6(a) if netutils.is_valid_ipv6(a) else a
+                 for a in addresses]
+
+    lun_id = int(lun_id)
+    if isinstance(iqns, six.string_types):
+        iqns = [iqns] * len(addresses)
+
+    target_portals = ['%s:%s' % (a, p) for a, p in zip(addresses, ports)]
 
     properties = {}
     properties['target_discovered'] = False
-    properties['target_portal'] = '%s:%s' % (address, port)
-    properties['target_iqn'] = iqn
-    properties['target_lun'] = int(lun_id)
+    properties['target_portal'] = target_portals[0]
+    properties['target_iqn'] = iqns[0]
+    properties['target_lun'] = lun_id
     properties['volume_id'] = volume['id']
+    if len(addresses) > 1:
+        properties['target_portals'] = target_portals
+        properties['target_iqns'] = iqns
+        properties['target_luns'] = [lun_id] * len(addresses)
+
     auth = volume['provider_auth']
     if auth:
         (auth_method, auth_username, auth_secret) = auth.split()
@@ -361,12 +376,11 @@ def get_export_host_junction_path(share):
     if '[' in share and ']' in share:
         try:
             # ipv6
-            host = re.search('\[(.*)\]', share).group(1)
+            host = re.search(r'\[(.*)\]', share).group(1)
             junction_path = share.split(':')[-1]
         except AttributeError:
-            raise exception.NetAppDriverException(_("Share '%s' is "
-                                                    "not in a valid "
-                                                    "format.") % share)
+            raise NetAppDriverException(_("Share '%s' is not in a valid "
+                                          "format.") % share)
     else:
         # ipv4
         path = share.split(':')
@@ -374,9 +388,8 @@ def get_export_host_junction_path(share):
             host = path[0]
             junction_path = path[1]
         else:
-            raise exception.NetAppDriverException(_("Share '%s' is "
-                                                    "not in a valid "
-                                                    "format.") % share)
+            raise NetAppDriverException(_("Share '%s' is not in a valid "
+                                          "format.") % share)
 
     return host, junction_path
 

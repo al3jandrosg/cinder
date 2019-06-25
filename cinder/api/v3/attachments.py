@@ -13,6 +13,7 @@
 """The volumes attachments API."""
 
 from oslo_log import log as logging
+from six.moves import http_client
 import webob
 
 from cinder.api import common
@@ -99,7 +100,7 @@ class AttachmentsController(wsgi.Controller):
                 sort_direction=sort_dirs)
 
     @wsgi.Controller.api_version(mv.NEW_ATTACH)
-    @wsgi.response(200)
+    @wsgi.response(http_client.OK)
     @validation.schema(attachment.create)
     def create(self, req, body):
         """Create an attachment.
@@ -144,7 +145,7 @@ class AttachmentsController(wsgi.Controller):
                 "connector":
                 {
                     "initiator": "iqn.1993-08.org.debian:01:cad181614cec",
-                    "ip":"192.168.1.20",
+                    "ip": "192.168.1.20",
                     "platform": "x86_64",
                     "host": "tempest-1",
                     "os_type": "linux2",
@@ -215,13 +216,13 @@ class AttachmentsController(wsgi.Controller):
                     "connector":
                     {
                         "initiator": "iqn.1993-08.org.debian:01:cad181614cec",
-                        "ip":"192.168.1.20",
+                        "ip": "192.168.1.20",
                         "platform": "x86_64",
                         "host": "tempest-1",
                         "os_type": "linux2",
-                        "multipath": False,
+                        "multipath": false,
                         "mountpoint": "/dev/vdb",
-                        "mode": None|"rw"|"ro",
+                        "mode": "None|rw|ro"
                     }
                 }
             }
@@ -269,7 +270,7 @@ class AttachmentsController(wsgi.Controller):
         attachments = self.volume_api.attachment_delete(context, attachment)
         return attachment_views.ViewBuilder.list(attachments)
 
-    @wsgi.response(204)
+    @wsgi.response(http_client.NO_CONTENT)
     @wsgi.Controller.api_version(mv.NEW_ATTACH_COMPLETION)
     @wsgi.action('os-complete')
     def complete(self, req, id, body):

@@ -53,7 +53,7 @@ backup_opts = [
                choices=['none', 'off', 'no',
                         'zlib', 'gzip',
                         'bz2', 'bzip2'],
-               help='Compression algorithm (None to disable)'),
+               help='Compression algorithm ("none" to disable)'),
 ]
 
 CONF = cfg.CONF
@@ -152,7 +152,7 @@ class ChunkedBackupDriver(driver.BackupDriver):
 
     @abc.abstractmethod
     def get_object_writer(self, container, object_name, extra_metadata=None):
-        """Returns a writer object which stores the chunk data in backup repository.
+        """Returns a writer object which stores the chunk data.
 
         The object returned should be a context handler that can be used in a
         "with" context.
