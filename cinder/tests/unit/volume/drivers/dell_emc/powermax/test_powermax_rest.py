@@ -228,7 +228,7 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_get_uni_version(self):
         version, major_version = self.rest.get_uni_version()
-        self.assertEqual('90', major_version)
+        self.assertEqual('91', major_version)
         with mock.patch.object(self.rest, '_get_request', return_value=None):
             version, major_version = self.rest.get_uni_version()
             self.assertIsNone(major_version)
@@ -317,12 +317,12 @@ class PowerMaxRestTest(test.TestCase):
                            'storageGroupId': self.data.storagegroup_name_f,
                            'emulation': 'FBA',
                            'sloBasedStorageGroupParam': [
-                               {'num_of_vols': 0,
-                                'sloId': self.data.slo,
+                               {'sloId': self.data.slo,
                                 'workloadSelection': 'NONE',
-                                'volumeAttribute': {
+                                'volumeAttributes': [{
                                     'volume_size': '0',
-                                    'capacityUnit': 'GB'}}]}
+                                    'capacityUnit': 'GB',
+                                    'num_of_vols': 0}]}]}
                 mock_sg.assert_called_once_with(self.data.array, payload)
 
     def test_create_storage_group_failed(self):
@@ -350,12 +350,12 @@ class PowerMaxRestTest(test.TestCase):
                        'storageGroupId': self.data.default_sg_compr_disabled,
                        'emulation': 'FBA',
                        'sloBasedStorageGroupParam': [
-                           {'num_of_vols': 0,
-                            'sloId': self.data.slo,
+                           {'sloId': self.data.slo,
                             'workloadSelection': self.data.workload,
-                            'volumeAttribute': {
+                            'volumeAttributes': [{
                                 'volume_size': '0',
-                                'capacityUnit': 'GB'},
+                                'capacityUnit': 'GB',
+                                'num_of_vols': 0}],
                             'noCompression': 'true'}]}
             mock_sg.assert_called_once_with(self.data.array, payload)
 
@@ -475,8 +475,9 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_add_child_sg_to_parent_sg(self):
         payload = {'editStorageGroupActionParam': {
-            'addExistingStorageGroupParam': {
-                'storageGroupId': [self.data.storagegroup_name_f]}}}
+            'expandStorageGroupParam': {
+                'addExistingStorageGroupParam': {
+                    'storageGroupId': [self.data.storagegroup_name_f]}}}}
         with mock.patch.object(
                 self.rest, 'modify_storage_group',
                 return_value=(202, self.data.job_list[0])) as mck_mod_sg:
@@ -484,7 +485,7 @@ class PowerMaxRestTest(test.TestCase):
                 self.data.array, self.data.storagegroup_name_f,
                 self.data.parent_sg_f, self.data.extra_specs)
             mck_mod_sg.assert_called_once_with(
-                self.data.array, self.data.parent_sg_f, payload, version='83')
+                self.data.array, self.data.parent_sg_f, payload)
 
     def test_remove_child_sg_from_parent_sg(self):
         payload = {'editStorageGroupActionParam': {
@@ -543,34 +544,62 @@ class PowerMaxRestTest(test.TestCase):
             self.rest._modify_volume, self.data.array,
             device_id, payload)
 
-    def test_extend_volume(self):
+    @mock.patch.object(rest.PowerMaxRest, 'wait_for_job')
+    def test_extend_volume(self, mck_wait):
+        array = self.data.array
         device_id = self.data.device_id
         new_size = '3'
+        extra_specs = self.data.extra_specs,
+        rdfg_num = self.data.rdf_group_no
+
         extend_vol_payload = {'executionOption': 'ASYNCHRONOUS',
                               'editVolumeActionParam': {
                                   'expandVolumeParam': {
                                       'volumeAttribute': {
                                           'volume_size': new_size,
-                                          'capacityUnit': 'GB'}}}}
+                                          'capacityUnit': 'GB'},
+                                      'rdfGroupNumber': rdfg_num}}}
+
         with mock.patch.object(
                 self.rest, '_modify_volume',
-                return_value=(202, self.data.job_list[0])) as mock_modify:
-            self.rest.extend_volume(self.data.array, device_id, new_size,
-                                    self.data.extra_specs)
-            mock_modify.assert_called_once_with(
-                self.data.array, device_id, extend_vol_payload)
+                return_value=(202, self.data.job_list[0])) as mck_modify:
 
-    def test_delete_volume(self):
+            self.rest.extend_volume(array, device_id, new_size, extra_specs,
+                                    rdfg_num)
+
+            mck_modify.assert_called_once_with(array, device_id,
+                                               extend_vol_payload)
+
+    def test_legacy_delete_volume(self):
         device_id = self.data.device_id
         vb_except = exception.VolumeBackendAPIException
-        with mock.patch.object(self.rest, 'delete_resource') as mock_delete, \
+        with mock.patch.object(self.rest, 'delete_resource') as mock_delete, (
                 mock.patch.object(
                     self.rest, '_modify_volume',
-                    side_effect=[None, None, None, vb_except]) as mock_modify:
-            for x in range(0, 2):
+                    side_effect=[None, None, None, vb_except])) as mock_modify:
+            for _ in range(0, 2):
                 self.rest.delete_volume(self.data.array, device_id)
             mod_call_count = mock_modify.call_count
             self.assertEqual(4, mod_call_count)
+            mock_delete.assert_called_once_with(
+                self.data.array, 'sloprovisioning', 'volume', device_id)
+
+    def test_delete_volume(self):
+        device_id = self.data.device_id
+        ucode_5978_foxtail = tpd.PowerMaxData.ucode_5978_foxtail
+        with mock.patch.object(
+            self.rest, 'delete_resource') as mock_delete, (
+                mock.patch.object(
+                    self.rest, '_modify_volume')) as mock_modify, (
+                mock.patch.object(
+                    self.rest, 'get_array_detail',
+                    return_value=ucode_5978_foxtail))as mock_det:
+
+            self.rest.delete_volume(self.data.array, device_id)
+            detail_call_count = mock_det.call_count
+            mod_call_count = mock_modify.call_count
+            self.assertEqual(1, detail_call_count)
+            self.assertEqual(1, mod_call_count)
             mock_delete.assert_called_once_with(
                 self.data.array, 'sloprovisioning', 'volume', device_id)
 
@@ -1001,7 +1030,7 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_create_volume_snap(self):
         snap_name = self.data.volume_snap_vx[
-            'snapshotSrc'][0]['snapshotName']
+            'snapshotSrcs'][0]['snapshotName']
         device_id = self.data.device_id
         extra_specs = self.data.extra_specs
         payload = {'deviceNameListSource': [{'name': device_id}],
@@ -1034,8 +1063,8 @@ class PowerMaxRestTest(test.TestCase):
         array = self.data.array
         source_id = self.data.device_id
         target_id = self.data.volume_snap_vx[
-            'snapshotSrc'][0]['linkedDevices'][0]['targetDevice']
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+            'snapshotSrcs'][0]['linkedDevices'][0]['targetDevice']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         extra_specs = self.data.extra_specs
         payload = {'deviceNameListSource': [{'name': source_id}],
                    'deviceNameListTarget': [
@@ -1043,8 +1072,7 @@ class PowerMaxRestTest(test.TestCase):
                    'copy': 'true', 'action': "",
                    'star': 'false', 'force': 'false',
                    'exact': 'false', 'remote': 'false',
-                   'symforce': 'false', 'nocopy': 'false',
-                   'generation': 0}
+                   'symforce': 'false', 'generation': 0}
         payload_restore = {'deviceNameListSource': [{'name': source_id}],
                            'deviceNameListTarget': [{'name': source_id}],
                            'action': 'Restore',
@@ -1094,7 +1122,7 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_delete_volume_snap(self):
         array = self.data.array
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         source_device_id = self.data.device_id
         payload = {'deviceNameListSource': [{'name': source_device_id}],
                    'generation': 0}
@@ -1108,7 +1136,7 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_delete_volume_snap_restore(self):
         array = self.data.array
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         source_device_id = self.data.device_id
         payload = {'deviceNameListSource': [{'name': source_device_id}],
                    'restore': True, 'generation': 0}
@@ -1128,22 +1156,22 @@ class PowerMaxRestTest(test.TestCase):
 
     def test_get_volume_snap(self):
         array = self.data.array
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         device_id = self.data.device_id
-        ref_snap = self.data.volume_snap_vx['snapshotSrc'][0]
+        ref_snap = self.data.volume_snap_vx['snapshotSrcs'][0]
         snap = self.rest.get_volume_snap(array, device_id, snap_name)
         self.assertEqual(ref_snap, snap)
 
     def test_get_volume_snap_none(self):
         array = self.data.array
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         device_id = self.data.device_id
         with mock.patch.object(self.rest, 'get_volume_snap_info',
                                return_value=None):
             snap = self.rest.get_volume_snap(array, device_id, snap_name)
             self.assertIsNone(snap)
         with mock.patch.object(self.rest, 'get_volume_snap_info',
-                               return_value={'snapshotSrc': []}):
+                               return_value={'snapshotSrcs': []}):
             snap = self.rest.get_volume_snap(array, device_id, snap_name)
             self.assertIsNone(snap)
 
@@ -1167,10 +1195,10 @@ class PowerMaxRestTest(test.TestCase):
         source_id = self.data.device_id
         generation = 0
         target_id = self.data.volume_snap_vx[
-            'snapshotSrc'][0]['linkedDevices'][0]['targetDevice']
-        snap_name = self.data.volume_snap_vx['snapshotSrc'][0]['snapshotName']
+            'snapshotSrcs'][0]['linkedDevices'][0]['targetDevice']
+        snap_name = self.data.volume_snap_vx['snapshotSrcs'][0]['snapshotName']
         ref_sync = self.data.volume_snap_vx[
-            'snapshotSrc'][0]['linkedDevices'][0]
+            'snapshotSrcs'][0]['linkedDevices'][0]
         sync = self.rest.get_sync_session(
             array, source_id, snap_name, target_id, generation)
         self.assertEqual(ref_sync, sync)
@@ -1354,29 +1382,87 @@ class PowerMaxRestTest(test.TestCase):
             self.data.device_id2, self.data.remote_array, extra_specs)
         self.assertEqual(ref_dict, rdf_dict)
 
+    @mock.patch.object(rest.PowerMaxRest, 'wait_for_job')
+    @mock.patch.object(rest.PowerMaxRest, 'create_resource',
+                       return_value=(200, 'job'))
+    @mock.patch.object(rest.PowerMaxRest, 'is_next_gen_array',
+                       side_effect=[True, True, False, False])
+    def test_test_create_rdf_device_pair_metro_cons_exempt(
+            self, mck_nxt_gen, mck_create, mck_wait):
+        extra_specs = deepcopy(self.data.extra_specs)
+        extra_specs[utils.REP_MODE] = utils.REP_METRO
+        extra_specs[utils.METROBIAS] = True
+
+        ref_payload = ({
+            "deviceNameListSource": [{"name": self.data.device_id}],
+            "deviceNameListTarget": [{"name": self.data.device_id2}],
+            "replicationMode": 'Active',
+            "establish": 'true',
+            "rdfType": 'RDF1'})
+
+        get_payload_true = {'rdfType': 'RDF1', 'consExempt': 'true'}
+        get_payload_false = {'rdfType': 'RDF1', 'consExempt': 'false'}
+
+        with mock.patch.object(
+                self.rest, 'get_metro_payload_info',
+                side_effect=[get_payload_true,
+                             get_payload_false]) as mock_payload:
+            ref_extra_specs = deepcopy(extra_specs)
+
+            ref_extra_specs[utils.RDF_CONS_EXEMPT] = True
+            self.rest.create_rdf_device_pair(
+                self.data.array, self.data.device_id, self.data.rdf_group_no,
+                self.data.device_id2, self.data.remote_array, extra_specs)
+            mock_payload.assert_called_once_with(
+                self.data.array, ref_payload, self.data.rdf_group_no,
+                ref_extra_specs)
+
+            mock_payload.reset_mock()
+
+            ref_extra_specs[utils.RDF_CONS_EXEMPT] = False
+            self.rest.create_rdf_device_pair(
+                self.data.array, self.data.device_id, self.data.rdf_group_no,
+                self.data.device_id2, self.data.remote_array, extra_specs)
+            mock_payload.assert_called_once_with(
+                self.data.array, ref_payload, self.data.rdf_group_no,
+                ref_extra_specs)
+
     @mock.patch.object(rest.PowerMaxRest, 'get_rdf_group',
                        side_effect=[{'numDevices': 0}, {'numDevices': 0},
-                                    {'numDevices': 1}])
+                                    {'numDevices': 1}, {'numDevices': 1}])
     def test_get_metro_payload_info(self, mock_rdfg):
-        ref_payload = {'establish': 'true', 'rdfType': 'RDF1'}
-        payload1 = self.rest.get_metro_payload_info(
-            self.data.array, ref_payload, self.data.rdf_group_no, {})
-        self.assertEqual(ref_payload, payload1)
-        payload2 = self.rest.get_metro_payload_info(
-            self.data.array, ref_payload, self.data.rdf_group_no,
+        payload_in = {'establish': 'true', 'rdfType': 'RDF1'}
+
+        # First volume out, Metro use bias not set
+        act_payload_1 = self.rest.get_metro_payload_info(
+            self.data.array, payload_in.copy(), self.data.rdf_group_no, {})
+        self.assertEqual(payload_in, act_payload_1)
+
+        # First volume out, Metro use bias set
+        act_payload_2 = self.rest.get_metro_payload_info(
+            self.data.array, payload_in.copy(), self.data.rdf_group_no,
             {'metro_bias': True})
-        self.assertEqual('true', payload2['metroBias'])
-        ref_payload2 = {'establish': 'true', 'rdfType': 'RDF1'}
-        payload3 = self.rest.get_metro_payload_info(
-            self.data.array, ref_payload2, self.data.rdf_group_no, {})
-        ref_payload3 = {'rdfType': 'NA', 'format': 'true'}
-        self.assertEqual(ref_payload3, payload3)
+        self.assertEqual('true', act_payload_2['metroBias'])
+
+        # Not first vol in RDFG, consistency exempt not set
+        act_payload_3 = self.rest.get_metro_payload_info(
+            self.data.array, payload_in.copy(), self.data.rdf_group_no,
+            {'consExempt': False})
+        ref_payload_3 = {'rdfType': 'NA', 'format': 'true'}
+        self.assertEqual(ref_payload_3, act_payload_3)
+
+        # Not first vol in RDFG, consistency exempt set
+        act_payload_4 = self.rest.get_metro_payload_info(
+            self.data.array, payload_in.copy(), self.data.rdf_group_no,
+            {'consExempt': True})
+        ref_payload_4 = {'rdfType': 'RDF1', 'consExempt': 'true'}
+        self.assertEqual(ref_payload_4, act_payload_4)
 
     def test_modify_rdf_device_pair(self):
         resource_name = '70/volume/00001'
         common_opts = {'force': 'false', 'symForce': 'false', 'star': 'false',
                        'hop2': 'false', 'bypass': 'false'}
-        suspend_payload = {'action': 'Suspend',
+        suspend_payload = {'action': 'SUSPEND',
                            'executionOption': 'ASYNCHRONOUS',
                            'suspend': common_opts}
 
@@ -1654,3 +1740,10 @@ class PowerMaxRestTest(test.TestCase):
         self.rest.u4p_failover_targets = []
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.rest._handle_u4p_failover)
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_array_detail',
+                       return_value=tpd.PowerMaxData.powermax_model_details)
+    def test_get_array_ucode(self, mck_ucode):
+        array = self.data.array
+        ucode = self.rest.get_array_ucode_version(array)
+        self.assertEqual(self.data.powermax_model_details['ucode'], ucode)

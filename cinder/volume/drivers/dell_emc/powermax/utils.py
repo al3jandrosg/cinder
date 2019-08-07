@@ -41,6 +41,8 @@ VMAX_AFA_MODELS = ['VMAX250F', 'VMAX450F', 'VMAX850F', 'VMAX950F']
 MAX_SRP_LENGTH = 16
 TRUNCATE_5 = 5
 TRUNCATE_27 = 27
+UCODE_5978_ELMSR = 221
+UCODE_5978 = 5978
 
 ARRAY = 'array'
 SLO = 'slo'
@@ -71,6 +73,7 @@ RDF_FAILEDOVER_STATE = 'failed over'
 RDF_ACTIVE = 'active'
 RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
+RDF_CONS_EXEMPT = 'consExempt'
 METROBIAS = 'metro_bias'
 DEFAULT_PORT = 8443
 CLONE_SNAPSHOT_NAME = "snapshot_for_clone"

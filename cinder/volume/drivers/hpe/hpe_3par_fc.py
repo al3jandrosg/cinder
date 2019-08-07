@@ -37,6 +37,7 @@ except ImportError:
 from oslo_log import log as logging
 from oslo_utils.excutils import save_and_reraise_exception
 
+from cinder import coordination
 from cinder import interface
 from cinder import utils
 from cinder.volume.drivers.hpe import hpe_3par_base as hpebasedriver
@@ -125,6 +126,7 @@ class HPE3PARFCDriver(hpebasedriver.HPE3PARDriverBase):
         self.protocol = 'FC'
 
     @utils.trace
+    @coordination.synchronized('3par-{volume.id}')
     def initialize_connection(self, volume, connector):
         """Assigns the volume to a server.
 
@@ -171,10 +173,22 @@ class HPE3PARFCDriver(hpebasedriver.HPE3PARDriverBase):
             host = self._create_host(common, volume, connector)
             target_wwns, init_targ_map, numPaths = \
                 self._build_initiator_target_map(common, connector)
-            if not connector.get('multipath'):
-                target_wwns = target_wwns[:1]
+
+            multipath = connector.get('multipath')
+            LOG.debug("multipath: %(multipath)s",
+                      {'multipath': multipath})
+            user_target = None
+            if not multipath:
+                user_target = self._get_user_target(common)
                 initiator = connector.get('wwpns')[0]
-                init_targ_map[initiator] = init_targ_map[initiator][:1]
+                if user_target is None:
+                    target_wwns = target_wwns[:1]
+                    init_targ_map[initiator] = \
+                        init_targ_map[initiator][:1]
+                else:
+                    target_wwns = [user_target]
+                    init_targ_map[initiator] = [user_target]
+
             # check if a VLUN already exists for this host
             existing_vlun = common.find_existing_vlun(volume, host)
 
@@ -208,8 +222,9 @@ class HPE3PARFCDriver(hpebasedriver.HPE3PARDriverBase):
             self._logout(common)
 
     @utils.trace
+    @coordination.synchronized('3par-{volume.id}')
     def terminate_connection(self, volume, connector, **kwargs):
-        """Driver entry point to unattach a volume from an instance."""
+        """Driver entry point to detach a volume from an instance."""
         array_id = self.get_volume_replication_driver_data(volume)
         common = self._login(array_id=array_id)
         try:
@@ -408,3 +423,26 @@ class HPE3PARFCDriver(hpebasedriver.HPE3PARDriverBase):
             self._modify_3par_fibrechan_host(common, host['name'], new_wwns)
             host = common._get_3par_host(host['name'])
         return host
+
+    def _get_user_target(self, common):
+        target_nsp = common.config.hpe3par_target_nsp
+
+        if not target_nsp:
+            return None
+        else:
+            # Get target wwn from target nsp
+            fc_ports = common.get_active_fc_target_ports()
+
+            target_wwn = ''
+            for port in fc_ports:
+                nsp = port['nsp']
+                if target_nsp == nsp:
+                    target_wwn = port['portWWN']
+                    break
+
+            if not target_wwn:
+                LOG.warning("Did not get wwn for target nsp: "
+                            "%(nsp)s", {'nsp': target_nsp})
+                return None
+            else:
+                return target_wwn

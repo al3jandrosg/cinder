@@ -231,10 +231,10 @@ class SolidFireDriver(san.SanISCSIDriver):
           2.0.10 - Add response to debug on retryable errors
           2.0.11 - Add ability to failback replicating volumes
           2.0.12 - Fix bug #1744005
-
+          2.0.14 - Fix bug #1782588 qos settings on extend
     """
 
-    VERSION = '2.0.12'
+    VERSION = '2.0.14'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "NetApp_SolidFire_CI"
@@ -1376,7 +1376,8 @@ class SolidFireDriver(san.SanISCSIDriver):
                                                          volume)
         return model, True
 
-    def _retrieve_qos_setting(self, volume):
+    # extended_size > 0 when we are extending a volume
+    def _retrieve_qos_setting(self, volume, extended_size=0):
         qos = {}
         if (self.configuration.sf_allow_tenant_qos and
                 volume.get('volume_metadata')is not None):
@@ -1386,7 +1387,8 @@ class SolidFireDriver(san.SanISCSIDriver):
         type_id = volume.get('volume_type_id', None)
         if type_id is not None:
             qos = self._set_qos_by_volume_type(ctxt, type_id,
-                                               volume.get('size'))
+                                               extended_size if extended_size
+                                               > 0 else volume.get('size'))
         return qos
 
     def create_volume(self, volume):
@@ -1929,24 +1931,29 @@ class SolidFireDriver(san.SanISCSIDriver):
                       "the SolidFire Cluster while attempting "
                       "extend_volume operation!", volume['id'])
             raise exception.VolumeNotFound(volume_id=volume['id'])
-
+        qos = self._retrieve_qos_setting(volume, new_size)
         params = {
             'volumeID': sf_vol['volumeID'],
-            'totalSize': int(new_size * units.Gi)
+            'totalSize': int(new_size * units.Gi),
+            'qos': qos
         }
         self._issue_api_request('ModifyVolume',
                                 params, version='5.0')
 
-    def _get_provisioned_capacity(self):
+    def _get_provisioned_capacity_iops(self):
         response = self._issue_api_request('ListVolumes', {}, version='8.0')
         volumes = response['result']['volumes']
 
         LOG.debug("%s volumes present in cluster", len(volumes))
-        provisioned = 0
-        for vol in volumes:
-            provisioned += vol['totalSize']
 
-        return provisioned
+        provisioned_cap = 0
+        provisioned_iops = 0
+
+        for vol in volumes:
+            provisioned_cap += vol['totalSize']
+            provisioned_iops += vol['qos']['minIOPS']
+
+        return provisioned_cap, provisioned_iops
 
     def _update_cluster_status(self):
         """Retrieve status info for the Cluster."""
@@ -1969,7 +1976,8 @@ class SolidFireDriver(san.SanISCSIDriver):
         data['multiattach'] = True
 
         try:
-            results = self._issue_api_request('GetClusterCapacity', params)
+            results = self._issue_api_request('GetClusterCapacity', params,
+                                              version='8.0')
         except SolidFireAPIException:
             data['total_capacity_gb'] = 0
             data['free_capacity_gb'] = 0
@@ -1977,14 +1985,14 @@ class SolidFireDriver(san.SanISCSIDriver):
             return
 
         results = results['result']['clusterCapacity']
+        prov_cap, prov_iops = self._get_provisioned_capacity_iops()
 
         if self.configuration.sf_provisioning_calc == 'usedSpace':
             free_capacity = (
                 results['maxUsedSpace'] - results['usedSpace'])
             data['total_capacity_gb'] = results['maxUsedSpace'] / units.Gi
             data['thin_provisioning_support'] = True
-            data['provisioned_capacity_gb'] = (
-                self._get_provisioned_capacity() / units.Gi)
+            data['provisioned_capacity_gb'] = prov_cap / units.Gi
             data['max_over_subscription_ratio'] = (
                 self.configuration.max_over_subscription_ratio
             )
@@ -1995,12 +2003,30 @@ class SolidFireDriver(san.SanISCSIDriver):
                 results['maxProvisionedSpace'] / units.Gi)
 
         data['free_capacity_gb'] = float(free_capacity / units.Gi)
-        data['compression_percent'] = (
-            results['compressionPercent'])
-        data['deduplicaton_percent'] = (
-            results['deDuplicationPercent'])
-        data['thin_provision_percent'] = (
-            results['thinProvisioningPercent'])
+
+        if (results['uniqueBlocksUsedSpace'] == 0 or
+                results['uniqueBlocks'] == 0 or
+                results['zeroBlocks'] == 0):
+            data['compression_percent'] = 100
+            data['deduplicaton_percent'] = 100
+            data['thin_provision_percent'] = 100
+        else:
+            data['compression_percent'] = (
+                (float(results['uniqueBlocks'] * 4096) /
+                 results['uniqueBlocksUsedSpace']) * 100)
+            data['deduplicaton_percent'] = (
+                float(results['nonZeroBlocks'] /
+                      results['uniqueBlocks']) * 100)
+            data['thin_provision_percent'] = (
+                (float(results['nonZeroBlocks'] + results['zeroBlocks']) /
+                 results['nonZeroBlocks']) * 100)
+
+        data['provisioned_iops'] = prov_iops
+        data['current_iops'] = results['currentIOPS']
+        data['average_iops'] = results['averageIOPS']
+        data['max_iops'] = results['maxIOPS']
+        data['peak_iops'] = results['peakIOPS']
+
         data['shared_targets'] = False
         self.cluster_stats = data
 

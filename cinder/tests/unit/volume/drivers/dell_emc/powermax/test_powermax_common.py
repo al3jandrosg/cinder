@@ -58,29 +58,28 @@ class PowerMaxCommonTest(test.TestCase):
         self.utils.get_volumetype_extra_specs = (
             mock.Mock(return_value=self.data.vol_type_extra_specs))
 
-    @mock.patch.object(rest.PowerMaxRest, 'set_rest_credentials')
-    @mock.patch.object(common.PowerMaxCommon, '_get_slo_workload_combinations',
-                       return_value=[])
-    @mock.patch.object(
-        common.PowerMaxCommon, 'get_attributes_from_cinder_config',
-        return_value=[])
-    def test_gather_info_no_opts(self, mock_parse, mock_combo, mock_rest):
-        configuration = tpfo.FakeConfiguration(
-            None, 'config_group', None, None)
-        fc.PowerMaxFCDriver(configuration=configuration)
-
+    @mock.patch.object(rest.PowerMaxRest, 'get_array_ucode_version',
+                       return_value=tpd.PowerMaxData.next_gen_ucode)
     @mock.patch.object(rest.PowerMaxRest, 'get_array_model_info',
                        return_value=('PowerMax 2000', True))
     @mock.patch.object(rest.PowerMaxRest, 'set_rest_credentials')
     @mock.patch.object(common.PowerMaxCommon, '_get_slo_workload_combinations',
                        return_value=[])
-    @mock.patch.object(
-        common.PowerMaxCommon, 'get_attributes_from_cinder_config',
-        return_value=tpd.PowerMaxData.array_info_wl)
-    def test_gather_info_next_gen(self, mock_parse, mock_combo, mock_rest,
-                                  mock_nextgen):
+    @mock.patch.object(common.PowerMaxCommon,
+                       'get_attributes_from_cinder_config',
+                       side_effect=[[], tpd.PowerMaxData.array_info_wl])
+    def test_gather_info_tests(self, mck_parse, mck_combo, mck_rest,
+                               mck_nextgen, mck_ucode):
+
+        # Use-Case 1: Gather info no-opts
+        configuration = tpfo.FakeConfiguration(
+            None, 'config_group', None, None)
+        fc.PowerMaxFCDriver(configuration=configuration)
+
+        # Use-Case 2: Gather info next-gen with ucode/version
         self.common._gather_info()
         self.assertTrue(self.common.next_gen)
+        self.assertEqual(self.common.ucode_level, self.data.next_gen_ucode)
 
     def test_get_slo_workload_combinations_powermax(self):
         array_info = self.common.get_attributes_from_cinder_config()
@@ -445,28 +444,42 @@ class PowerMaxCommonTest(test.TestCase):
             mock_unmap.assert_called_once_with(
                 volume, connector)
 
-    @mock.patch.object(rest.PowerMaxRest, 'is_next_gen_array',
-                       return_value=True)
-    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
     @mock.patch.object(provision.PowerMaxProvision, 'extend_volume')
-    def test_extend_volume_success(self, mock_extend, mock_sync, mock_newgen):
+    @mock.patch.object(common.PowerMaxCommon, '_array_ode_capabilities_check',
+                       return_value=[True] * 4)
+    @mock.patch.object(common.PowerMaxCommon, '_extend_vol_validation_checks')
+    def test_extend_vol_no_rep_success(self, mck_val_chk, mck_ode_chk,
+                                       mck_extend):
         volume = self.data.test_volume
         array = self.data.array
         device_id = self.data.device_id
         new_size = self.data.test_volume.size
         ref_extra_specs = deepcopy(self.data.extra_specs_intervals_set)
         ref_extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
-        with mock.patch.object(self.rest, 'is_vol_in_rep_session',
-                               side_effect=[(False, False, None),
-                                            (False, True, None)]):
+        self.common.extend_volume(volume, new_size)
+        mck_extend.assert_called_once_with(
+            array, device_id, new_size, ref_extra_specs, None)
+
+    @mock.patch.object(provision.PowerMaxProvision, 'extend_volume')
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=(10, None))
+    @mock.patch.object(common.PowerMaxCommon, '_array_ode_capabilities_check',
+                       return_value=[True] * 4)
+    @mock.patch.object(common.PowerMaxCommon, '_extend_vol_validation_checks')
+    def test_extend_vol_rep_success(self, mck_val_chk, mck_ode_chk,
+                                    mck_get_rdf, mck_extend):
+        volume = self.data.test_volume
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = self.data.test_volume.size
+        ref_extra_specs = deepcopy(self.data.rep_extra_specs_ode)
+        with mock.patch.object(self.common, '_initial_setup',
+                               return_value=self.data.rep_extra_specs_ode):
+            self.common.next_gen = True
+            self.common.rep_config = deepcopy(ref_extra_specs)
             self.common.extend_volume(volume, new_size)
-            mock_extend.assert_called_once_with(
-                array, device_id, new_size, ref_extra_specs)
-            # Success, with snapshot, on new VMAX array
-            mock_extend.reset_mock()
-            self.common.extend_volume(volume, new_size)
-            mock_extend.assert_called_once_with(
-                array, device_id, new_size, ref_extra_specs)
+            mck_extend.assert_called_with(
+                array, device_id, new_size, ref_extra_specs, 10)
 
     def test_extend_volume_failed_snap_src(self):
         volume = self.data.test_volume
@@ -728,6 +741,38 @@ class PowerMaxCommonTest(test.TestCase):
             self.assertRaises(exception.VolumeBackendAPIException,
                               self.common._create_cloned_volume,
                               volume, source_volume, extra_specs)
+
+    @mock.patch.object(common.PowerMaxCommon,
+                       '_find_device_on_array')
+    def test_create_cloned_volume_not_licenced_2(self, mock_device):
+        volume = self.data.test_clone_volume
+        source_volume = self.data.test_volume
+        extra_specs = self.data.extra_specs
+        with mock.patch.object(self.rest, 'is_snapvx_licensed',
+                               return_value=False):
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.common._create_cloned_volume,
+                              volume, source_volume, extra_specs,
+                              False, False)
+            mock_device.assert_not_called()
+
+    @mock.patch.object(common.PowerMaxCommon,
+                       '_find_device_on_array',
+                       return_value=None)
+    @mock.patch.object(common.PowerMaxCommon,
+                       '_clone_check')
+    def test_create_cloned_volume_source_not_found(
+            self, mock_check, mock_device):
+        volume = self.data.test_clone_volume
+        source_volume = self.data.test_volume
+        extra_specs = self.data.extra_specs
+        with mock.patch.object(self.rest, 'is_snapvx_licensed',
+                               return_value=True):
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.common._create_cloned_volume,
+                              volume, source_volume, extra_specs,
+                              False, False)
+            mock_check.assert_not_called()
 
     def test_parse_snap_info_found(self):
         ref_device_id = self.data.device_id
@@ -1072,8 +1117,10 @@ class PowerMaxCommonTest(test.TestCase):
     def test_get_ip_and_iqn(self):
         ref_ip_iqn = [{'iqn': self.data.initiator,
                        'ip': self.data.ip}]
+        director = self.data.portgroup[1]['symmetrixPortKey'][0]['directorId']
         port = self.data.portgroup[1]['symmetrixPortKey'][0]['portId']
-        ip_iqn_list = self.common._get_ip_and_iqn(self.data.array, port)
+        dirport = "%s:%s" % (director, port)
+        ip_iqn_list = self.common._get_ip_and_iqn(self.data.array, dirport)
         self.assertEqual(ref_ip_iqn, ip_iqn_list)
 
     def test_find_ip_and_iqns(self):
@@ -1246,6 +1293,32 @@ class PowerMaxCommonTest(test.TestCase):
             self.common._sync_check(array, device_id, extra_specs)
             mock_break.assert_not_called()
 
+    def test_do_sync_check_repeat(self):
+        array = self.data.array
+        device_id = self.data.device_id
+        extra_specs = self.data.extra_specs
+        with mock.patch.object(self.common,
+                               '_unlink_targets_and_delete_temp_snapvx',
+                               side_effect=Exception):
+            with mock.patch.object(self.common,
+                                   '_unlink_targets_and_delete_temp_snapvx',
+                                   side_effect=None):
+                self.common._sync_check(array, device_id, extra_specs)
+
+    def test_do_sync_check_repeat_and_fail_again(self):
+        array = self.data.array
+        device_id = self.data.device_id
+        extra_specs = self.data.extra_specs
+        with mock.patch.object(self.common,
+                               '_unlink_targets_and_delete_temp_snapvx',
+                               side_effect=Exception):
+            with mock.patch.object(self.common,
+                                   '_unlink_targets_and_delete_temp_snapvx',
+                                   side_effect=Exception):
+                self.assertRaises(exception.VolumeBackendAPIException,
+                                  self.common._sync_check, array,
+                                  device_id, extra_specs)
+
     @mock.patch.object(provision.PowerMaxProvision, 'delete_volume_snap')
     @mock.patch.object(provision.PowerMaxProvision,
                        'break_replication_relationship')
@@ -1291,7 +1364,7 @@ class PowerMaxCommonTest(test.TestCase):
             self.common._clone_check(array, device_id, extra_specs)
             mock_break.assert_called_with(
                 array, target, device_id, temp_snap_name, extra_specs, 0)
-            mock_delete.asset_not_called()
+            mock_delete.assert_not_called()
 
         sessions1 = [{'source_vol': device_id,
                       'snap_name': temp_snap_name, 'generation': 0,
@@ -1304,7 +1377,7 @@ class PowerMaxCommonTest(test.TestCase):
                                    return_value=sessions1):
                 self.common._clone_check(array, device_id, extra_specs)
                 mock_break.assert_not_called()
-                mock_delete.asset_not_called()
+                mock_delete.assert_not_called()
 
     @mock.patch.object(provision.PowerMaxProvision,
                        'break_replication_relationship')
@@ -2587,3 +2660,124 @@ class PowerMaxCommonTest(test.TestCase):
     def test_retest_primary_u4p(self, mock_primary_u4p, mock_request):
         self.common.retest_primary_u4p()
         self.assertFalse(self.rest.u4p_in_failover)
+
+    @mock.patch.object(rest.PowerMaxRest, 'is_vol_in_rep_session',
+                       return_value=(None, False, None))
+    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
+    def test_extend_vol_validation_checks_success(self, mck_sync, mck_rep):
+        volume = self.data.test_volume
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = self.data.test_volume.size + 1
+        extra_specs = deepcopy(self.data.extra_specs)
+        self.common._extend_vol_validation_checks(
+            array, device_id, volume.name, extra_specs, volume.size, new_size)
+
+    @mock.patch.object(rest.PowerMaxRest, 'is_vol_in_rep_session',
+                       return_value=(None, False, None))
+    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
+    def test_extend_vol_val_check_no_device(self, mck_sync, mck_rep):
+        volume = self.data.test_volume
+        array = self.data.array
+        device_id = None
+        new_size = self.data.test_volume.size + 1
+        extra_specs = deepcopy(self.data.extra_specs)
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            self.common._extend_vol_validation_checks,
+            array, device_id, volume.name, extra_specs, volume.size, new_size)
+
+    @mock.patch.object(rest.PowerMaxRest, 'is_vol_in_rep_session',
+                       return_value=(None, True, None))
+    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
+    def test_extend_vol_val_check_snap_src(self, mck_sync, mck_rep):
+        volume = self.data.test_volume
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = self.data.test_volume.size + 1
+        extra_specs = deepcopy(self.data.extra_specs)
+        self.common.next_gen = False
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            self.common._extend_vol_validation_checks,
+            array, device_id, volume.name, extra_specs, volume.size, new_size)
+
+    @mock.patch.object(rest.PowerMaxRest, 'is_vol_in_rep_session',
+                       return_value=(None, False, None))
+    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
+    def test_extend_vol_val_check_wrong_size(self, mck_sync, mck_rep):
+        volume = self.data.test_volume
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = volume.size - 1
+        extra_specs = deepcopy(self.data.extra_specs)
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            self.common._extend_vol_validation_checks,
+            array, device_id, volume.name, extra_specs, volume.size, new_size)
+
+    @mock.patch.object(rest.PowerMaxRest, 'is_next_gen_array',
+                       return_value=True)
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_array_ucode_version',
+        return_value=tpd.PowerMaxData.powermax_model_details['ucode'])
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=(10, tpd.PowerMaxData.remote_array))
+    def test_array_ode_capabilities_check(self, mck_rdf, mck_ucode, mck_gen):
+
+        array = self.data.powermax_model_details['symmetrixId']
+        self.common.ucode_level = self.data.powermax_model_details['ucode']
+        self.common.next_gen = True
+
+        r1, r1_ode, r2, r2_ode = self.common._array_ode_capabilities_check(
+            array, True)
+        self.assertTrue(r1)
+        self.assertTrue(r1_ode)
+        self.assertTrue(r2)
+        self.assertTrue(r2_ode)
+
+    @mock.patch.object(common.PowerMaxCommon,
+                       '_add_new_volume_to_volume_group')
+    @mock.patch.object(common.PowerMaxCommon, 'setup_volume_replication')
+    @mock.patch.object(provision.PowerMaxProvision, 'extend_volume')
+    @mock.patch.object(rest.PowerMaxRest, 'get_size_of_device_on_array',
+                       return_value=tpd.PowerMaxData.test_volume.size)
+    @mock.patch.object(provision.PowerMaxProvision, 'break_rdf_relationship')
+    @mock.patch.object(masking.PowerMaxMasking, 'remove_and_reset_members')
+    @mock.patch.object(
+        common.PowerMaxCommon, '_get_replication_extra_specs',
+        return_value=tpd.PowerMaxData.rep_extra_specs)
+    @mock.patch.object(
+        common.PowerMaxCommon, 'get_remote_target_device',
+        return_value=(
+            tpd.PowerMaxData.device_id2, tpd.PowerMaxData.remote_array,
+            tpd.PowerMaxData.rdf_group_vol_details['localRdfGroupNumber'],
+            tpd.PowerMaxData.rdf_group_vol_details['localVolumeState'],
+            tpd.PowerMaxData.rdf_group_vol_details['rdfpairState']))
+    def test_extend_legacy_replicated_vol(self, mck_get_tgt, mck_rdf_specs,
+                                          mck_reset, mck_break_rdf, mck_size,
+                                          mck_extend, mck_set_rep, mck_add):
+
+        volume = self.data.test_volume_group_member
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = volume.size + 1
+        extra_specs = deepcopy(self.data.extra_specs)
+
+        self.common._extend_legacy_replicated_vol(
+            array, volume, device_id, volume.name, new_size, extra_specs)
+
+    @mock.patch.object(
+        common.PowerMaxCommon, 'get_remote_target_device',
+        return_value=(None, None, None, None, None))
+    def test_extend_legacy_replicated_vol_fail(self, mck_get_tgt):
+
+        volume = self.data.test_volume_group_member
+        array = self.data.array
+        device_id = self.data.device_id
+        new_size = volume.size + 1
+        extra_specs = deepcopy(self.data.extra_specs)
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            self.common._extend_vol_validation_checks,
+            array, device_id, volume.name, extra_specs, volume.size, new_size)

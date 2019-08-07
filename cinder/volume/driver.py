@@ -562,6 +562,7 @@ class BaseVD(object):
     def check_for_setup_error(self):
         return
 
+    @staticmethod
     def get_driver_options():
         """Return the oslo_config options specific to the driver."""
         return volume_opts
@@ -896,7 +897,8 @@ class BaseVD(object):
             image_utils.upload_volume(context,
                                       image_service,
                                       image_meta,
-                                      attach_info['device']['path'])
+                                      attach_info['device']['path'],
+                                      compress=True)
         finally:
             # Since attached volume was not used for writing we can force
             # detach it

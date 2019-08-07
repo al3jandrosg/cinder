@@ -79,12 +79,12 @@ from cinder.volume.drivers.dell_emc import ps as \
     cinder_volume_drivers_dell_emc_ps
 from cinder.volume.drivers.dell_emc.sc import storagecenter_common as \
     cinder_volume_drivers_dell_emc_sc_storagecentercommon
-from cinder.volume.drivers.dell_emc.scaleio import driver as \
-    cinder_volume_drivers_dell_emc_scaleio_driver
 from cinder.volume.drivers.dell_emc.unity import driver as \
     cinder_volume_drivers_dell_emc_unity_driver
 from cinder.volume.drivers.dell_emc.vnx import common as \
     cinder_volume_drivers_dell_emc_vnx_common
+from cinder.volume.drivers.dell_emc.vxflexos import driver as \
+    cinder_volume_drivers_dell_emc_vxflexos_driver
 from cinder.volume.drivers.dell_emc import xtremio as \
     cinder_volume_drivers_dell_emc_xtremio
 from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_common as \
@@ -113,6 +113,8 @@ from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_fc as \
 from cinder.volume.drivers.ibm.storwize_svc import storwize_svc_iscsi as \
     cinder_volume_drivers_ibm_storwize_svc_storwizesvciscsi
 from cinder.volume.drivers import infinidat as cinder_volume_drivers_infinidat
+from cinder.volume.drivers.infortrend.raidcmd_cli import common_cli as \
+    cinder_volume_drivers_infortrend_raidcmd_cli_commoncli
 from cinder.volume.drivers.inspur.as13000 import as13000_driver as \
     cinder_volume_drivers_inspur_as13000_as13000driver
 from cinder.volume.drivers.inspur.instorage import instorage_common as \
@@ -126,6 +128,8 @@ from cinder.volume.drivers.lenovo import lenovo_common as \
 from cinder.volume.drivers import linstordrv as \
     cinder_volume_drivers_linstordrv
 from cinder.volume.drivers import lvm as cinder_volume_drivers_lvm
+from cinder.volume.drivers.macrosan import driver as \
+    cinder_volume_drivers_macrosan_driver
 from cinder.volume.drivers.netapp import options as \
     cinder_volume_drivers_netapp_options
 from cinder.volume.drivers.nexenta import options as \
@@ -147,7 +151,6 @@ from cinder.volume.drivers import solidfire as cinder_volume_drivers_solidfire
 from cinder.volume.drivers import storpool as cinder_volume_drivers_storpool
 from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
-from cinder.volume.drivers import tintri as cinder_volume_drivers_tintri
 from cinder.volume.drivers.veritas_access import veritas_iscsi as \
     cinder_volume_drivers_veritas_access_veritasiscsi
 from cinder.volume.drivers.vmware import vmdk as \
@@ -253,6 +256,8 @@ def list_opts():
                 cinder_volume_driver.backup_opts,
                 cinder_volume_driver.image_opts,
                 cinder_volume_drivers_fusionstorage_dsware.volume_opts,
+                cinder_volume_drivers_infortrend_raidcmd_cli_commoncli.
+                infortrend_opts,
                 cinder_volume_drivers_inspur_as13000_as13000driver.
                 inspur_as13000_opts,
                 cinder_volume_drivers_inspur_instorage_instoragecommon.
@@ -291,9 +296,9 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_ps.eqlx_opts,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
                 common_opts,
-                cinder_volume_drivers_dell_emc_scaleio_driver.scaleio_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
                 cinder_volume_drivers_dell_emc_vnx_common.VNX_OPTS,
+                cinder_volume_drivers_dell_emc_vxflexos_driver.vxflexos_opts,
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
@@ -320,6 +325,7 @@ def list_opts():
                 cinder_volume_drivers_lenovo_lenovocommon.iscsi_opts,
                 cinder_volume_drivers_linstordrv.linstor_opts,
                 cinder_volume_drivers_lvm.volume_opts,
+                cinder_volume_drivers_macrosan_driver.config.macrosan_opts,
                 cinder_volume_drivers_netapp_options.netapp_proxy_opts,
                 cinder_volume_drivers_netapp_options.netapp_connection_opts,
                 cinder_volume_drivers_netapp_options.netapp_transport_opts,
@@ -352,7 +358,6 @@ def list_opts():
                 cinder_volume_drivers_sheepdog.sheepdog_opts,
                 cinder_volume_drivers_solidfire.sf_opts,
                 cinder_volume_drivers_synology_synologycommon.cinder_opts,
-                cinder_volume_drivers_tintri.tintri_opts,
                 cinder_volume_drivers_vmware_vmdk.vmdk_opts,
                 cinder_volume_drivers_vzstorage.vzstorage_opts,
                 cinder_volume_drivers_windows_iscsi.windows_opts,

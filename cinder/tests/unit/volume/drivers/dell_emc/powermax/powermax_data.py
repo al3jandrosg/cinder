@@ -67,7 +67,7 @@ class PowerMaxData(object):
     device_id4 = '00004'
     rdf_group_name = '23_24_007'
     rdf_group_no = '70'
-    u4v_version = '90'
+    u4v_version = '91'
     storagegroup_name_source = 'Grp_source_sg'
     storagegroup_name_target = 'Grp_target_sg'
     group_snapshot_name = 'Grp_snapshot'
@@ -77,6 +77,7 @@ class PowerMaxData(object):
     volume_id = '2b06255d-f5f0-4520-a953-b029196add6a'
     no_slo_sg_name = 'OS-HostX-No_SLO-OS-fibre-PG'
     temp_snapvx = 'temp-00001-snapshot_for_clone'
+    next_gen_ucode = 5978
 
     # connector info
     wwpn1 = '123456789012345'
@@ -294,6 +295,14 @@ class PowerMaxData(object):
     rep_extra_specs5 = deepcopy(rep_extra_specs2)
     rep_extra_specs5['target_array_model'] = 'VMAX250F'
 
+    rep_extra_specs_ode = deepcopy(rep_extra_specs2)
+    rep_extra_specs_ode['array'] = array
+    rep_extra_specs_ode.pop('rep_mode')
+    rep_extra_specs_ode['mode'] = 'Metro'
+
+    rep_extra_specs_legacy = deepcopy(rep_extra_specs_ode)
+    rep_extra_specs_legacy['mode'] = 'Synchronous'
+
     test_volume_type_1 = volume_type.VolumeType(
         id='2b06255d-f5f0-4520-a953-b029196add6a', name='abc',
         extra_specs=extra_specs)
@@ -438,12 +447,12 @@ class PowerMaxData(object):
     portgroup = [{'portGroupId': port_group_name_f,
                   'symmetrixPortKey': [
                       {'directorId': 'FA-1D',
-                       'portId': 'FA-1D:4'}],
+                       'portId': '4'}],
                   'maskingview': [masking_view_name_f]},
                  {'portGroupId': port_group_name_i,
                   'symmetrixPortKey': [
                       {'directorId': 'SE-4E',
-                       'portId': 'SE-4E:0'}],
+                       'portId': '0'}],
                   'maskingview': [masking_view_name_i]}]
 
     port_list = [
@@ -663,7 +672,7 @@ class PowerMaxData(object):
 
     # replication
     volume_snap_vx = {'snapshotLnks': [],
-                      'snapshotSrc': [
+                      'snapshotSrcs': [
                           {'generation': 0,
                            'linkedDevices': [
                                {'targetDevice': device_id2,
@@ -748,9 +757,11 @@ class PowerMaxData(object):
                  {'symmetrixId': array_herc,
                   'model': 'PowerMax 2000',
                   'ucode': '5978.1091.1092'}]
-    version_details = {'version': 'V9.0.0.1'}
+    version_details = {'version': 'V9.1.0.1'}
 
     headroom = {'headroom': [{'headroomCapacity': 20348.29}]}
+
+    ucode_5978_foxtail = {'ucode': '5978.435.435'}
 
     p_vol_rest_response_single = {
         'id': 'f3aab01c-a5a8-4fb4-af2b-16ae1c46dc9e_0', 'count': 1,
@@ -995,11 +1006,11 @@ class PowerMaxData(object):
 
     data_dict = {volume_id: volume_info_dict}
     platform = 'Linux-4.4.0-104-generic-x86_64-with-Ubuntu-16.04-xenial'
-    unisphere_version = u'V9.0.0.1'
+    unisphere_version = u'V9.1.0.1'
     openstack_release = '12.0.0.0b3.dev401'
     openstack_version = '12.0.0'
     python_version = '2.7.12'
-    vmax_driver_version = '3.1'
+    vmax_driver_version = '4.1'
     vmax_firmware_version = u'5977.1125.1125'
     vmax_model = u'VMAX250F'
 

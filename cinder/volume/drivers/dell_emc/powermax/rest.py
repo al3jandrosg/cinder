@@ -38,7 +38,7 @@ LOG = logging.getLogger(__name__)
 SLOPROVISIONING = 'sloprovisioning'
 REPLICATION = 'replication'
 SYSTEM = 'system'
-U4V_VERSION = '90'
+U4V_VERSION = '91'
 UCODE_5978 = '5978'
 retry_exc_tuple = (exception.VolumeBackendAPIException,)
 # HTTP constants
@@ -584,8 +584,8 @@ class PowerMaxRest(object):
 
         :returns: version dict
         """
-        version_url = "/%s/system/version" % U4V_VERSION
-        version_dict = self._get_request(version_url, 'version')
+        version_url = "/%s/system/info" % U4V_VERSION
+        version_dict = self._get_request(version_url, 'info')
         if not version_dict:
             LOG.error("Unisphere version info not found.")
         return version_dict
@@ -671,6 +671,18 @@ class PowerMaxRest(object):
                 is_next_gen = True
         return array_model, is_next_gen
 
+    def get_array_ucode_version(self, array):
+        """Get the PowerMax/VMAX uCode version.
+
+        :param array: the array serial number
+        :return: the PowerMax/VMAX uCode version
+        """
+        ucode_version = None
+        system_info = self.get_array_detail(array)
+        if system_info:
+            ucode_version = system_info['ucode']
+        return ucode_version
+
     def is_compression_capable(self, array):
         """Check if array is compression capable.
 
@@ -678,7 +690,8 @@ class PowerMaxRest(object):
         :returns: bool
         """
         is_compression_capable = False
-        target_uri = "/84/sloprovisioning/symmetrix?compressionCapable=true"
+        target_uri = ("/%s/sloprovisioning/symmetrix?compressionCapable=true"
+                      % U4V_VERSION)
         status_code, message = self.request(target_uri, GET)
         self.check_status_code_success(
             "Check if compression enabled", status_code, message)
@@ -750,10 +763,11 @@ class PowerMaxRest(object):
         :param extra_specs: the extra specifications
         """
         payload = {"editStorageGroupActionParam": {
-            "addExistingStorageGroupParam": {
-                "storageGroupId": [child_sg]}}}
-        sc, job = self.modify_storage_group(array, parent_sg, payload,
-                                            version="83")
+            "expandStorageGroupParam": {
+                "addExistingStorageGroupParam": {
+                    "storageGroupId": [child_sg]}}}}
+
+        sc, job = self.modify_storage_group(array, parent_sg, payload)
         self.wait_for_job('Add child sg to parent sg', sc, job, extra_specs)
 
     def remove_child_sg_from_parent_sg(
@@ -806,12 +820,12 @@ class PowerMaxRest(object):
         if slo:
             if self.is_next_gen_array(array):
                 workload = 'NONE'
-            slo_param = {"num_of_vols": 0,
-                         "sloId": slo,
+            slo_param = {"sloId": slo,
                          "workloadSelection": workload,
-                         "volumeAttribute": {
+                         "volumeAttributes": [{
                              "volume_size": "0",
-                             "capacityUnit": "GB"}}
+                             "capacityUnit": "GB",
+                             "num_of_vols": 0}]}
             if do_disable_compression:
                 slo_param.update({"noCompression": "true"})
             elif self.is_compression_capable(array):
@@ -854,7 +868,7 @@ class PowerMaxRest(object):
             {"executionOption": "ASYNCHRONOUS",
              "editStorageGroupActionParam": {
                  "expandStorageGroupParam": {
-                     "addVolumeParam": {
+                     "addVolumeParam": [{
                          "num_of_vols": 1,
                          "emulation": "FBA",
                          "create_new_volumes": "False",
@@ -863,7 +877,7 @@ class PowerMaxRest(object):
                              "volumeIdentifierChoice": "identifier_name"},
                          "volumeAttribute": {
                              "volume_size": volume_size,
-                             "capacityUnit": "GB"}}}}})
+                             "capacityUnit": "GB"}}]}}})
         status_code, job = self.modify_storage_group(
             array, storagegroup_name, payload)
 
@@ -929,21 +943,28 @@ class PowerMaxRest(object):
                     found_device_id = device_id
         return found_device_id
 
-    def add_vol_to_sg(self, array, storagegroup_name, device_id, extra_specs):
+    def add_vol_to_sg(self, array, storagegroup_name, device_id, extra_specs,
+                      force=False):
         """Add a volume to a storage group.
 
         :param array: the array serial number
         :param storagegroup_name: storage group name
         :param device_id: the device id
         :param extra_specs: extra specifications
+        :param force: add force argument to call
         """
         if not isinstance(device_id, list):
             device_id = [device_id]
+
+        force_add = "true" if force else "false"
+
         payload = ({"executionOption": "ASYNCHRONOUS",
                     "editStorageGroupActionParam": {
                         "expandStorageGroupParam": {
                             "addSpecificVolumeParam": {
-                                "volumeId": device_id}}}})
+                                "volumeId": device_id,
+                                "remoteSymmSGInfoParam": {
+                                    "force": force_add}}}}})
         status_code, job = self.modify_storage_group(
             array, storagegroup_name, payload)
 
@@ -959,12 +980,17 @@ class PowerMaxRest(object):
         :param device_id: the device id
         :param extra_specs: the extra specifications
         """
+
+        force_vol_remove = ("true" if "force_vol_remove" in extra_specs
+                            else "false")
         if not isinstance(device_id, list):
             device_id = [device_id]
         payload = ({"executionOption": "ASYNCHRONOUS",
                     "editStorageGroupActionParam": {
                         "removeVolumeParam": {
-                            "volumeId": device_id}}})
+                            "volumeId": device_id,
+                            "remoteSymmSGInfoParam": {
+                                "force": force_vol_remove}}}})
         status_code, job = self.modify_storage_group(
             array, storagegroup_name, payload)
 
@@ -1225,20 +1251,26 @@ class PowerMaxRest(object):
         return self.modify_resource(array, SLOPROVISIONING, 'volume',
                                     payload, resource_name=device_id)
 
-    def extend_volume(self, array, device_id, new_size, extra_specs):
+    def extend_volume(self, array, device_id, new_size, extra_specs,
+                      rdf_grp_no=None):
         """Extend a PowerMax/VMAX volume.
 
         :param array: the array serial number
         :param device_id: volume device id
         :param new_size: the new required size for the device
         :param extra_specs: the extra specifications
+        :param rdf_grp_no: the RDG group number
         """
-        extend_vol_payload = {"executionOption": "ASYNCHRONOUS",
-                              "editVolumeActionParam": {
-                                  "expandVolumeParam": {
-                                      "volumeAttribute": {
-                                          "volume_size": new_size,
-                                          "capacityUnit": "GB"}}}}
+        extend_vol_payload = {'executionOption': 'ASYNCHRONOUS',
+                              'editVolumeActionParam': {
+                                  'expandVolumeParam': {
+                                      'volumeAttribute': {
+                                          'volume_size': new_size,
+                                          'capacityUnit': 'GB'}}}}
+
+        if rdf_grp_no:
+            extend_vol_payload['editVolumeActionParam'][
+                'expandVolumeParam'].update({'rdfGroupNumber': rdf_grp_no})
 
         status_code, job = self._modify_volume(
             array, device_id, extend_vol_payload)
@@ -1265,23 +1297,47 @@ class PowerMaxRest(object):
         self._modify_volume(array, device_id, rename_vol_payload)
 
     def delete_volume(self, array, device_id):
-        """Deallocate or delete a volume.
+        """Delete a volume.
 
         :param array: the array serial number
         :param device_id: volume device id
         """
-        # Deallocate volume. Can fail if there are no tracks allocated.
-        payload = {"editVolumeActionParam": {
-            "freeVolumeParam": {"free_volume": 'true'}}}
-        try:
-            self._modify_volume(array, device_id, payload)
-            # Rename volume, removing the OS-<cinderUUID>
-            self.rename_volume(array, device_id, None)
-        except Exception as e:
-            LOG.warning('Deallocate volume failed with %(e)s.'
-                        'Attempting delete.', {'e': e})
-            # Try to delete the volume if deallocate failed.
-            self.delete_resource(array, SLOPROVISIONING, "volume", device_id)
+        array_details = self.get_array_detail(array)
+        ucode_major_level = 0
+        ucode_minor_level = 0
+
+        if array_details:
+            split_ucode_level = array_details['ucode'].split('.')
+            ucode_level = [int(level) for level in split_ucode_level]
+            ucode_major_level = ucode_level[0]
+            ucode_minor_level = ucode_level[1]
+
+        if ((ucode_major_level >= utils.UCODE_5978)
+                and (ucode_minor_level > utils.UCODE_5978_ELMSR)):
+            # Use Rapid TDEV Deallocation to delete after ELMSR
+            try:
+                # Rename volume, removing the OS-<cinderUUID>
+                self.rename_volume(array, device_id, None)
+                self.delete_resource(array, SLOPROVISIONING,
+                                     "volume", device_id)
+            except Exception as e:
+                LOG.warning('Delete volume failed with %(e)s.', {'e': e})
+                raise
+        else:
+            # Pre-Foxtail, deallocation and delete are separate calls
+            payload = {"editVolumeActionParam": {
+                "freeVolumeParam": {"free_volume": 'true'}}}
+            try:
+                # Rename volume, removing the OS-<cinderUUID>
+                self.rename_volume(array, device_id, None)
+                self._modify_volume(array, device_id, payload)
+                pass
+            except Exception as e:
+                LOG.warning('Deallocate volume failed with %(e)s.'
+                            'Attempting delete.', {'e': e})
+                # Try to delete the volume if deallocate failed.
+                self.delete_resource(array, SLOPROVISIONING,
+                                     "volume", device_id)
 
     def find_mv_connections_for_vol(self, array, maskingview, device_id):
         """Find the host_lun_id for a volume in a masking view.
@@ -1413,7 +1469,7 @@ class PowerMaxRest(object):
         if portgroup_info:
             port_key = portgroup_info["symmetrixPortKey"]
             for key in port_key:
-                port = key['portId']
+                port = "%s:%s" % (key['directorId'], key['portId'])
                 portlist.append(port)
         return portlist
 
@@ -1699,7 +1755,7 @@ class PowerMaxRest(object):
            "snapVxCapable": true,
            "rdfCapable": true}
 
-        :param: array
+        :param array
         :returns: capabilities dict for the given array
         """
         array_capabilities = None
@@ -1804,8 +1860,7 @@ class PowerMaxRest(object):
                        "copy": 'true', "action": action,
                        "star": 'false', "force": 'false',
                        "exact": 'false', "remote": 'false',
-                       "symforce": 'false', "nocopy": 'false',
-                       "generation": generation}
+                       "symforce": 'false', "generation": generation}
 
         elif action == "Rename":
             operation = 'Rename snapVx snapshot'
@@ -1868,9 +1923,9 @@ class PowerMaxRest(object):
         snapshot = None
         snap_info = self.get_volume_snap_info(array, device_id)
         if snap_info:
-            if (snap_info.get('snapshotSrc') and
-                    bool(snap_info['snapshotSrc'])):
-                for snap in snap_info['snapshotSrc']:
+            if (snap_info.get('snapshotSrcs') and
+                    bool(snap_info['snapshotSrcs'])):
+                for snap in snap_info['snapshotSrcs']:
                     if snap['snapshotName'] == snap_name:
                         if snap['generation'] == generation:
                             snapshot = snap
@@ -1887,8 +1942,8 @@ class PowerMaxRest(object):
         snapshot_list = []
         snap_info = self.get_volume_snap_info(array, source_device_id)
         if snap_info:
-            if bool(snap_info['snapshotSrc']):
-                snapshot_list = snap_info['snapshotSrc']
+            if bool(snap_info['snapshotSrcs']):
+                snapshot_list = snap_info['snapshotSrcs']
         return snapshot_list
 
     def is_vol_in_rep_session(self, array, device_id):
@@ -2273,6 +2328,14 @@ class PowerMaxRest(object):
             payload_update = self._get_async_payload_info(array, rdf_group_no)
             payload.update(payload_update)
         elif rep_mode == 'Active':
+            # Check if arrays are next gen to support add data vol to existing
+            # metro enabled rdfg, else format drive before adding
+            r1_nxt_gen = self.is_next_gen_array(array)
+            r2_nxt_gen = self.is_next_gen_array(remote_array)
+            if r1_nxt_gen and r2_nxt_gen:
+                extra_specs[utils.RDF_CONS_EXEMPT] = True
+            else:
+                extra_specs[utils.RDF_CONS_EXEMPT] = False
             payload = self.get_metro_payload_info(
                 array, payload, rdf_group_no, extra_specs)
         resource_type = ("rdf_group/%(rdf_num)s/volume"
@@ -2320,10 +2383,19 @@ class PowerMaxRest(object):
                     and extra_specs[utils.METROBIAS] is True):
                 payload.update({'metroBias': 'true'})
         else:
-            # Need to format subsequent volumes
-            payload['format'] = 'true'
+            if (extra_specs.get(utils.RDF_CONS_EXEMPT)
+                    and extra_specs[utils.RDF_CONS_EXEMPT] is True):
+                payload['consExempt'] = 'true'
+                payload['rdfType'] = 'RDF1'
+            else:
+                LOG.warning("Adding HyperMax OS volumes to an existing RDFG "
+                            "requires the volumes to be formatted in advance,"
+                            "please upgrade to PowerMax OS to bypass this "
+                            "restriction.")
+                payload['format'] = 'true'
+                payload['rdfType'] = 'NA'
+
             payload.pop('establish')
-            payload['rdfType'] = 'NA'
         return payload
 
     def modify_rdf_device_pair(
@@ -2346,7 +2418,7 @@ class PowerMaxRest(object):
                     and extra_specs[utils.REP_MODE] == utils.REP_ASYNC):
                 common_opts.update({"immediate": 'false',
                                     "consExempt": 'true'})
-            payload = {"action": "Suspend",
+            payload = {"action": "SUSPEND",
                        "executionOption": "ASYNCHRONOUS",
                        "suspend": common_opts}
 
@@ -2378,7 +2450,7 @@ class PowerMaxRest(object):
         resource_name = ("%(rdf_num)s/volume/%(device_id)s"
                          % {'rdf_num': rdf_group, 'device_id': device_id})
         self.delete_resource(array, REPLICATION, 'rdf_group', resource_name,
-                             private="/private", params=params)
+                             params=params)
 
     def get_storage_group_rep(self, array, storage_group_name):
         """Given a name, return storage group details wrt replication.

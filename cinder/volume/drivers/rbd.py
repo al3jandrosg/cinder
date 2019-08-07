@@ -261,7 +261,8 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
             return {
                 'name': self.configuration.rbd_cluster_name,
                 'conf': self.configuration.rbd_ceph_conf,
-                'user': self.configuration.rbd_user
+                'user': self.configuration.rbd_user,
+                'secret_uuid': self.configuration.rbd_secret_uuid
             }
         raise exception.InvalidReplicationTarget(
             reason=_('RBD: Unknown failover target host %s.') % target_id)
@@ -291,10 +292,13 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                                           self.SYSCONFDIR + name + '.conf')
             user = replication_device.get(
                 'user', self.configuration.rbd_user or 'cinder')
+            secret_uuid = replication_device.get(
+                'secret_uuid', self.configuration.rbd_secret_uuid)
             # Pool has to be the same in all clusters
             replication_target = {'name': name,
                                   'conf': utils.convert_str(conf),
-                                  'user': utils.convert_str(user)}
+                                  'user': utils.convert_str(user),
+                                  'secret_uuid': secret_uuid}
             LOG.info('Adding replication target: %s.', name)
             self._replication_targets.append(replication_target)
             self._target_names.append(name)
@@ -302,7 +306,8 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
     def _get_config_tuple(self, remote=None):
         if not remote:
             remote = self._active_config
-        return (remote.get('name'), remote.get('conf'), remote.get('user'))
+        return (remote.get('name'), remote.get('conf'), remote.get('user'),
+                remote.get('secret_uuid', None))
 
     def _trash_purge(self):
         LOG.info("Purging trash for backend '%s'", self._backend_name)
@@ -375,7 +380,7 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
     def _ceph_args(self):
         args = []
 
-        name, conf, user = self._get_config_tuple()
+        name, conf, user, secret_uuid = self._get_config_tuple()
 
         if user:
             args.extend(['--id', user])
@@ -391,7 +396,7 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                      self.configuration.rados_connection_interval,
                      self.configuration.rados_connection_retries)
         def _do_conn(pool, remote, timeout):
-            name, conf, user = self._get_config_tuple(remote)
+            name, conf, user, secret_uuid = self._get_config_tuple(remote)
 
             if pool is not None:
                 pool = utils.convert_str(pool)
@@ -772,10 +777,36 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
             self.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
         ]
         vol_name = utils.convert_str(volume.name)
+        image_features = None
         with RBDVolumeProxy(self, vol_name) as image:
+            image_features = image.features()
             for feature in multipath_feature_exclusions:
-                if image.features() & feature:
+                if image_features & feature:
                     image.update_features(feature, False)
+
+        return {'provider_location':
+                self._dumps({'saved_features': image_features})}
+
+    def _disable_multiattach(self, volume):
+        multipath_feature_exclusions = [
+            self.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
+            self.rbd.RBD_FEATURE_OBJECT_MAP,
+            self.rbd.RBD_FEATURE_FAST_DIFF,
+            self.rbd.RBD_FEATURE_JOURNALING,
+        ]
+        vol_name = utils.convert_str(volume.name)
+        with RBDVolumeProxy(self, vol_name) as image:
+            try:
+                provider_location = json.loads(volume.provider_location)
+                image_features = provider_location['saved_features']
+            except Exception:
+                msg = _('Could not find saved image features.')
+                raise RBDDriverException(reason=msg)
+            for feature in multipath_feature_exclusions:
+                if image_features & feature:
+                    image.update_features(feature, True)
+
+        return {'provider_location': None}
 
     def _is_replicated_type(self, volume_type):
         # We do a safe attribute get because volume_type could be None
@@ -787,27 +818,52 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
         specs = getattr(volume_type, 'extra_specs', {})
         return specs.get(EXTRA_SPECS_MULTIATTACH) == "<is> True"
 
-    def _setup_volume(self, volume):
-        want_replication = self._is_replicated_type(volume.volume_type)
-        want_multiattach = self._is_multiattach_type(volume.volume_type)
+    def _setup_volume(self, volume, volume_type=None):
+
+        if volume_type:
+            had_replication = self._is_replicated_type(volume.volume_type)
+            had_multiattach = self._is_multiattach_type(volume.volume_type)
+        else:
+            had_replication = False
+            had_multiattach = False
+            volume_type = volume.volume_type
+
+        want_replication = self._is_replicated_type(volume_type)
+        want_multiattach = self._is_multiattach_type(volume_type)
 
         if want_replication and want_multiattach:
             msg = _('Replication and Multiattach are mutually exclusive.')
             raise RBDDriverException(reason=msg)
 
+        volume_update = dict()
+
         if want_replication:
-            return self._enable_replication(volume)
-
-        update = None
-
-        if self._is_replication_enabled:
-            update = {'replication_status':
-                      fields.ReplicationStatus.DISABLED}
+            if had_multiattach:
+                volume_update.update(self._disable_multiattach(volume))
+            if not had_replication:
+                try:
+                    volume_update.update(self._enable_replication(volume))
+                except Exception:
+                    err_msg = (_('Failed to enable image replication'))
+                    raise exception.ReplicationError(reason=err_msg,
+                                                     volume_id=volume.id)
+        elif had_replication:
+            try:
+                volume_update.update(self._disable_replication(volume))
+            except Exception:
+                err_msg = (_('Failed to disable image replication'))
+                raise exception.ReplicationError(reason=err_msg,
+                                                 volume_id=volume.id)
+        elif self._is_replication_enabled:
+            volume_update.update({'replication_status':
+                                  fields.ReplicationStatus.DISABLED})
 
         if want_multiattach:
-            self._enable_multiattach(volume)
+            volume_update.update(self._enable_multiattach(volume))
+        elif had_multiattach:
+            volume_update.update(self._disable_multiattach(volume))
 
-        return update
+        return volume_update
 
     def _check_encryption_provider(self, volume, context):
         """Check that this is a LUKS encryption provider.
@@ -1197,40 +1253,7 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
 
     def retype(self, context, volume, new_type, diff, host):
         """Retype from one volume type to another on the same backend."""
-
-        # NOTE: There is no mechanism to store prior image features when
-        # creating a multiattach volume.  So retyping to non-multiattach
-        # would result in an RBD image that lacks several popular
-        # features (object-map, fast-diff, etc).  Without saving prior
-        # state as we do for replication, it is impossible to know which
-        # feautures to restore.
-        if self._is_multiattach_type(volume.volume_type):
-            msg = _('Retyping from multiattach is not supported.')
-            raise RBDDriverException(reason=msg)
-
-        old_vol_replicated = self._is_replicated_type(volume.volume_type)
-        new_vol_replicated = self._is_replicated_type(new_type)
-
-        if old_vol_replicated and not new_vol_replicated:
-            try:
-                return True, self._disable_replication(volume)
-            except Exception:
-                err_msg = (_('Failed to disable image replication'))
-                raise exception.ReplicationError(reason=err_msg,
-                                                 volume_id=volume.id)
-        elif not old_vol_replicated and new_vol_replicated:
-            try:
-                return True, self._enable_replication(volume)
-            except Exception:
-                err_msg = (_('Failed to enable image replication'))
-                raise exception.ReplicationError(reason=err_msg,
-                                                 volume_id=volume.id)
-
-        if not new_vol_replicated and self._is_replication_enabled:
-            update = {'replication_status': fields.ReplicationStatus.DISABLED}
-        else:
-            update = None
-        return True, update
+        return True, self._setup_volume(volume, new_type)
 
     def _dumps(self, obj):
         return json.dumps(obj, separators=(',', ':'), sort_keys=True)
@@ -1389,6 +1412,7 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
 
     def initialize_connection(self, volume, connector):
         hosts, ports = self._get_mon_addrs()
+        name, conf, user, secret_uuid = self._get_config_tuple()
         data = {
             'driver_volume_type': 'rbd',
             'data': {
@@ -1396,11 +1420,11 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                                    volume.name),
                 'hosts': hosts,
                 'ports': ports,
-                'cluster_name': self.configuration.rbd_cluster_name,
-                'auth_enabled': (self.configuration.rbd_user is not None),
-                'auth_username': self.configuration.rbd_user,
+                'cluster_name': name,
+                'auth_enabled': (user is not None),
+                'auth_username': user,
                 'secret_type': 'ceph',
-                'secret_uuid': self.configuration.rbd_secret_uuid,
+                'secret_uuid': secret_uuid,
                 'volume_id': volume.id,
                 "discard": True,
                 'keyring': self._get_keyring_contents(),

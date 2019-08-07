@@ -115,7 +115,7 @@ class RequestContext(context.RequestContext):
             self.service_catalog = [s for s in service_catalog
                                     if s.get('type') in
                                     ('identity', 'compute', 'object-store',
-                                     'image')]
+                                     'image', 'key-manager')]
         else:
             # if list is empty or none
             self.service_catalog = []
@@ -195,7 +195,7 @@ class RequestContext(context.RequestContext):
             location of the object e.g. ``{'project_id': context.project_id}``.
             If None, then this default target will be considered:
             {'project_id': self.project_id, 'user_id': self.user_id}
-        :param: target_obj: dictionary representing the object which will be
+        :param target_obj: dictionary representing the object which will be
             used to update target.
         :param fatal: if False, will return False when an
             exception.PolicyNotAuthorized occurs.

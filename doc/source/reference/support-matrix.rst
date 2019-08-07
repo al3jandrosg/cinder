@@ -78,3 +78,8 @@ release.
    * HGST Flash Storage Suite Driver (vgc)
    * ITRI DISCO Driver
    * NetApp E-Series Driver
+
+* Train
+   * Tintri Storage Driver
+   * Veritas HyperScale Storage Driver
+   * Nexenta Edge Storage Driver

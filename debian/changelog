@@ -1,3 +1,9 @@
+cinder (2:15.0.0~b1~git2019080709.0a0d55d8a-0ubuntu1) eoan; urgency=medium
+
+  * New upstream snapshot for OpenStack Train (LP: #1834845).
+
+ -- James Page <james.page@ubuntu.com>  Wed, 07 Aug 2019 13:13:56 +0100
+
 cinder (2:15.0.0~b1~git2019061315.6cbc53b71-0ubuntu1) eoan; urgency=medium
 
   * New upstream release 15.0.0~b1.

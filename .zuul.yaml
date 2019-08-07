@@ -7,7 +7,7 @@
       - periodic-stable-jobs
       - check-requirements
       - integrated-gate
-      - integrated-gate-py3
+      - integrated-gate-storage
       - release-notes-jobs-python3
     check:
       jobs:
@@ -31,7 +31,7 @@
             voting: false
             timeout: 5400
             irrelevant-files: *functional-irrelevant-files
-        - devstack-plugin-ceph-tempest:
+        - cinder-plugin-ceph-tempest:
             voting: false
             irrelevant-files: &gate-irrelevant-files
               - ^(test-|)requirements.txt$
@@ -67,7 +67,7 @@
             irrelevant-files: *gate-irrelevant-files
         - tempest-full:
             irrelevant-files: *gate-irrelevant-files
-        - tempest-full-py3:
+        - tempest-integrated-storage:
             irrelevant-files: *gate-irrelevant-files
         - grenade-py3:
             irrelevant-files: *gate-irrelevant-files
@@ -79,7 +79,7 @@
             irrelevant-files: *gate-irrelevant-files
         - tempest-full:
             irrelevant-files: *gate-irrelevant-files
-        - tempest-full-py3:
+        - tempest-integrated-storage:
             irrelevant-files: *gate-irrelevant-files
         - grenade-py3:
             irrelevant-files: *gate-irrelevant-files
@@ -143,3 +143,11 @@
     required-projects:
       - openstack/rally-openstack
       - openstack/osprofiler
+
+- job:
+    name: cinder-plugin-ceph-tempest
+    parent: devstack-plugin-ceph-tempest
+    run: playbooks/tempest-and-cinderlib-run.yaml
+    required-projects:
+      - openstack/cinderlib
+      - openstack/tempest

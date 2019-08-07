@@ -268,7 +268,8 @@ class RBDTestCase(test.TestCase):
         cfg = [{'backend_id': 'secondary-backend'}]
         expected = [{'name': 'secondary-backend',
                      'conf': '/etc/ceph/secondary-backend.conf',
-                     'user': 'cinder'}]
+                     'user': 'cinder',
+                     'secret_uuid': self.cfg.rbd_secret_uuid}]
         self.driver._parse_replication_configs(cfg)
         self.assertEqual(expected, self.driver._replication_targets)
 
@@ -280,10 +281,12 @@ class RBDTestCase(test.TestCase):
                {'backend_id': 'tertiary-backend'}]
         expected = [{'name': 'secondary-backend',
                      'conf': 'foo',
-                     'user': 'bar'},
+                     'user': 'bar',
+                     'secret_uuid': self.cfg.rbd_secret_uuid},
                     {'name': 'tertiary-backend',
                      'conf': '/etc/ceph/tertiary-backend.conf',
-                     'user': 'cinder'}]
+                     'user': 'cinder',
+                     'secret_uuid': self.cfg.rbd_secret_uuid}]
         self.driver._parse_replication_configs(cfg[:num_targets])
         self.assertEqual(expected[:num_targets],
                          self.driver._replication_targets)
@@ -297,16 +300,19 @@ class RBDTestCase(test.TestCase):
             self.assertEqual([], self.driver._target_names)
             self.assertEqual({'name': self.cfg.rbd_cluster_name,
                               'conf': self.cfg.rbd_ceph_conf,
-                              'user': self.cfg.rbd_user},
+                              'user': self.cfg.rbd_user,
+                              'secret_uuid': self.cfg.rbd_secret_uuid},
                              self.driver._active_config)
 
     def test_do_setup_replication(self):
         cfg = [{'backend_id': 'secondary-backend',
                 'conf': 'foo',
-                'user': 'bar'}]
+                'user': 'bar',
+                'secret_uuid': 'secondary_secret_uuid'}]
         expected = [{'name': 'secondary-backend',
                      'conf': 'foo',
-                     'user': 'bar'}]
+                     'user': 'bar',
+                     'secret_uuid': 'secondary_secret_uuid'}]
 
         with mock.patch.object(self.driver.configuration, 'safe_get',
                                return_value=cfg):
@@ -315,16 +321,19 @@ class RBDTestCase(test.TestCase):
             self.assertEqual(expected, self.driver._replication_targets)
             self.assertEqual({'name': self.cfg.rbd_cluster_name,
                               'conf': self.cfg.rbd_ceph_conf,
-                              'user': self.cfg.rbd_user},
+                              'user': self.cfg.rbd_user,
+                              'secret_uuid': self.cfg.rbd_secret_uuid},
                              self.driver._active_config)
 
     def test_do_setup_replication_failed_over(self):
         cfg = [{'backend_id': 'secondary-backend',
                 'conf': 'foo',
-                'user': 'bar'}]
+                'user': 'bar',
+                'secret_uuid': 'secondary_secret_uuid'}]
         expected = [{'name': 'secondary-backend',
                      'conf': 'foo',
-                     'user': 'bar'}]
+                     'user': 'bar',
+                     'secret_uuid': 'secondary_secret_uuid'}]
         self.driver._active_backend_id = 'secondary-backend'
 
         with mock.patch.object(self.driver.configuration, 'safe_get',
@@ -347,14 +356,14 @@ class RBDTestCase(test.TestCase):
                               self.context)
 
     @mock.patch.object(driver.RBDDriver, '_enable_replication',
-                       return_value=mock.sentinel.volume_update)
+                       return_value={'replication': 'enabled'})
     def test_setup_volume_with_replication(self, mock_enable):
         self.volume_a.volume_type = fake_volume.fake_volume_type_obj(
             self.context,
             id=fake.VOLUME_TYPE_ID,
             extra_specs={'replication_enabled': '<is> True'})
         res = self.driver._setup_volume(self.volume_a)
-        self.assertEqual(mock.sentinel.volume_update, res)
+        self.assertEqual('enabled', res['replication'])
         mock_enable.assert_called_once_with(self.volume_a)
 
     @ddt.data(False, True)
@@ -365,7 +374,7 @@ class RBDTestCase(test.TestCase):
         if enabled:
             expect = {'replication_status': fields.ReplicationStatus.DISABLED}
         else:
-            expect = None
+            expect = {}
         self.assertEqual(expect, res)
         mock_enable.assert_not_called()
 
@@ -458,7 +467,7 @@ class RBDTestCase(test.TestCase):
 
         res = self.driver.create_volume(self.volume_a)
 
-        self.assertIsNone(res)
+        self.assertEqual({}, res)
         chunk_size = self.cfg.rbd_store_chunk_size * units.Mi
         order = int(math.log(chunk_size, 2))
         args = [client.ioctx, str(self.volume_a.name),
@@ -1038,7 +1047,7 @@ class RBDTestCase(test.TestCase):
                 res = self.driver.create_cloned_volume(self.volume_b,
                                                        self.volume_a)
 
-                self.assertIsNone(res)
+                self.assertEqual({}, res)
                 (self.mock_rbd.Image.return_value.create_snap
                     .assert_called_once_with('.'.join(
                         (self.volume_b.name, 'clone_snap'))))
@@ -1104,7 +1113,7 @@ class RBDTestCase(test.TestCase):
                 res = self.driver.create_cloned_volume(self.volume_b,
                                                        self.volume_a)
 
-                self.assertIsNone(res)
+                self.assertEqual({}, res)
                 (self.mock_rbd.Image.return_value.create_snap
                     .assert_called_once_with('.'.join(
                         (self.volume_b.name, 'clone_snap'))))
@@ -1153,7 +1162,7 @@ class RBDTestCase(test.TestCase):
                 res = self.driver.create_cloned_volume(self.volume_b,
                                                        self.volume_a)
 
-                self.assertIsNone(res)
+                self.assertEqual({}, res)
                 (self.mock_rbd.Image.return_value.create_snap
                  .assert_called_once_with('.'.join(
                      (self.volume_b.name, 'clone_snap'))))
@@ -1516,6 +1525,9 @@ class RBDTestCase(test.TestCase):
         keyring_data = "[client.cinder]\n  key = test\n"
         mock_keyring.return_value = keyring_data
 
+        self.driver._active_config = {'name': 'secondary_id',
+                                      'user': 'foo',
+                                      'conf': 'bar'}
         expected = {
             'driver_volume_type': 'rbd',
             'data': {
@@ -1523,11 +1535,11 @@ class RBDTestCase(test.TestCase):
                                    self.volume_a.name),
                 'hosts': hosts,
                 'ports': ports,
-                'cluster_name': self.cfg.rbd_cluster_name,
+                'cluster_name': 'secondary_id',
                 'auth_enabled': True,
-                'auth_username': self.cfg.rbd_user,
+                'auth_username': 'foo',
                 'secret_type': 'ceph',
-                'secret_uuid': None,
+                'secret_uuid': self.cfg.rbd_secret_uuid,
                 'volume_id': self.volume_a.id,
                 'discard': True,
                 'keyring': keyring_data,
@@ -1538,6 +1550,13 @@ class RBDTestCase(test.TestCase):
         # Check how it will work with empty keyring path
         mock_keyring.return_value = None
         expected['data']['keyring'] = None
+        self._initialize_connection_helper(expected, hosts, ports)
+
+        self.driver._active_config = {'name': 'secondary_id',
+                                      'user': 'foo',
+                                      'conf': 'bar',
+                                      'secret_uuid': 'secondary_secret_uuid'}
+        expected['data']['secret_uuid'] = 'secondary_secret_uuid'
         self._initialize_connection_helper(expected, hosts, ports)
 
     def test__get_keyring_contents_no_config_file(self):
@@ -1706,7 +1725,7 @@ class RBDTestCase(test.TestCase):
         if enabled:
             expect = {'replication_status': fields.ReplicationStatus.DISABLED}
         else:
-            expect = None
+            expect = {}
         context = {}
         diff = {'encryption': {},
                 'extra_specs': {}}
@@ -1750,9 +1769,9 @@ class RBDTestCase(test.TestCase):
     @ddt.unpack
     @common_mocks
     @mock.patch.object(driver.RBDDriver, '_disable_replication',
-                       return_value=mock.sentinel.disable_replication)
+                       return_value={'replication': 'disabled'})
     @mock.patch.object(driver.RBDDriver, '_enable_replication',
-                       return_value=mock.sentinel.enable_replication)
+                       return_value={'replication': 'enabled'})
     def test_retype_replicated(self, mock_disable, mock_enable, old_replicated,
                                new_replicated):
         """Test retyping a non replicated volume.
@@ -1771,15 +1790,15 @@ class RBDTestCase(test.TestCase):
         if new_replicated:
             new_type = replicated_type
             if old_replicated:
-                update = None
+                update = {}
             else:
-                update = mock.sentinel.enable_replication
+                update = {'replication': 'enabled'}
         else:
             new_type = fake_volume.fake_volume_type_obj(
                 self.context,
                 id=fake.VOLUME_TYPE2_ID),
             if old_replicated:
-                update = mock.sentinel.disable_replication
+                update = {'replication': 'disabled'}
             else:
                 update = {'replication_status':
                           fields.ReplicationStatus.DISABLED}

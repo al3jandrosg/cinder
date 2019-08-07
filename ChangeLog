@@ -1,19 +1,78 @@
 CHANGES
 =======
 
+* Fix upload volume to glance
+* Update Veritas Access in Support Matrix
+* NetApp ONTAP: Fix JSON serialization error on EMS logs
+* Fix DetachedInstanceError for VolumeAttachment
+* Fix get\_driver\_options
+* Correcting typo in environment spelling
+* Prevent double-attachment race in attachment\_reserve
+* 3PAR: Provide new option to specify NSP for single path attachments
+* Imported Translations from Zanata
+* Add MacroSAN cinder driver
+* Fix dothill multiattach support
+* Update api-ref location
+* Remove outdated scripts from tools/
+* [DOCFIX] Correct Cinder Backup Driver Option Value
+* Re-add Infortrend Cinder volume driver
+* Replace "integrated-gate-py3" template with new "integrated-gate-storage"
+* Compress images uploaded to Glance
+* HPE 3PAR - Fix detach of multiattach volumes
+* doc: Fix rbd driver marked support multiattach
+* Update support matrix entries for MSA and Lenovo arrays
+* Add policy sample file to gitignore
+* Add release note ignore for backport note
+* Move DotHill release note to correct location
+* Cleanup api-ref sample files
+* Zadara VPSA: Fix driver force detach operation
+* Launch driver list generation with the same python interpreter
+* Blacklist sphinx 2.1.0 (autodoc bug)
+* Add support for VxFlex OS 3.0 to VxFlex OS driver
+* Add Active/Active HA to Support Matrix
+* Mark Datera driver unsupported
+* RBD: save and restore multiattach features
+* Add case: force delete snapshot
+* Add case: volume can't be reverted in in-use status
+* Fix assertion methods in a unit test
+* Replace deprecated with\_lockmode with with\_for\_update
+* SF: Handle qos values on extend volume
+* Fix volume type quota defaults in quotas tests
+* Fix :param: in docstring
+* Run cinderlib functional tests on Ceph job
+* Remove the Nexenta Edge Driver
+* Remove the Veritas HyperScale Driver
+* Remove the Tintri Driver
+* remove support for deprecated options in VxFlex OS driver
+* rename ScaleIO driver to VxFlex OS
+* NetApp SolidFire: Adding new fields to scheduler data
+* Add key-manager to sevice catalog
+* NFS: Retry on intermittent mount failure
 * Add Contributor Docs for Upgrade Checks
+* Rename RSD doc file to match title for sorting
 * Update QoS and add Accuracy Note
 * Remove the DRBDManage Driver
 * Add OS-SCH-HNT in extensions list
 * Cinder RSD Driver
 * Replace assert to raise AssertionError
 * VMware: Enable thin volume from image on VVol
+* PowerMax Driver - Metro ODE Support
+* PowerMax Driver - PowerMax Formatted Vols Fix
+* PowerMax driver - Rapid TDEV Deallocation
 * Remove unused CG volume manager constants
 * Enable osprofiler for rally job
 * Small doc updates: canonical URLs, rally doc, etc
 * Re-enable new pycodestyle errors
 * Mark Veritas Access Driver Unsupported
 * Mark Prophetstor Driver Unsupported
+* Mark the Nimble Driver Unsupported
+* PowerMax driver - locking improvements
+* PowerMax driver - clone improvements
+* PowerMax driver - add 'target\_array\_model' to metadata
+* Docs: Add new driver review checklist
+* Revert "Implement volume capacity stats for VMware"
+* PowerMax driver -  changing from 9.0 to 9.1 REST endpoints
+* Add rbd secret\_uuid in secondary config
 * Bump hacking version to 1.1.x
 * Update Python 3 test runtimes for Train
 * PowerMax docs - known issues with metro
@@ -24,6 +83,7 @@ CHANGES
 * move kaminario driver exceptions
 * Deprecate NestedDbQuotaDriver for nested quotas
 * move dothill exceptions
+* Mark the Sheepdog driver unsupported
 * move purestorage driver exceptions
 * move Hyperscale exceptions to driver
 * move storpool exception
@@ -53,6 +113,7 @@ CHANGES
 * move xtremio exceptions
 * Update doc for missed quotation marks
 * Remove driver requirements of removed drivers
+* Remove the repeated calls
 * Remove confusing annotation
 * VMware: Filter out datastore with 0 capacity
 * move solidfire driver exceptions
