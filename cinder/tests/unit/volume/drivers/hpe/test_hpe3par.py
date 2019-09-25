@@ -33,8 +33,8 @@ from cinder.volume.drivers.hpe import hpe_3par_common as hpecommon
 from cinder.volume.drivers.hpe import hpe_3par_fc as hpefcdriver
 from cinder.volume.drivers.hpe import hpe_3par_iscsi as hpedriver
 from cinder.volume import qos_specs
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 hpeexceptions = hpe3parclient.hpeexceptions
 
@@ -726,6 +726,7 @@ class HPE3PARBaseDriver(test.TestCase):
         configuration.filter_function = FILTER_FUNCTION
         configuration.image_volume_cache_enabled = False
         configuration.replication_device = None
+        configuration.hpe3par_target_nsp = None
         return configuration
 
     @mock.patch(
@@ -4898,7 +4899,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_create_group(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -4933,7 +4934,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_create_group_with_replication_enabled(self, cg_ss_enable,
                                                    vol_ss_enable):
         cg_ss_enable.return_value = True
@@ -4998,7 +4999,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_delete_empty_group_with_replication_enabled(self, cg_ss_enable,
                                                          vol_ss_enable):
         cg_ss_enable.return_value = True
@@ -5042,7 +5043,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_delete_group_with_replication_enabled(self, cg_ss_enable,
                                                    vol_ss_enable):
         cg_ss_enable.return_value = True
@@ -5098,7 +5099,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_enable_group_replication(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -5136,7 +5137,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_disable_group_replication(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -5303,7 +5304,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     @mock.patch.object(volume_types, 'get_volume_type')
     def test_update_replication_enabled_group_add_vol(self, _mock_volume_types,
                                                       cg_ss_enable,
@@ -5382,7 +5383,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     @mock.patch.object(volume_types, 'get_volume_type')
     def test_update_repl_group_add_periodic_vol(self, _mock_volume_types,
                                                 cg_ss_enable,
@@ -5468,7 +5469,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     @mock.patch.object(volume_types, 'get_volume_type')
     def test_update_replication_enabled_group_remove_vol(
             self, _mock_volume_types, cg_ss_enable, vol_ss_enable):
@@ -5864,7 +5865,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
                 'get_volume_settings_from_type')
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'create_group')
     @mock.patch.object(volume_types, 'get_volume_type')
@@ -5976,7 +5977,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
                 'get_volume_settings_from_type')
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_create_group_from_src(self, cg_ss_enable, vol_ss_enable,
                                    typ_info):
         cg_ss_enable.return_value = True
@@ -6080,7 +6081,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
                 'get_volume_settings_from_type')
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_create_group_from_src_group(self, cg_ss_enable, vol_ss_enable,
                                          typ_info):
         cg_ss_enable.return_value = True
@@ -6153,7 +6154,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_delete_group(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6205,7 +6206,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_delete_group_exceptions(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6246,7 +6247,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_update_group_add_vol(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6300,7 +6301,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_update_group_remove_vol(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6371,7 +6372,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_create_group_snapshot(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6453,7 +6454,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseDriver):
 
     @mock.patch('cinder.volume.drivers.hpe.hpe_3par_common.HPE3PARCommon.'
                 'is_volume_group_snap_type')
-    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
     def test_delete_group_snapshot(self, cg_ss_enable, vol_ss_enable):
         cg_ss_enable.return_value = True
         vol_ss_enable.return_value = True
@@ -6997,7 +6998,6 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                 mock.call.queryHost(wwns=['123456789012345']),
                 mock.call.getHost(self.FAKE_HOST),
                 mock.call.getPorts(),
-                mock.call.getPorts(),
                 mock.call.getHostVLUNs(self.FAKE_HOST),
                 mock.call.createVLUN(
                     self.VOLUME_3PAR_NAME,
@@ -7093,7 +7093,6 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                 mock.call.getHost(self.FAKE_HOST),
                 mock.ANY,
                 mock.call.getHost(self.FAKE_HOST),
-                mock.call.getPorts(),
                 mock.call.getPorts(),
                 mock.call.getHostVLUNs(self.FAKE_HOST),
                 mock.call.getPorts(),
@@ -7274,6 +7273,133 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                 mock.call.getHostVLUNs(self.FAKE_HOST)]
 
             mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+            self.assertDictEqual(expected_properties, result)
+
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_initialize_connection_peer_persistence(self, _mock_volume_types):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        conf = self.setup_configuration()
+        self.replication_targets[0]['replication_mode'] = 'sync'
+        self.replication_targets[0]['quorum_witness_ip'] = '10.50.3.192'
+        conf.replication_device = self.replication_targets
+        mock_client = self.setup_driver(config=conf)
+
+        mock_client.getStorageSystemInfo.return_value = (
+            {'id': self.CLIENT_ID})
+
+        mock_replicated_client = self.setup_driver(config=conf)
+        mock_replicated_client.getStorageSystemInfo.return_value = (
+            {'id': self.REPLICATION_CLIENT_ID})
+
+        _mock_volume_types.return_value = {
+            'name': 'replicated',
+            'extra_specs': {
+                'replication_enabled': '<is> True',
+                'replication:mode': 'sync',
+                'volume_type': self.volume_type_replicated}}
+
+        mock_client.getVolume.return_value = {'userCPG': HPE3PAR_CPG}
+        mock_client.getCPG.return_value = {}
+        mock_client.getHost.side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            {'name': self.FAKE_HOST,
+                'FCPaths': [{'driverVersion': None,
+                             'firmwareVersion': None,
+                             'hostSpeed': 0,
+                             'model': None,
+                             'portPos': {'cardPort': 1, 'node': 7,
+                                         'slot': 1},
+                             'vendor': None,
+                             'wwn': self.wwn[0]},
+                            {'driverVersion': None,
+                             'firmwareVersion': None,
+                             'hostSpeed': 0,
+                             'model': None,
+                             'portPos': {'cardPort': 1, 'node': 6,
+                                         'slot': 1},
+                             'vendor': None,
+                             'wwn': self.wwn[1]}]}]
+        mock_client.queryHost.return_value = {
+            'members': [{
+                'name': self.FAKE_HOST
+            }]
+        }
+
+        mock_client.getHostVLUNs.side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            [{'active': True,
+              'volumeName': self.VOLUME_3PAR_NAME,
+              'remoteName': self.wwn[1],
+              'lun': 90, 'type': 0}],
+            [{'active': True,
+              'volumeName': self.VOLUME_3PAR_NAME,
+              'remoteName': self.wwn[0],
+              'lun': 90, 'type': 0}]]
+        mock_replicated_client.getHostVLUNs.side_effect = (
+            mock_client.getHostVLUNs.side_effect)
+
+        location = ("%(volume_name)s,%(lun_id)s,%(host)s,%(nsp)s" %
+                    {'volume_name': self.VOLUME_3PAR_NAME,
+                     'lun_id': 90,
+                     'host': self.FAKE_HOST,
+                     'nsp': 'something'})
+        mock_client.createVLUN.return_value = location
+        mock_replicated_client.createVLUN.return_value = location
+
+        expected_properties = {
+            'driver_volume_type': 'fibre_channel',
+            'data': {
+                'encrypted': False,
+                'target_lun': 90,
+                'target_wwn': ['0987654321234', '123456789000987',
+                               '0987654321234', '123456789000987'],
+                'target_discovered': True,
+                'initiator_target_map':
+                    {'123456789012345': ['0987654321234', '123456789000987',
+                                         '0987654321234', '123456789000987'],
+                     '123456789054321': ['0987654321234', '123456789000987',
+                                         '0987654321234', '123456789000987']}}}
+
+        with mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_client') as mock_create_client, \
+            mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_replication_client') as mock_replication_client:
+
+            mock_create_client.return_value = mock_client
+            mock_replication_client.return_value = mock_replicated_client
+
+            volume = self.volume
+            volume['replication_status'] = 'enabled'
+
+            result = self.driver.initialize_connection(
+                volume,
+                self.connector_multipath_enabled)
+
+            expected = [
+                mock.call.getVolume(self.VOLUME_3PAR_NAME),
+                mock.call.getCPG(HPE3PAR_CPG),
+                mock.call.getHost(self.FAKE_HOST),
+                mock.call.queryHost(wwns=['123456789012345',
+                                          '123456789054321']),
+                mock.call.getHost(self.FAKE_HOST),
+                mock.call.getPorts(),
+                mock.call.getHostVLUNs(self.FAKE_HOST),
+                mock.call.createVLUN(
+                    self.VOLUME_3PAR_NAME,
+                    auto=True,
+                    hostname=self.FAKE_HOST,
+                    lun=None),
+                mock.call.getHostVLUNs(self.FAKE_HOST)]
+
+            mock_client.assert_has_calls(
+                self.get_id_login +
+                self.standard_logout +
                 self.standard_login +
                 expected +
                 self.standard_logout)
@@ -7471,6 +7597,8 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
 
     def test_terminate_connection_more_vols(self):
         mock_client = self.setup_driver()
+        mock_client.getStorageSystemInfo.return_value = (
+            {'id': self.CLIENT_ID})
         # mock more than one vlun on the host (don't even try to remove host)
         mock_client.getHostVLUNs.return_value = \
             [
@@ -7520,10 +7648,140 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
             conn_info = self.driver.terminate_connection(self.volume,
                                                          self.connector)
             mock_client.assert_has_calls(
+                self.get_id_login +
+                self.standard_logout +
                 self.standard_login +
                 expect_less +
                 self.standard_logout)
             self.assertEqual(expect_conn, conn_info)
+
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_terminate_connection_peer_persistence(self, _mock_volume_types):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        conf = self.setup_configuration()
+        self.replication_targets[0]['replication_mode'] = 'sync'
+        self.replication_targets[0]['quorum_witness_ip'] = '10.50.3.192'
+        conf.replication_device = self.replication_targets
+        mock_client = self.setup_driver(config=conf)
+
+        mock_client.getStorageSystemInfo.return_value = (
+            {'id': self.CLIENT_ID})
+
+        mock_replicated_client = self.setup_driver(config=conf)
+        mock_replicated_client.getStorageSystemInfo.return_value = (
+            {'id': self.REPLICATION_CLIENT_ID})
+
+        _mock_volume_types.return_value = {
+            'name': 'replicated',
+            'extra_specs': {
+                'replication_enabled': '<is> True',
+                'replication:mode': 'sync',
+                'volume_type': self.volume_type_replicated}}
+
+        effects = [
+            [{'active': False, 'volumeName': self.VOLUME_3PAR_NAME,
+              'lun': None, 'type': 0}],
+            hpeexceptions.HTTPNotFound,
+            hpeexceptions.HTTPNotFound]
+
+        mock_client.getHostVLUNs.side_effect = effects
+        mock_replicated_client.getHostVLUNs.side_effect = effects
+
+        getHost_side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            {'name': self.FAKE_HOST,
+                'FCPaths': [{'driverVersion': None,
+                             'firmwareVersion': None,
+                             'hostSpeed': 0,
+                             'model': None,
+                             'portPos': {'cardPort': 1, 'node': 7,
+                                         'slot': 1},
+                             'vendor': None,
+                             'wwn': self.wwn[0]},
+                            {'driverVersion': None,
+                             'firmwareVersion': None,
+                             'hostSpeed': 0,
+                             'model': None,
+                             'portPos': {'cardPort': 1, 'node': 6,
+                                         'slot': 1},
+                             'vendor': None,
+                             'wwn': self.wwn[1]}]}]
+        queryHost_return_value = {
+            'members': [{
+                'name': self.FAKE_HOST
+            }]
+        }
+
+        mock_client.getHost.side_effect = getHost_side_effect
+        mock_client.queryHost.return_value = queryHost_return_value
+
+        mock_replicated_client.getHost.side_effect = getHost_side_effect
+        mock_replicated_client.queryHost.return_value = queryHost_return_value
+
+        expected = [
+            mock.call.queryHost(wwns=['123456789012345', '123456789054321']),
+            mock.call.getHostVLUNs(self.FAKE_HOST),
+            mock.call.deleteVLUN(
+                self.VOLUME_3PAR_NAME,
+                None,
+                hostname=self.FAKE_HOST),
+            mock.call.getHostVLUNs(self.FAKE_HOST),
+            mock.call.deleteHost(self.FAKE_HOST),
+            mock.call.getHostVLUNs(self.FAKE_HOST),
+            mock.call.getPorts()]
+
+        volume = self.volume
+        volume['replication_status'] = 'enabled'
+
+        with mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_client') as mock_create_client, \
+            mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_replication_client') as mock_replication_client:
+
+            mock_create_client.return_value = mock_client
+            mock_replication_client.return_value = mock_replicated_client
+
+            conn_info = self.driver.terminate_connection(
+                volume, self.connector_multipath_enabled)
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+            self.assertIn('data', conn_info)
+            self.assertIn('initiator_target_map', conn_info['data'])
+            mock_client.reset_mock()
+            mock_replicated_client.reset_mock()
+            mock_client.getHostVLUNs.side_effect = effects
+            mock_replicated_client.getHostVLUNs.side_effect = effects
+
+            # mock some deleteHost exceptions that are handled
+            delete_with_vlun = hpeexceptions.HTTPConflict(
+                error={'message': "has exported VLUN"})
+            delete_with_hostset = hpeexceptions.HTTPConflict(
+                error={'message': "host is a member of a set"})
+            mock_client.deleteHost = mock.Mock(
+                side_effect=[delete_with_vlun, delete_with_hostset])
+
+            conn_info = self.driver.terminate_connection(
+                volume, self.connector_multipath_enabled)
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+            mock_client.reset_mock()
+            mock_replicated_client.reset_mock()
+            mock_client.getHostVLUNs.side_effect = effects
+            mock_replicated_client.getHostVLUNs.side_effect = effects
+
+            conn_info = self.driver.terminate_connection(
+                volume, self.connector_multipath_enabled)
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
 
     def test_get_3par_host_from_wwn_iqn(self):
         mock_client = self.setup_driver()
@@ -7955,7 +8213,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -7970,6 +8228,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
 
             self.assertEqual('fake', host['name'])
+            self.assertEqual(HPE3PAR_CPG, cpg)
 
     def test_create_host(self):
         # setup_mock_client drive with default configuration
@@ -8002,7 +8261,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8044,7 +8303,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8084,7 +8343,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8123,7 +8382,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8176,7 +8435,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8219,7 +8478,7 @@ class TestHPE3PARFCDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host = self.driver._create_host(
+            host, cpg = self.driver._create_host(
                 common,
                 self.volume,
                 self.connector_multipath_enabled)
@@ -8418,8 +8677,10 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
         with mock.patch.object(hpecommon.HPE3PARCommon,
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
+            volume = self.volume
+            volume['replication_status'] = 'disabled'
             result = self.driver.initialize_connection(
-                self.volume,
+                volume,
                 self.connector_multipath_enabled)
 
             expected = [
@@ -8478,8 +8739,10 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
         with mock.patch.object(hpecommon.HPE3PARCommon,
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
+            volume = self.volume
+            volume['replication_status'] = 'disabled'
             result = self.driver.initialize_connection(
-                self.volume,
+                volume,
                 self.connector_multipath_enabled)
 
             expected = [
@@ -8553,6 +8816,111 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             expected_properties = self.properties
             expected_properties['data']['encrypted'] = True
             self.assertDictEqual(self.properties, result)
+
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_initialize_connection_peer_persistence(self, _mock_volume_types):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        conf = self.setup_configuration()
+        self.replication_targets[0]['replication_mode'] = 'sync'
+        self.replication_targets[0]['quorum_witness_ip'] = '10.50.3.192'
+        self.replication_targets[0]['hpe3par_iscsi_ips'] = '1.1.1.2'
+        conf.replication_device = self.replication_targets
+
+        mock_client = self.setup_driver(config=conf)
+        mock_client.getStorageSystemInfo.return_value = (
+            {'id': self.CLIENT_ID})
+
+        mock_replicated_client = self.setup_driver(config=conf)
+        mock_replicated_client.getStorageSystemInfo.return_value = (
+            {'id': self.REPLICATION_CLIENT_ID})
+
+        _mock_volume_types.return_value = {
+            'name': 'replicated',
+            'extra_specs': {
+                'replication_enabled': '<is> True',
+                'replication:mode': 'sync',
+                'volume_type': self.volume_type_replicated}}
+
+        mock_client.getVolume.return_value = {'userCPG': HPE3PAR_CPG}
+        mock_client.getCPG.return_value = {}
+
+        mock_client.getHost.side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            {'name': self.FAKE_HOST}]
+        mock_client.queryHost.return_value = {
+            'members': [{
+                'name': self.FAKE_HOST
+            }]
+        }
+
+        mock_client.getHostVLUNs.side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            [{'active': True,
+              'volumeName': self.VOLUME_3PAR_NAME,
+              'lun': self.TARGET_LUN, 'type': 0,
+              'portPos': {'node': 8, 'slot': 1, 'cardPort': 1}}]]
+        mock_replicated_client.getHostVLUNs.side_effect = [
+            hpeexceptions.HTTPNotFound('fake'),
+            [{'active': True,
+              'volumeName': self.VOLUME_3PAR_NAME,
+              'lun': self.TARGET_LUN, 'type': 0,
+              'portPos': {'node': 8, 'slot': 1, 'cardPort': 1}}]]
+
+        location = ("%(volume_name)s,%(lun_id)s,%(host)s,%(nsp)s" %
+                    {'volume_name': self.VOLUME_3PAR_NAME,
+                     'lun_id': self.TARGET_LUN,
+                     'host': self.FAKE_HOST,
+                     'nsp': 'something'})
+        mock_client.createVLUN.return_value = location
+        mock_replicated_client.createVLUN.return_value = location
+
+        mock_client.getiSCSIPorts.return_value = [{
+            'IPAddr': '1.1.1.2',
+            'iSCSIName': self.TARGET_IQN,
+        }]
+
+        with mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_client') as mock_create_client, \
+            mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_replication_client') as mock_replication_client:
+
+            mock_create_client.return_value = mock_client
+            mock_replication_client.return_value = mock_replicated_client
+
+            volume = self.volume
+            volume['replication_status'] = 'enabled'
+
+            result = self.driver.initialize_connection(
+                volume,
+                self.connector_multipath_enabled)
+
+            expected = [
+                mock.call.getVolume(self.VOLUME_3PAR_NAME),
+                mock.call.getCPG(HPE3PAR_CPG),
+                mock.call.getHost(self.FAKE_HOST),
+                mock.call.queryHost(iqns=['iqn.1993-08.org.debian:01:222']),
+                mock.call.getHost(self.FAKE_HOST),
+                mock.call.getiSCSIPorts(state=4),
+                mock.call.getHostVLUNs(self.FAKE_HOST),
+                mock.call.createVLUN(
+                    self.VOLUME_3PAR_NAME,
+                    auto=True,
+                    hostname=self.FAKE_HOST,
+                    portPos=self.FAKE_ISCSI_PORT['portPos'],
+                    lun=None),
+                mock.call.getHostVLUNs(self.FAKE_HOST)]
+
+            mock_client.assert_has_calls(
+                self.get_id_login +
+                self.standard_logout +
+                self.standard_login +
+                expected +
+                self.standard_logout)
+
+            self.assertDictEqual(self.multipath_properties, result)
 
     def test_terminate_connection_for_clear_chap_creds_not_found(self):
         # setup_mock_client drive with default configuration
@@ -9051,7 +9419,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
             expected = [
                 mock.call.getVolume('osv-0DM4qZEVSKON-DXN-NwVpw'),
@@ -9081,7 +9449,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
             expected = [
                 mock.call.getVolume('osv-0DM4qZEVSKON-DXN-NwVpw'),
@@ -9099,6 +9467,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             self.assertEqual(self.FAKE_HOST, host['name'])
             self.assertIsNone(auth_username)
             self.assertIsNone(auth_password)
+            self.assertEqual(HPE3PAR_CPG, cpg)
 
     def test_create_host_chap_enabled(self):
         # setup_mock_client drive with CHAP enabled configuration
@@ -9136,7 +9505,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
             expected = [
                 mock.call.getVolume('osv-0DM4qZEVSKON-DXN-NwVpw'),
@@ -9203,7 +9572,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9265,7 +9634,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9300,7 +9669,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9355,7 +9724,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9400,7 +9769,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, user, pwd = self.driver._create_host(
+            host, user, pwd, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
             expected = [
                 mock.call.getVolume('osv-0DM4qZEVSKON-DXN-NwVpw'),
@@ -9434,7 +9803,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9492,7 +9861,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                                '_create_client') as mock_create_client:
             mock_create_client.return_value = mock_client
             common = self.driver._login()
-            host, auth_username, auth_password = self.driver._create_host(
+            host, auth_username, auth_password, cpg = self.driver._create_host(
                 common, self.volume, self.connector)
 
             expected = [
@@ -9769,7 +10138,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                 common, 'test-host', 'test-vol', 'test-host', 'fake')
             mock_client.assert_has_calls(expected)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_do_export(self, mock_utils):
         # setup_mock_client drive with default configuration
         # and return the mock HTTP 3PAR client
@@ -9850,7 +10219,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_do_export_host_not_found(self, mock_utils):
         # setup_mock_client drive with CHAP enabled configuration
         # and return the mock HTTP 3PAR client
@@ -9886,7 +10255,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_do_export_host_chap_disabled(self, mock_utils):
         # setup_mock_client drive with CHAP enabled configuration
         # and return the mock HTTP 3PAR client
@@ -9932,7 +10301,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_do_export_no_active_vluns(self, mock_utils):
         # setup_mock_client drive with CHAP enabled configuration
         # and return the mock HTTP 3PAR client
@@ -9976,7 +10345,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
             self.assertEqual(expected_model, model)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_do_export_vlun_missing_chap_credentials(self, mock_utils):
         # setup_mock_client drive with CHAP enabled configuration
         # and return the mock HTTP 3PAR client
@@ -10033,7 +10402,7 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
             mock_client.assert_has_calls(expected)
             self.assertDictEqual(expected_model, model_without_remote_name)
 
-    @mock.patch('cinder.volume.utils.generate_password')
+    @mock.patch('cinder.volume.volume_utils.generate_password')
     def test_create_export(self, mock_utils):
         config = self.setup_configuration()
         config.hpe3par_iscsi_chap_enabled = True
@@ -10273,6 +10642,80 @@ class TestHPE3PARISCSIDriver(HPE3PARBaseDriver):
                 self.volume,
                 self.connector,
                 force=True)
+
+            expected = [
+                mock.call.queryHost(iqns=[self.connector['initiator']]),
+                mock.call.getHostVLUNs(self.FAKE_HOST),
+                mock.call.deleteVLUN(
+                    self.VOLUME_3PAR_NAME,
+                    None,
+                    hostname=self.FAKE_HOST),
+                mock.call.getHostVLUNs(self.FAKE_HOST),
+                mock.call.modifyHost(
+                    'fakehost',
+                    {'pathOperation': 2,
+                     'iSCSINames': ['iqn.1993-08.org.debian:01:222']}),
+                mock.call.removeVolumeMetaData(
+                    self.VOLUME_3PAR_NAME, CHAP_USER_KEY),
+                mock.call.removeVolumeMetaData(
+                    self.VOLUME_3PAR_NAME, CHAP_PASS_KEY)]
+
+            mock_client.assert_has_calls(
+                self.standard_login +
+                expected +
+                self.standard_logout)
+
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_terminate_connection_peer_persistence(self, _mock_volume_types):
+        # setup_mock_client drive with default configuration
+        # and return the mock HTTP 3PAR client
+        conf = self.setup_configuration()
+        self.replication_targets[0]['replication_mode'] = 'sync'
+        self.replication_targets[0]['quorum_witness_ip'] = '10.50.3.192'
+        conf.replication_device = self.replication_targets
+        mock_client = self.setup_driver(config=conf)
+
+        mock_client.getStorageSystemInfo.return_value = (
+            {'id': self.CLIENT_ID})
+
+        mock_replicated_client = self.setup_driver(config=conf)
+        mock_replicated_client.getStorageSystemInfo.return_value = (
+            {'id': self.REPLICATION_CLIENT_ID})
+
+        _mock_volume_types.return_value = {
+            'name': 'replicated',
+            'extra_specs': {
+                'replication_enabled': '<is> True',
+                'replication:mode': 'sync',
+                'volume_type': self.volume_type_replicated}}
+
+        mock_client.getHostVLUNs.return_value = [
+            {'active': False,
+             'volumeName': self.VOLUME_3PAR_NAME,
+             'lun': None, 'type': 0}]
+
+        mock_client.queryHost.return_value = {
+            'members': [{
+                'name': self.FAKE_HOST
+            }]
+        }
+
+        volume = self.volume
+        volume['replication_status'] = 'enabled'
+
+        with mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_client') as mock_create_client, \
+            mock.patch.object(
+                hpecommon.HPE3PARCommon,
+                '_create_replication_client') as mock_replication_client:
+
+            mock_create_client.return_value = mock_client
+            mock_replication_client.return_value = mock_replicated_client
+
+            self.driver.terminate_connection(
+                volume,
+                self.connector_multipath_enabled)
 
             expected = [
                 mock.call.queryHost(iqns=[self.connector['initiator']]),

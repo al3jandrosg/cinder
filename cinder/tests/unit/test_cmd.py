@@ -1800,7 +1800,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         rpc_init.assert_called_once_with(CONF)
         last_completed_audit_period.assert_called_once_with()
 
-    @mock.patch('cinder.volume.utils.notify_about_volume_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
     @mock.patch('cinder.objects.volume.VolumeList.get_all_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
@@ -1866,7 +1866,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
                       extra_usage_info=local_extra_info)
         ])
 
-    @mock.patch('cinder.volume.utils.notify_about_volume_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
     @mock.patch('cinder.objects.volume.VolumeList.get_all_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
@@ -1940,10 +1940,10 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
                       extra_usage_info=local_extra_info_delete)
         ])
 
-    @mock.patch('cinder.volume.utils.notify_about_snapshot_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_snapshot_usage')
     @mock.patch('cinder.objects.snapshot.SnapshotList.'
                 'get_all_active_by_window')
-    @mock.patch('cinder.volume.utils.notify_about_volume_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
     @mock.patch('cinder.objects.volume.VolumeList.get_all_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
@@ -2017,9 +2017,9 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
                       extra_usage_info=local_extra_info_delete)
         ])
 
-    @mock.patch('cinder.volume.utils.notify_about_backup_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_backup_usage')
     @mock.patch('cinder.objects.backup.BackupList.get_all_active_by_window')
-    @mock.patch('cinder.volume.utils.notify_about_volume_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
     @mock.patch('cinder.objects.volume.VolumeList.get_all_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
@@ -2084,12 +2084,12 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
             ctxt, backup1, 'delete.start',
             extra_usage_info=local_extra_info_delete)
 
-    @mock.patch('cinder.volume.utils.notify_about_backup_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_backup_usage')
     @mock.patch('cinder.objects.backup.BackupList.get_all_active_by_window')
-    @mock.patch('cinder.volume.utils.notify_about_snapshot_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_snapshot_usage')
     @mock.patch('cinder.objects.snapshot.SnapshotList.'
                 'get_all_active_by_window')
-    @mock.patch('cinder.volume.utils.notify_about_volume_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
     @mock.patch('cinder.objects.volume.VolumeList.get_all_active_by_window')
     @mock.patch('cinder.utils.last_completed_audit_period')
     @mock.patch('cinder.rpc.init')
@@ -2248,50 +2248,3 @@ class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
             'uuid': 'f080f895-cff2-4eb3-9c61-050c060b59ad'}
         utils.create_service(ctxt, values)
         self.ctxt = ctxt
-
-    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
-                return_value='1.8')
-    def test_shared_targets_migrations(self, mock_version):
-        """Ensure we can update the column."""
-        # Run the migration and verify that we updated 1 entry
-        with mock.patch('cinder.volume.rpcapi.VolumeAPI.get_capabilities',
-                        return_value={'connection_protocol': 'iSCSI',
-                                      'shared_targets': False}):
-            total, updated = (
-                cinder_manage.shared_targets_online_data_migration(
-                    self.ctxt, 10))
-            self.assertEqual(3, total)
-            self.assertEqual(3, updated)
-
-    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
-                return_value='1.8')
-    def test_shared_targets_migrations_non_iscsi(self, mock_version):
-        """Ensure we can update the column."""
-        # Run the migration and verify that we updated 1 entry
-        with mock.patch('cinder.volume.rpcapi.VolumeAPI.get_capabilities',
-                        return_value={'connection_protocol': 'RBD'}):
-            total, updated = (
-                cinder_manage.shared_targets_online_data_migration(
-                    self.ctxt, 10))
-            self.assertEqual(3, total)
-            self.assertEqual(3, updated)
-
-    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
-                return_value='1.8')
-    def test_shared_targets_migrations_with_limit(self, mock_version):
-        """Ensure we update in batches."""
-        # Run the migration and verify that we updated 1 entry
-        with mock.patch('cinder.volume.rpcapi.VolumeAPI.get_capabilities',
-                        return_value={'connection_protocol': 'iSCSI',
-                                      'shared_targets': False}):
-            total, updated = (
-                cinder_manage.shared_targets_online_data_migration(
-                    self.ctxt, 2))
-            self.assertEqual(3, total)
-            self.assertEqual(2, updated)
-
-            total, updated = (
-                cinder_manage.shared_targets_online_data_migration(
-                    self.ctxt, 2))
-            self.assertEqual(1, total)
-            self.assertEqual(1, updated)

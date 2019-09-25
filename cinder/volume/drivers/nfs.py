@@ -33,7 +33,7 @@ from cinder import interface
 from cinder import utils
 from cinder.volume import configuration
 from cinder.volume.drivers import remotefs
-from cinder.volume import utils as vutils
+from cinder.volume import volume_utils
 
 VERSION = '1.4.0'
 
@@ -118,7 +118,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         self._sparse_copy_volume_data = True
         self.reserved_percentage = self.configuration.reserved_percentage
         self.max_over_subscription_ratio = (
-            vutils.get_max_over_subscription_ratio(
+            volume_utils.get_max_over_subscription_ratio(
                 self.configuration.max_over_subscription_ratio,
                 supports_auto=supports_auto_mosr))
 
@@ -461,7 +461,8 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         :returns: model_update to update DB with any needed changes
         """
         name_id = None
-        if original_volume_status == 'available':
+        if (original_volume_status == 'available' and
+                volume.provider_location != new_volume.provider_location):
             current_name = CONF.volume_name_template % new_volume.id
             original_volume_name = CONF.volume_name_template % volume.id
             current_path = self.local_path(new_volume)

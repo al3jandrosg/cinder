@@ -180,8 +180,8 @@ Set ``storage_protocol = iscsi`` if iSCSI protocol is used.
 The value of the option ``storage_protocol`` can be either ``fc`` or ``iscsi``,
 which is case insensitive.
 
-For more details on multiple back ends, see `Configure multiple-storage
-back ends <https://docs.openstack.org/cinder/latest/admin/blockstorage-multi-backend.html>`_
+For more details on multiple back ends, see :doc:`Configure multiple-storage
+back ends </admin/blockstorage-multi-backend>`.
 
 Required configurations
 -----------------------
@@ -318,7 +318,7 @@ section, the driver will move the volumes out of the storage groups and then
 delete them if the user tries to delete the volumes that remain in the storage
 group on the VNX array.
 
-The default value of ``force_delete_lun_in_storagegroup`` is ``False``.
+The default value of ``force_delete_lun_in_storagegroup`` is ``True``.
 
 Over subscription in thin provisioning
 --------------------------------------

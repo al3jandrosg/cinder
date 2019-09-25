@@ -19,7 +19,6 @@ import time
 
 from oslo_log import log as logging
 from oslo_service import loopingcall
-from oslo_utils import units
 import requests
 import requests.auth
 import requests.exceptions as r_exc
@@ -39,6 +38,7 @@ SLOPROVISIONING = 'sloprovisioning'
 REPLICATION = 'replication'
 SYSTEM = 'system'
 U4V_VERSION = '91'
+MIN_U4P_VERSION = '9.1.0.1054'
 UCODE_5978 = '5978'
 retry_exc_tuple = (exception.VolumeBackendAPIException,)
 # HTTP constants
@@ -518,6 +518,7 @@ class PowerMaxRest(object):
         self.check_status_code_success(operation, status_code, message)
         return status_code, message
 
+    @retry(retry_exc_tuple, interval=2, retries=3)
     def delete_resource(
             self, array, category, resource_type, resource_name,
             payload=None, private='', params=None):
@@ -584,8 +585,13 @@ class PowerMaxRest(object):
 
         :returns: version dict
         """
-        version_url = "/%s/system/info" % U4V_VERSION
-        version_dict = self._get_request(version_url, 'info')
+        post_90_endpoint = '/version'
+        pre_91_endpoint = '/system/version'
+
+        status_code, version_dict = self.request(post_90_endpoint, GET)
+        if status_code is not STATUS_200:
+            status_code, version_dict = self.request(pre_91_endpoint, GET)
+
         if not version_dict:
             LOG.error("Unisphere version info not found.")
         return version_dict
@@ -868,16 +874,19 @@ class PowerMaxRest(object):
             {"executionOption": "ASYNCHRONOUS",
              "editStorageGroupActionParam": {
                  "expandStorageGroupParam": {
-                     "addVolumeParam": [{
-                         "num_of_vols": 1,
+                     "addVolumeParam": {
                          "emulation": "FBA",
                          "create_new_volumes": "False",
-                         "volumeIdentifier": {
-                             "identifier_name": volume_name,
-                             "volumeIdentifierChoice": "identifier_name"},
-                         "volumeAttribute": {
-                             "volume_size": volume_size,
-                             "capacityUnit": "GB"}}]}}})
+                         "volumeAttributes": [
+                             {
+                                 "num_of_vols": 1,
+                                 "volumeIdentifier": {
+                                     "identifier_name": volume_name,
+                                     "volumeIdentifierChoice":
+                                         "identifier_name"
+                                 },
+                                 "volume_size": volume_size,
+                                 "capacityUnit": "GB"}]}}}})
         status_code, job = self.modify_storage_group(
             array, storagegroup_name, payload)
 
@@ -1024,15 +1033,15 @@ class PowerMaxRest(object):
         except KeyError:
             LOG.debug("Unable to get storage group QoS details.")
         if 'total_iops_sec' in extra_specs.get('qos'):
-            property_dict = self.validate_qos_input(
+            property_dict = self.utils.validate_qos_input(
                 'total_iops_sec', sg_maxiops, extra_specs.get('qos'),
                 property_dict)
         if 'total_bytes_sec' in extra_specs.get('qos'):
-            property_dict = self.validate_qos_input(
+            property_dict = self.utils.validate_qos_input(
                 'total_bytes_sec', sg_maxmbps, extra_specs.get('qos'),
                 property_dict)
         if 'DistributionType' in extra_specs.get('qos') and property_dict:
-            property_dict = self.validate_qos_distribution_type(
+            property_dict = self.utils.validate_qos_distribution_type(
                 sg_distribution_type, extra_specs.get('qos'), property_dict)
 
         if property_dict:
@@ -1049,52 +1058,6 @@ class PowerMaxRest(object):
                           "%(e)s", {'e': e})
                 return_value = False
         return return_value
-
-    @staticmethod
-    def validate_qos_input(input_key, sg_value, qos_extra_spec, property_dict):
-        max_value = 100000
-        qos_unit = "IO/Sec"
-        if input_key == 'total_iops_sec':
-            min_value = 100
-            input_value = int(qos_extra_spec['total_iops_sec'])
-            sg_key = 'host_io_limit_io_sec'
-        else:
-            qos_unit = "MB/sec"
-            min_value = 1
-            input_value = int(qos_extra_spec['total_bytes_sec']) / units.Mi
-            sg_key = 'host_io_limit_mb_sec'
-        if min_value <= input_value <= max_value:
-            if sg_value is None or input_value != int(sg_value):
-                property_dict[sg_key] = input_value
-        else:
-            exception_message = (
-                _("Invalid %(ds)s with value %(dt)s entered. Valid values "
-                  "range from %(du)s %(dv)s to 100,000 %(dv)s") % {
-                    'ds': input_key, 'dt': input_value, 'du': min_value,
-                    'dv': qos_unit})
-            LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(
-                message=exception_message)
-        return property_dict
-
-    @staticmethod
-    def validate_qos_distribution_type(
-            sg_value, qos_extra_spec, property_dict):
-        dynamic_list = ['never', 'onfailure', 'always']
-        if qos_extra_spec.get('DistributionType').lower() in dynamic_list:
-            distribution_type = qos_extra_spec['DistributionType']
-            if distribution_type != sg_value:
-                property_dict["dynamicDistribution"] = distribution_type
-        else:
-            exception_message = (
-                _("Wrong Distribution type value %(dt)s entered. Please enter "
-                  "one of: %(dl)s") % {
-                    'dt': qos_extra_spec.get('DistributionType'),
-                    'dl': dynamic_list})
-            LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(
-                message=exception_message)
-        return property_dict
 
     def set_storagegroup_srp(
             self, array, storagegroup_name, srp_name, extra_specs):
@@ -1857,7 +1820,7 @@ class PowerMaxRest(object):
                 tgt_list.append({'name': target_id})
             payload = {"deviceNameListSource": src_list,
                        "deviceNameListTarget": tgt_list,
-                       "copy": 'true', "action": action,
+                       "copy": 'false', "action": action,
                        "star": 'false', "force": 'false',
                        "exact": 'false', "remote": 'false',
                        "symforce": 'false', "generation": generation}
@@ -1923,7 +1886,7 @@ class PowerMaxRest(object):
         snapshot = None
         snap_info = self.get_volume_snap_info(array, device_id)
         if snap_info:
-            if (snap_info.get('snapshotSrcs') and
+            if (snap_info.get('snapshotSrcs', None) and
                     bool(snap_info['snapshotSrcs'])):
                 for snap in snap_info['snapshotSrcs']:
                     if snap['snapshotName'] == snap_name:
@@ -1942,7 +1905,8 @@ class PowerMaxRest(object):
         snapshot_list = []
         snap_info = self.get_volume_snap_info(array, source_device_id)
         if snap_info:
-            if bool(snap_info['snapshotSrcs']):
+            if (snap_info.get('snapshotSrcs', None) and
+                    bool(snap_info['snapshotSrcs'])):
                 snapshot_list = snap_info['snapshotSrcs']
         return snapshot_list
 
@@ -2137,46 +2101,48 @@ class PowerMaxRest(object):
         :param tgt_only: Flag - return only sessions where device is target
         :returns: list of snapshot dicts
         """
-        snap_dict_list, sessions = [], []
-        vol_details = self._get_private_volume(array, device_id)
-        snap_vx_info = vol_details['timeFinderInfo']
-        is_snap_src = snap_vx_info['snapVXSrc']
-        is_snap_tgt = snap_vx_info['snapVXTgt']
-        if snap_vx_info.get('snapVXSession'):
-            sessions = snap_vx_info['snapVXSession']
-        if is_snap_src and not tgt_only:
-            for session in sessions:
-                if session.get('srcSnapshotGenInfo'):
-                    src_list = session['srcSnapshotGenInfo']
-                    for src in src_list:
-                        snap_name = src['snapshotHeader']['snapshotName']
-                        generation = src['snapshotHeader']['generation']
-                        target_list, target_dict_list = [], []
-                        if src.get('lnkSnapshotGenInfo'):
-                            target_dict_list = src['lnkSnapshotGenInfo']
-                        for tgt in target_dict_list:
-                            target_tup = tgt['targetDevice'], tgt['state']
-                            target_list.append(target_tup)
-                        link_info = {'target_vol_list': target_list,
-                                     'snap_name': snap_name,
-                                     'source_vol': device_id,
-                                     'generation': generation}
-                        snap_dict_list.append(link_info)
-        if is_snap_tgt:
-            for session in sessions:
+        snap_tgt_dict, snap_src_dict_list = dict(), list()
+        s_in = self.get_volume_snap_info(array, device_id)
+
+        snap_src = (
+            s_in['snapshotSrcs'] if s_in.get('snapshotSrcs') else list())
+        snap_tgt = (
+            s_in['snapshotLnks'][0] if s_in.get('snapshotLnks') else dict())
+
+        if snap_src and not tgt_only:
+            for session in snap_src:
+                snap_src_dict = dict()
+
+                snap_src_dict['source_vol_id'] = device_id
+                snap_src_dict['generation'] = session['generation']
+                snap_src_dict['snap_name'] = session['snapshotName']
+                snap_src_dict['expired'] = session['expired']
+
+                if session.get('linkedDevices'):
+                    snap_src_link = session['linkedDevices'][0]
+                    snap_src_dict['target_vol_id'] = snap_src_link[
+                        'targetDevice']
+                    snap_src_dict['copy_mode'] = snap_src_link['copy']
+                    snap_src_dict['state'] = snap_src_link['state']
+
+                snap_src_dict_list.append(snap_src_dict)
+
+        if snap_tgt:
+            snap_tgt_dict['source_vol_id'] = snap_tgt['linkSourceName']
+            snap_tgt_dict['target_vol_id'] = device_id
+            snap_tgt_dict['state'] = snap_tgt['state']
+            snap_tgt_dict['copy_mode'] = snap_tgt['copy']
+
+            vol_info = self._get_private_volume(array, device_id)
+            vol_tf_sessions = vol_info['timeFinderInfo']['snapVXSession']
+            for session in vol_tf_sessions:
                 if session.get('tgtSrcSnapshotGenInfo'):
-                    tgt = session['tgtSrcSnapshotGenInfo']
-                    snap_name = tgt['snapshotName']
-                    target_tup = tgt['targetDevice'], tgt['state']
-                    target_list = [target_tup]
-                    source_vol = tgt['sourceDevice']
-                    generation = tgt['generation']
-                    link_info = {'target_vol_list': target_list,
-                                 'snap_name': snap_name,
-                                 'source_vol': source_vol,
-                                 'generation': generation}
-                    snap_dict_list.append(link_info)
-        return snap_dict_list
+                    snap_tgt_link = session.get('tgtSrcSnapshotGenInfo')
+                    snap_tgt_dict['snap_name'] = snap_tgt_link['snapshotName']
+                    snap_tgt_dict['expired'] = snap_tgt_link['expired']
+                    snap_tgt_dict['generation'] = snap_tgt_link['generation']
+
+        return snap_src_dict_list, snap_tgt_dict
 
     def get_rdf_group(self, array, rdf_number):
         """Get specific rdf group details.
@@ -2677,3 +2643,34 @@ class PowerMaxRest(object):
                 pass
 
         return iterator_result
+
+    def validate_unisphere_version(self):
+        """Validate that the running Unisphere version meets min requirement
+
+        :returns: unisphere_meets_min_req -- boolean
+        """
+        running_version, _ = self.get_uni_version()
+        minimum_version = MIN_U4P_VERSION
+        unisphere_meets_min_req = False
+
+        if running_version and (running_version[0].isalpha()):
+            # remove leading letter
+            version = running_version[1:]
+            unisphere_meets_min_req = version >= minimum_version
+
+        if unisphere_meets_min_req:
+            LOG.info("Unisphere version %(running_version)s meets minimum "
+                     "requirement of version %(minimum_version)s.",
+                     {'running_version': running_version,
+                      'minimum_version': minimum_version})
+        elif running_version:
+            LOG.error("Unisphere version %(running_version)s does not meet "
+                      "minimum requirement for use with this release, please "
+                      "upgrade to Unisphere %(minimum_version)s at minimum.",
+                      {'running_version': running_version,
+                       'minimum_version': minimum_version})
+        else:
+            LOG.warning("Unable to validate Unisphere instance meets minimum "
+                        "requirements.")
+
+        return unisphere_meets_min_req

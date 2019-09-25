@@ -412,8 +412,8 @@ Upgrade Checks
 Starting with the Stein release of OpenStack, Cinder has added support for
 Upgrade Checks.  Upgrade checks provide a release-specific readiness check
 before restarting services with new code. Details on how to run an Upgrade
-Check can be seen in the `CLI interface for cinder status commands
-<https://docs.openstack.org/cinder/latest/cli/cinder-status.html>`_ page.
+Check can be seen in the `CLI interface for :doc:`cinder status commands
+</cli/cinder-status>` page.
 
 Upgrade checks are intended to help identify changes between releases that
 may impact the deployment environment. As a result, developers should take time
@@ -458,3 +458,13 @@ Documentation
 <https://docs.openstack.org/nova/latest/reference/upgrade-checks.html>`_ .
 
 
+What can be checked?
+....................
+
+The cinder-status CLI tool is assumed to be run from a place where it can
+read cinder.conf for the services, and that it can access the Cinder
+database to query information.
+
+It cannot be assumed to have network access to a storage backend -- a backend
+may only be accessible from the Cinder Volume service and not reachable
+directly from where this tool is run.

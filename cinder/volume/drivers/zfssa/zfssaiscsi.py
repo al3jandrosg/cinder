@@ -32,8 +32,8 @@ from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume.drivers.zfssa import zfssarest
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 import taskflow.engines
 from taskflow.patterns import linear_flow as lf
@@ -127,6 +127,10 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
     """
     VERSION = '1.0.4'
     protocol = 'iSCSI'
+
+    # TODO(jsbryant) Remove driver in the 'U' release as Oracle
+    #                is dropping support.
+    SUPPORTED = False
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Oracle_ZFSSA_CI"
@@ -263,7 +267,7 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
 
         # Lookup the zfssa_target_portal DNS name to an IP address
         host, port = lcfg.zfssa_target_portal.split(':')
-        host_ip_addr = utils.resolve_hostname(host)
+        host_ip_addr = volume_utils.resolve_hostname(host)
         self.zfssa_target_portal = host_ip_addr + ':' + port
 
     def check_for_setup_error(self):

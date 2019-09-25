@@ -28,6 +28,7 @@ from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder import ssh_utils
+from cinder import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -148,21 +149,22 @@ class MStorageISMCLI(object):
             stdin, stdout, stderr = ssh.exec_command(command)
             stdin.close()
             channel = stdout.channel
-            _out, _err = [], []
+            tmpout, tmperr = b'', b''
             while 1:
                 select.select([channel], [], [])
                 if channel.recv_ready():
-                    _out.append(channel.recv(4096))
+                    tmpout += channel.recv(4096)
                     continue
                 if channel.recv_stderr_ready():
-                    _err.append(channel.recv_stderr(4096))
+                    tmperr += channel.recv_stderr(4096)
                     continue
                 if channel.exit_status_ready():
                     status = channel.recv_exit_status()
                     break
             LOG.debug('`%(command)s` done. status=%(status)d.',
                       {'command': command, 'status': status})
-            out, err = ''.join(_out), ''.join(_err)
+            out = utils.convert_str(tmpout)
+            err = utils.convert_str(tmperr)
             if expected_status is not None and status not in expected_status:
                 LOG.debug('`%(command)s` failed. status=%(status)d, '
                           'out="%(out)s", err="%(err)s".',

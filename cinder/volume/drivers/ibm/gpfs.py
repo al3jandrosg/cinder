@@ -40,7 +40,7 @@ from cinder.volume import driver
 from cinder.volume.drivers import nfs
 from cinder.volume.drivers import remotefs
 from cinder.volume.drivers.san import san
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 
 GPFS_CLONE_MIN_RELEASE = 1200
 GPFS_ENC_MIN_RELEASE = 1404
@@ -165,6 +165,9 @@ class GPFSDriver(driver.CloneableImageVD,
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "IBM_GPFS_CI"
+
+    # TODO(jsbryant) Remove driver in the 'U' release if CI is not fixed.
+    SUPPORTED = False
 
     def __init__(self, *args, **kwargs):
         super(GPFSDriver, self).__init__(*args, **kwargs)

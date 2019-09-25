@@ -80,6 +80,8 @@ cgexec: ChainingRegExpFilter, cgexec, root, cgexec, -g, blkio:\S+
 # cinder/image/image_utils.py
 qemu-img: EnvFilter, env, root, LC_ALL=C, qemu-img
 qemu-img_convert: CommandFilter, qemu-img, root
+qzip: CommandFilter, qzip, root
+gzip: CommandFilter, gzip, root
 
 # cinder/volume/nfs.py
 stat: CommandFilter, stat, root
@@ -136,3 +138,5 @@ ploop: CommandFilter, ploop, root
 # cinder/volume/drivers/quobyte.py
 mount.quobyte: CommandFilter, mount.quobyte, root
 umount.quobyte: CommandFilter, umount.quobyte, root
+
+cryptsetup: CommandFilter, cryptsetup, root

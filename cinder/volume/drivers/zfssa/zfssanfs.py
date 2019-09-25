@@ -36,7 +36,7 @@ from cinder.volume import configuration
 from cinder.volume.drivers import nfs
 from cinder.volume.drivers.san import san
 from cinder.volume.drivers.zfssa import zfssarest
-from cinder.volume import utils as vutils
+from cinder.volume import volume_utils
 
 
 ZFSSA_OPTS = [
@@ -101,6 +101,10 @@ class ZFSSANFSDriver(nfs.NfsDriver):
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Oracle_ZFSSA_CI"
 
+    # TODO(jsbryant) Remove driver in the 'U' release as Oracle
+    #                is dropping support.
+    SUPPORTED = False
+
     def __init__(self, *args, **kwargs):
         super(ZFSSANFSDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(ZFSSA_OPTS)
@@ -110,7 +114,7 @@ class ZFSSANFSDriver(nfs.NfsDriver):
 
     def do_setup(self, context):
         self.configuration.max_over_subscription_ratio = (
-            vutils.get_max_over_subscription_ratio(
+            volume_utils.get_max_over_subscription_ratio(
                 self.configuration.max_over_subscription_ratio,
                 supports_auto=False))
 

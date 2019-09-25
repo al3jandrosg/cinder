@@ -351,7 +351,7 @@ def patch_dd_copy(copied_lun):
 
 @contextlib.contextmanager
 def patch_copy_volume():
-    with mock.patch('cinder.volume.utils.copy_volume') as mocked:
+    with mock.patch('cinder.volume.volume_utils.copy_volume') as mocked:
         yield mocked
 
 
@@ -378,7 +378,7 @@ class IdMatcher(object):
 
 @ddt.ddt
 @mock.patch.object(adapter, 'storops_ex', new=ex)
-@mock.patch.object(adapter.vol_utils, 'is_group_a_cg_snapshot_type',
+@mock.patch.object(adapter.volume_utils, 'is_group_a_cg_snapshot_type',
                    new=lambda x: True)
 class CommonAdapterTest(test.TestCase):
     def setUp(self):

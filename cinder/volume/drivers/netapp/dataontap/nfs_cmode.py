@@ -42,7 +42,7 @@ from cinder.volume.drivers.netapp.dataontap.utils import loopingcalls
 from cinder.volume.drivers.netapp.dataontap.utils import utils as dot_utils
 from cinder.volume.drivers.netapp import options as na_opts
 from cinder.volume.drivers.netapp import utils as na_utils
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 
 
 LOG = logging.getLogger(__name__)
@@ -327,7 +327,7 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
         for share in self._mounted_shares:
             host, junction_path = na_utils.get_export_host_junction_path(share)
 
-            address = utils.resolve_hostname(host)
+            address = volume_utils.resolve_hostname(host)
 
             if address not in vserver_addresses:
                 LOG.warning('Address not found for NFS share %s.', share)
@@ -463,7 +463,7 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
 
     def _get_ip_verify_on_cluster(self, host):
         """Verifies if host on same cluster and returns ip."""
-        ip = utils.resolve_hostname(host)
+        ip = volume_utils.resolve_hostname(host)
         vserver = self._get_vserver_for_ip(ip)
         if not vserver:
             raise exception.NotFound(_("Unable to locate an SVM that is "

@@ -1,3 +1,15 @@
+cinder (2:15.0.0~b3~git2019092509.cea6e823c-0ubuntu1) eoan; urgency=medium
+
+  [ Sahid Orentino Ferdjaoui ]
+  * New upstream snapshot for OpenStack Train.
+  * d/control: Align (Build-)Depends with upstream.
+
+  [ Corey Bryant ]
+  * d/tests/cinder-daemons: As of disco, sqlalchemy defaults to mysqldb so
+    we must override the driver to use pymysql (LP: #1845321).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 25 Sep 2019 08:48:14 -0400
+
 cinder (2:15.0.0~b1~git2019080709.0a0d55d8a-0ubuntu1) eoan; urgency=medium
 
   * New upstream snapshot for OpenStack Train (LP: #1834845).

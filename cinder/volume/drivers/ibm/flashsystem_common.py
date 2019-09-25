@@ -41,8 +41,8 @@ from cinder import utils
 from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -96,6 +96,9 @@ class FlashSystemDriver(san.SanDriver,
     """
 
     VERSION = "1.0.12"
+
+    # TODO(jsbryant) Remove driver in the 'U' release if CI is not fixed.
+    SUPPORTED = False
 
     MULTI_HOST_MAP_ERRORS = ['CMMVC6045E', 'CMMVC6071E']
 

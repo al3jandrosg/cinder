@@ -109,8 +109,17 @@ Contents:
    :maxdepth: 1
 
    configuration/index
-   reference/support-matrix
-   drivers
+
+.. toctree::
+   :maxdepth: 2
+   :titlesonly:
+   :includehidden:
+
+   drivers-all-about
+
+.. toctree::
+   :maxdepth: 1
+
    cli/index
 
 Additional resources
@@ -152,10 +161,13 @@ Contents:
 
    common/glossary.rst
 
-Indices and tables
-~~~~~~~~~~~~~~~~~~
 
-Contents:
+.. only:: html
 
-* :ref:`genindex`
-* :ref:`search`
+   Indices and tables
+   ~~~~~~~~~~~~~~~~~~
+
+   Contents:
+
+   * :ref:`genindex`
+   * :ref:`search`

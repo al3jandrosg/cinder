@@ -39,6 +39,7 @@ from cinder.objects import fields
 from cinder import quota
 from cinder import test
 from cinder.tests import fake_driver
+from cinder.tests.unit.api.v2 import fakes as v2_fakes
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import utils
 from cinder.volume import rpcapi as volume_rpcapi
@@ -1008,7 +1009,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertEqual('available', temp_vol['status'])
         self.assertEqual('fake_provider_id', temp_vol['provider_id'])
 
-    @mock.patch('cinder.volume.utils.notify_about_backup_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_backup_usage')
     def test_create_backup_with_notify(self, notify):
         """Test normal backup creation with notifications."""
         vol_size = 1
@@ -1020,7 +1021,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertEqual(2, notify.call_count)
 
     @mock.patch('cinder.volume.rpcapi.VolumeAPI.get_backup_device')
-    @mock.patch('cinder.volume.utils.clone_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.clone_encryption_key')
     @mock.patch('cinder.utils.brick_get_connector_properties')
     def test_create_backup_encrypted_volume(self,
                                             mock_connector_properties,
@@ -1048,7 +1049,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertEqual(fake.UUID2, backup.encryption_key_id)
 
     @mock.patch('cinder.volume.rpcapi.VolumeAPI.get_backup_device')
-    @mock.patch('cinder.volume.utils.clone_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.clone_encryption_key')
     @mock.patch('cinder.utils.brick_get_connector_properties')
     def test_create_backup_encrypted_volume_again(self,
                                                   mock_connector_properties,
@@ -1261,7 +1262,7 @@ class BackupTestCase(BaseBackupTest):
         backup = db.backup_get(self.ctxt, backup.id)
         self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
 
-    @mock.patch('cinder.volume.utils.notify_about_backup_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_backup_usage')
     def test_restore_backup_with_notify(self, notify):
         """Test normal backup restoration with notifications."""
         vol_size = 1
@@ -1274,8 +1275,8 @@ class BackupTestCase(BaseBackupTest):
         self.backup_mgr.restore_backup(self.ctxt, backup, vol_id)
         self.assertEqual(2, notify.call_count)
 
-    @mock.patch('cinder.volume.utils.clone_encryption_key')
-    @mock.patch('cinder.volume.utils.delete_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.clone_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.delete_encryption_key')
     @mock.patch(
         'cinder.tests.unit.backup.fake_service.FakeBackupService.restore')
     @mock.patch('cinder.utils.brick_get_connector_properties')
@@ -1307,8 +1308,8 @@ class BackupTestCase(BaseBackupTest):
         mock_clone_encryption_key.assert_not_called()
         mock_delete_encryption_key.assert_not_called()
 
-    @mock.patch('cinder.volume.utils.clone_encryption_key')
-    @mock.patch('cinder.volume.utils.delete_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.clone_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.delete_encryption_key')
     @mock.patch(
         'cinder.tests.unit.backup.fake_service.FakeBackupService.restore')
     @mock.patch('cinder.utils.brick_get_connector_properties')
@@ -1368,8 +1369,8 @@ class BackupTestCase(BaseBackupTest):
         backup = db.backup_get(self.ctxt, backup.id)
         self.assertEqual(fake.UUID2, backup.encryption_key_id)
 
-    @mock.patch('cinder.volume.utils.clone_encryption_key')
-    @mock.patch('cinder.volume.utils.delete_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.clone_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.delete_encryption_key')
     @mock.patch(
         'cinder.tests.unit.backup.fake_service.FakeBackupService.restore')
     @mock.patch('cinder.utils.brick_get_connector_properties')
@@ -1505,7 +1506,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertGreaterEqual(timeutils.utcnow(), backup.deleted_at)
         self.assertEqual(fields.BackupStatus.DELETED, backup.status)
 
-    @mock.patch('cinder.volume.utils.delete_encryption_key')
+    @mock.patch('cinder.volume.volume_utils.delete_encryption_key')
     def test_delete_backup_of_encrypted_volume(self,
                                                mock_delete_encryption_key):
         """Test deletion of backup of encrypted volume"""
@@ -1524,7 +1525,7 @@ class BackupTestCase(BaseBackupTest):
         self.assertTrue(backup.deleted)
         self.assertIsNone(backup.encryption_key_id)
 
-    @mock.patch('cinder.volume.utils.notify_about_backup_usage')
+    @mock.patch('cinder.volume.volume_utils.notify_about_backup_usage')
     def test_delete_backup_with_notify(self, notify):
         """Test normal backup deletion with notifications."""
         vol_id = self._create_volume_db_entry(size=1)
@@ -1794,179 +1795,6 @@ class BackupTestCase(BaseBackupTest):
         self.assertListEqual([], tpool._threads)
 
 
-class BackupTestCaseWithVerify(BaseBackupTest):
-    """Test Case for backups."""
-
-    def setUp(self):
-        self.override_config(
-            "backup_driver",
-            "cinder.tests.unit.backup.fake_service_with_verify."
-            "FakeBackupServiceWithVerify")
-        super(BackupTestCaseWithVerify, self).setUp()
-
-    def test_import_record_with_verify(self):
-        """Test normal backup record import.
-
-        Test the case when import succeeds for the case that the
-        driver implements verify.
-        """
-        vol_size = 1
-        backup_id = uuid.uuid4()
-        export = self._create_exported_record_entry(
-            vol_size=vol_size, exported_id=backup_id)
-        imported_record = self._create_export_record_db_entry(
-            backup_id=backup_id)
-        backup_hosts = []
-        backup_driver = self.backup_mgr.service(self.ctxt)
-        _mock_backup_verify_class = ('%s.%s.%s' %
-                                     (backup_driver.__module__,
-                                      backup_driver.__class__.__name__,
-                                      'verify'))
-
-        def mock_verify(backup_id):
-            backup = db.backup_get(self.ctxt, backup_id)
-            self.assertEqual(fields.BackupStatus.CREATING, backup['status'])
-
-        with mock.patch(_mock_backup_verify_class) as mock_backup_verify:
-            mock_backup_verify.side_effect = mock_verify
-            self.backup_mgr.import_record(self.ctxt,
-                                          imported_record,
-                                          export['backup_service'],
-                                          export['backup_url'],
-                                          backup_hosts)
-        backup = db.backup_get(self.ctxt, imported_record.id)
-        self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
-        self.assertEqual(vol_size, backup['size'])
-
-    def test_import_record_with_verify_invalid_backup(self):
-        """Test error handling.
-
-        Test error handling when attempting an import of a backup
-        record where the backup driver returns an exception.
-        """
-        vol_size = 1
-        backup_id = uuid.uuid4()
-        export = self._create_exported_record_entry(
-            vol_size=vol_size, exported_id=backup_id)
-        imported_record = self._create_export_record_db_entry(
-            backup_id=backup_id)
-        backup_hosts = []
-        backup_driver = self.backup_mgr.service(self.ctxt)
-        _mock_backup_verify_class = ('%s.%s.%s' %
-                                     (backup_driver.__module__,
-                                      backup_driver.__class__.__name__,
-                                      'verify'))
-        with mock.patch(_mock_backup_verify_class) as _mock_record_verify:
-            _mock_record_verify.side_effect = \
-                exception.InvalidBackup(reason='fake')
-
-            self.assertRaises(exception.InvalidBackup,
-                              self.backup_mgr.import_record,
-                              self.ctxt,
-                              imported_record,
-                              export['backup_service'],
-                              export['backup_url'],
-                              backup_hosts)
-            self.assertTrue(_mock_record_verify.called)
-        backup = db.backup_get(self.ctxt, imported_record.id)
-        self.assertEqual(fields.BackupStatus.ERROR, backup['status'])
-
-    @mock.patch.object(manager.BackupManager,
-                       '_cleanup_temp_volumes_snapshots_for_one_backup')
-    def test_backup_reset_status_from_nonrestoring_to_available(
-            self, mock_clean_temp):
-        service_name = ('cinder.tests.unit.backup.'
-                        'fake_service_with_verify.FakeBackupServiceWithVerify')
-        self.override_config('backup_driver', service_name)
-        self.backup_mgr.driver_name = service_name
-        vol_id = self._create_volume_db_entry(status='available',
-                                              size=1)
-        backup = self._create_backup_db_entry(status=fields.BackupStatus.ERROR,
-                                              volume_id=vol_id,
-                                              service=service_name)
-        self.backup_mgr.reset_status(self.ctxt,
-                                     backup,
-                                     fields.BackupStatus.AVAILABLE)
-        mock_clean_temp.assert_called_once_with(self.ctxt, backup)
-        new_backup = db.backup_get(self.ctxt, backup.id)
-        self.assertEqual(fields.BackupStatus.AVAILABLE,
-                         new_backup['status'])
-
-        self.backup_mgr.reset_status(self.ctxt,
-                                     backup,
-                                     fields.BackupStatus.ERROR)
-        mock_clean_temp.reset_mock()
-
-        self.backup_mgr.reset_status(self.ctxt,
-                                     backup,
-                                     fields.BackupStatus.AVAILABLE)
-        mock_clean_temp.assert_called_once_with(self.ctxt, backup)
-        backup = db.backup_get(self.ctxt, backup.id)
-        self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
-
-    def test_backup_reset_status_to_available_invalid_backup(self):
-        volume = db.volume_create(self.ctxt, {'status': 'available',
-                                              'host': 'test',
-                                              'provider_location': '',
-                                              'size': 1})
-        backup = self._create_backup_db_entry(status=fields.BackupStatus.ERROR,
-                                              volume_id=volume['id'])
-
-        backup_driver = self.backup_mgr.service(self.ctxt)
-        _mock_backup_verify_class = ('%s.%s.%s' %
-                                     (backup_driver.__module__,
-                                      backup_driver.__class__.__name__,
-                                      'verify'))
-        with mock.patch(_mock_backup_verify_class) as \
-                _mock_record_verify:
-            _mock_record_verify.side_effect = \
-                exception.BackupVerifyUnsupportedDriver(reason='fake')
-
-            self.assertRaises(exception.BackupVerifyUnsupportedDriver,
-                              self.backup_mgr.reset_status,
-                              self.ctxt,
-                              backup,
-                              fields.BackupStatus.AVAILABLE)
-            backup = db.backup_get(self.ctxt, backup.id)
-            self.assertEqual(fields.BackupStatus.ERROR, backup['status'])
-
-    @mock.patch.object(manager.BackupManager,
-                       '_cleanup_temp_volumes_snapshots_for_one_backup')
-    def test_backup_reset_status_from_restoring_to_available(
-            self, mock_clean_temp):
-        volume = db.volume_create(self.ctxt,
-                                  {'status': 'available',
-                                   'host': 'test',
-                                   'provider_location': '',
-                                   'size': 1})
-        backup = self._create_backup_db_entry(
-            status=fields.BackupStatus.RESTORING,
-            volume_id=volume['id'])
-
-        self.backup_mgr.reset_status(self.ctxt, backup,
-                                     fields.BackupStatus.AVAILABLE)
-        mock_clean_temp.assert_called_once_with(self.ctxt, backup)
-        backup = db.backup_get(self.ctxt, backup.id)
-        self.assertEqual(fields.BackupStatus.AVAILABLE, backup['status'])
-
-    @mock.patch.object(manager.BackupManager,
-                       '_cleanup_temp_volumes_snapshots_for_one_backup')
-    def test_backup_reset_status_to_error(self, mock_clean_temp):
-        volume = db.volume_create(self.ctxt,
-                                  {'status': 'available',
-                                   'host': 'test',
-                                   'provider_location': '',
-                                   'size': 1})
-        backup = self._create_backup_db_entry(
-            status=fields.BackupStatus.CREATING,
-            volume_id=volume['id'])
-        self.backup_mgr.reset_status(self.ctxt, backup,
-                                     fields.BackupStatus.ERROR)
-        mock_clean_temp.assert_called_once_with(self.ctxt, backup)
-        backup = db.backup_get(self.ctxt, backup['id'])
-        self.assertEqual(fields.BackupStatus.ERROR, backup['status'])
-
-
 @ddt.ddt
 class BackupAPITestCase(BaseBackupTest):
     def setUp(self):
@@ -2167,4 +1995,60 @@ class BackupAPITestCase(BaseBackupTest):
                           self.ctxt, 'fake_backup_url')
         mock_reserve.assert_called_with(
             self.ctxt, backups=1, backup_gigabytes=1)
+        mock_rollback.assert_called_with(self.ctxt, "fake_reservation")
+
+    @mock.patch('cinder.db.backup_get_all_by_volume')
+    @mock.patch('cinder.backup.rpcapi.BackupAPI.create_backup')
+    @mock.patch.object(api.API, '_get_available_backup_service_host',
+                       return_value='fake_host')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
+    def test_create_backup_failed_with_empty_backup_objects(
+            self, mock_reserve, mock_rollback, mock_get_service,
+            mock_create, mock_get_backups):
+        mock_get_backups.return_value = [v2_fakes.fake_backup('fake-1')]
+        backups = objects.BackupList.get_all_by_volume(self.ctxt,
+                                                       fake.VOLUME_ID)
+        backups.objects = []
+        is_incremental = True
+        self.ctxt.user_id = 'fake_user'
+        self.ctxt.project_id = 'fake_project'
+        mock_reserve.return_value = 'fake_reservation'
+
+        volume_id = self._create_volume_db_entry(status='available',
+                                                 host='testhost#rbd',
+                                                 size=1)
+        self.assertRaises(exception.InvalidBackup,
+                          self.api.create,
+                          self.ctxt,
+                          None, None,
+                          volume_id, None,
+                          incremental=is_incremental)
+        mock_rollback.assert_called_with(self.ctxt, "fake_reservation")
+
+    @mock.patch('cinder.db.backup_get_all_by_volume',
+                return_value=[v2_fakes.fake_backup('fake-1')])
+    @mock.patch('cinder.backup.rpcapi.BackupAPI.create_backup')
+    @mock.patch.object(api.API, '_get_available_backup_service_host',
+                       return_value='fake_host')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
+    def test_create_backup_failed_with_backup_status_not_available(
+            self, mock_reserve, mock_rollback, mock_get_service,
+            mock_createi, mock_get_backups):
+
+        is_incremental = True
+        self.ctxt.user_id = 'fake_user'
+        self.ctxt.project_id = 'fake_project'
+        mock_reserve.return_value = 'fake_reservation'
+
+        volume_id = self._create_volume_db_entry(status='available',
+                                                 host='testhost#rbd',
+                                                 size=1)
+        self.assertRaises(exception.InvalidBackup,
+                          self.api.create,
+                          self.ctxt,
+                          None, None,
+                          volume_id, None,
+                          incremental=is_incremental)
         mock_rollback.assert_called_with(self.ctxt, "fake_reservation")

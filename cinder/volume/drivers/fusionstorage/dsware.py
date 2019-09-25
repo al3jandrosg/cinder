@@ -26,7 +26,7 @@ from cinder.volume import driver
 from cinder.volume.drivers.fusionstorage import fs_client
 from cinder.volume.drivers.fusionstorage import fs_conf
 from cinder.volume.drivers.san import san
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -109,6 +109,9 @@ CONF.register_opts(volume_opts)
 class DSWAREDriver(driver.VolumeDriver):
     VERSION = '2.0'
     CI_WIKI_NAME = 'Huawei_FusionStorage_CI'
+
+    # TODO(jsbryant) Remove driver in the 'U' release due to no py37 support.
+    SUPPORTED = False
 
     def __init__(self, *args, **kwargs):
         super(DSWAREDriver, self).__init__(*args, **kwargs)

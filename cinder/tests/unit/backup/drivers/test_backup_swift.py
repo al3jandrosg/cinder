@@ -126,7 +126,7 @@ class BackupSwiftTestCase(test.TestCase):
             self.size_volume_file += 1024
 
         notify_patcher = mock.patch(
-            'cinder.volume.utils.notify_about_backup_usage')
+            'cinder.volume.volume_utils.notify_about_backup_usage')
         notify_patcher.start()
         self.addCleanup(notify_patcher.stop)
 
@@ -304,6 +304,15 @@ class BackupSwiftTestCase(test.TestCase):
         volume_id = '2b9f10a3-42b4-4fdf-b316-000000ceb039'
         self._create_backup_db_entry(volume_id=volume_id)
         self.flags(backup_compression_algorithm='none')
+        service = swift_dr.SwiftBackupDriver(self.ctxt)
+        self.volume_file.seek(0)
+        backup = objects.Backup.get_by_id(self.ctxt, fake.BACKUP_ID)
+        service.backup(backup, self.volume_file)
+
+    def test_backup_uncompressed_casing(self):
+        volume_id = '2b9f10a3-42b4-dead-b316-000000ceb039'
+        self._create_backup_db_entry(volume_id=volume_id)
+        self.flags(backup_compression_algorithm='None')
         service = swift_dr.SwiftBackupDriver(self.ctxt)
         self.volume_file.seek(0)
         backup = objects.Backup.get_by_id(self.ctxt, fake.BACKUP_ID)

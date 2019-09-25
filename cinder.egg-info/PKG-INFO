@@ -1,6 +1,6 @@
-Metadata-Version: 1.1
+Metadata-Version: 2.1
 Name: cinder
-Version: 14.1.0.dev369
+Version: 14.1.0.dev551
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -26,6 +26,7 @@ Description: ========================
         * Developer docs: https://docs.openstack.org/cinder/latest/
         * Blueprints: https://blueprints.launchpad.net/cinder
         * Release notes: https://docs.openstack.org/releasenotes/cinder/
+        * Design specifications: https://specs.openstack.org/openstack/cinder-specs/
         
         Getting Started
         ---------------
@@ -56,3 +57,17 @@ Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
+Provides-Extra: all
+Provides-Extra: datacore
+Provides-Extra: ds8k
+Provides-Extra: fujitsu
+Provides-Extra: hpe3par
+Provides-Extra: infinidat
+Provides-Extra: kaminario
+Provides-Extra: powermax
+Provides-Extra: pure
+Provides-Extra: rsd
+Provides-Extra: storpool
+Provides-Extra: test
+Provides-Extra: unity
+Provides-Extra: vnx

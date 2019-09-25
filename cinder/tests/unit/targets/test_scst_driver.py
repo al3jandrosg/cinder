@@ -16,7 +16,7 @@ from cinder import context
 from cinder.tests.unit.targets import targets_fixture as tf
 from cinder import utils
 from cinder.volume.targets import scst
-from cinder.volume import utils as vutils
+from cinder.volume import volume_utils
 
 
 class TestSCSTAdmDriver(tf.TargetDriverFixture):
@@ -163,9 +163,9 @@ class TestSCSTAdmDriver(tf.TargetDriverFixture):
                                   side_effect=_fake_iscsi_location),\
                 mock.patch.object(self.target, 'target_driver',
                                   return_value='iscsi'),\
-                mock.patch.object(vutils, 'generate_username',
+                mock.patch.object(volume_utils, 'generate_username',
                                   side_effect=lambda: 'QZJbisGmn9AL954FNF4D'),\
-                mock.patch.object(vutils, 'generate_password',
+                mock.patch.object(volume_utils, 'generate_password',
                                   side_effect=lambda: 'P68eE7u9eFqDGexd28DQ'):
             self.assertEqual(expected_result,
                              self.target.create_export(ctxt,
@@ -231,3 +231,16 @@ class TestSCSTAdmDriver(tf.TargetDriverFixture):
                 'iqn.2010-10.org.openstack:testvol',
                 'ed2c2222-5fc0-11e4-aa15-123b93f75cba',
                 0, 1, self.fake_volumes_dir, None)
+
+    def test_iscsi_location(self):
+        location = self.target._iscsi_location('portal', 1, 'target', 2)
+        self.assertEqual('portal:3260,1 target 2', location)
+
+    def test_iscsi_location_IPv6(self):
+        ip = 'fd00:fd00:fd00:3000::12'
+        location = self.target._iscsi_location(ip, 1, 'target', 2)
+        self.assertEqual('[%s]:3260,1 target 2' % ip, location)
+
+        ip = '[' + ip + ']'
+        location = self.target._iscsi_location(ip, 1, 'target', 2)
+        self.assertEqual(ip + ':3260,1 target 2', location)

@@ -61,8 +61,8 @@ from cinder import utils
 from cinder.volume.flows.api import create_volume
 from cinder.volume.flows.api import manage_existing
 from cinder.volume import rpcapi as volume_rpcapi
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 allow_force_upload_opt = cfg.BoolOpt('enable_force_upload',
                                      default=False,
@@ -198,6 +198,12 @@ class API(base.Base):
     def _is_multiattach(self, volume_type):
         specs = getattr(volume_type, 'extra_specs', {})
         return specs.get('multiattach', 'False') == '<is> True'
+
+    def _is_encrypted(self, volume_type):
+        specs = volume_type.get('extra_specs', {})
+        if 'encryption' not in specs:
+            return False
+        return specs.get('encryption', {}) is not {}
 
     def create(self, context, size, name, description, snapshot=None,
                image_id=None, volume_type=None, metadata=None,
@@ -1310,6 +1316,13 @@ class API(base.Base):
                     pass
 
             recv_metadata = self.image_service.create(context, metadata)
+
+            # NOTE(ZhengMa): Check if allow image compression before image
+            # uploading
+            if recv_metadata.get('container_format') == 'compressed':
+                allow_compression = CONF.allow_compression_on_image_upload
+                if allow_compression is False:
+                    raise exception.ImageCompressionNotAllowed()
         except Exception:
             # NOTE(geguileo): To mimic behavior before conditional_update we
             # will rollback status if image create fails
@@ -1642,6 +1655,11 @@ class API(base.Base):
             if tgt_is_multiattach:
                 context.authorize(vol_policy.MULTIATTACH_POLICY,
                                   target_obj=volume)
+
+        if tgt_is_multiattach and self._is_encrypted(new_type):
+            msg = ('Retype requested both encryption and multi-attach, '
+                   'which is not supported.')
+            raise exception.InvalidInput(reason=msg)
 
         # We're checking here in so that we can report any quota issues as
         # early as possible, but won't commit until we change the type. We

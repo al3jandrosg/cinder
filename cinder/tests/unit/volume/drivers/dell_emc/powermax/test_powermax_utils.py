@@ -31,8 +31,8 @@ from cinder.tests.unit.volume.drivers.dell_emc.powermax import (
 from cinder.volume.drivers.dell_emc.powermax import iscsi
 from cinder.volume.drivers.dell_emc.powermax import rest
 from cinder.volume.drivers.dell_emc.powermax import utils
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 
 @ddt
@@ -500,3 +500,63 @@ class PowerMaxUtilsTest(test.TestCase):
         device_info_fail = self.data.volume_details_no_sg
         hostname = self.utils.get_volume_attached_hostname(device_info_fail)
         self.assertIsNone(hostname)
+
+    def test_validate_qos_input_exception(self):
+        qos_extra_spec = {'total_iops_sec': 90, 'DistributionType': 'Wrong',
+                          'total_bytes_sec': 100}
+        input_key = 'total_iops_sec'
+        sg_value = 4000
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_qos_input, input_key, sg_value,
+                          qos_extra_spec, {})
+        input_key = 'total_bytes_sec'
+        sg_value = 4000
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_qos_input, input_key, sg_value,
+                          qos_extra_spec, {})
+
+    def test_validate_qos_distribution_type(self):
+        qos_extra_spec = {'total_iops_sec': 4000, 'DistributionType': 'Always',
+                          'total_bytes_sec': 4194304000}
+        input_prop_dict = {'total_iops_sec': 4000}
+        sg_value = 'Always'
+        ret_prop_dict = self.utils.validate_qos_distribution_type(
+            sg_value, qos_extra_spec, input_prop_dict)
+        self.assertEqual(input_prop_dict, ret_prop_dict)
+
+    def test_compare_cylinders(self):
+        source_cylinders = '12345'
+        target_cylinders = '12345'
+        self.utils.compare_cylinders(source_cylinders, target_cylinders)
+
+    def test_compare_cylinders_target_larger(self):
+        source_cylinders = '12345'
+        target_cylinders = '12346'
+        self.utils.compare_cylinders(source_cylinders, target_cylinders)
+
+    def test_compare_cylinders_source_larger(self):
+        source_cylinders = '12347'
+        target_cylinders = '12346'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.compare_cylinders, source_cylinders,
+                          target_cylinders)
+
+    def test_get_grp_volume_model_update(self):
+        volume = self.data.test_volume
+        volume_dict = self.data.provider_location
+        group_id = self.data.gvg_group_id
+        metadata = self.data.volume_metadata
+
+        ref_model_update_meta = {
+            'id': volume.id, 'status': 'available', 'metadata': metadata,
+            'provider_location': six.text_type(volume_dict)}
+        act_model_update_meta = self.utils.get_grp_volume_model_update(
+            volume, volume_dict, group_id, metadata)
+        self.assertEqual(ref_model_update_meta, act_model_update_meta)
+
+        ref_model_update_no_meta = {
+            'id': volume.id, 'status': 'available',
+            'provider_location': six.text_type(volume_dict)}
+        act_model_update_no_meta = self.utils.get_grp_volume_model_update(
+            volume, volume_dict, group_id)
+        self.assertEqual(ref_model_update_no_meta, act_model_update_no_meta)

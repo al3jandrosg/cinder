@@ -37,8 +37,8 @@ from cinder.volume.drivers.dell_emc.powermax import metadata as volume_metadata
 from cinder.volume.drivers.dell_emc.powermax import provision
 from cinder.volume.drivers.dell_emc.powermax import rest
 from cinder.volume.drivers.dell_emc.powermax import utils
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 LOG = logging.getLogger(__name__)
 
 CONF = cfg.CONF
@@ -74,14 +74,6 @@ powermax_opts = [
                 default=False,
                 help='Use this value to enable '
                      'the initiator_check.'),
-    cfg.PortOpt(utils.VMAX_SERVER_PORT_OLD,
-                deprecated_for_removal=True,
-                deprecated_since="13.0.0",
-                deprecated_reason='Unisphere port should now be '
-                                  'set using the common san_api_port '
-                                  'config option instead.',
-                default=8443,
-                help='REST server port number.'),
     cfg.StrOpt(utils.VMAX_ARRAY,
                help='DEPRECATED: vmax_array.',
                deprecated_for_removal=True,
@@ -187,13 +179,14 @@ class PowerMaxCommon(object):
         self.next_gen = False
         self.replication_enabled = False
         self.extend_replicated_vol = False
-        self.rep_devices = None
+        self.rep_devices = []
         self.failover = False
 
         # Gather environment info
         self._get_replication_info()
         self._get_u4p_failover_info()
         self._gather_info()
+        self.rest.validate_unisphere_version()
 
     def _gather_info(self):
         """Gather the relevant information for update_volume_stats."""
@@ -229,10 +222,8 @@ class PowerMaxCommon(object):
         self.pool_info['reserved_percentage'] = (
             self.configuration.safe_get('reserved_percentage'))
         LOG.debug(
-            "Updating volume stats on file %(emcConfigFileName)s on "
-            "backend %(backendName)s.",
-            {'emcConfigFileName': self.pool_info['config_file'],
-             'backendName': self.pool_info['backend_name']})
+            "Updating volume stats on Cinder backend %(backendName)s.",
+            {'backendName': self.pool_info['backend_name']})
 
     def _get_u4p_failover_info(self):
         """Gather Unisphere failover target information, if provided."""
@@ -322,7 +313,7 @@ class PowerMaxCommon(object):
     def _get_replication_info(self):
         """Gather replication information, if provided."""
         self.rep_config = None
-        self.replication_targets = None
+        self.replication_targets = []
         if hasattr(self.configuration, 'replication_device'):
             self.rep_devices = self.configuration.safe_get(
                 'replication_device')
@@ -459,8 +450,12 @@ class PowerMaxCommon(object):
                 group_name = self._add_new_volume_to_volume_group(
                     volume, volume_dict['device_id'], volume_name,
                     extra_specs, rep_driver_data)
+
         model_update.update(
             {'provider_location': six.text_type(volume_dict)})
+        model_update = self.update_metadata(
+            model_update, volume.metadata, self.get_volume_metadata(
+                volume_dict['array'], volume_dict['device_id']))
 
         self.volume_metadata.capture_create_volume(
             volume_dict['device_id'], volume, group_name, group_id,
@@ -525,7 +520,9 @@ class PowerMaxCommon(object):
 
         model_update.update(
             {'provider_location': six.text_type(clone_dict)})
-
+        model_update = self.update_metadata(
+            model_update, volume.metadata, self.get_volume_metadata(
+                clone_dict['array'], clone_dict['device_id']))
         self.volume_metadata.capture_create_volume(
             clone_dict['device_id'], volume, None, None,
             extra_specs, rep_info_dict, 'createFromSnapshot',
@@ -553,6 +550,9 @@ class PowerMaxCommon(object):
 
         model_update.update(
             {'provider_location': six.text_type(clone_dict)})
+        model_update = self.update_metadata(
+            model_update, clone_volume.metadata, self.get_volume_metadata(
+                clone_dict['array'], clone_dict['device_id']))
         self.volume_metadata.capture_create_volume(
             clone_dict['device_id'], clone_volume, None, None,
             extra_specs, rep_info_dict, 'createFromVolume',
@@ -609,9 +609,19 @@ class PowerMaxCommon(object):
         extra_specs = self._initial_setup(volume)
         snapshot_dict = self._create_cloned_volume(
             snapshot, volume, extra_specs, is_snapshot=True)
+
+        model_update = {
+            'provider_location': six.text_type(snapshot_dict)}
+        model_update = self.update_metadata(
+            model_update, snapshot.metadata, self.get_snapshot_metadata(
+                extra_specs['array'], snapshot_dict['source_id'],
+                snapshot_dict['snap_name']))
+        if snapshot.metadata:
+            model_update['metadata'].update(snapshot.metadata)
+
         self.volume_metadata.capture_snapshot_info(
             volume, extra_specs, 'createSnapshot', snapshot_dict['snap_name'])
-        model_update = {'provider_location': six.text_type(snapshot_dict)}
+
         return model_update
 
     def delete_snapshot(self, snapshot, volume):
@@ -1071,8 +1081,8 @@ class PowerMaxCommon(object):
         :param rep_enabled: if replication is enabled for backend
         :returns: r1_ode: (bool) If R1 array supports ODE
         :returns: r1_ode_metro: (bool) If R1 array supports ODE with Metro vols
-        :returns: r2_ode: (bool) If R1 array supports ODE
-        :returns: r2_ode_metro: (bool) If R1 array supports ODE with Metro vols
+        :returns: r2_ode: (bool) If R2 array supports ODE
+        :returns: r2_ode_metro: (bool) If R2 array supports ODE with Metro vols
         """
         r1_ucode = self.ucode_level.split('.')
         r1_ode, r1_ode_metro = False, False
@@ -1741,11 +1751,9 @@ class PowerMaxCommon(object):
                 foundsnap_name = None
 
         if foundsnap_name is None or sourcedevice_id is None:
-            exception_message = (_("Error retrieving snapshot details. "
-                                   "Snapshot name: %(snap)s") %
-                                 {'snap': volume_name})
-            LOG.error(exception_message)
-
+            LOG.debug("Error retrieving snapshot details. "
+                      "Snapshot name: %(snap)s",
+                      {'snap': volume_name})
         else:
             LOG.debug("Source volume: %(volume_name)s  Snap name: "
                       "%(foundsnap_name)s.",
@@ -1811,6 +1819,12 @@ class PowerMaxCommon(object):
         # Remove from any storage groups and cleanup replication
         self._remove_vol_and_cleanup_replication(
             array, device_id, volume_name, extra_specs, volume)
+        # Check if volume is in any storage group
+        sg_list = self.rest.get_storage_groups_from_volume(array, device_id)
+        if sg_list:
+            LOG.error("Device %(device_id)s is in storage group(s) "
+                      "%(sg_list)s prior to delete. Delete will fail.",
+                      {'device_id': device_id, 'sg_list': sg_list})
         self._delete_from_srp(
             array, device_id, volume_name, extra_specs)
         return volume_name
@@ -2007,12 +2021,6 @@ class PowerMaxCommon(object):
             self.provision.delete_volume_from_srp(
                 array, device_id, volume_name)
         except Exception as e:
-            # If we cannot successfully delete the volume, then we want to
-            # return the volume to the default storage group,
-            # which should be the SG it previously belonged to.
-            self.masking.add_volume_to_default_storage_group(
-                array, device_id, volume_name, extra_specs)
-
             error_message = (_("Failed to delete volume %(volume_name)s. "
                                "Exception received: %(e)s") %
                              {'volume_name': volume_name,
@@ -2174,13 +2182,21 @@ class PowerMaxCommon(object):
         clone_id = clone_volume.id
         clone_name = self.utils.get_volume_element_name(clone_id)
         create_snap = False
+
+        volume_dict = self.rest.get_volume(array, source_device_id)
         # PowerMax/VMAX supports using a target volume that is bigger than
         # the source volume, so we create the target volume the desired
         # size at this point to avoid having to extend later
         try:
             clone_dict = self._create_volume(
                 clone_name, clone_volume.size, extra_specs)
+
             target_device_id = clone_dict['device_id']
+            if target_device_id:
+                clone_volume_dict = self.rest.get_volume(
+                    array, target_device_id)
+                self.utils.compare_cylinders(
+                    volume_dict['cap_cyl'], clone_volume_dict['cap_cyl'])
             LOG.info("The target device id is: %(device_id)s.",
                      {'device_id': target_device_id})
             if not snap_name:
@@ -2197,7 +2213,8 @@ class PowerMaxCommon(object):
                             {'cloneName': clone_name, 'e': e})
                 self._cleanup_target(
                     array, target_device_id, source_device_id,
-                    clone_name, snap_name, extra_specs)
+                    clone_name, snap_name, extra_specs,
+                    target_volume=clone_volume)
                 # Re-throw the exception.
             raise
         # add source id and snap_name to the clone dict
@@ -2207,7 +2224,8 @@ class PowerMaxCommon(object):
 
     def _cleanup_target(
             self, array, target_device_id, source_device_id,
-            clone_name, snap_name, extra_specs, generation=0):
+            clone_name, snap_name, extra_specs, generation=0,
+            target_volume=None):
         """Cleanup target volume on failed clone/ snapshot creation.
 
         :param array: the array serial number
@@ -2216,6 +2234,7 @@ class PowerMaxCommon(object):
         :param clone_name: the name of the clone volume
         :param extra_specs: the extra specifications
         :param generation: the generation number of the snapshot
+        :param target_volume: the target volume object
         """
         snap_session = self.rest.get_sync_session(
             array, source_device_id, snap_name, target_device_id, generation)
@@ -2223,9 +2242,12 @@ class PowerMaxCommon(object):
             self.provision.break_replication_relationship(
                 array, target_device_id, source_device_id,
                 snap_name, extra_specs, generation)
+        self._remove_vol_and_cleanup_replication(
+            array, target_device_id, clone_name, extra_specs, target_volume)
         self._delete_from_srp(
             array, target_device_id, clone_name, extra_specs)
 
+    @retry(retry_exc_tuple, interval=1, retries=3)
     def _sync_check(self, array, device_id, extra_specs,
                     tgt_only=False, source_device_id=None):
         """Check if volume is part of a SnapVx sync process.
@@ -2239,19 +2261,26 @@ class PowerMaxCommon(object):
         """
         if not source_device_id and tgt_only:
             source_device_id = self._get_target_source_device(
-                array, device_id, tgt_only)
+                array, device_id)
         if source_device_id:
-            @coordination.synchronized("emc-source-{source_device_id}")
-            def do_unlink_and_delete_snap(source_device_id):
+            @coordination.synchronized("emc-source-{src_device_id}")
+            def do_unlink_and_delete_snap(src_device_id):
+                # Check if source device exists on the array
+                try:
+                    self.rest.get_volume(array, src_device_id)
+                except exception.VolumeBackendAPIException:
+                    LOG.debug("Device %(device_id)s not found on array, no "
+                              "sync check required.",
+                              {'device_id': src_device_id})
+                    return
                 self._do_sync_check(
-                    array, device_id, extra_specs, tgt_only)
+                    array, src_device_id, extra_specs, tgt_only)
 
             do_unlink_and_delete_snap(source_device_id)
         else:
             self._do_sync_check(
                 array, device_id, extra_specs, tgt_only)
 
-    @retry(retry_exc_tuple, interval=2, retries=2)
     def _do_sync_check(
             self, array, device_id, extra_specs, tgt_only=False):
         """Check if volume is part of a SnapVx sync process.
@@ -2262,92 +2291,82 @@ class PowerMaxCommon(object):
         :param extra_specs: extra specifications
         :param tgt_only: Flag to specify if it is a target
         """
-        get_sessions = False
         snapvx_tgt, snapvx_src, __ = self.rest.is_vol_in_rep_session(
             array, device_id)
-        if snapvx_tgt:
-            get_sessions = True
-        elif snapvx_src and not tgt_only:
-            get_sessions = True
-        if get_sessions:
-            snap_vx_sessions = self.rest.find_snap_vx_sessions(
-                array, device_id, tgt_only)
-            if snap_vx_sessions:
-                snap_vx_sessions.sort(
-                    key=lambda k: k['generation'], reverse=True)
-                for session in snap_vx_sessions:
-                    try:
-                        self._unlink_targets_and_delete_temp_snapvx(
-                            session, array, extra_specs)
-                    except Exception:
-                        exception_message = _(
-                            "Will retry one more time.")
+        get_sessions = True if snapvx_tgt or snapvx_src else False
 
-                        LOG.warning(exception_message)
-                        raise exception.VolumeBackendAPIException(
-                            exception_message)
+        if get_sessions:
+            src_sessions, tgt_session = self.rest.find_snap_vx_sessions(
+                array, device_id, tgt_only)
+            if tgt_session:
+                self._unlink_targets_and_delete_temp_snapvx(
+                    tgt_session, array, extra_specs)
+            if src_sessions and not tgt_only:
+                src_sessions.sort(key=lambda k: k['generation'], reverse=True)
+                for session in src_sessions:
+                    self._unlink_targets_and_delete_temp_snapvx(
+                        session, array, extra_specs)
 
     def _unlink_targets_and_delete_temp_snapvx(
             self, session, array, extra_specs):
-        """unlink targets and delete the temporary snapvx
+        """Unlink target and delete the temporary snapvx if valid candidate.
 
         :param session: the snapvx session
         :param array: the array serial number
         :param extra_specs: extra specifications
         """
-        source = session['source_vol']
         snap_name = session['snap_name']
-        targets = session['target_vol_list']
+        source = session['source_vol_id']
         generation = session['generation']
-        for target in targets:
-            LOG.debug("Unlinking source from target. Source: "
-                      "%(volume)s, Target: %(target)s, "
-                      "generation: %(generation)s.",
-                      {'volume': source, 'target': target[0],
-                       'generation': generation})
+        expired = session['expired']
+
+        target, cm_enabled = None, False
+        if session.get('target_vol_id'):
+            target = session['target_vol_id']
+            cm_enabled = session['copy_mode']
+
+        if target:
+            loop = True if cm_enabled else False
+            LOG.debug(
+                "Unlinking source from target. Source: %(vol)s, Target: "
+                "%(tgt)s, Generation: %(gen)s.", {'vol': source, 'tgt': target,
+                                                  'gen': generation})
             self.provision.break_replication_relationship(
-                array, target[0], source, snap_name,
-                extra_specs, generation)
-        # The snapshot name will only have 'temp' (or EMC_SMI for
-        # legacy volumes) if it is a temporary volume.
-        # Only then is it a candidate for deletion.
-        if 'temp' in snap_name or 'EMC_SMI' in snap_name:
-            LOG.debug("Deleting temporary snapshot. Source: "
-                      "%(volume)s, snap name: %(snap_name)s, "
-                      "generation: %(generation)s.",
-                      {'volume': source, 'snap_name': snap_name,
-                       'generation': generation})
+                array, target, source, snap_name, extra_specs, generation,
+                loop)
+
+        # Candidates for deletion:
+        # 1. If legacy snapshot with 'EMC_SMI' in snapshot name
+        # 2. If snapVX snapshot with copy mode enabled
+        # 3. If snapVX snapshot with copy mode disabled and not expired
+        if ('EMC_SMI' in snap_name or cm_enabled or (
+                not cm_enabled and not expired)):
+            LOG.debug(
+                "Deleting temporary snapshot. Source: %(vol)s, snap name: "
+                "%(name)s, generation: %(gen)s.", {
+                    'vol': source, 'name': snap_name, 'gen': generation})
             self.provision.delete_temp_volume_snap(
                 array, snap_name, source, generation)
 
-    def _get_target_source_device(
-            self, array, device_id, tgt_only=False):
+    def _get_target_source_device(self, array, device_id):
         """Get the source device id of the target.
 
         :param array: the array serial number
         :param device_id: volume instance
-        :param tgt_only: Flag - return only sessions where device is target
         return source_device_id
         """
-        LOG.debug("Getting source device id from target %(target)s.",
-                  {'target': device_id})
-        get_sessions = False
+        LOG.debug("Getting the source device ID for target device %(tgt)s",
+                  {'tgt': device_id})
         source_device_id = None
-        snapvx_tgt, snapvx_src, __ = self.rest.is_vol_in_rep_session(
+        snapvx_tgt, __, __ = self.rest.is_vol_in_rep_session(
             array, device_id)
         if snapvx_tgt:
-            get_sessions = True
-        elif snapvx_src and not tgt_only:
-            get_sessions = True
-        if get_sessions:
-            snap_vx_sessions = self.rest.find_snap_vx_sessions(
-                array, device_id, tgt_only)
-            if snap_vx_sessions:
-                snap_vx_sessions.sort(
-                    key=lambda k: k['generation'], reverse=True)
-                for session in snap_vx_sessions:
-                    source_device_id = session['source_vol']
-                    break
+            __, tgt_session = self.rest.find_snap_vx_sessions(
+                array, device_id, tgt_only=True)
+            source_device_id = tgt_session['source_vol_id']
+            LOG.debug("Target %(tgt)s source device %(src)s",
+                      {'target': device_id, 'src': source_device_id})
+
         return source_device_id
 
     def _clone_check(self, array, device_id, extra_specs):
@@ -2359,86 +2378,51 @@ class PowerMaxCommon(object):
         """
         snapvx_tgt, snapvx_src, __ = self.rest.is_vol_in_rep_session(
             array, device_id)
+
         if snapvx_src or snapvx_tgt:
             @coordination.synchronized("emc-source-{src_device_id}")
             def do_unlink_and_delete_snap(src_device_id):
-                snap_vx_sessions = self.rest.find_snap_vx_sessions(
+                src_sessions, tgt_session = self.rest.find_snap_vx_sessions(
                     array, src_device_id)
-                if snap_vx_sessions:
-                    snap_vx_sessions.sort(
+                count = 0
+                if tgt_session and count < self.snapvx_unlink_limit:
+                    self._delete_valid_snapshot(array, tgt_session,
+                                                extra_specs)
+                    count += 1
+                if src_sessions:
+                    src_sessions.sort(
                         key=lambda k: k['generation'], reverse=True)
-                    self._break_relationship(
-                        snap_vx_sessions, snapvx_tgt, src_device_id, array,
-                        extra_specs)
+                    for session in src_sessions:
+                        if count < self.snapvx_unlink_limit:
+                            self._delete_valid_snapshot(array, session,
+                                                        extra_specs)
+                            count += 1
+                        else:
+                            break
 
             do_unlink_and_delete_snap(device_id)
 
-    def _break_relationship(
-            self, snap_vx_sessions, snapvx_tgt, snapvx_src, array,
-            extra_specs):
-        """Break relationship and cleanup
+    def _delete_valid_snapshot(self, array, session, extra_specs):
+        """Delete a snapshot if valid candidate for deletion.
 
-        :param snap_vx_sessions: the snapvx sessions
-        :param snapvx_tgt: the snapvx target
-        :param snapvx_src: the snapvx source
-        :param array: the serialnumber of the array
-        :param extra_specs: extra specifications
-        """
-        count = 0
-        for session in snap_vx_sessions:
-            snap_name = session['snap_name']
-            targets = session['target_vol_list']
-            # Only unlink a set number of targets
-            if count == self.snapvx_unlink_limit:
-                break
-            is_temp = False
-            is_temp = 'temp' in snap_name or 'EMC_SMI' in snap_name
-            if utils.CLONE_SNAPSHOT_NAME in snap_name:
-                is_temp = False
-            for target in targets:
-                if snapvx_src:
-                    if not is_temp and target[1] == "Copied":
-                        # Break the replication relationship
-                        LOG.debug("Unlinking source from "
-                                  "target. Source: %(volume)s, "
-                                  "Target: %(target)s.",
-                                  {'volume': session['source_vol'],
-                                   'target': target[0]})
-                        self.provision.break_replication_relationship(
-                            array, target[0], session['source_vol'],
-                            snap_name, extra_specs,
-                            session['generation'])
-                        count = count + 1
-                elif snapvx_tgt:
-                    # If our device is a target, we need to wait
-                    # and then unlink
-                    self._break_relationship_snapvx_tgt(
-                        session, target, is_temp, array, extra_specs)
-
-    def _break_relationship_snapvx_tgt(
-            self, session, target, is_temp, array, extra_specs):
-        """Break relationship of the snapvx target and cleanup
-
+        :param array: the array serial
         :param session: the snapvx session
-        :param target: the snapvx target
-        :param is_temp: is the snapshot temporary
-        :param array: the serialnumber of the array
         :param extra_specs: extra specifications
         """
-        LOG.debug("Unlinking source from "
-                  "target. Source: %(volume)s, "
-                  "Target: %(target)s.",
-                  {'volume': session['source_vol'],
-                   'target': target[0]})
-        self.provision.break_replication_relationship(
-            array, target[0], session['source_vol'], session['snap_name'],
-            extra_specs, session['generation'])
-        # For older styled temp snapshots for clone
-        # do a delete as well
-        if is_temp:
-            self.provision.delete_temp_volume_snap(
-                array, session['snap_name'], session['source_vol'],
-                session['generation'])
+        is_legacy = 'EMC_SMI' in session['snap_name']
+        is_temp = utils.CLONE_SNAPSHOT_NAME in session['snap_name']
+        is_expired = session['expired']
+        is_valid = True if is_legacy or (is_temp and is_expired) else False
+        if is_valid:
+            try:
+                self._unlink_targets_and_delete_temp_snapvx(
+                    session, array, extra_specs)
+            except exception.VolumeBackendAPIException as e:
+                # Ignore and continue as snapshot has been unlinked
+                # successfully with incorrect status code returned
+                if ('404' and session['snap_name'] and
+                        'does not exist' in six.text_type(e)):
+                    pass
 
     def manage_existing(self, volume, external_ref):
         """Manages an existing PowerMax/VMAX Volume (import to Cinder).
@@ -2498,6 +2482,10 @@ class PowerMaxCommon(object):
                 self.rest.rename_volume(array, device_id, orig_vol_name)
                 raise exception.VolumeBackendAPIException(
                     message=exception_message)
+
+        model_update = self.update_metadata(
+            model_update, volume.metadata, self.get_volume_metadata(
+                array, device_id))
 
         self.volume_metadata.capture_manage_existing(
             volume, rep_info_dict, device_id, extra_specs)
@@ -2719,9 +2707,12 @@ class PowerMaxCommon(object):
                 message=exception_message)
 
         prov_loc = {'source_id': device_id, 'snap_name': snap_backend_name}
-
-        updates = {'display_name': snap_display_name,
-                   'provider_location': six.text_type(prov_loc)}
+        model_update = {
+            'display_name': snap_display_name,
+            'provider_location': six.text_type(prov_loc)}
+        model_update = self.update_metadata(
+            model_update, snapshot.metadata, self.get_snapshot_metadata(
+                array, device_id, snap_backend_name))
 
         LOG.info("Managing SnapVX Snapshot %(snap_name)s of source "
                  "volume %(device_id)s, OpenStack Snapshot display name: "
@@ -2729,7 +2720,7 @@ class PowerMaxCommon(object):
                      'snap_name': snap_name, 'device_id': device_id,
                      'snap_display_name': snap_display_name})
 
-        return updates
+        return model_update
 
     def manage_existing_snapshot_get_size(self, snapshot):
         """Return the size of the source volume for manage-existing-snapshot.
@@ -3212,6 +3203,10 @@ class PowerMaxCommon(object):
                     model_update = {
                         'replication_status': rep_status,
                         'replication_driver_data': six.text_type(rdf_dict)}
+                    model_update = self.update_metadata(
+                        model_update, volume.metadata,
+                        self.get_volume_metadata(array, device_id))
+
                     return True, model_update
 
             try:
@@ -3234,6 +3229,10 @@ class PowerMaxCommon(object):
                     rep_mode, is_rep_enabled, target_extra_specs)
 
         if success:
+            model_update = self.update_metadata(
+                model_update, volume.metadata,
+                self.get_volume_metadata(array, device_id))
+
             self.volume_metadata.capture_retype_info(
                 volume, device_id, array, srp, target_slo,
                 target_workload, target_sg_name, is_rep_enabled, rep_mode,
@@ -4447,11 +4446,18 @@ class PowerMaxCommon(object):
 
         for snapshot in snapshots:
             src_dev_id = self._get_src_device_id_for_group_snap(snapshot)
+            extra_specs = self._initial_setup(snapshot.volume)
+            array = extra_specs['array']
+
             snapshots_model_update.append(
                 {'id': snapshot.id,
                  'provider_location': six.text_type(
                      {'source_id': src_dev_id, 'snap_name': snap_name}),
                  'status': fields.SnapshotStatus.AVAILABLE})
+            snapshots_model_update = self.update_metadata(
+                snapshots_model_update, snapshot.metadata,
+                self.get_snapshot_metadata(
+                    array, src_dev_id, snap_name))
         model_update = {'status': fields.GroupStatus.AVAILABLE}
 
         return model_update, snapshots_model_update
@@ -4887,7 +4893,10 @@ class PowerMaxCommon(object):
             (device_id, extra_specs, volume))
         volumes_model_update.append(
             self.utils.get_grp_volume_model_update(
-                volume, volume_dict, group_id))
+                volume, volume_dict, group_id,
+                meta=self.get_volume_metadata(volume_dict['array'],
+                                              volume_dict['device_id'])))
+
         return volumes_model_update, rollback_dict, list_volume_pairs
 
     def _get_clone_vol_info(self, volume, source_vols, snapshots):
@@ -4968,6 +4977,7 @@ class PowerMaxCommon(object):
         :param extra_specs: the extra specs
         :return: volumes_model_update
         """
+        ret_volumes_model_update = []
         rdf_group_no, remote_array = self.get_rdf_details(array)
         self.rest.replicate_group(
             array, group_name, rdf_group_no, remote_array, extra_specs)
@@ -4989,7 +4999,11 @@ class PowerMaxCommon(object):
             volume_model_update.update(
                 {'replication_driver_data': six.text_type(rep_update),
                  'replication_status': fields.ReplicationStatus.ENABLED})
-        return volumes_model_update
+            volume_model_update = self.update_metadata(
+                volume_model_update, None, self.get_volume_metadata(
+                    array, src_device_id))
+            ret_volumes_model_update.append(volume_model_update)
+        return ret_volumes_model_update
 
     def enable_replication(self, context, group, volumes):
         """Enable replication for a group.
@@ -5258,10 +5272,8 @@ class PowerMaxCommon(object):
 
         :returns: unisphere port
         """
-        if self.configuration.safe_get(utils.VMAX_SERVER_PORT_OLD):
-            return self.configuration.safe_get(utils.VMAX_SERVER_PORT_OLD)
-        elif self.configuration.safe_get(utils.VMAX_SERVER_PORT_NEW):
-            return self.configuration.safe_get(utils.VMAX_SERVER_PORT_NEW)
+        if self.configuration.safe_get(utils.U4P_SERVER_PORT):
+            return self.configuration.safe_get(utils.U4P_SERVER_PORT)
         else:
             LOG.debug("PowerMax/VMAX port is not set, using default port: %s",
                       utils.DEFAULT_PORT)
@@ -5288,7 +5300,7 @@ class PowerMaxCommon(object):
             exception_message = (_(
                 "Failed to revert the volume to the snapshot"))
             raise exception.VolumeDriverException(message=exception_message)
-        self._sync_check(array, sourcedevice_id, extra_specs)
+        self._clone_check(array, sourcedevice_id, extra_specs)
         try:
             LOG.info("Reverting device: %(deviceid)s "
                      "to snapshot: %(snapname)s.",
@@ -5317,3 +5329,89 @@ class PowerMaxCommon(object):
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
                 message=exception_message)
+
+    def update_metadata(
+            self, model_update, existing_metadata, object_metadata):
+        """Update volume metadata in model_update.
+
+        :param model_update: existing model
+        :param existing_metadata: existing metadata
+        :param object_metadata: object metadata
+        :returns: dict -- updated model
+        """
+        if model_update:
+            if 'metadata' in model_update:
+                model_update['metadata'].update(object_metadata)
+            else:
+                model_update.update({'metadata': object_metadata})
+        else:
+            model_update = {}
+            model_update.update({'metadata': object_metadata})
+
+        if existing_metadata:
+            model_update['metadata'].update(existing_metadata)
+
+        return model_update
+
+    def get_volume_metadata(self, array, device_id):
+        """Get volume metadata for model_update.
+
+        :param array: the array ID
+        :param device_id: the device ID
+        :returns: dict -- volume metadata
+        """
+        vol_info = self.rest._get_private_volume(array, device_id)
+        vol_header = vol_info['volumeHeader']
+        array_model, __ = self.rest.get_array_model_info(array)
+        sl = (vol_header['serviceLevel'] if
+              vol_header.get('serviceLevel') else 'None')
+        wl = vol_header['workload'] if vol_header.get('workload') else 'None'
+        ce = 'True' if vol_header.get('compressionEnabled') else 'False'
+
+        metadata = {'DeviceID': device_id,
+                    'DeviceLabel': vol_header['userDefinedIdentifier'],
+                    'ArrayID': array, 'ArrayModel': array_model,
+                    'ServiceLevel': sl, 'Workload': wl,
+                    'Emulation': vol_header['emulationType'],
+                    'Configuration': vol_header['configuration'],
+                    'CompressionEnabled': ce}
+
+        is_rep_enabled = vol_info['rdfInfo']['RDF']
+        if is_rep_enabled:
+            rdf_info = vol_info['rdfInfo']
+            rdf_session = rdf_info['RDFSession'][0]
+            rdf_num = rdf_session['SRDFGroupNumber']
+            rdfg_info = self.rest.get_rdf_group(array, str(rdf_num))
+            r2_array_model, __ = self.rest.get_array_model_info(
+                rdf_session['remoteSymmetrixID'])
+
+            metadata.update(
+                {'ReplicationEnabled': 'True',
+                 'R2-DeviceID': rdf_session['remoteDeviceID'],
+                 'R2-ArrayID': rdf_session['remoteSymmetrixID'],
+                 'R2-ArrayModel': r2_array_model,
+                 'ReplicationMode': rdf_session['SRDFReplicationMode'],
+                 'RDFG-Label': rdfg_info['label'],
+                 'R1-RDFG': rdf_session['SRDFGroupNumber'],
+                 'R2-RDFG': rdf_session['SRDFRemoteGroupNumber']})
+        else:
+            metadata['ReplicationEnabled'] = 'False'
+
+        return metadata
+
+    def get_snapshot_metadata(self, array, device_id, snap_name):
+        """Get snapshot metadata for model_update.
+
+        :param array: the array ID
+        :param device_id: the device ID
+        :param snap_name: the snapshot name
+        :returns: dict -- volume metadata
+        """
+        snap_info = self.rest.get_volume_snap_info(array, device_id)
+        device_name = snap_info['deviceName']
+        device_label = device_name.split(':')[1]
+        metadata = {'SnapshotLabel': snap_name,
+                    'SourceDeviceID': device_id,
+                    'SourceDeviceLabel': device_label}
+
+        return metadata

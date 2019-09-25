@@ -14,7 +14,7 @@ GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' \
   IDENTIFIED BY 'changeme';
 EOF
 
-sed -i -e 's!connection = sqlite.*cinder.sqlite!connection = mysql://cinder:changeme@localhost/cinder!g' /etc/cinder/cinder.conf
+sed -i -e 's!connection = sqlite.*cinder.sqlite!connection = mysql+pymysql://cinder:changeme@localhost/cinder!g' /etc/cinder/cinder.conf
 
 su -s /bin/sh -c 'cinder-manage db sync' cinder
 

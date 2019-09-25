@@ -21,7 +21,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder.volume import configuration
 from cinder.volume.targets import nvmeof
-from cinder.volume import utils
+from cinder.volume import volume_utils
 
 spdk_opts = [
     cfg.StrOpt('spdk_rpc_ip',
@@ -34,6 +34,10 @@ spdk_opts = [
     cfg.StrOpt('spdk_rpc_password',
                help='The NVMe target remote configuration password.',
                secret=True),
+    cfg.IntOpt('spdk_max_queue_depth',
+               default=64,
+               min=1, max=128,
+               help='Queue depth for rdma transport.'),
 ]
 CONF = cfg.CONF
 CONF.register_opts(spdk_opts, group=configuration.SHARED_CONF_GROUP)
@@ -58,6 +62,8 @@ class SpdkNvmf(nvmeof.NVMeOF):
         try:
             params = {
                 'trtype': 'rdma',
+                'max_queue_depth':
+                self.configuration.spdk_max_queue_depth
             }
             self._rpc_call('nvmf_create_transport', params)
         except Exception:
@@ -136,7 +142,7 @@ class SpdkNvmf(nvmeof.NVMeOF):
             nqn = '%s:cnode%s' % (subsystem_name, node)
             choice = string.ascii_uppercase + string.digits
             serial = ''.join(
-                utils.generate_password(length=12, symbolgroups=choice))
+                volume_utils.generate_password(length=12, symbolgroups=choice))
 
             params = {
                 'nqn': nqn,

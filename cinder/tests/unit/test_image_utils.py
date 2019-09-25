@@ -1,5 +1,3 @@
-# Copyright (c) 2013 eNovance , Inc.
-# All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -137,7 +135,7 @@ class TestConvertImage(test.TestCase):
         mock_info.return_value.virtual_size = 1048576
         throttle = throttling.Throttle(prefix=['cgcmd'])
 
-        with mock.patch('cinder.volume.utils.check_for_odirect_support',
+        with mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                         return_value=True):
             output = image_utils.convert_image(source, dest, out_format,
                                                throttle=throttle)
@@ -149,7 +147,7 @@ class TestConvertImage(test.TestCase):
 
         mock_exec.reset_mock()
 
-        with mock.patch('cinder.volume.utils.check_for_odirect_support',
+        with mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                         return_value=False):
             output = image_utils.convert_image(source, dest, out_format)
 
@@ -170,7 +168,7 @@ class TestConvertImage(test.TestCase):
         mock_info.side_effect = ValueError
         throttle = throttling.Throttle(prefix=['cgcmd'])
 
-        with mock.patch('cinder.volume.utils.check_for_odirect_support',
+        with mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                         return_value=True):
             output = image_utils.convert_image(source, dest, out_format,
                                                throttle=throttle)
@@ -183,7 +181,7 @@ class TestConvertImage(test.TestCase):
 
         mock_exec.reset_mock()
 
-        with mock.patch('cinder.volume.utils.check_for_odirect_support',
+        with mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                         return_value=False):
             output = image_utils.convert_image(source, dest, out_format)
 
@@ -192,7 +190,7 @@ class TestConvertImage(test.TestCase):
                                               '-O', out_format, source, dest,
                                               run_as_root=True)
 
-    @mock.patch('cinder.volume.utils.check_for_odirect_support',
+    @mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                 return_value=True)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.utils.execute')
@@ -217,7 +215,7 @@ class TestConvertImage(test.TestCase):
                                           source, dest,
                                           run_as_root=True)
 
-    @mock.patch('cinder.volume.utils.check_for_odirect_support',
+    @mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                 return_value=True)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.utils.execute')
@@ -253,7 +251,7 @@ class TestConvertImage(test.TestCase):
         out_format = mock.sentinel.out_format
         mock_info.return_value.virtual_size = 1048576
 
-        with mock.patch('cinder.volume.utils.check_for_odirect_support',
+        with mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                         return_value=True):
             output = image_utils.convert_image(source, dest, out_format,
                                                src_format='AMI')
@@ -266,7 +264,7 @@ class TestConvertImage(test.TestCase):
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.utils.execute')
     @mock.patch('cinder.utils.is_blk_device', return_value=False)
-    @mock.patch('cinder.volume.utils.check_for_odirect_support')
+    @mock.patch('cinder.volume.volume_utils.check_for_odirect_support')
     def test_convert_to_vhd(self, mock_check_odirect, mock_isblk,
                             mock_exec, mock_info):
         source = mock.sentinel.source
@@ -307,7 +305,7 @@ class TestConvertImage(test.TestCase):
                                           run_as_root=True)
 
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('cinder.volume.utils.check_for_odirect_support',
+    @mock.patch('cinder.volume.volume_utils.check_for_odirect_support',
                 return_value=True)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.utils.execute')
@@ -723,8 +721,10 @@ class TestTemporaryDir(test.TestCase):
 
 @ddt.ddt
 class TestUploadVolume(test.TestCase):
-    @ddt.data((mock.sentinel.disk_format, mock.sentinel.disk_format),
-              ('ploop', 'parallels'))
+    @ddt.data((mock.sentinel.disk_format, mock.sentinel.disk_format, True),
+              (mock.sentinel.disk_format, mock.sentinel.disk_format, False),
+              ('ploop', 'parallels', True),
+              ('ploop', 'parallels', False))
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.CONF')
     @mock.patch('six.moves.builtins.open')
@@ -734,11 +734,12 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('cinder.image.image_utils.os')
     def test_diff_format(self, image_format, mock_os, mock_temp, mock_convert,
                          mock_info, mock_open, mock_conf, mock_proxy):
-        input_format, output_format = image_format
+        input_format, output_format, do_compress = image_format
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_meta = {'id': 'test_id',
-                      'disk_format': input_format}
+                      'disk_format': input_format,
+                      'container_format': mock.sentinel.container_format}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'posix'
         data = mock_info.return_value
@@ -747,14 +748,14 @@ class TestUploadVolume(test.TestCase):
         temp_file = mock_temp.return_value.__enter__.return_value
 
         output = image_utils.upload_volume(ctxt, image_service, image_meta,
-                                           volume_path, compress=True)
+                                           volume_path, compress=do_compress)
 
         self.assertIsNone(output)
         mock_convert.assert_called_once_with(volume_path,
                                              temp_file,
                                              output_format,
                                              run_as_root=True,
-                                             compress=True)
+                                             compress=do_compress)
         mock_info.assert_called_with(temp_file, run_as_root=True)
         self.assertEqual(2, mock_info.call_count)
         mock_open.assert_called_once_with(temp_file, 'rb')
@@ -776,7 +777,8 @@ class TestUploadVolume(test.TestCase):
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_meta = {'id': 'test_id',
-                      'disk_format': 'raw'}
+                      'disk_format': 'raw',
+                      'container_format': mock.sentinel.container_format}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'posix'
         mock_os.access.return_value = False
@@ -794,6 +796,62 @@ class TestUploadVolume(test.TestCase):
         image_service.update.assert_called_once_with(
             ctxt, image_meta['id'], {}, mock_proxy.return_value)
 
+    @mock.patch('cinder.image.accelerator.ImageAccel._get_engine')
+    @mock.patch('cinder.image.accelerator.ImageAccel.is_engine_ready',
+                return_value = True)
+    @mock.patch('eventlet.tpool.Proxy')
+    @mock.patch('cinder.image.image_utils.utils.temporary_chown')
+    @mock.patch('cinder.image.image_utils.CONF')
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.convert_image')
+    @mock.patch('cinder.image.image_utils.temporary_file')
+    @mock.patch('cinder.image.image_utils.os')
+    def test_same_format_compressed(self, mock_os, mock_temp, mock_convert,
+                                    mock_info, mock_open, mock_conf,
+                                    mock_chown, mock_proxy,
+                                    mock_engine_ready, mock_get_engine):
+        class fakeEngine(object):
+
+            def __init__(self):
+                pass
+
+            def compress_img(self, src, dest, run_as_root):
+                pass
+
+        ctxt = mock.sentinel.context
+        image_service = mock.Mock()
+        image_meta = {'id': 'test_id',
+                      'disk_format': 'raw',
+                      'container_format': 'compressed'}
+        mock_conf.allow_compression_on_image_upload = True
+        volume_path = mock.sentinel.volume_path
+        mock_os.name = 'posix'
+        data = mock_info.return_value
+        data.file_format = 'raw'
+        data.backing_file = None
+        temp_file = mock_temp.return_value.__enter__.return_value
+        mock_engine = mock.Mock(spec=fakeEngine)
+        mock_get_engine.return_value = mock_engine
+
+        output = image_utils.upload_volume(ctxt, image_service, image_meta,
+                                           volume_path)
+
+        self.assertIsNone(output)
+        mock_convert.assert_called_once_with(volume_path,
+                                             temp_file,
+                                             'raw',
+                                             compress=True,
+                                             run_as_root=True)
+        mock_info.assert_called_with(temp_file, run_as_root=True)
+        self.assertEqual(2, mock_info.call_count)
+        mock_open.assert_called_once_with(temp_file, 'rb')
+        mock_proxy.assert_called_once_with(
+            mock_open.return_value.__enter__.return_value)
+        image_service.update.assert_called_once_with(
+            ctxt, image_meta['id'], {}, mock_proxy.return_value)
+        mock_engine.compress_img.assert_called()
+
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
@@ -808,7 +866,8 @@ class TestUploadVolume(test.TestCase):
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_meta = {'id': 'test_id',
-                      'disk_format': 'raw'}
+                      'disk_format': 'raw',
+                      'container_format': 'bare'}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'nt'
         mock_os.access.return_value = False
@@ -825,6 +884,63 @@ class TestUploadVolume(test.TestCase):
         image_service.update.assert_called_once_with(
             ctxt, image_meta['id'], {}, mock_proxy.return_value)
 
+    @mock.patch('cinder.image.accelerator.ImageAccel._get_engine')
+    @mock.patch('cinder.image.accelerator.ImageAccel.is_engine_ready',
+                return_value = True)
+    @mock.patch('eventlet.tpool.Proxy')
+    @mock.patch('cinder.image.image_utils.utils.temporary_chown')
+    @mock.patch('cinder.image.image_utils.CONF')
+    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.convert_image')
+    @mock.patch('cinder.image.image_utils.temporary_file')
+    @mock.patch('cinder.image.image_utils.os')
+    def test_same_format_on_nt_compressed(self, mock_os, mock_temp,
+                                          mock_convert, mock_info,
+                                          mock_open, mock_conf,
+                                          mock_chown, mock_proxy,
+                                          mock_engine_ready, mock_get_engine):
+        class fakeEngine(object):
+
+            def __init__(self):
+                pass
+
+            def compress_img(self, src, dest, run_as_root):
+                pass
+
+        ctxt = mock.sentinel.context
+        image_service = mock.Mock()
+        image_meta = {'id': 'test_id',
+                      'disk_format': 'raw',
+                      'container_format': 'compressed'}
+        mock_conf.allow_compression_on_image_upload = True
+        volume_path = mock.sentinel.volume_path
+        mock_os.name = 'posix'
+        data = mock_info.return_value
+        data.file_format = 'raw'
+        data.backing_file = None
+        temp_file = mock_temp.return_value.__enter__.return_value
+        mock_engine = mock.Mock(spec=fakeEngine)
+        mock_get_engine.return_value = mock_engine
+
+        output = image_utils.upload_volume(ctxt, image_service, image_meta,
+                                           volume_path)
+
+        self.assertIsNone(output)
+        mock_convert.assert_called_once_with(volume_path,
+                                             temp_file,
+                                             'raw',
+                                             compress=True,
+                                             run_as_root=True)
+        mock_info.assert_called_with(temp_file, run_as_root=True)
+        self.assertEqual(2, mock_info.call_count)
+        mock_open.assert_called_once_with(temp_file, 'rb')
+        mock_proxy.assert_called_once_with(
+            mock_open.return_value.__enter__.return_value)
+        image_service.update.assert_called_once_with(
+            ctxt, image_meta['id'], {}, mock_proxy.return_value)
+        mock_engine.compress_img.assert_called()
+
     @mock.patch('cinder.image.image_utils.CONF')
     @mock.patch('six.moves.builtins.open')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
@@ -836,7 +952,8 @@ class TestUploadVolume(test.TestCase):
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_meta = {'id': 'test_id',
-                      'disk_format': mock.sentinel.disk_format}
+                      'disk_format': mock.sentinel.disk_format,
+                      'container_format': mock.sentinel.container_format}
         volume_path = mock.sentinel.volume_path
         mock_os.name = 'posix'
         data = mock_info.return_value
@@ -1640,6 +1757,83 @@ class TestFetchToVolumeFormat(test.TestCase):
             exception.ImageUnacceptable,
             image_utils.get_qemu_data, image_id, has_meta, disk_format_raw,
             dest, run_as_root=run_as_root)
+
+    @mock.patch('cinder.image.accelerator.is_gzip_compressed',
+                return_value = True)
+    @mock.patch('cinder.image.accelerator.ImageAccel._get_engine')
+    @mock.patch('cinder.image.accelerator.ImageAccel.is_engine_ready',
+                return_value = True)
+    @mock.patch('cinder.image.image_utils.check_available_space')
+    @mock.patch('cinder.image.image_utils.convert_image')
+    @mock.patch('cinder.image.image_utils.volume_utils.copy_volume')
+    @mock.patch(
+        'cinder.image.image_utils.replace_xenserver_image_with_coalesced_vhd')
+    @mock.patch('cinder.image.image_utils.is_xenserver_format',
+                return_value=False)
+    @mock.patch('cinder.image.image_utils.fetch')
+    @mock.patch('cinder.image.image_utils.qemu_img_info')
+    @mock.patch('cinder.image.image_utils.temporary_file')
+    @mock.patch('cinder.image.image_utils.CONF')
+    def test_defaults_compressed(self, mock_conf, mock_temp, mock_info,
+                                 mock_fetch, mock_is_xen, mock_repl_xen,
+                                 mock_copy, mock_convert, mock_check_space,
+                                 mock_engine_ready, mock_get_engine,
+                                 mock_gzip_compressed):
+        class fakeEngine(object):
+            def __init__(self):
+                pass
+
+            def decompress_img(self, src, dest, run_as_root):
+                pass
+
+        class FakeImageService(object):
+            def __init__(self, db_driver=None,
+                         image_service=None, disk_format='raw'):
+                self.temp_images = None
+                self.disk_format = disk_format
+
+            def show(self, context, image_id):
+                return {'size': 2 * units.Gi,
+                        'disk_format': self.disk_format,
+                        'container_format': 'compressed',
+                        'status': 'active'}
+
+        ctxt = mock.sentinel.context
+        ctxt.user_id = mock.sentinel.user_id
+        image_service = FakeImageService()
+        image_id = mock.sentinel.image_id
+        dest = mock.sentinel.dest
+        volume_format = mock.sentinel.volume_format
+        out_subformat = None
+        blocksize = mock.sentinel.blocksize
+
+        data = mock_info.return_value
+        data.file_format = volume_format
+        data.backing_file = None
+        data.virtual_size = 1234
+        tmp = mock_temp.return_value.__enter__.return_value
+
+        mock_engine = mock.Mock(spec=fakeEngine)
+        mock_get_engine.return_value = mock_engine
+
+        output = image_utils.fetch_to_volume_format(ctxt, image_service,
+                                                    image_id, dest,
+                                                    volume_format, blocksize)
+
+        self.assertIsNone(output)
+        mock_temp.assert_called_once_with()
+        mock_info.assert_has_calls([
+            mock.call(tmp, force_share=False, run_as_root=True),
+            mock.call(tmp, run_as_root=True)])
+        mock_fetch.assert_called_once_with(ctxt, image_service, image_id,
+                                           tmp, None, None)
+        self.assertFalse(mock_repl_xen.called)
+        self.assertFalse(mock_copy.called)
+        mock_convert.assert_called_once_with(tmp, dest, volume_format,
+                                             out_subformat=out_subformat,
+                                             run_as_root=True,
+                                             src_format='raw')
+        mock_engine.decompress_img.assert_called()
 
 
 class TestXenserverUtils(test.TestCase):

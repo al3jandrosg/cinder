@@ -42,7 +42,7 @@ import cinder.policy
 from cinder import quota
 from cinder import quota_utils
 import cinder.volume
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 
 backup_opts = [
     cfg.BoolOpt('backup_use_same_host',
@@ -274,13 +274,18 @@ class API(base.Base):
                                          < snapshot['created_at']))
                     else datetime(1, 1, 1, 1, 1, 1, tzinfo=timezone('UTC')))
             else:
+                QUOTAS.rollback(context, reservations)
                 msg = _('No backups available to do an incremental backup.')
                 raise exception.InvalidBackup(reason=msg)
 
         parent_id = None
+        parent = None
+
         if latest_backup:
+            parent = latest_backup
             parent_id = latest_backup.id
             if latest_backup['status'] != fields.BackupStatus.AVAILABLE:
+                QUOTAS.rollback(context, reservations)
                 msg = _('The parent backup must be available for '
                         'incremental backup.')
                 raise exception.InvalidBackup(reason=msg)
@@ -313,6 +318,7 @@ class API(base.Base):
                 'availability_zone': availability_zone,
                 'snapshot_id': snapshot_id,
                 'data_timestamp': data_timestamp,
+                'parent': parent,
                 'metadata': metadata or {}
             }
             backup = objects.Backup(context=context, **kwargs)

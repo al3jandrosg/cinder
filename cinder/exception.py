@@ -773,10 +773,6 @@ class BackupMetadataNotFound(NotFound):
                 "key %(metadata_key)s.")
 
 
-class BackupVerifyUnsupportedDriver(BackupDriverException):
-    message = _("Unsupported backup verify driver")
-
-
 class VolumeMetadataBackupExists(BackupDriverException):
     message = _("Metadata backup already exists for this volume")
 
@@ -1099,3 +1095,20 @@ class ServiceUserTokenNoAuth(CinderException):
     message = _("The [service_user] send_service_user_token option was "
                 "requested, but no service auth could be loaded. Please check "
                 "the [service_user] configuration section.")
+
+
+class RekeyNotSupported(CinderException):
+    message = _("Rekey not supported.")
+
+
+class ImageCompressionNotAllowed(CinderException):
+    message = _("Image compression upload disallowed, but container_format "
+                "is compressed")
+
+
+class CinderAcceleratorError(CinderException):
+    message = _("Cinder accelerator %(accelerator)s encountered an error "
+                "while compressing/decompressing image.\n"
+                "Command %(cmd)s execution failed.\n"
+                "%(description)s\n"
+                "Reason: %(reason)s")

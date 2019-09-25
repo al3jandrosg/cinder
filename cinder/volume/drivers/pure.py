@@ -42,7 +42,7 @@ from cinder import utils
 from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 from cinder.zonemanager import utils as fczm_utils
 
 try:
@@ -2582,7 +2582,7 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
     supports the Cinder Fibre Channel Zone Manager.
     """
 
-    VERSION = "6.0.0"
+    VERSION = "7.0.0"
 
     def __init__(self, *args, **kwargs):
         execute = kwargs.pop("execute", utils.execute)

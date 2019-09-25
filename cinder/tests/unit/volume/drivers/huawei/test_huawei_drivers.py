@@ -47,8 +47,8 @@ from cinder.volume.drivers.huawei import replication
 from cinder.volume.drivers.huawei import rest_client
 from cinder.volume.drivers.huawei import smartx
 from cinder.volume import qos_specs
-from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 admin_contex = context.get_admin_context()
 
@@ -4781,7 +4781,7 @@ class HuaweiFCDriverTestCase(HuaweiTestBase):
             self.assertEqual(disk_type_value['disktype'],
                              data['pools'][0]['disk_type'])
         else:
-            self.assertIsNone(data['pools'][0].get('disk_type'))
+            self.assertNotIn('disk_type', data['pools'][0])
 
     def test_get_disk_type_pool_info_none(self):
         driver = FakeISCSIStorage(configuration=self.configuration)
@@ -4790,7 +4790,7 @@ class HuaweiFCDriverTestCase(HuaweiTestBase):
         self.mock_object(rest_client.RestClient, 'get_pool_info',
                          return_value=None)
         data = driver.get_volume_stats()
-        self.assertIsNone(data['pools'][0].get('disk_type'))
+        self.assertNotIn('disk_type', data['pools'][0])
 
     def test_extend_volume(self):
         self.driver.extend_volume(self.volume, 3)

@@ -117,6 +117,9 @@ class PowerMaxISCSIDriver(san.SanISCSIDriver):
               - Support for Rapid TDEV Delete (bp powermax-tdev-deallocation)
               - PowerMax OS Metro formatted volumes fix (bug #1829876)
               - Support for Metro ODE (bp/powermax-metro-ode)
+              - Removal of san_rest_port from PowerMax cinder.conf config
+              - SnapVX noCopy mode enabled for all links
+              - Volume/Snapshot backed metadata inclusion
     """
 
     VERSION = "4.1.0"

@@ -21,13 +21,14 @@ import re
 from cinder.objects.group import Group
 from oslo_log import log as logging
 from oslo_utils import strutils
+from oslo_utils import units
 import six
 
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
-from cinder.volume import utils as vol_utils
 from cinder.volume import volume_types
+from cinder.volume import volume_utils
 
 
 LOG = logging.getLogger(__name__)
@@ -91,8 +92,7 @@ UNMANAGED_SG = 'OS-Unmanaged'
 VMAX_SERVER_IP = 'san_ip'
 VMAX_USER_NAME = 'san_login'
 VMAX_PASSWORD = 'san_password'
-VMAX_SERVER_PORT_NEW = 'san_api_port'
-VMAX_SERVER_PORT_OLD = 'san_rest_port'
+U4P_SERVER_PORT = 'san_api_port'
 VMAX_ARRAY = 'vmax_array'
 VMAX_WORKLOAD = 'vmax_workload'
 VMAX_SRP = 'vmax_srp'
@@ -508,17 +508,20 @@ class PowerMaxUtils(object):
         return volume_model_updates
 
     @staticmethod
-    def get_grp_volume_model_update(volume, volume_dict, group_id):
+    def get_grp_volume_model_update(volume, volume_dict, group_id, meta=None):
         """Create and return the volume model update on creation.
 
         :param volume: volume object
         :param volume_dict: the volume dict
         :param group_id: consistency group id
+        :param meta: the volume metadata
         :returns: model_update
         """
         LOG.info("Updating status for group: %(id)s.", {'id': group_id})
         model_update = ({'id': volume.id, 'status': 'available',
                          'provider_location': six.text_type(volume_dict)})
+        if meta:
+            model_update['metadata'] = meta
         return model_update
 
     @staticmethod
@@ -807,9 +810,9 @@ class PowerMaxUtils(object):
         :param new_type_extra_specs: the target type extra specs
         :return: bool
         """
-        is_src_multiattach = vol_utils.is_boolean_str(
+        is_src_multiattach = volume_utils.is_boolean_str(
             extra_specs.get('multiattach'))
-        is_tgt_multiattach = vol_utils.is_boolean_str(
+        is_tgt_multiattach = volume_utils.is_boolean_str(
             new_type_extra_specs.get('multiattach'))
         return is_src_multiattach != is_tgt_multiattach
 
@@ -903,3 +906,67 @@ class PowerMaxUtils(object):
             return sg_id.split('-')[1]
         except IndexError:
             return None
+
+    @staticmethod
+    def validate_qos_input(input_key, sg_value, qos_extra_spec, property_dict):
+        max_value = 100000
+        qos_unit = "IO/Sec"
+        if input_key == 'total_iops_sec':
+            min_value = 100
+            input_value = int(qos_extra_spec['total_iops_sec'])
+            sg_key = 'host_io_limit_io_sec'
+        else:
+            qos_unit = "MB/sec"
+            min_value = 1
+            input_value = int(qos_extra_spec['total_bytes_sec']) / units.Mi
+            sg_key = 'host_io_limit_mb_sec'
+        if min_value <= input_value <= max_value:
+            if sg_value is None or input_value != int(sg_value):
+                property_dict[sg_key] = input_value
+        else:
+            exception_message = (
+                _("Invalid %(ds)s with value %(dt)s entered. Valid values "
+                  "range from %(du)s %(dv)s to 100,000 %(dv)s") % {
+                    'ds': input_key, 'dt': input_value, 'du': min_value,
+                    'dv': qos_unit})
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
+        return property_dict
+
+    @staticmethod
+    def validate_qos_distribution_type(
+            sg_value, qos_extra_spec, property_dict):
+        dynamic_list = ['never', 'onfailure', 'always']
+        if qos_extra_spec.get('DistributionType').lower() in dynamic_list:
+            distribution_type = qos_extra_spec['DistributionType']
+            if distribution_type != sg_value:
+                property_dict["dynamicDistribution"] = distribution_type
+        else:
+            exception_message = (
+                _("Wrong Distribution type value %(dt)s entered. Please "
+                  "enter one of: %(dl)s") % {
+                    'dt': qos_extra_spec.get('DistributionType'),
+                    'dl': dynamic_list})
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
+        return property_dict
+
+    @staticmethod
+    def compare_cylinders(cylinders_source, cylinder_target):
+        """Compare number of cylinders of source and target.
+
+        :param cylinders_source: number of cylinders on source
+        :param cylinders_target: number of cylinders on target
+        """
+        if float(cylinders_source) > float(cylinder_target):
+            exception_message = (
+                _("The number of source cylinders %(cylinders_source)s "
+                  "cannot be greater than the number of target cylinders "
+                  "%(cylinder_target)s. Please extend your source volume by "
+                  "at least 1GiB.") % {
+                    'cylinders_source': cylinders_source,
+                    'cylinder_target': cylinder_target})
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)

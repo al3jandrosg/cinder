@@ -29,7 +29,7 @@ from cinder.tests.unit.volume.drivers.dell_emc.powermax import (
 from cinder.volume.drivers.dell_emc.powermax import fc
 from cinder.volume.drivers.dell_emc.powermax import rest
 from cinder.volume.drivers.dell_emc.powermax import utils
-from cinder.volume import utils as volume_utils
+from cinder.volume import volume_utils
 
 
 class PowerMaxRestTest(test.TestCase):
@@ -226,11 +226,20 @@ class PowerMaxRestTest(test.TestCase):
         array_details = self.rest.get_array_detail(self.data.failed_resource)
         self.assertIsNone(array_details)
 
-    def test_get_uni_version(self):
-        version, major_version = self.rest.get_uni_version()
-        self.assertEqual('91', major_version)
-        with mock.patch.object(self.rest, '_get_request', return_value=None):
+    def test_get_uni_version_success(self):
+        ret_val = (200, tpd.PowerMaxData.version_details)
+        current_major_version = tpd.PowerMaxData.u4v_version
+        with mock.patch.object(self.rest, 'request', return_value=ret_val):
             version, major_version = self.rest.get_uni_version()
+            self.assertIsNotNone(version)
+            self.assertIsNotNone(major_version)
+            self.assertEqual(major_version, current_major_version)
+
+    def test_get_uni_version_failed(self):
+        ret_val = (500, '')
+        with mock.patch.object(self.rest, 'request', return_value=ret_val):
+            version, major_version = self.rest.get_uni_version()
+            self.assertIsNone(version)
             self.assertIsNone(major_version)
 
     def test_get_srp_by_name(self):
@@ -362,13 +371,36 @@ class PowerMaxRestTest(test.TestCase):
     def test_modify_storage_group(self):
         array = self.data.array
         storagegroup = self.data.defaultstoragegroup_name
-        payload = {'someKey': 'someValue'}
+        return_message = self.data.add_volume_sg_info_dict
+        payload = (
+            {"executionOption": "ASYNCHRONOUS",
+             "editStorageGroupActionParam": {
+                 "expandStorageGroupParam": {
+                     "addVolumeParam": {
+                         "emulation": "FBA",
+                         "create_new_volumes": "False",
+                         "volumeAttributes": [
+                             {
+                                 "num_of_vols": 1,
+                                 "volumeIdentifier": {
+                                     "identifier_name": "os-123-456",
+                                     "volumeIdentifierChoice":
+                                         "identifier_name"
+                                 },
+                                 "volume_size": 1,
+                                 "capacityUnit": "GB"}]}}}})
         version = self.data.u4v_version
-        with mock.patch.object(self.rest, 'modify_resource') as mock_modify:
-            self.rest.modify_storage_group(array, storagegroup, payload)
+        with mock.patch.object(self.rest, 'modify_resource',
+                               return_value=(200,
+                                             return_message)) as mock_modify:
+            status_code, message = self.rest.modify_storage_group(
+                array, storagegroup, payload)
             mock_modify.assert_called_once_with(
                 self.data.array, 'sloprovisioning', 'storagegroup',
                 payload, version, resource_name=storagegroup)
+            self.assertEqual(1, mock_modify.call_count)
+            self.assertEqual(200, status_code)
+            self.assertEqual(return_message, message)
 
     def test_create_volume_from_sg_success(self):
         volume_name = self.data.volume_details[0]['volume_identifier']
@@ -1069,7 +1101,7 @@ class PowerMaxRestTest(test.TestCase):
         payload = {'deviceNameListSource': [{'name': source_id}],
                    'deviceNameListTarget': [
                        {'name': target_id}],
-                   'copy': 'true', 'action': "",
+                   'copy': 'false', 'action': "",
                    'star': 'false', 'force': 'false',
                    'exact': 'false', 'remote': 'false',
                    'symforce': 'false', 'generation': 0}
@@ -1206,30 +1238,41 @@ class PowerMaxRestTest(test.TestCase):
     def test_find_snap_vx_sessions(self):
         array = self.data.array
         source_id = self.data.device_id
-        ref_sessions = [{'generation': '0',
-                         'snap_name': 'temp-1',
-                         'source_vol': self.data.device_id,
-                         'target_vol_list':
-                             [(self.data.device_id2, 'Copied')]},
-                        {'generation': '0',
-                         'snap_name': 'temp-1',
-                         'source_vol': self.data.device_id,
-                         'target_vol_list':
-                             [(self.data.device_id2, 'Copied')]}]
-        sessions = self.rest.find_snap_vx_sessions(array, source_id)
-        self.assertEqual(ref_sessions, sessions)
+        ref_sessions = [{'generation': 0,
+                         'snap_name': 'temp-000AA-snapshot_for_clone',
+                         'source_vol_id': self.data.device_id,
+                         'target_vol_id': self.data.device_id2,
+                         'expired': False, 'copy_mode': True,
+                         'state': 'Copied'},
+                        {'generation': 1,
+                         'snap_name': 'temp-000AA-snapshot_for_clone',
+                         'source_vol_id': self.data.device_id,
+                         'target_vol_id': self.data.device_id3,
+                         'expired': False, 'copy_mode': True,
+                         'state': 'Copied'}]
 
-    def test_find_snap_vx_sessions_tgt_only(self):
+        with mock.patch.object(self.rest, 'get_volume_snap_info',
+                               return_value=self.data.snapshot_src_details):
+            src_list, __ = self.rest.find_snap_vx_sessions(array, source_id)
+            self.assertEqual(ref_sessions, src_list)
+            self.assertIsInstance(src_list, list)
+
+    @mock.patch.object(rest.PowerMaxRest, '_get_private_volume',
+                       return_value=tpd.PowerMaxData.snap_tgt_vol_details)
+    @mock.patch.object(rest.PowerMaxRest, 'get_volume_snap_info',
+                       return_value=tpd.PowerMaxData.snapshot_tgt_details)
+    def test_find_snap_vx_sessions_tgt_only(self, mck_snap, mck_vol):
         array = self.data.array
         source_id = self.data.device_id
-        ref_sessions = [{'generation': '0',
-                         'snap_name': 'temp-1',
-                         'source_vol': self.data.device_id,
-                         'target_vol_list':
-                             [(self.data.device_id2, 'Copied')]}]
-        sessions = self.rest.find_snap_vx_sessions(
+        ref_session = {'generation': 6, 'state': 'Linked', 'copy_mode': False,
+                       'snap_name': 'temp-000AA-snapshot_for_clone',
+                       'source_vol_id': self.data.device_id2,
+                       'target_vol_id': source_id, 'expired': True}
+
+        __, snap_tgt = self.rest.find_snap_vx_sessions(
             array, source_id, tgt_only=True)
-        self.assertEqual(ref_sessions, sessions)
+        self.assertEqual(ref_session, snap_tgt)
+        self.assertIsInstance(snap_tgt, dict)
 
     def test_update_storagegroup_qos(self):
         sg_qos = {'srp': self.data.srp, 'num_of_vols': 2, 'cap_gb': 2,
@@ -1268,29 +1311,6 @@ class PowerMaxRestTest(test.TestCase):
             return_value = self.rest.update_storagegroup_qos(
                 array, 'OS-QOS-SG', extra_specs)
             self.assertFalse(return_value)
-
-    def test_validate_qos_input_exception(self):
-        qos_extra_spec = {'total_iops_sec': 90, 'DistributionType': 'Wrong',
-                          'total_bytes_sec': 100}
-        input_key = 'total_iops_sec'
-        sg_value = 4000
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.rest.validate_qos_input, input_key, sg_value,
-                          qos_extra_spec, {})
-        input_key = 'total_bytes_sec'
-        sg_value = 4000
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.rest.validate_qos_input, input_key, sg_value,
-                          qos_extra_spec, {})
-
-    def test_validate_qos_distribution_type(self):
-        qos_extra_spec = {'total_iops_sec': 4000, 'DistributionType': 'Always',
-                          'total_bytes_sec': 4194304000}
-        input_prop_dict = {'total_iops_sec': 4000}
-        sg_value = 'Always'
-        ret_prop_dict = self.rest.validate_qos_distribution_type(
-            sg_value, qos_extra_spec, input_prop_dict)
-        self.assertEqual(input_prop_dict, ret_prop_dict)
 
     @mock.patch.object(rest.PowerMaxRest, 'modify_storage_group',
                        return_value=(202, tpd.PowerMaxData.job_list[0]))
@@ -1747,3 +1767,34 @@ class PowerMaxRestTest(test.TestCase):
         array = self.data.array
         ucode = self.rest.get_array_ucode_version(array)
         self.assertEqual(self.data.powermax_model_details['ucode'], ucode)
+
+    def test_validate_unisphere_version_suceess(self):
+        version = tpd.PowerMaxData.unisphere_version
+        returned_version = {'version': version}
+        with mock.patch.object(self.rest, "request",
+                               return_value=(200,
+                                             returned_version)) as mock_req:
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertTrue(valid_version)
+        request_count = mock_req.call_count
+        self.assertEqual(1, request_count)
+
+    def test_validate_unisphere_version_fail(self):
+        version = tpd.PowerMaxData.unisphere_version_90
+        returned_version = {'version': version}
+
+        with mock.patch.object(self.rest, "request",
+                               return_value=(200,
+                                             returned_version))as mock_req:
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertFalse(valid_version)
+        request_count = mock_req.call_count
+        self.assertEqual(1, request_count)
+
+    def test_validate_unisphere_version_no_connection(self):
+        with mock.patch.object(self.rest, "request",
+                               return_value=(500, '')) as mock_req:
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertFalse(valid_version)
+        request_count = mock_req.call_count
+        self.assertEqual(2, request_count)

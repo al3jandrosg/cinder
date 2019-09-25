@@ -42,7 +42,7 @@ Build-Depends-Indep:
  python3-mock (>= 2.0.0),
  python3-novaclient (>= 2:9.1.0),
  python3-oauth2client (>= 1.5.0),
- python3-openstackdocstheme (>= 1.18.1),
+ python3-openstackdocstheme (>= 1.20.0),
  python3-os-api-ref (>= 1.4.0),
  python3-os-brick (>= 2.2.0),
  python3-os-win (>= 3.0.0),

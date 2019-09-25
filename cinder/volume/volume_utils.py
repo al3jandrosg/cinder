@@ -23,6 +23,7 @@ import operator
 import os
 from os import urandom
 import re
+import socket
 import tempfile
 import time
 import uuid
@@ -38,6 +39,7 @@ from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from oslo_utils import netutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
 from oslo_utils import units
@@ -1174,7 +1176,7 @@ def copy_image_to_volume(driver, context, volume, image_meta, image_location,
                'image_location': image_location})
 
 
-def _image_conversion_dir():
+def image_conversion_dir():
     tmpdir = (CONF.image_conversion_dir or
               tempfile.gettempdir())
 
@@ -1205,3 +1207,43 @@ def check_encryption_provider(db, volume, context):
         raise exception.VolumeDriverException(message=msg)
 
     return encryption
+
+
+def sanitize_host(host):
+    """Ensure IPv6 addresses are enclosed in [] for iSCSI portals."""
+    if netutils.is_valid_ipv6(host):
+        return '[%s]' % host
+    return host
+
+
+def sanitize_hostname(hostname):
+    """Return a hostname which conforms to RFC-952 and RFC-1123 specs."""
+    if six.PY3:
+        hostname = hostname.encode('latin-1', 'ignore')
+        hostname = hostname.decode('latin-1')
+    else:
+        if isinstance(hostname, six.text_type):
+            hostname = hostname.encode('latin-1', 'ignore')
+
+    hostname = re.sub(r'[ _]', '-', hostname)
+    hostname = re.sub(r'[^\w.-]+', '', hostname)
+    hostname = hostname.lower()
+    hostname = hostname.strip('.-')
+
+    return hostname
+
+
+def resolve_hostname(hostname):
+    """Resolves host name to IP address.
+
+    Resolves a host name (my.data.point.com) to an IP address (10.12.143.11).
+    This routine also works if the data passed in hostname is already an IP.
+    In this case, the same IP address will be returned.
+
+    :param hostname:  Host name to resolve.
+    :returns:         IP Address for Host name.
+    """
+    ip = socket.getaddrinfo(hostname, None)[0][4][0]
+    LOG.debug('Asked to resolve hostname %(host)s and got IP %(ip)s.',
+              {'host': hostname, 'ip': ip})
+    return ip

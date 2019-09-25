@@ -35,6 +35,7 @@ class PowerMaxData(object):
     array = '000197800123'
     uni_array = u'000197800123'
     array_herc = '000197900123'
+    array_model = 'PowerMax_8000'
     srp = 'SRP_1'
     srp2 = 'SRP_2'
     slo = 'Diamond'
@@ -78,6 +79,7 @@ class PowerMaxData(object):
     no_slo_sg_name = 'OS-HostX-No_SLO-OS-fibre-PG'
     temp_snapvx = 'temp-00001-snapshot_for_clone'
     next_gen_ucode = 5978
+    gvg_group_id = 'test-gvg'
 
     # connector info
     wwpn1 = '123456789012345'
@@ -564,6 +566,7 @@ class PowerMaxData(object):
                         'SLO': 'Diamond'}
 
     volume_details = [{'cap_gb': 2,
+                       'cap_cyl': 1092,
                        'num_of_storage_groups': 1,
                        'volumeId': device_id,
                        'volume_identifier': 'OS-%s' % test_volume.id,
@@ -573,6 +576,7 @@ class PowerMaxData(object):
                        'storageGroupId': [defaultstoragegroup_name,
                                           storagegroup_name_f]},
                       {'cap_gb': 1,
+                       'cap_cyl': 546,
                        'num_of_storage_groups': 1,
                        'volumeId': device_id2,
                        'volume_identifier': 'OS-%s' % test_volume.id,
@@ -580,11 +584,13 @@ class PowerMaxData(object):
                        'storageGroupId': [defaultstoragegroup_name,
                                           storagegroup_name_f]},
                       {'cap_gb': 1,
+                       'cap_cyl': 546,
                        'num_of_storage_groups': 0,
                        'volumeId': device_id3,
                        'volume_identifier': '123',
                        'wwn': '600012345'},
                       {'cap_gb': 1,
+                       'cap_cyl': 546,
                        'num_of_storage_groups': 1,
                        'volumeId': device_id4,
                        'volume_identifier': 'random_name',
@@ -757,7 +763,7 @@ class PowerMaxData(object):
                  {'symmetrixId': array_herc,
                   'model': 'PowerMax 2000',
                   'ucode': '5978.1091.1092'}]
-    version_details = {'version': 'V9.1.0.1'}
+    version_details = {'version': 'V9.1.0.1054'}
 
     headroom = {'headroom': [{'headroomCapacity': 20348.29}]}
 
@@ -1004,9 +1010,32 @@ class PowerMaxData(object):
         'workload': 'DSS',
         'child_storage_group': 'OS-HostX-SRP_1-DiamondDSS-OS-fibre-PG'}
 
+    add_volume_sg_info_dict = {
+        "storageGroupId": defaultstoragegroup_name,
+        "slo": "Optimized",
+        "service_level": "Optimized",
+        "base_slo_name": "Optimized",
+        "srp": "SRP_1",
+        "slo_compliance": "NONE",
+        "num_of_vols": 39,
+        "num_of_child_sgs": 0,
+        "num_of_parent_sgs": 0,
+        "num_of_masking_views": 0,
+        "num_of_snapshots": 0,
+        "cap_gb": 109.06,
+        "device_emulation": "FBA",
+        "type": "Standalone",
+        "unprotected": "true",
+        "compression": "true",
+        "compressionRatio": "1.0:1",
+        "compression_ratio_to_one": 1,
+        "vp_saved_percent": 99.9
+    }
+
     data_dict = {volume_id: volume_info_dict}
     platform = 'Linux-4.4.0-104-generic-x86_64-with-Ubuntu-16.04-xenial'
-    unisphere_version = u'V9.1.0.1'
+    unisphere_version = u'V9.1.0.1054'
+    unisphere_version_90 = "V9.0.0.1"
     openstack_release = '12.0.0.0b3.dev401'
     openstack_version = '12.0.0'
     python_version = '2.7.12'
@@ -1061,3 +1090,93 @@ class PowerMaxData(object):
          'RestUserName': 'test',
          'RestPassword': 'test',
          'SSLVerify': 'True'}]
+
+    snapshot_src_details = {'snapshotSrcs': [{
+        'snapshotName': 'temp-000AA-snapshot_for_clone',
+        'generation': 0, 'state': 'Established', 'expired': False,
+        'linkedDevices': [{'targetDevice': device_id2, 'state': 'Copied',
+                           'copy': True}]},
+        {'snapshotName': 'temp-000AA-snapshot_for_clone', 'generation': 1,
+         'state': 'Established', 'expired': False,
+         'linkedDevices': [{'targetDevice': device_id3, 'state': 'Copied',
+                            'copy': True}]}],
+        'snapshotLnks': []}
+
+    snapshot_tgt_details = {"snapshotLnks": [{
+        "linkSourceName": device_id2, "state": "Linked", "copy": False}]}
+
+    snap_tgt_vol_details = {"timeFinderInfo": {"snapVXSession": [{
+        "tgtSrcSnapshotGenInfo": {
+            "generation": 6, "expired": True,
+            "snapshotName": "temp-000AA-snapshot_for_clone"}}]}}
+
+    snap_tgt_session = {
+        'generation': 0, 'expired': False, 'copy_mode': False,
+        'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
+        'source_vol_id': device_id, 'target_vol_id': device_id2}
+
+    snap_tgt_session_cm_enabled = {
+        'generation': 0, 'expired': False, 'copy_mode': True,
+        'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
+        'source_vol_id': device_id, 'target_vol_id': device_id2}
+
+    snap_src_sessions = [
+        {'generation': 0, 'expired': False, 'copy_mode': False,
+         'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
+         'source_vol_id': device_id, 'target_vol_id': device_id3},
+        {'generation': 1, 'expired': False, 'copy_mode': False,
+         'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
+         'source_vol_id': device_id, 'target_vol_id': device_id4}]
+
+    device_label = 'OS-00001'
+    priv_vol_response_rep = {
+        'volumeHeader': {
+            'private': False, 'capGB': 1.0, 'capMB': 1026.0,
+            'serviceState': 'Normal', 'emulationType': 'FBA',
+            'volumeId': '00001', 'status': 'Ready', 'mapped': False,
+            'numStorageGroups': 0, 'reservationInfo': {'reserved': False},
+            'encapsulated': False, 'formattedName': '00001',
+            'system_resource': False, 'numSymDevMaskingViews': 0,
+            'nameModifier': "", 'configuration': 'TDEV',
+            'userDefinedIdentifier': 'OS-00001'},
+        'maskingInfo': {'masked': False},
+        'rdfInfo': {
+            'dynamicRDF': False, 'RDF': True,
+            'concurrentRDF': False,
+            'getDynamicRDFCapability': 'RDF1_Capable', 'RDFA': False,
+            'RDFSession': [
+                {'SRDFStatus': 'Ready',
+                 'SRDFReplicationMode': 'Synchronized',
+                 'remoteDeviceID': device_id2,
+                 'remoteSymmetrixID': remote_array,
+                 'SRDFGroupNumber': 1,
+                 'SRDFRemoteGroupNumber': 1}]}}
+
+    priv_vol_response_no_rep = {
+        'volumeHeader': {
+            'private': False, 'capGB': 1.0, 'capMB': 1026.0,
+            'serviceState': 'Normal', 'emulationType': 'FBA',
+            'volumeId': '00001', 'status': 'Ready', 'mapped': False,
+            'numStorageGroups': 0, 'reservationInfo': {'reserved': False},
+            'encapsulated': False, 'formattedName': '00001',
+            'system_resource': False, 'numSymDevMaskingViews': 0,
+            'nameModifier': "", 'configuration': 'TDEV',
+            'userDefinedIdentifier': 'OS-00001'},
+        'maskingInfo': {'masked': False},
+        'rdfInfo': {'RDF': False}}
+
+    snap_device_label = ('%(dev)s:%(label)s' % {'dev': device_id,
+                                                'label': managed_snap_id})
+    priv_snap_response = {
+        'deviceName': snap_device_label, 'snapshotLnks': [],
+        'snapshotSrcs': [
+            {'generation': 0,
+             'linkedDevices': [
+                 {'targetDevice': device_id2, 'percentageCopied': 100,
+                  'state': 'Copied', 'copy': True, 'defined': True,
+                  'linked': True}],
+             'snapshotName': test_snapshot_snap_name,
+             'state': 'Established'}]}
+
+    volume_metadata = {
+        'DeviceID': device_id, 'ArrayID': array, 'ArrayModel': array_model}
