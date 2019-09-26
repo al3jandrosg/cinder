@@ -8,10 +8,10 @@ failure=false
 
 mysql -u root << EOF
 CREATE DATABASE cinder;
-GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' \
-  IDENTIFIED BY 'changeme';
-GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' \
-  IDENTIFIED BY 'changeme';
+CREATE USER 'cinder'@'localhost' IDENTIFIED BY 'changeme';
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost';
+CREATE USER 'cinder'@'%' IDENTIFIED BY 'changeme';
+GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%';
 EOF
 
 sed -i -e 's!connection = sqlite.*cinder.sqlite!connection = mysql+pymysql://cinder:changeme@localhost/cinder!g' /etc/cinder/cinder.conf

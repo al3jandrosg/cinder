@@ -1,3 +1,11 @@
+cinder (2:15.0.0~b3~git2019092509.cea6e823c-0ubuntu2) eoan; urgency=medium
+
+  * Fix test issues triggered by mysql8
+    - d/p/fix-test-setup-mysql8.patch: use explicit create user in CI setup
+    - debian/tests/cinder-daemons: use explicit create user in autopkgtest
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 26 Sep 2019 09:07:05 +0200
+
 cinder (2:15.0.0~b3~git2019092509.cea6e823c-0ubuntu1) eoan; urgency=medium
 
   [ Sahid Orentino Ferdjaoui ]
