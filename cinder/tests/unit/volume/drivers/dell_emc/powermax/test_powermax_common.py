@@ -1615,7 +1615,7 @@ class PowerMaxCommonTest(test.TestCase):
         extra_specs = self.data.extra_specs
         volume = self.data.test_volume
         host = {'host': self.data.fake_host}
-        new_type = {'extra_specs': {}}
+        new_type = {'extra_specs': {'slo': 'Bronze'}}
         migrate_status = self.common._slo_workload_migration(
             device_id, volume, host, volume_name, new_type, extra_specs)
         self.assertFalse(migrate_status)
@@ -1700,7 +1700,7 @@ class PowerMaxCommonTest(test.TestCase):
         volume_name = self.data.test_attached_volume.name
         # Rep Config
         rep_mode = 'Synchronous'
-        self.common.rep_config = {'mode': rep_mode}
+        self.common.rep_config = {'mode': rep_mode, 'metro_use_bias': True}
         # Extra Specs
         new_type = {'extra_specs': {}}
         src_extra_specs = self.data.extra_specs_migrate
@@ -1737,8 +1737,10 @@ class PowerMaxCommonTest(test.TestCase):
             success = self.common._migrate_volume(
                 array, volume, device_id, srp, slo, workload, volume_name,
                 new_type, src_extra_specs)[0]
+            cleanup_specs = src_extra_specs
+            cleanup_specs['force_vol_add'] = True
             mck_cleanup.assert_called_once_with(
-                volume, volume_name, device_id, src_extra_specs)
+                volume, volume_name, device_id, cleanup_specs)
             mck_retype.assert_called_once_with(
                 array, srp, volume, device_id, src_extra_specs, slo, workload,
                 tgt_extra_specs, False)
@@ -1753,8 +1755,11 @@ class PowerMaxCommonTest(test.TestCase):
             success = self.common._migrate_volume(
                 array, volume, device_id, srp, slo, workload, volume_name,
                 new_type, src_extra_specs)[0]
+            mck_setup_specs = src_extra_specs
+            mck_setup_specs[utils.METROBIAS] = self.common.rep_config[
+                'metro_use_bias']
             mck_setup.assert_called_once_with(
-                self.data.array, volume, device_id, src_extra_specs)
+                self.data.array, volume, device_id, mck_setup_specs)
             mck_retype.assert_called_once_with(
                 array, srp, volume, device_id, src_extra_specs, slo,
                 workload, tgt_extra_specs, False)
@@ -1779,6 +1784,8 @@ class PowerMaxCommonTest(test.TestCase):
             mck_setup.assert_not_called()
             self.assertTrue(success)
 
+    @mock.patch.object(common.PowerMaxCommon, 'setup_volume_replication',
+                       return_value=('Status', 'Data', 'Info'))
     @mock.patch.object(common.PowerMaxCommon, '_retype_volume',
                        return_value=True)
     @mock.patch.object(common.PowerMaxCommon, 'cleanup_lun_replication')
@@ -1792,8 +1799,8 @@ class PowerMaxCommonTest(test.TestCase):
     @mock.patch.object(common.PowerMaxCommon, 'get_volume_metadata',
                        return_value='')
     def test_migrate_volume_attachment_path(
-            self, mck_meta, mck_remote_retype, mck_setup, mck_inuse_retype,
-            mck_cleanup, mck_retype):
+            self, mck_meta, mck_remote_retype, mck_setup_use, mck_inuse_retype,
+            mck_cleanup, mck_retype, mck_setup):
         # Array/Volume info
         array = self.data.array
         srp = self.data.srp
@@ -1820,7 +1827,7 @@ class PowerMaxCommonTest(test.TestCase):
             self.assertTrue(success)
 
         mck_cleanup.reset_mock()
-        mck_setup.reset_mock()
+        mck_setup_use.reset_mock()
 
         # Scenario 2: Volume not attached
         with mock.patch.object(self.utils, 'is_replication_enabled',
@@ -1828,6 +1835,23 @@ class PowerMaxCommonTest(test.TestCase):
             success = self.common._migrate_volume(
                 array, volume_not_attached, device_id, srp, slo, workload,
                 volume_not_attached_name, new_type, src_extra_specs)[0]
+            mck_retype.assert_called_once()
+            self.assertTrue(success)
+
+        # Scenario 3: Volume not attached, enable RDF
+        tgt_extra_specs = {
+            'srp': srp, 'array': array, 'slo': slo, 'workload': workload,
+            'interval': src_extra_specs['interval'],
+            'retries': src_extra_specs['retries'],
+            utils.METROBIAS: True}
+        self.common.rep_config[utils.METROBIAS] = True
+        with mock.patch.object(self.utils, 'is_replication_enabled',
+                               side_effect=[False, True]):
+            success = self.common._migrate_volume(
+                array, volume_not_attached, device_id, srp, slo, workload,
+                volume_not_attached_name, new_type, src_extra_specs)[0]
+            mck_setup.assert_called_once_with(array, volume_not_attached,
+                                              device_id, tgt_extra_specs)
             mck_retype.assert_called_once()
             self.assertTrue(success)
 
@@ -2890,11 +2914,37 @@ class PowerMaxCommonTest(test.TestCase):
             'DeviceLabel': self.data.device_label, 'ArrayID': self.data.array,
             'ArrayModel': self.data.array_model, 'ServiceLevel': 'None',
             'Workload': 'None', 'Emulation': 'FBA', 'Configuration': 'TDEV',
-            'CompressionEnabled': 'False', 'ReplicationEnabled': 'True',
+            'CompressionDisabled': 'True', 'ReplicationEnabled': 'True',
             'R2-DeviceID': self.data.device_id2,
             'R2-ArrayID': self.data.remote_array,
             'R2-ArrayModel': self.data.array_model,
             'ReplicationMode': 'Synchronized',
+            'RDFG-Label': self.data.rdf_group_name,
+            'R1-RDFG': 1, 'R2-RDFG': 1}
+        array = self.data.array
+        device_id = self.data.device_id
+        act_metadata = self.common.get_volume_metadata(array, device_id)
+        self.assertEqual(ref_metadata, act_metadata)
+
+    @mock.patch.object(rest.PowerMaxRest, '_get_private_volume',
+                       return_value=tpd.PowerMaxData.
+                       priv_vol_response_metro_active_rep)
+    @mock.patch.object(rest.PowerMaxRest, 'get_array_model_info',
+                       return_value=(tpd.PowerMaxData.array_model, None))
+    @mock.patch.object(rest.PowerMaxRest, 'get_rdf_group',
+                       return_value=(tpd.PowerMaxData.rdf_group_details))
+    def test_get_volume_metadata_metro_active_rep(self, mck_rdf,
+                                                  mck_model, mck_priv):
+        ref_metadata = {
+            'DeviceID': self.data.device_id,
+            'DeviceLabel': self.data.device_label, 'ArrayID': self.data.array,
+            'ArrayModel': self.data.array_model, 'ServiceLevel': 'None',
+            'Workload': 'None', 'Emulation': 'FBA', 'Configuration': 'TDEV',
+            'CompressionDisabled': 'True', 'ReplicationEnabled': 'True',
+            'R2-DeviceID': self.data.device_id2,
+            'R2-ArrayID': self.data.remote_array,
+            'R2-ArrayModel': self.data.array_model,
+            'ReplicationMode': 'Metro',
             'RDFG-Label': self.data.rdf_group_name,
             'R1-RDFG': 1, 'R2-RDFG': 1}
         array = self.data.array
@@ -2912,7 +2962,7 @@ class PowerMaxCommonTest(test.TestCase):
             'DeviceLabel': self.data.device_label, 'ArrayID': self.data.array,
             'ArrayModel': self.data.array_model, 'ServiceLevel': 'None',
             'Workload': 'None', 'Emulation': 'FBA', 'Configuration': 'TDEV',
-            'CompressionEnabled': 'False', 'ReplicationEnabled': 'False'}
+            'CompressionDisabled': 'True', 'ReplicationEnabled': 'False'}
         array = self.data.array
         device_id = self.data.device_id
         act_metadata = self.common.get_volume_metadata(array, device_id)

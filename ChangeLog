@@ -1,8 +1,21 @@
 CHANGES
 =======
 
+15.0.0.0rc1
+-----------
+
+* Releasenote followup: Untyped to default volume type
+* PowerMax Driver - Volume Retype Replication fix
+* PowerMax Driver - Metro Volume Metadata change
+* Add "deletion policy" property to uploaded images
+* NEC Driver: Storage assist retype and a bugfix
 * HPE 3PAR: Updated supported operations for multiattach feature
+* Make sure stale image metadata is not used
 * PowerMax Driver - Unisphere version check
+* PowerMax Driver - Debug Metadata Fix
+* Untyped to Default Volume Type
+* NEC Driver: Support revert to snapshot
+* Unity: Add replication support
 * Delete unused key when rekeying volume
 * Leverage hw accelerator in image compression
 * Tests: Fix test\_volume.py import ordering
@@ -12,6 +25,7 @@ CHANGES
 * Pylint: use -j 0 arg
 * target/spdknvmf: Add max\_queue\_depth configuration parameter
 * NEC Driver: allow more than 4 iSCSI portals
+* Zadara VPSA: Move to API access key authentication
 * Fix up test\_snapshot notify tests
 * Continue renaming of volume\_utils (drivers)
 * Continue renaming volume\_utils (core)

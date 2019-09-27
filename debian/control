@@ -25,6 +25,7 @@ Build-Depends-Indep:
  python3-ddt (>= 1.2.1),
  python3-decorator (>= 3.4.0),
  python3-defusedxml (>= 0.5.0),
+ python3-doc8 (>= 0.6.0),
  python3-eventlet (>= 0.22.0),
  python3-fixtures (>= 3.0.0),
  python3-glanceclient (>= 1:2.15.0),
@@ -73,6 +74,7 @@ Build-Depends-Indep:
  python3-prettytable (>= 0.7.1),
  python3-psutil (>= 3.2.2),
  python3-psycopg2 (>= 2.7),
+ python3-pycodestyle (>= 2.5.0),
  python3-pymysql (>= 0.7.6),
  python3-pyparsing (>= 2.1.0),
  python3-reno (>= 2.5.0),
@@ -81,6 +83,8 @@ Build-Depends-Indep:
  python3-routes (>= 2.3.1),
  python3-rtslib-fb (>= 2.1.65),
  python3-six (>= 1.10.0),
+ python3-sphinx-feature-classification (>= 0.1.0),
+ python3-sphinxcontrib.apidoc (>= 0.2.0),
  python3-sqlalchemy (>= 1.0.10),
  python3-stestr,
  python3-stevedore (>= 1:1.20.0),
@@ -240,6 +244,7 @@ Depends:
  python3-paramiko (>= 2.0.0),
  python3-paste (>= 2.0.2),
  python3-pastedeploy (>= 1.5.0),
+ python3-pbr (>= 2.0.0),
  python3-prettytable (>= 0.7.1),
  python3-psutil (>= 3.2.2),
  python3-pyparsing (>= 2.1.0),
@@ -263,7 +268,7 @@ Suggests:
  python3-oauth2client (>= 1.5.0),
  python3-rados,
  python3-rbd,
- python3-rtslib-fb,
+ python3-rtslib-fb (>= 2.1.65),
 Description: Cinder Python 3 libraries
  OpenStack is a reliable cloud infrastructure. Its mission is to produce
  the ubiquitous cloud computing platform that will meet the needs of public
