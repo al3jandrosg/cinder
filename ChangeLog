@@ -1,6 +1,24 @@
 CHANGES
 =======
 
+15.0.0
+------
+
+* NetApp SolidFire: Add options for replication mode
+* Imported Translations from Zanata
+* NetApp SolidFire: Fix replication
+* 3PAR: For Peer Persistence, add policy options in RCG
+* PowerMax Docs -  New features and supported software
+* Fix: Online migrations for untyped volumes/snapshots
+* Add "service token" documentation
+* Tests: Fix retype unit test InvalidUUID warning
+* PowerMax Docs -  Short host and port group name changes
+* PowerMax Driver - ODE Capabilities Fix
+* Mark Virtuozzo Driver Unsupported
+* Add doc page for accelerate image compression
+* Update TOX/UPPER\_CONSTRAINTS\_FILE for stable/train
+* Update .gitreview for stable/train
+
 15.0.0.0rc1
 -----------
 

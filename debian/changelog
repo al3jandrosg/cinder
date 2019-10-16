@@ -1,3 +1,9 @@
+cinder (2:15.0.0-0ubuntu1) eoan; urgency=medium
+
+  * New upstream release for OpenStack Train.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 16 Oct 2019 10:59:02 -0400
+
 cinder (2:15.0.0~rc1-0ubuntu1) eoan; urgency=medium
 
   * d/watch: Scope to 15.x series.

@@ -1649,6 +1649,7 @@ doc/source/upgrade.rst
 doc/source/_extra/.htaccess
 doc/source/_static/.placeholder
 doc/source/admin/README.rst
+doc/source/admin/blockstorage-accelerate-image-compression.rst
 doc/source/admin/blockstorage-api-throughput.rst
 doc/source/admin/blockstorage-availability-zone-type.rst
 doc/source/admin/blockstorage-backup-disks.rst
@@ -1708,6 +1709,7 @@ doc/source/configuration/block-storage/policy.rst
 doc/source/configuration/block-storage/scheduler-filters.rst
 doc/source/configuration/block-storage/scheduler-weights.rst
 doc/source/configuration/block-storage/schedulers.rst
+doc/source/configuration/block-storage/service-token.rst
 doc/source/configuration/block-storage/volume-drivers.rst
 doc/source/configuration/block-storage/volume-encryption.rst
 doc/source/configuration/block-storage/backup/ceph-backup-driver.rst
@@ -2131,6 +2133,7 @@ releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
 releasenotes/notes/fix-reserve-volume-policy-31790a8d865ee0a1.yaml
 releasenotes/notes/fix-solidfire-provisioning-report-880141e64c1ea52f.yaml
 releasenotes/notes/fix-solidfire-python3-support-ee02ff2c1ec920f2.yaml
+releasenotes/notes/fix-solidfire-replication-dcb3e59b29950933.yaml
 releasenotes/notes/fix-vol-image-metadata-endpoints-returning-none-ba0590e6c6757b0c.yaml
 releasenotes/notes/force-delete-mv-a53924f09c475386.yaml
 releasenotes/notes/friendly-zone-names-d5e131d356040de0.yaml
@@ -2168,6 +2171,7 @@ releasenotes/notes/hnas-manage-unmanage-snapshot-support-40c8888cc594a7be.yaml
 releasenotes/notes/hnas-remove-iscsi-driver-419e9c08133f9f0a.yaml
 releasenotes/notes/hnas_deprecate_xml-16840b5a8c25d15e.yaml
 releasenotes/notes/hpe-3par-peer-persistence.yaml-91cc84bf89dbb462.yaml
+releasenotes/notes/hpe-3par-pp-rcg-policy-options-53271f38c315779f.yaml
 releasenotes/notes/hpe-3par-specify-nsp-for-fc-bootable-volume-f372879e1b625b4d.yaml
 releasenotes/notes/hpe3par-replication-group-a18a28d18de09e95.yaml
 releasenotes/notes/hpe_3par_multiattach-bf98a9e5c2208902.yaml
@@ -2275,6 +2279,7 @@ releasenotes/notes/netapp-nfs-consistency-group-support-83eccc2da91ee19b.yaml
 releasenotes/notes/netapp-non-discovery-19af4e10f7b190ea.yaml
 releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml
 releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml
+releasenotes/notes/netapp-solidfire-add-replication-mode-eb26535d0ec78cb4.yaml
 releasenotes/notes/netapp-solidfire-stats-improving-57207f313d7faf42.yaml
 releasenotes/notes/netapp_cdot_report_shared_blocks_exhaustion-073a73e05daf09d4.yaml
 releasenotes/notes/netapp_fix_svm_scoped_permissions.yaml
@@ -2540,6 +2545,7 @@ releasenotes/notes/verify-dorado-luntype-for-huawei-driver-4fc2f4cca3141bb3.yaml
 releasenotes/notes/veritas_access_driver-c73b2320ba9f46a8.yaml
 releasenotes/notes/veritas_access_iscsi_driver-de642dad9e7d0890.yaml
 releasenotes/notes/vhd-disk-format-upload-to-image-5851f9d35f4ee447.yaml
+releasenotes/notes/virtuozzo-unsupported-645b47dceb0ddbd2.yaml
 releasenotes/notes/vmax-attach-snapshot-3137e59ab4ff39a4.yaml
 releasenotes/notes/vmax-clone-cg-09fce492931c957f.yaml
 releasenotes/notes/vmax-compression-support-1dfe463328b56d7f.yaml
@@ -2645,8 +2651,6 @@ releasenotes/source/stein.rst
 releasenotes/source/unreleased.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
-releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po
-releasenotes/source/locale/ja/LC_MESSAGES/releasenotes.po
 tools/check_exec.py
 tools/coding-checks.sh
 tools/fast8.sh
