@@ -71,9 +71,10 @@ backup_manager_opts = [
                help='Time in seconds between checks to see if the backup '
                     'driver has been successfully initialized, any time '
                     'the driver is restarted.'),
-    cfg.IntOpt('backup_driver_status_check_interval',
+    cfg.IntOpt('backup_driver_stats_polling_interval',
                default=60,
                min=10,
+               deprecated_name='backup_driver_status_check_interval',
                help='Time in seconds between checks of the backup driver '
                     'status.  If does not report as working, it is '
                     'restarted.'),
@@ -111,7 +112,7 @@ SERVICE_PGRP = '' if os.name == 'nt' else os.getpgrp()
 # writes/reads and the compression/decompression calls.
 # (https://github.com/eventlet/eventlet/issues/432)
 
-class BackupManager(manager.ThreadPoolManager):
+class BackupManager(manager.SchedulerDependentManager):
     """Manages backup of block storage devices."""
 
     RPC_API_VERSION = backup_rpcapi.BackupAPI.RPC_API_VERSION
@@ -157,6 +158,7 @@ class BackupManager(manager.ThreadPoolManager):
         backups = objects.BackupList.get_all_by_host(ctxt, self.host)
         self._add_to_threadpool(key_migration.migrate_fixed_key,
                                 backups=backups)
+        self.publish_service_capabilities(ctxt)
 
     def _setup_backup_driver(self, ctxt):
         backup_service = self.service(context=ctxt, db=self.db)
@@ -358,10 +360,6 @@ class BackupManager(manager.ThreadPoolManager):
 
         self._notify_about_backup_usage(context, backup, "create.start")
 
-        backup.host = self.host
-        backup.availability_zone = self.az
-        backup.save()
-
         expected_status = "backing-up"
         if snapshot_id:
             actual_status = snapshot['status']
@@ -535,9 +533,6 @@ class BackupManager(manager.ThreadPoolManager):
 
         volume = objects.Volume.get_by_id(context, volume_id)
         self._notify_about_backup_usage(context, backup, "restore.start")
-
-        backup.host = self.host
-        backup.save()
 
         expected_status = [fields.VolumeStatus.RESTORING_BACKUP,
                            fields.VolumeStatus.CREATING]
@@ -715,8 +710,6 @@ class BackupManager(manager.ThreadPoolManager):
         LOG.info('Delete backup started, backup: %s.', backup.id)
 
         self._notify_about_backup_usage(context, backup, "delete.start")
-        backup.host = self.host
-        backup.save()
 
         expected_status = fields.BackupStatus.DELETING
         actual_status = backup.status
@@ -1082,7 +1075,18 @@ class BackupManager(manager.ThreadPoolManager):
         return self.is_initialized
 
     @periodic_task.periodic_task(
-        spacing=CONF.backup_driver_status_check_interval)
+        spacing=CONF.backup_driver_stats_polling_interval)
+    def publish_service_capabilities(self, context):
+        """Collect driver status and then publish."""
+        self._report_driver_status(context)
+        self._publish_service_capabilities(context)
+
     def _report_driver_status(self, context):
         if not self.is_working():
             self.setup_backup_backend(context)
+        backup_stats = {
+            'backend_state': self.is_working(),
+            'driver_name': self.driver_name,
+            'availability_zone': self.az
+        }
+        self.update_service_capabilities(backup_stats)

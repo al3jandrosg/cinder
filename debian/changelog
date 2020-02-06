@@ -1,3 +1,17 @@
+cinder (2:16.0.0~b2~git2020020407.819b4a0fc-0ubuntu1) focal; urgency=medium
+
+  * New upstream snapshot for OpenStack Ussuri.
+  * d/control: Drop. Dropped Python2 support.
+  * d/rules: Switched to pybuild.
+  * d/p/skip-taskflow-tests-py37.patch: Dropped. Fixed upstream.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/control: Added python3-tabulate.
+  * d/control: Removed min version for python-hacking.
+  * d/control: Added python3-sqlalchemy-utils.
+  * d/p/py38skip.patch: Skip failing tests with Python3.8.
+
+ -- Sahid Orentino Ferdjaoui <sahid.ferdjaoui@canonical.com>  Thu, 06 Feb 2020 11:33:45 +0000
+
 cinder (2:15.0.0-0ubuntu1) eoan; urgency=medium
 
   * New upstream release for OpenStack Train.

@@ -19,7 +19,6 @@ import hashlib
 import math
 import time
 
-from cinder import utils
 from defusedxml import lxml as etree
 from oslo_log import log as logging
 from oslo_utils import strutils
@@ -29,6 +28,7 @@ import six
 
 from cinder import coordination
 from cinder.i18n import _
+from cinder import utils
 import cinder.volume.drivers.stx.exception as stx_exception
 
 LOG = logging.getLogger(__name__)
@@ -392,10 +392,10 @@ class STXClient(object):
                 lun = obj.findtext("PROPERTY[@name='lun']")
                 iid = obj.findtext("PROPERTY[@name='identifier']")
                 if iid in ids:
-                    LOG.debug("volume '{}' is already mapped to {} at lun {}".
-                              format(volume_name, iid, lun))
+                    LOG.debug("volume '%s' is already mapped to %s at lun %s",
+                              volume_name, iid, lun)
                     return int(lun)
-        except Exception as e:
+        except Exception:
             LOG.exception("failed to look up mappings for volume '%s'",
                           volume_name)
             raise

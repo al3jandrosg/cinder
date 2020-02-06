@@ -13,14 +13,12 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""
-Volume driver test for Inspur AS13000
-"""
+"""Volume driver test for Inspur AS13000."""
 
 import json
-import mock
 import random
 import time
+from unittest import mock
 
 import ddt
 import eventlet
@@ -997,7 +995,7 @@ class AS13000DriverTestCase(test.TestCase):
         host_exist, target_name, node = (
             self.as13000_san._get_target_from_conn(host_ip))
 
-        if host_ip is 'fake_ip3':
+        if host_ip == 'fake_ip3':
             self.assertEqual((True, 'fake_target_2',
                               ['fake_node4', 'fake_node3']),
                              (host_exist, target_name, node))

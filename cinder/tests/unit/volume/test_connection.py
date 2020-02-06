@@ -15,8 +15,9 @@
 #    under the License.
 """Tests for Volume connection test cases."""
 
+from unittest import mock
+
 import ddt
-import mock
 
 from cinder import context
 from cinder import db
@@ -88,7 +89,7 @@ class DiscardFlagTestCase(base.BaseVolumeTestCase):
         self.volume.driver.initialize_connection.return_value = conn_info
 
         def _safe_get(key):
-            if key is 'report_discard_supported':
+            if key == 'report_discard_supported':
                 return config_discard_flag
             else:
                 return None

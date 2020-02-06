@@ -16,13 +16,13 @@
 import collections
 import copy
 import distutils.version as dist_version  # pylint: disable=E0611
-import eventlet
 import math
 import os
-import six
 import string
 
+import eventlet
 from oslo_log import log as logging
+import six
 
 from cinder import coordination
 from cinder import exception
@@ -175,7 +175,7 @@ class DS8KCommonHelper(object):
                           'the end.'))
             lss_range = lss_range.replace('-', ' - ').split()
             for index, lss in enumerate(lss_range):
-                if lss is '-':
+                if lss == '-':
                     try:
                         begin = int(lss_range[index - 1], 16)
                         end = int(lss_range[index + 1], 16)

@@ -18,21 +18,19 @@
 import os
 import sys
 
+from oslo_config import cfg
+from oslo_upgradecheck import upgradecheck as uc
+
 from cinder import context
 from cinder import db
 from cinder import exception
 from cinder import objects
-from cinder import service  # noqa
-from oslo_config import cfg
-from oslo_upgradecheck import upgradecheck as uc
-
 from cinder.policy import DEFAULT_POLICY_FILENAME
-import cinder.service  # noqa
-
+# Need to import service to load config
+from cinder import service  # noqa
 # We must first register Cinder's objects. Otherwise
 # we cannot import the volume manager.
 objects.register_all()
-
 import cinder.volume.manager as volume_manager
 
 CONF = cfg.CONF
@@ -40,10 +38,18 @@ CONF = cfg.CONF
 SUCCESS = uc.Code.SUCCESS
 FAILURE = uc.Code.FAILURE
 WARNING = uc.Code.WARNING
-REMOVED_DRVRS = ["coprhd",
-                 "drbdmanage",
-                 "disco",
-                 "hgst", ]
+REMOVED_DRVRS = [
+    "coprhd",
+    "drbdmanage",
+    "disco",
+    "hgst",
+    "fusionstorage",
+    "prophetstor",
+    "nimble",
+    "sheepdog",
+    "vzstorage",
+    "veritas_access",
+]
 
 
 def _get_enabled_drivers():

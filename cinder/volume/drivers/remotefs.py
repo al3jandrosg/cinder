@@ -106,7 +106,7 @@ CONF.register_opts(nas_opts, group=configuration.SHARED_CONF_GROUP)
 CONF.register_opts(volume_opts, group=configuration.SHARED_CONF_GROUP)
 
 
-def locked_volume_id_operation(f, external=False):
+def locked_volume_id_operation(f):
     """Lock decorator for volume operations.
 
        Takes a named lock prior to executing the operation. The lock is named
@@ -130,7 +130,7 @@ def locked_volume_id_operation(f, external=False):
             raise exception.VolumeBackendAPIException(data=err_msg)
 
         @utils.synchronized('%s-%s' % (lock_tag, volume_id),
-                            external=external)
+                            external=False)
         def lvo_inner2():
             return f(inst, *args, **kwargs)
         return lvo_inner2()
@@ -141,7 +141,7 @@ class BackingFileTemplate(string.Template):
     """Custom Template for substitutions in backing files regex strings
 
         Changes the default delimiter from '$' to '#' in order to prevent
-        clashing with the the regex end of line marker '$'.
+        clashing with the regex end of line marker '$'.
     """
     delimiter = '#'
     idpattern = r'[a-z][_a-z0-9]*'
@@ -474,11 +474,13 @@ class RemoteFSDriver(driver.BaseVD):
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
+        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
         image_utils.upload_volume(context,
                                   image_service,
                                   image_meta,
                                   self.local_path(volume),
-                                  run_as_root=self._execute_as_root)
+                                  run_as_root=self._execute_as_root,
+                                  store_id=store_id)
 
     def _read_config_file(self, config_file):
         # Returns list of lines in file
@@ -945,7 +947,7 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
         return self.base
 
     def _copy_volume_to_image(self, context, volume, image_service,
-                              image_meta):
+                              image_meta, store_id=None):
         """Copy the volume to the specified image."""
 
         # If snapshots exist, flatten to a temporary image, and upload it
@@ -973,11 +975,15 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
             else:
                 upload_path = active_file_path
 
+            if not store_id:
+                store_id = volume.volume_type.extra_specs.get(
+                    'image_service:store_id')
             image_utils.upload_volume(context,
                                       image_service,
                                       image_meta,
                                       upload_path,
-                                      run_as_root=self._execute_as_root)
+                                      run_as_root=self._execute_as_root,
+                                      store_id=store_id)
 
     def get_active_image_from_info(self, volume):
         """Returns filename of the active image from the info file."""
@@ -1058,7 +1064,7 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
                 'status': fields.SnapshotStatus.CREATING,
                 'progress': '0%',
                 'volume_size': src_vref.size,
-                'display_name': 'tmp-snap-%s' % src_vref.id,
+                'display_name': 'tmp-snap-%s' % volume.id,
                 'display_description': None,
                 'volume_type_id': src_vref.volume_type_id,
                 'encryption_key_id': src_vref.encryption_key_id,
@@ -1654,6 +1660,7 @@ class RemoteFSSnapDriver(RemoteFSSnapDriverBase):
     def create_volume_from_snapshot(self, volume, snapshot):
         return self._create_volume_from_snapshot(volume, snapshot)
 
+    # TODO: should be locking on src_vref id -- bug #1852449
     @locked_volume_id_operation
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume."""
@@ -1696,6 +1703,8 @@ class RemoteFSSnapDriverDistributed(RemoteFSSnapDriverBase):
     def create_volume_from_snapshot(self, volume, snapshot):
         return self._create_volume_from_snapshot(volume, snapshot)
 
+    # lock the source volume id first
+    @coordination.synchronized('{self.driver_prefix}-{src_vref.id}')
     @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume."""

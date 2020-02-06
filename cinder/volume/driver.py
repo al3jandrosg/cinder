@@ -312,12 +312,18 @@ image_opts = [
     cfg.BoolOpt('use_multipath_for_image_xfer',
                 default=False,
                 help='Do we attach/detach volumes in cinder using multipath '
-                     'for volume to image and image to volume transfers?'),
+                     'for volume to image and image to volume transfers? '
+                     'This parameter needs to be configured for each backend '
+                     'section or in [backend_defaults] section as a common '
+                     'configuration for all backends.'),
     cfg.BoolOpt('enforce_multipath_for_image_xfer',
                 default=False,
                 help='If this is set to True, attachment of volumes for '
                      'image transfer will be aborted when multipathd is not '
-                     'running. Otherwise, it will fallback to single path.'),
+                     'running. Otherwise, it will fallback to single path. '
+                     'This parameter needs to be configured for each backend '
+                     'section or in [backend_defaults] section as a common '
+                     'configuration for all backends.'),
 ]
 
 
@@ -893,12 +899,16 @@ class BaseVD(object):
                                                           enforce_multipath)
         attach_info, volume = self._attach_volume(context, volume, properties)
 
+        # retrieve store information from extra-specs
+        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
+
         try:
             image_utils.upload_volume(context,
                                       image_service,
                                       image_meta,
                                       attach_info['device']['path'],
-                                      compress=True)
+                                      compress=True,
+                                      store_id=store_id)
         finally:
             # Since attached volume was not used for writing we can force
             # detach it

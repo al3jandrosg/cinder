@@ -14,13 +14,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-# TODO(smcginnis) update this once six has support for collections.abc
-# (https://github.com/benjaminp/six/pull/241) or clean up once we drop py2.7.
-try:
-    from collections.abc import Callable
-except ImportError:
-    from collections import Callable
-
+from collections import abc
 import functools
 import inspect
 import math
@@ -39,14 +33,11 @@ import webob.exc
 from cinder.api.openstack import api_version_request as api_version
 from cinder.api.openstack import versioned_method
 from cinder import exception
-
 from cinder import i18n
 i18n.enable_lazy()
-
 from cinder.i18n import _
 from cinder import utils
 from cinder.wsgi import common as wsgi
-
 
 LOG = logging.getLogger(__name__)
 
@@ -609,13 +600,11 @@ class ResourceExceptionHandler(object):
             raise Fault(exception.ConvertedException(
                 code=ex_value.code, explanation=six.text_type(ex_value)))
         elif isinstance(ex_value, TypeError):
-            exc_info = (ex_type, ex_value, ex_traceback)
-            LOG.error('Exception handling resource: %s',
-                      ex_value, exc_info=exc_info)
+            LOG.exception('Exception handling resource:')
             raise Fault(webob.exc.HTTPBadRequest())
         elif isinstance(ex_value, Fault):
             LOG.info("Fault thrown: %s", ex_value)
-            raise ex_value
+            raise
         elif isinstance(ex_value, webob.exc.HTTPException):
             LOG.info("HTTP exception thrown: %s", ex_value)
             raise Fault(ex_value)
@@ -1095,7 +1084,7 @@ class ControllerMetaclass(type):
                 versioned_methods.append(getattr(base, VER_METHOD_ATTR))
 
         for key, value in cls_dict.items():
-            if not isinstance(value, Callable):
+            if not isinstance(value, abc.Callable):
                 continue
             if getattr(value, 'wsgi_action', None):
                 actions[value.wsgi_action] = key

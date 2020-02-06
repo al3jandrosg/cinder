@@ -13,12 +13,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""
-Tests for Backup code.
-"""
+"""Tests for Backup code."""
+
+from unittest import mock
 
 import ddt
-import mock
 from oslo_serialization import jsonutils
 from oslo_utils import timeutils
 import six
@@ -252,6 +251,45 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual(3, len(res_dict['backups'][0]))
         self.assertEqual(backup2.id, res_dict['backups'][0]['id'])
         self.assertEqual('test_backup', res_dict['backups'][0]['name'])
+
+        backup3.destroy()
+        backup2.destroy()
+        backup1.destroy()
+
+    def test_list_all_backups_detail_json_over_limit(self):
+        self.override_config('osapi_max_limit', 2)
+        backup1 = utils.create_backup(self.context, availability_zone='az1',
+                                      container='volumebackups', size=1)
+        backup2 = utils.create_backup(self.context, availability_zone='az1',
+                                      container='volumebackups', size=1)
+        backup3 = utils.create_backup(self.context, availability_zone='az1',
+                                      container='volumebackups', size=1)
+
+        req = webob.Request.blank('/v2/%s/backups/detail' % fake.PROJECT_ID)
+        req.method = 'GET'
+        req.headers['Content-Type'] = 'application/json'
+        req.headers['Accept'] = 'application/json'
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+        res_dict = jsonutils.loads(res.body)
+
+        self.assertEqual(http_client.OK, res.status_int)
+        self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][0]))
+        self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][1]))
+        self.assertEqual(2, len(res_dict['backups']))
+
+        self.assertIn('backups_links', res_dict)
+        links = res_dict['backups_links']
+        next_url = links[0]['href']
+        req = webob.Request.blank(next_url)
+        req.method = 'GET'
+        req.headers['Content-Type'] = 'application/json'
+        req.headers['Accept'] = 'application/json'
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+        res_dict = jsonutils.loads(res.body)
+
+        self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][0]))
 
         backup3.destroy()
         backup2.destroy()

@@ -51,7 +51,8 @@ This module provides Manager, a base class for managers.
 
 """
 
-
+from eventlet import greenpool
+from eventlet import tpool
 from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging as messaging
@@ -66,10 +67,6 @@ from cinder import objects
 from cinder import rpc
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import utils
-
-from eventlet import greenpool
-from eventlet import tpool
-
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -177,12 +174,13 @@ class SchedulerDependentManager(ThreadPoolManager):
     """
 
     def __init__(self, host=None, db_driver=None, service_name='undefined',
-                 cluster=None):
+                 cluster=None, *args, **kwargs):
         self.last_capabilities = None
         self.service_name = service_name
         self.scheduler_rpcapi = scheduler_rpcapi.SchedulerAPI()
         super(SchedulerDependentManager, self).__init__(host, db_driver,
-                                                        cluster=cluster)
+                                                        cluster=cluster,
+                                                        *args, **kwargs)
 
     def update_service_capabilities(self, capabilities):
         """Remember these capabilities to send on next periodic update."""

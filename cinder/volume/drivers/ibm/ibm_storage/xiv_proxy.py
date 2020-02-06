@@ -15,13 +15,10 @@
 #
 import datetime
 import re
-import six
 import socket
-
 
 from oslo_log import log as logging
 from oslo_utils import importutils
-
 pyxcli = importutils.try_import("pyxcli")
 if pyxcli:
     from pyxcli import client
@@ -29,6 +26,7 @@ if pyxcli:
     from pyxcli.events import events
     from pyxcli.mirroring import mirrored_entities
     from pyxcli import transports
+import six
 
 from cinder import context
 from cinder.i18n import _
@@ -1801,12 +1799,12 @@ class XIVProxy(proxy.IBMStorageProxy):
                 "cg_create", cg=cgname,
                 pool=self.storage_info[
                     storage.FLAG_KEYS['storage_pool']]).as_list
-        except errors.CgNameExistsError as e:
+        except errors.CgNameExistsError:
             error = (_("consistency group %s already exists on backend") %
                      cgname)
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.CgLimitReachedError as e:
+        except errors.CgLimitReachedError:
             error = _("Reached Maximum number of consistency groups")
             LOG.error(error)
             raise self._get_exception()(error)
@@ -2176,37 +2174,37 @@ class XIVProxy(proxy.IBMStorageProxy):
             self._call_xiv_xcli(
                 "cg_snapshots_create", cg=cgname,
                 snap_group=groupname).as_list
-        except errors.CgDoesNotExistError as e:
+        except errors.CgDoesNotExistError:
             error = (_("Consistency group %s does not exist on backend") %
                      cgname)
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.CgBadNameError as e:
+        except errors.CgBadNameError:
             error = (_("Consistency group %s has an illegal name") % cgname)
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.SnapshotGroupDoesNotExistError as e:
+        except errors.SnapshotGroupDoesNotExistError:
             error = (_("Snapshot group %s has an illegal name") % cgname)
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.PoolSnapshotLimitReachedError as e:
+        except errors.PoolSnapshotLimitReachedError:
             error = _("Reached maximum snapshots allocation size")
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.CgEmptyError as e:
+        except errors.CgEmptyError:
             error = (_("Consistency group %s is empty") % cgname)
             LOG.error(error)
             raise self._get_exception()(error)
         except (errors.MaxVolumesReachedError,
-                errors.DomainMaxVolumesReachedError) as e:
+                errors.DomainMaxVolumesReachedError):
             error = _("Reached Maximum number of volumes")
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.SnapshotGroupIsReservedError as e:
+        except errors.SnapshotGroupIsReservedError:
             error = (_("Consistency group %s name is reserved") % cgname)
             LOG.error(error)
             raise self._get_exception()(error)
-        except errors.SnapshotGroupAlreadyExistsError as e:
+        except errors.SnapshotGroupAlreadyExistsError:
             error = (_("Snapshot group %s already exists") % groupname)
             LOG.error(error)
             raise self._get_exception()(error)

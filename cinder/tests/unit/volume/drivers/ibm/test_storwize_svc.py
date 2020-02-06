@@ -14,22 +14,20 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 #
-"""
-Tests for the IBM Storwize family and SVC volume driver.
-"""
+"""Tests for the IBM Storwize family and SVC volume driver."""
 
-import ddt
 import json
-import mock
-import paramiko
 import random
 import re
 import time
+from unittest import mock
 
+import ddt
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_utils import importutils
 from oslo_utils import units
+import paramiko
 import six
 
 from cinder import context
@@ -4069,8 +4067,9 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                           volume_fc,
                           connector)
         # All the wwpns of this host are not configured.
-        host_site_2 = {'site1': 'ff00000000000000',
-                       'site1': 'ff00000000000001'}
+        # TODO: This needs to be fixed. See bug #1857043
+        host_site_2 = {'site1': 'ff00000000000000',  # noqa
+                       'site1': 'ff00000000000001'}  # noqa
         self.fc_driver.configuration.set_override(
             'storwize_preferred_host_site', host_site_2)
         self.assertRaises(exception.VolumeDriverException,
@@ -4078,8 +4077,9 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                           volume_fc,
                           connector)
 
-        host_site_3 = {'site1': 'ffff000000000000',
-                       'site1': 'ffff000000000001'}
+        # TODO: This needs to be fixed. See bug #1857043
+        host_site_3 = {'site1': 'ffff000000000000',  # noqa
+                       'site1': 'ffff000000000001'}  # noqa
         self.fc_driver.configuration.set_override(
             'storwize_preferred_host_site', host_site_3)
         self.fc_driver.initialize_connection(volume_fc, connector)
@@ -4088,8 +4088,9 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
         host_info = self.fc_driver._helpers.ssh.lshost(host=host_name)
         self.assertEqual('site1', host_info[0]['site_name'])
 
-        host_site_4 = {'site2': 'ffff000000000000',
-                       'site2': 'ffff000000000001'}
+        # TODO: This needs to be fixed. See bug #1857043
+        host_site_4 = {'site2': 'ffff000000000000',  # noqa
+                       'site2': 'ffff000000000001'}  # noqa
         self.fc_driver.configuration.set_override(
             'storwize_preferred_host_site', host_site_4)
         self.assertRaises(exception.InvalidConfigurationValue,

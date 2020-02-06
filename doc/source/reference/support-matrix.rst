@@ -85,3 +85,12 @@ release.
    * Tintri Storage Driver
    * Veritas HyperScale Storage Driver
    * Nexenta Edge Storage Driver
+
+* Ussuri
+   * Huawei FusionStorage Driver
+   * Nimble Storage Driver
+   * ProphetStor Flexvisor Driver
+   * Sheepdog Driver
+   * Veritas Access Storage Driver
+   * Virtuozzo Storage Driver
+

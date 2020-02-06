@@ -14,9 +14,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import ddt
-import mock
 import time
+from unittest import mock
+
+import ddt
 
 from cinder import context
 from cinder import exception
@@ -363,6 +364,29 @@ xml_out = '''
      <UNIT name="LDN(h)">0006</UNIT>
     </SECTION>
    </OBJECT>
+   <OBJECT name="LD Set(iSCSI)">
+    <SECTION name="LD Set(iSCSI) Information">
+     <UNIT name="Platform">LX</UNIT>
+     <UNIT name="LD Set Name">OpenStack2</UNIT>
+     <UNIT name="Target Mode">Normal</UNIT>
+     <UNIT name="Target Name">iqn.2001-03.target0002</UNIT>
+    </SECTION>
+    <SECTION name="Portal">
+     <UNIT name="Portal">192.168.1.94:3260</UNIT>
+    </SECTION>
+    <SECTION name="Portal">
+     <UNIT name="Portal">192.168.1.95:3260</UNIT>
+    </SECTION>
+    <SECTION name="Portal">
+     <UNIT name="Portal">192.168.2.96:3260</UNIT>
+    </SECTION>
+    <SECTION name="Portal">
+     <UNIT name="Portal">192.168.2.97:3260</UNIT>
+    </SECTION>
+    <SECTION name="Initiator List">
+     <UNIT name="Initiator List">iqn.1994-05.com.redhat:13a80ea272e</UNIT>
+    </SECTION>
+   </OBJECT>
   </CHAPTER>
  <RETURN_MSG>Command Completed Successfully!!</RETURN_MSG>
  <RETURN_CODE>0</RETURN_CODE>
@@ -535,7 +559,7 @@ class NominatePoolLDTest(volume_helper.MStorageDSVDriver, test.TestCase):
         # config:pool_backup_pools=[2]
         self.pools[1]['free'] = savePool1
 
-        if len(self.pools[0]['ld_list']) is 1024:
+        if len(self.pools[0]['ld_list']) == 1024:
             savePool2 = self.pools[2]['free']
             savePool3 = self.pools[3]['free']
             self.pools[2]['free'] = 0
@@ -719,6 +743,13 @@ class BindLDTest(volume_helper.MStorageDSVDriver, test.TestCase):
             vol, vol.size, None,
             self._convert_id2name,
             self._select_leastused_poolnumber)
+        self.mock_object(self._cli, 'get_pair_lds',
+                         return_value={'lds1', 'lds2', 'lds3'})
+        with self.assertRaisesRegex(exception.VolumeBackendAPIException,
+                                    'Cannot create clone volume. '
+                                    'number of pairs reached 3. '
+                                    'ldname=LX:287RbQoP7VdwR1WsPC2fZT'):
+            self.create_cloned_volume(vol, src)
 
     def test_bindld_CreateCloneWaitingInterval(self):
         self.assertEqual(10, cli.get_sleep_time_for_clone(0))
@@ -1210,6 +1241,28 @@ class NonDisruptiveBackup_test(volume_helper.MStorageDSVDriver,
         ret = self.fc_initialize_connection_snapshot(snap, connector)
         self.assertIsNotNone(ret)
         self.assertEqual('fibre_channel', ret['driver_volume_type'])
+
+        ldset_lds0 = {'ldsetname': 'LX:OpenStack1', 'lds': {},
+                      'protocol': 'FC',
+                      'wwpn': ['1000-0090-FAA0-786A', '1000-0090-FAA0-786B'],
+                      'port': []}
+        ldset_lds1 = {'ldsetname': 'LX:OpenStack1',
+                      'lds': {16: {'ldn': 16, 'lun': 0}},
+                      'protocol': 'FC',
+                      'wwpn': ['1000-0090-FAA0-786A', '1000-0090-FAA0-786B'],
+                      'port': []}
+        return_ldset = [ldset_lds0, ldset_lds1]
+        self.mock_object(self, '_validate_fcldset_exist',
+                         side_effect=return_ldset)
+        mocker = self.mock_object(self._cli, 'addldsetld',
+                                  mock.Mock(wraps=self._cli.addldsetld))
+        connector = {'wwpns': ["10000090FAA0786A", "10000090FAA0786B"]}
+        ret = self.fc_initialize_connection_snapshot(snap, connector)
+        self.assertIsNotNone(ret)
+        self.assertEqual('fibre_channel', ret['driver_volume_type'])
+        mocker.assert_any_call('LX:OpenStack1', 'LX:__ControlVolume_10h', 0)
+        mocker.assert_any_call('LX:OpenStack1',
+                               'LX:287RbQoP7VdwR1WsPC2fZT_l', 1)
 
     def test_terminate_connection_snapshot(self):
         ctx = context.RequestContext('admin', 'fake', True)
@@ -1703,3 +1756,64 @@ class SetQosSpec_test(volume_helper.MStorageDSVDriver,
         volume_type_id = '33cd6136-0465-4ee0-82fa-b5f3a9138249'
         ret = self._set_qos_spec(ldname, volume_type_id)
         self.assertIsNone(ret)
+
+    def test_get_qos_parameters(self):
+        specs = {}
+        qos_params = self.get_qos_parameters(specs, True)
+        self.assertEqual(0, qos_params['upperlimit'])
+        self.assertEqual(0, qos_params['lowerlimit'])
+        self.assertEqual('off', qos_params['upperreport'])
+
+        specs = {}
+        qos_params = self.get_qos_parameters(specs, False)
+        self.assertIsNone(qos_params['upperlimit'])
+        self.assertIsNone(qos_params['lowerlimit'])
+        self.assertIsNone(qos_params['upperreport'])
+
+        specs = {u'upperlimit': u'1000',
+                 u'lowerlimit': u'500',
+                 u'upperreport': u'off'}
+        qos_params = self.get_qos_parameters(specs, False)
+        self.assertEqual(1000, qos_params['upperlimit'])
+        self.assertEqual(500, qos_params['lowerlimit'])
+        self.assertEqual('off', qos_params['upperreport'])
+
+        specs = {u'upperreport': u'on'}
+        qos_params = self.get_qos_parameters(specs, False)
+        self.assertIsNone(qos_params['upperlimit'])
+        self.assertIsNone(qos_params['lowerlimit'])
+        self.assertEqual('on', qos_params['upperreport'])
+
+        specs = {u'upperreport': u'aaa'}
+        qos_params = self.get_qos_parameters(specs, False)
+        self.assertIsNone(qos_params['upperlimit'])
+        self.assertIsNone(qos_params['lowerlimit'])
+        self.assertIsNone(qos_params['upperreport'])
+
+        specs = {u'upperlimit': u'1000001',
+                 u'lowerlimit': u'500'}
+        with self.assertRaisesRegex(exception.InvalidConfigurationValue,
+                                    'Value "1000001" is not valid for '
+                                    'configuration option "upperlimit"'):
+            self.get_qos_parameters(specs, False)
+
+        specs = {u'upperlimit': u'aaa',
+                 u'lowerlimit': u'500'}
+        with self.assertRaisesRegex(exception.InvalidConfigurationValue,
+                                    'Value "aaa" is not valid for '
+                                    'configuration option "upperlimit"'):
+            self.get_qos_parameters(specs, False)
+
+        specs = {u'upperlimit': u'1000',
+                 u'lowerlimit': u'aaa'}
+        with self.assertRaisesRegex(exception.InvalidConfigurationValue,
+                                    'Value "aaa" is not valid for '
+                                    'configuration option "lowerlimit"'):
+            self.get_qos_parameters(specs, False)
+
+        specs = {u'upperlimit': u'1000',
+                 u'lowerlimit': u'1'}
+        with self.assertRaisesRegex(exception.InvalidConfigurationValue,
+                                    'Value "1" is not valid for '
+                                    'configuration option "lowerlimit"'):
+            self.get_qos_parameters(specs, False)

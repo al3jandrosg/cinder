@@ -15,10 +15,10 @@
 
 from copy import deepcopy
 import datetime
+from unittest import mock
 
 from ddt import data
 from ddt import ddt
-import mock
 import six
 
 from cinder import exception
@@ -451,14 +451,24 @@ class PowerMaxUtilsTest(test.TestCase):
     def test_get_child_sg_name(self):
         host_name = 'HostX'
         # Slo and rep enabled
-        extra_specs1 = self.data.extra_specs_rep_enabled
-        extra_specs1[utils.PORTGROUPNAME] = self.data.port_group_name_f
+        extra_specs1 = {
+            'pool_name': u'Diamond+DSS+SRP_1+000197800123',
+            'slo': 'Diamond',
+            'workload': 'DSS',
+            'srp': 'SRP_1',
+            'array': self.data.array,
+            'interval': 3,
+            'retries': 120,
+            'replication_enabled': True,
+            'rep_mode': 'Synchronous',
+            utils.PORTGROUPNAME: self.data.port_group_name_f}
+
         child_sg_name, do_disable_compression, rep_enabled, pg_name = (
             self.utils.get_child_sg_name(host_name, extra_specs1))
         re_name = self.data.storagegroup_name_f + '-RE'
         self.assertEqual(re_name, child_sg_name)
         # Disable compression
-        extra_specs2 = self.data.extra_specs_disable_compression
+        extra_specs2 = deepcopy(self.data.extra_specs_disable_compression)
         extra_specs2[utils.PORTGROUPNAME] = self.data.port_group_name_f
         child_sg_name, do_disable_compression, rep_enabled, pg_name = (
             self.utils.get_child_sg_name(host_name, extra_specs2))
@@ -529,6 +539,30 @@ class PowerMaxUtilsTest(test.TestCase):
         sg_value = 'Always'
         ret_prop_dict = self.utils.validate_qos_distribution_type(
             sg_value, qos_extra_spec, input_prop_dict)
+        self.assertEqual(input_prop_dict, ret_prop_dict)
+
+    def test_validate_qos_cast_to_int(self):
+        qos_extra_spec = {'total_iops_sec': '500',
+                          'total_bytes_sec': '104857600',
+                          'DistributionType': 'Always'}
+        property_dict = {'host_io_limit_io_sec': 500}
+        input_prop_dict = {'host_io_limit_io_sec': 500,
+                           'host_io_limit_mb_sec': 100}
+        input_key = 'total_bytes_sec'
+        ret_prop_dict = self.utils.validate_qos_input(
+            input_key, None, qos_extra_spec, property_dict)
+        self.assertEqual(input_prop_dict, ret_prop_dict)
+
+    def test_validate_qos_cast_to_int_drop_fraction(self):
+        qos_extra_spec = {'total_iops_sec': '500',
+                          'total_bytes_sec': '105000000',
+                          'DistributionType': 'Always'}
+        property_dict = {'host_io_limit_io_sec': 500}
+        input_prop_dict = {'host_io_limit_io_sec': 500,
+                           'host_io_limit_mb_sec': 100}
+        input_key = 'total_bytes_sec'
+        ret_prop_dict = self.utils.validate_qos_input(
+            input_key, None, qos_extra_spec, property_dict)
         self.assertEqual(input_prop_dict, ret_prop_dict)
 
     def test_compare_cylinders(self):

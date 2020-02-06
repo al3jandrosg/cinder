@@ -13,14 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""
-Test suite for VMware vCenter VMDK driver.
-"""
+"""Test suite for VMware vCenter VMDK driver."""
 
 import re
+from unittest import mock
 
 import ddt
-import mock
+from oslo_utils import timeutils
 from oslo_utils import units
 from oslo_utils import versionutils
 from oslo_vmware import exceptions
@@ -34,6 +33,7 @@ from cinder import test
 from cinder.tests.unit import fake_constants
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import utils as test_utils
 from cinder.volume import configuration
 from cinder.volume.drivers.vmware import datastore as hub
 from cinder.volume.drivers.vmware import exceptions as vmdk_exceptions
@@ -107,6 +107,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                                db=self._db)
 
         self._context = context.get_admin_context()
+        self.updated_at = timeutils.utcnow()
 
     def test_get_volume_stats(self):
         stats = self._driver.get_volume_stats()
@@ -1184,7 +1185,17 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops.get_vmdk_path.return_value = vmdk_file_path
 
         context = mock.sentinel.context
-        volume = self._create_volume_dict()
+        volume = test_utils.create_volume(
+            self._context, volume_type_id = fake_constants.VOLUME_TYPE_ID,
+            updated_at = self.updated_at)
+        extra_specs = {
+            'image_service:store_id': 'fake-store'
+        }
+        test_utils.create_volume_type(self._context.elevated(),
+                                      id=fake_constants.VOLUME_TYPE_ID,
+                                      name="test_type",
+                                      extra_specs=extra_specs)
+
         image_service = mock.sentinel.image_service
         image_meta = self._create_image_meta()
         self._driver.copy_volume_to_image(
@@ -1204,6 +1215,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             session=session,
             host=self._config.vmware_host_ip,
             port=self._config.vmware_host_port,
+            store_id='fake-store',
             vm=backing,
             vmdk_file_path=vmdk_file_path,
             vmdk_size=volume['size'] * units.Gi,

@@ -10,25 +10,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""
-Driver for RackScale Design.
+"""Driver for RackScale Design."""
 
-"""
-
+from distutils import version
 import json
 
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import units
-
-from cinder import exception
-from cinder.i18n import _
-from cinder import interface
-from cinder import utils
-from cinder.volume import driver
-
-from distutils import version
-
 try:
     from rsd_lib import RSDLib
     from sushy import exceptions as sushy_exceptions
@@ -36,6 +25,12 @@ except ImportError:
     # Used for tests, when no rsd-lib is installed
     RSDLib = None
     sushy_exceptions = None
+
+from cinder import exception
+from cinder.i18n import _
+from cinder import interface
+from cinder import utils
+from cinder.volume import driver
 
 LOG = logging.getLogger(__name__)
 
@@ -417,7 +412,7 @@ class RSDClient(object):
                     detail=(_("Volume %s already attached") % volume_url))
 
             node.attach_endpoint(volume.path)
-        except sushy_exceptions.InvalidParameterValueError as e:
+        except sushy_exceptions.InvalidParameterValueError:
             LOG.exception("Attach volume failed (not allowable)")
             raise RSDRetryableException(
                 reason=(_("Not allowed to attach from "

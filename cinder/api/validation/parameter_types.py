@@ -67,7 +67,7 @@ def _build_regex_range(ws=True, invert=False, exclude=None):
 
     The inversion is useful when we want to generate a set of ranges
     which is everything that's not a certain class. For instance,
-    produce all all the non printable characters as a set of ranges.
+    produce all the non printable characters as a set of ranges.
     """
     if exclude is None:
         exclude = []
@@ -122,6 +122,11 @@ valid_description_regex = valid_description_regex_base % (
 name = {
     'type': 'string', 'minLength': 1, 'maxLength': 255,
     'format': 'name'
+}
+
+
+update_name = {
+    'type': ['string', 'null'], 'minLength': 1, 'maxLength': 255
 }
 
 

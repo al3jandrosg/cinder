@@ -78,6 +78,9 @@ class MacroSANBaseDriver(driver.VolumeDriver):
 
     CI_WIKI_NAME = 'MacroSAN Volume CI'
 
+    # TODO(jsbryant) Remove driver in 'V' release if CI is not fixed.
+    SUPPORTED = False
+
     def __init__(self, *args, **kwargs):
         """Initialize the driver."""
         super(MacroSANBaseDriver, self).__init__(*args, **kwargs)
@@ -967,7 +970,7 @@ class MacroSANBaseDriver(driver.VolumeDriver):
         owner = self.client.get_lun_sp(src_name)
         pool = host['capabilities'].get('pool_name', self.pool)
 
-        LOG.info('Migrating volume: %(volume), '
+        LOG.info('Migrating volume: %(volume)s, '
                  'host: %(host)s, '
                  'backend: %(volume_backend_name)s',
                  {'volume': src_name,

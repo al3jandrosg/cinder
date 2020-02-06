@@ -2607,7 +2607,7 @@ class PowerMaxCommon(object):
                       {'id': volume_id})
         else:
             # Check if volume is snap source
-            self._sync_check(extra_specs['array'], device_id, extra_specs)
+            self._clone_check(extra_specs['array'], device_id, extra_specs)
             # Remove volume from any openstack storage groups
             # and remove any replication
             self._remove_vol_and_cleanup_replication(
@@ -3182,6 +3182,21 @@ class PowerMaxCommon(object):
                 target_slo, target_workload, target_extra_specs,
                 is_compression_disabled)
 
+            # Ensure that storage groups for metro volumes stay consistent
+            if not was_rep_enabled and is_rep_enabled and (
+                    self.rep_config['mode'] is utils.REP_METRO):
+                async_sg = self.utils.get_async_rdf_managed_grp_name(
+                    self.rep_config)
+                sg_exists = self.rest.get_storage_group(array, async_sg)
+                if not sg_exists:
+                    self.rest.create_storage_group(
+                        array, async_sg, extra_specs['srp'],
+                        extra_specs['slo'], extra_specs['workload'],
+                        extra_specs)
+                self.masking.add_volume_to_storage_group(
+                    array, device_id, async_sg, volume_name, extra_specs,
+                    True)
+
             # If the volume was replication enabled both before and after
             # retype, the volume needs to be retyped on the remote array also
             if was_rep_enabled and is_rep_enabled:
@@ -3334,20 +3349,16 @@ class PowerMaxCommon(object):
         target_sg = self.rest.get_storage_group(array, target_sg_name)
 
         if not target_sg:
-            self.provision.create_storage_group(array, target_sg_name, srp,
-                                                target_slo,
-                                                target_workload,
-                                                target_extra_specs,
-                                                is_compression_disabled)
-            parent_sg = source_sg['parent_storage_group'][0]
-            self.masking.add_child_sg_to_parent_sg(
-                array, target_sg_name, parent_sg, target_extra_specs)
-            target_sg = self.rest.get_storage_group(array, target_sg_name)
+            target_sg = self.provision.create_storage_group(
+                array, target_sg_name, srp, target_slo, target_workload,
+                target_extra_specs, is_compression_disabled)
+            parent_sg = source_sg.get('parent_storage_group')
+            if parent_sg:
+                parent_sg = parent_sg[0]
+                self.masking.add_child_sg_to_parent_sg(
+                    array, target_sg_name, parent_sg, target_extra_specs)
 
-        target_in_parent = self.rest.is_child_sg_in_parent_sg(
-            array, target_sg_name, target_sg['parent_storage_group'][0])
-
-        if target_sg and target_in_parent:
+        if target_sg:
             self.masking.move_volume_between_storage_groups(
                 array, device_id, source_sg_name, target_sg_name,
                 target_extra_specs)
@@ -3588,6 +3599,9 @@ class PowerMaxCommon(object):
         rdf_group_no, remote_array = self.get_rdf_details(array)
         extra_specs['replication_enabled'] = '<is> True'
         extra_specs['rep_mode'] = self.rep_config['mode']
+        group_details = self.rest.get_rdf_group(array, rdf_group_no)
+        volumes_in_group = group_details['numDevices']
+        async_sg = self.utils.get_async_rdf_managed_grp_name(self.rep_config)
 
         rdf_vol_size = volume.size
         if rdf_vol_size == 0:
@@ -3598,8 +3612,24 @@ class PowerMaxCommon(object):
 
         rep_extra_specs = self._get_replication_extra_specs(
             extra_specs, self.rep_config)
-        volume_dict = self._create_volume(
-            target_name, rdf_vol_size, rep_extra_specs, in_use=True)
+        rep_mode = self.rep_config['mode']
+
+        if (volumes_in_group > 0) and (rep_mode is utils.REP_METRO or
+                                       rep_mode is utils.REP_ASYNC):
+            volume_dict = self._create_volume(
+                target_name, rdf_vol_size, rep_extra_specs)
+            sg_exists = self.rest.get_storage_group(remote_array, async_sg)
+            if not sg_exists:
+                self.rest.create_storage_group(
+                    remote_array, async_sg, extra_specs['srp'],
+                    extra_specs['slo'], extra_specs['workload'],
+                    rep_extra_specs)
+            self.masking.add_volume_to_storage_group(
+                remote_array, volume_dict['device_id'], async_sg,
+                target_name, rep_extra_specs, True)
+        else:
+            volume_dict = self._create_volume(
+                target_name, rdf_vol_size, rep_extra_specs, in_use=True)
         target_device_id = volume_dict['device_id']
 
         LOG.debug("Create volume replica: Target device: %(target)s "
@@ -4458,16 +4488,17 @@ class PowerMaxCommon(object):
             src_dev_id = self._get_src_device_id_for_group_snap(snapshot)
             extra_specs = self._initial_setup(snapshot.volume)
             array = extra_specs['array']
+            snapshot_model_dict = {
+                'id': snapshot.id,
+                'provider_location': six.text_type(
+                    {'source_id': src_dev_id, 'snap_name': snap_name}),
+                'status': fields.SnapshotStatus.AVAILABLE}
 
-            snapshots_model_update.append(
-                {'id': snapshot.id,
-                 'provider_location': six.text_type(
-                     {'source_id': src_dev_id, 'snap_name': snap_name}),
-                 'status': fields.SnapshotStatus.AVAILABLE})
-            snapshots_model_update = self.update_metadata(
-                snapshots_model_update, snapshot.metadata,
+            snapshot_model_dict = self.update_metadata(
+                snapshot_model_dict, snapshot.metadata,
                 self.get_snapshot_metadata(
                     array, src_dev_id, snap_name))
+            snapshots_model_update.append(snapshot_model_dict)
         model_update = {'status': fields.GroupStatus.AVAILABLE}
 
         return model_update, snapshots_model_update
@@ -4555,16 +4586,10 @@ class PowerMaxCommon(object):
                     {'group_id': source_group.id})
                 raise exception.VolumeBackendAPIException(
                     message=exception_message)
-            # Check if the snapshot exists
-            if 'snapVXSnapshots' in volume_group:
-                if snap_name in volume_group['snapVXSnapshots']:
-                    src_devs = self._get_snap_src_dev_list(array, snapshots)
-                    self.provision.delete_group_replica(
-                        array, snap_name, vol_grp_name, src_devs, extra_specs)
-            else:
-                # Snapshot has been already deleted, return successfully
-                LOG.error("Cannot find group snapshot %(snapId)s.",
-                          {'snapId': group_snapshot.id})
+
+            self.provision.delete_group_replica(
+                array, snap_name, vol_grp_name)
+
             model_update = {'status': fields.GroupSnapshotStatus.DELETED}
             for snapshot in snapshots:
                 snapshots_model_update.append(
@@ -4945,12 +4970,9 @@ class PowerMaxCommon(object):
             # Delete the snapshot if required
             if rollback_dict.get("snap_name"):
                 try:
-                    src_dev_ids = [
-                        a for a, b in rollback_dict['list_volume_pairs']]
                     self.provision.delete_group_replica(
                         array, rollback_dict["snap_name"],
-                        rollback_dict["source_group_name"],
-                        src_dev_ids, rollback_dict['interval_retries_dict'])
+                        rollback_dict["source_group_name"])
                 except Exception as e:
                     LOG.debug("Failed to delete group snapshot. Attempting "
                               "further rollback. Exception received: %(e)s.",
@@ -5341,27 +5363,45 @@ class PowerMaxCommon(object):
                 message=exception_message)
 
     def update_metadata(
-            self, model_update, existing_metadata, object_metadata):
+            self, model_update, existing_metadata, new_metadata):
         """Update volume metadata in model_update.
 
         :param model_update: existing model
         :param existing_metadata: existing metadata
-        :param object_metadata: object metadata
+        :param new_metadata: new object metadata
         :returns: dict -- updated model
         """
+        if new_metadata:
+            self._is_dict(new_metadata, 'new object metadata')
         if model_update:
+            self._is_dict(model_update, 'existing model')
             if 'metadata' in model_update:
-                model_update['metadata'].update(object_metadata)
+                model_update['metadata'].update(new_metadata)
             else:
-                model_update.update({'metadata': object_metadata})
+                model_update.update({'metadata': new_metadata})
         else:
             model_update = {}
-            model_update.update({'metadata': object_metadata})
+            model_update.update({'metadata': new_metadata})
 
         if existing_metadata:
+            self._is_dict(existing_metadata, 'existing metadata')
             model_update['metadata'].update(existing_metadata)
 
         return model_update
+
+    def _is_dict(self, input, description):
+        """Check that the input is a dict
+
+        :param input: object for checking
+        :raises: VolumeBackendAPIException
+        """
+        if not isinstance(input, dict):
+            exception_message = (_(
+                "Input %(desc)s is not a dict.") % {'desc': description})
+
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
     def get_volume_metadata(self, array, device_id):
         """Get volume metadata for model_update.

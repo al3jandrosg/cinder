@@ -331,6 +331,14 @@ class NotFound(CinderException):
     safe = True
 
 
+class GlanceStoreNotFound(NotFound):
+    message = _("Store %(store_id)s not enabled in glance.")
+
+
+class GlanceStoreReadOnly(Invalid):
+    message = _("Store %(store_id)s is read-only in glance.")
+
+
 class VolumeNotFound(NotFound):
     message = _("Volume %(volume_id)s could not be found.")
 
@@ -1117,3 +1125,8 @@ class CinderAcceleratorError(CinderException):
                 "Command %(cmd)s execution failed.\n"
                 "%(description)s\n"
                 "Reason: %(reason)s")
+
+
+class SnapshotLimitReached(CinderException):
+    message = _("Exceeded the configured limit of "
+                "%(set_limit)s snapshots per volume.")

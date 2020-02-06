@@ -12,10 +12,10 @@
 
 """Unit tests for the cinder-status CLI interfaces."""
 
-import ddt
-import mock
+from unittest import mock
 import uuid
 
+import ddt
 from oslo_config import cfg
 from oslo_upgradecheck import upgradecheck as uc
 import testtools
@@ -194,7 +194,16 @@ class TestCinderStatus(testtools.TestCase):
               'cinder.volume.drivers.coprhd.iscsi.EMCCoprHDISCSIDriver',
               'cinder.volume.drivers.coprhd.scaleio.EMCCoprHDScaleIODriver',
               'cinder.volume.drivers.disco.disco.DiscoDriver',
-              'cinder.volume.drivers.hgst.HGSTDriver')
+              'cinder.volume.drivers.hgst.HGSTDriver',
+              'cinder.volume.drivers.fusionstorage.dsware.DSWAREDriver',
+              'cinder.volume.drivers.prophetstor.dpl_fc.DPLFCDriver',
+              'cinder.volume.drivers.prophetstor.dpl_iscsi.DPLISCSIDriver',
+              'cinder.volume.drivers.nimble.NimbleFCDriver',
+              'cinder.volume.drivers.nimble.NimbleISCSIDriver',
+              'cinder.volume.drivers.sheepdog.SheepdogDriver',
+              'cinder.volume.drivers.vzstorage.VZStorageDriver',
+              'cinder.volume.drivers.veritas_access.veritas_iscsi.'
+              'ACCESSIscsiDriver')
     def test_check_removed_drivers_fail(self, volume_driver):
         self._set_volume_driver(
             volume_driver,

@@ -250,7 +250,7 @@ class GPFSDriver(driver.CloneableImageVD,
         try:
             fileset = fs_regex.match(out).group('fileset')
             return fileset
-        except AttributeError as exc:
+        except AttributeError:
             msg = (_('Failed to find fileset for path %(path)s, command '
                      'output: %(cmdout)s.') %
                    {'path': path,
@@ -994,10 +994,13 @@ class GPFSDriver(driver.CloneableImageVD,
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
+        # retrieve store information from extra-specs
+        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
         image_utils.upload_volume(context,
                                   image_service,
                                   image_meta,
-                                  self.local_path(volume))
+                                  self.local_path(volume),
+                                  store_id=store_id)
 
     def _migrate_volume(self, volume, host):
         """Migrate vol if source and dest are managed by same GPFS cluster."""

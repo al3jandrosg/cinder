@@ -46,9 +46,10 @@ class BackupAPI(rpc.RPCAPI):
 
         2.0 - Remove 1.x compatibility
         2.1 - Adds set_log_levels and get_log_levels
+        2.2 - Adds publish_service_capabilities
     """
 
-    RPC_API_VERSION = '2.1'
+    RPC_API_VERSION = '2.2'
     RPC_DEFAULT_VERSION = '2.0'
     TOPIC = constants.BACKUP_TOPIC
     BINARY = 'cinder-backup'
@@ -58,9 +59,9 @@ class BackupAPI(rpc.RPCAPI):
         cctxt = self._get_cctxt(server=backup.host)
         cctxt.cast(ctxt, 'create_backup', backup=backup)
 
-    def restore_backup(self, ctxt, volume_host, backup, volume_id):
+    def restore_backup(self, ctxt, backup_host, backup, volume_id):
         LOG.debug("restore_backup in rpcapi backup_id %s", backup.id)
-        cctxt = self._get_cctxt(server=volume_host)
+        cctxt = self._get_cctxt(server=backup_host)
         cctxt.cast(ctxt, 'restore_backup', backup=backup,
                    volume_id=volume_id)
 
@@ -111,3 +112,8 @@ class BackupAPI(rpc.RPCAPI):
     def get_log_levels(self, context, service, log_request):
         cctxt = self._get_cctxt(server=service.host, version='2.1')
         return cctxt.call(context, 'get_log_levels', log_request=log_request)
+
+    @rpc.assert_min_rpc_version('2.2')
+    def publish_service_capabilities(self, ctxt):
+        cctxt = self._get_cctxt(version='2.2', fanout=True)
+        cctxt.cast(ctxt, 'publish_service_capabilities')

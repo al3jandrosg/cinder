@@ -18,14 +18,8 @@
 
 """Implementation of SQLAlchemy backend."""
 
-
 import collections
-
-try:
-    from collections.abc import Iterable
-except ImportError:
-    from collections import Iterable
-
+from collections import abc
 import datetime as dt
 import functools
 import itertools
@@ -1658,35 +1652,33 @@ def volume_data_get_for_project(context, project_id,
                                         volume_type_id, host=host)
 
 
+VOLUME_DEPENDENT_MODELS = frozenset([models.VolumeMetadata,
+                                     models.VolumeAdminMetadata,
+                                     models.Transfer,
+                                     models.VolumeGlanceMetadata,
+                                     models.VolumeAttachment])
+
+
 @require_admin_context
 @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_destroy(context, volume_id):
     session = get_session()
     now = timeutils.utcnow()
+    updated_values = {'status': 'deleted',
+                      'deleted': True,
+                      'deleted_at': now,
+                      'updated_at': literal_column('updated_at'),
+                      'migration_status': None}
     with session.begin():
-        updated_values = {'status': 'deleted',
-                          'deleted': True,
-                          'deleted_at': now,
-                          'updated_at': literal_column('updated_at'),
-                          'migration_status': None}
         model_query(context, models.Volume, session=session).\
             filter_by(id=volume_id).\
             update(updated_values)
-        model_query(context, models.VolumeMetadata, session=session).\
-            filter_by(volume_id=volume_id).\
-            update({'deleted': True,
-                    'deleted_at': now,
-                    'updated_at': literal_column('updated_at')})
-        model_query(context, models.VolumeAdminMetadata, session=session).\
-            filter_by(volume_id=volume_id).\
-            update({'deleted': True,
-                    'deleted_at': now,
-                    'updated_at': literal_column('updated_at')})
-        model_query(context, models.Transfer, session=session).\
-            filter_by(volume_id=volume_id).\
-            update({'deleted': True,
-                    'deleted_at': now,
-                    'updated_at': literal_column('updated_at')})
+        for model in VOLUME_DEPENDENT_MODELS:
+            model_query(context, model, session=session).\
+                filter_by(volume_id=volume_id).\
+                update({'deleted': True,
+                        'deleted_at': now,
+                        'updated_at': literal_column('updated_at')})
     del updated_values['updated_at']
     return updated_values
 
@@ -1720,7 +1712,7 @@ def _include_in_cluster(context, cluster, model, partial_rename, filters):
         value = filters.pop(field)
         # We do a special backend filter
         query = query.filter(_filter_host(getattr(model, field), value))
-        # If we want do do a partial rename and we haven't set the cluster
+        # If we want to do a partial rename and we haven't set the cluster
         # already, the value we want to set is a SQL replace of existing field
         # value.
         if partial_rename and isinstance(cluster, six.string_types):
@@ -5083,7 +5075,7 @@ def volume_glance_metadata_copy_from_volume_to_volume(context,
                                                       volume_id):
     """Update the Glance metadata for a volume.
 
-    This copies all all of the key:value pairs from the originating volume,
+    This copies all of the key:value pairs from the originating volume,
     to ensure that a volume created from the volume (clone) will
     retain the original metadata.
     """
@@ -7135,7 +7127,7 @@ def condition_db_filter(model, field, value):
     """
     orm_field = getattr(model, field)
     # For values that must match and are iterables we use IN
-    if (isinstance(value, Iterable) and
+    if (isinstance(value, abc.Iterable) and
             not isinstance(value, six.string_types)):
         # We cannot use in_ when one of the values is None
         if None not in value:
@@ -7161,7 +7153,7 @@ def condition_not_db_filter(model, field, value, auto_none=True):
     result = ~condition_db_filter(model, field, value)
 
     if (auto_none
-            and ((isinstance(value, Iterable) and
+            and ((isinstance(value, abc.Iterable) and
                   not isinstance(value, six.string_types)
                   and None not in value)
                  or (value is not None))):

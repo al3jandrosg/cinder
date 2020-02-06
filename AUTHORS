@@ -5,6 +5,7 @@ Abhilash Divakaran <abhilashd@tegile.com>
 Abhinav Srivastava <abhiabhi.sr@gmail.com>
 Abhiram Moturi <abhiram.moturi@oracle.com>
 Abhishek Kekane <abhishek.kekane@nttdata.com>
+Abhishek Kekane <akekane@redhat.com>
 Abhishek Lekshmanan <abhishek.lekshmanan@gmail.com>
 Abhishek Sharma <abmsharm@in.ibm.com>
 Abhishek Shrivastava <abhishek@cloudbyte.com>
@@ -235,6 +236,7 @@ Dmitry Guryanov <dguryanov@parallels.com>
 Dmitry Guryanov <dguryanov@virtuozzo.com>
 Dmitry Kudyukin <gmorfy@gmail.com>
 Dolph Mathews <dolph.mathews@gmail.com>
+Dominic Schlegel <dominic.schlegel@hostpoint.ch>
 Dongcan Ye <hellochosen@gmail.com>
 Dongsheng Yang <dongsheng.yang@easystack.cn>
 Doug Hellmann <doug.hellmann@dreamhost.com>
@@ -352,6 +354,7 @@ Irina Mihai <irina.mihai@windriver.com>
 Isaac Beckman <isaacb@il.ibm.com>
 Ivan Kolodyazhny <e0ne@e0ne.info>
 Ivan Kolodyazhny <ikolodyazhny@mirantis.com>
+Ivan Pchelintsev <Ivan.Pchelintsev@dell.com>
 Ivaylo Mitev <imitev@vmware.com>
 Ivy Zhang <shzyu@cn.ibm.com>
 Jack Lu <renxlu@cisco.com>
@@ -655,6 +658,7 @@ Rafael Toschi Chiafarelli <rafael.chiafarelli@fit-tecnologia.org.br>
 Rafi Khardalian <rafi@metacloud.com>
 Rahul Verma <rahul.verma@hp.com>
 Raildo Mascena <raildo@lsd.ufcg.edu.br>
+Rajat Dhasmana <rajatdhasmana@gmail.com>
 Rajesh Tailor <rajesh.tailor@nttdata.com>
 Rakesh H S <rh-s@hp.com>
 Rakesh Jain <rakeshj@us.ibm.com>
@@ -703,6 +707,7 @@ Ryan Rossiter <rlrossit@us.ibm.com>
 Ryan Selden <ryanx.seldon@intel.com>
 Ryosuke Mizuno <r-mizuno@rs.jp.nec.com>
 Sachi King <nakato@nakato.io>
+Sagar Waghmare <sawaghma@redhat.com>
 Sai Kiran <saikiran@techpatron.co.in>
 Sam Morrison <sorrison@gmail.com>
 Samantha Blanco <samantha.blanco@att.com>
@@ -741,6 +746,7 @@ Serhii Rusin <serhii_rusin@jabil.com>
 Shane Wang <shane.wang@intel.com>
 ShangXiao <shangxiaobj@inspur.com>
 Shao Kai Li <lshaokai@cn.ibm.com>
+Shatadru Bandyopadhyay <shatadru1@gmail.com>
 Shay Halsband <Shay.Halsband@emc.com>
 Shay Halsband <shay.halsband@emc.com>
 Sheel Rana <ranasheel2000@gmail.com>
@@ -758,6 +764,7 @@ Simon O'Donovan <simon.odonovan@dell.com>
 Sivaramakrishna Garimella <sivaramakrishna.garimella@hp.com>
 Skyler Berg <sberg@tintri.com>
 Slade Baumann <baumann@us.ibm.com>
+Slawek Kaplonski <skaplons@redhat.com>
 Sneha Rai <sneha.rai@hpe.com>
 Soffie Huang <Soffie.Huang@falconstor.com>
 Sofia Enriquez <lsofia.enriquez@gmail.com>
@@ -783,6 +790,7 @@ Sven Wegener <sven.wegener@inovex.de>
 Svetlana Shturm <sshturm@mirantis.com>
 Swapnil Kulkarni <swapnilkulkarni2608@gmail.com>
 Swapnil Nilangekar <swapnil.sun.nilangekar@hpe.com>
+Swathi Hrishikesh <swathi@hedviginc.com>
 Sylvain Baubeau <sylvain.baubeau@enovance.com>
 Szymon Borkowski <szymon.borkowski@intel.com>
 Szymon Wroblewski <szymon.wroblewski@intel.com>
@@ -892,6 +900,7 @@ Xingchao Yu <xingchao@unitedstack.com>
 Xinli Guan <xinli@us.ibm.com>
 Xinyuan Huang <xinyuahu@cisco.com>
 Xu Ao <xuao@awcloud.com>
+Xuchu Jiang <xcjiang@cn.ibm.com>
 XueChendi <chendi.xue@intel.com>
 YAMADA Hideki <yamada.hideki@lab.ntt.co.jp>
 Yaguang Tang <heut2008@gmail.com>
@@ -899,6 +908,7 @@ Yaguang Tang <yaguang.tang@canonical.com>
 Yaguang Tang <ytang@mirantis.com>
 Yaguo Zhou <zhouyaguo@gmail.com>
 YanLin Ren <renylin@cn.ibm.com>
+Yang Youseok <ileixe@gmail.com>
 Yang Yu <yuyangbj@cn.ibm.com>
 YangLei <yanglyy@cn.ibm.com>
 Yasuaki Nagata <yasuaki.nagata@intellilink.co.jp>
@@ -1006,7 +1016,9 @@ ghanshyam <gmann@ghanshyammann.com>
 git-harry <git-harry@live.co.uk>
 gtt116 <gtt116@gmail.com>
 guangpei.liu <guangpei.liu@easystack.cn>
+haixin <haixin@inspur.com>
 hallur, parashuram <parashuram.hallur@emc.com>
+hanchl <1922361860@qq.com>
 haobing1 <hao.bing1@zte.com.cn>
 hgangwx <hgangwx@cn.ibm.com>
 honjo-rikimaru-c6 <honjo.rikimaru@po.ntts.co.jp>
@@ -1058,6 +1070,7 @@ lijing <lijing@gohighsec.com>
 lijunbo <lijunbo@fiberhome.com>
 lijunjie <lijunjie@cloudin.cn>
 lijunli1 <lijunli@chinac.com>
+limin0801 <limin.lc@inspur.com>
 ling-yun <zengyunling@huawei.com>
 lirenke <lvhancy@163.com>
 lisali <xiaoyan.li@intel.com>
@@ -1085,6 +1098,7 @@ lrqrun <lrqrun@gmail.com>
 ls1175 <liusheng@huawei.com>
 luqitao <qtlu@fiberhome.com>
 lvdongbing <dongbing.lv@kylin-cloud.com>
+maaoyu <maaoyu@inspur.com>
 malei <ma.lei@99cloud.net>
 manishd <deolalkar.manish@hpe.com>
 mannuray <mannu.ray@gmail.com>
@@ -1173,6 +1187,7 @@ vinita <Vinita.Deshpande@emc.com>
 vitas.yuzhou <vitas.yuzhou@huawei.com>
 walmart <yatinkumbhare@gmail.com>
 wang yong <wangyong2017@inspur.com>
+wangfaxin <wangfaxin@inspur.com>
 wanghao <sxmatch1986@gmail.com>
 wanghao <wanghao749@huawei.com>
 wanghong <w.wanghong@huawei.com>

@@ -16,13 +16,13 @@
 import collections
 import math
 import re
-import six
 import uuid
 
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import units
+import six
 
 from cinder import context
 from cinder import exception
@@ -315,7 +315,7 @@ class HuaweiBaseDriver(driver.VolumeDriver):
                 replica_info = self.replica.create_replica(lun_info,
                                                            replica_model)
                 model_update.update(replica_info)
-            except Exception as err:
+            except Exception:
                 LOG.exception('Create replication volume error.')
                 self._delete_lun_with_check(lun_id)
                 raise
@@ -392,7 +392,7 @@ class HuaweiBaseDriver(driver.VolumeDriver):
         if replica_data:
             try:
                 self.replica.delete_replica(volume)
-            except exception.VolumeBackendAPIException as err:
+            except exception.VolumeBackendAPIException:
                 with excutils.save_and_reraise_exception():
                     LOG.exception("Delete replication error.")
                     self._delete_volume(volume)

@@ -16,7 +16,7 @@
 Unit Tests for cinder.backup.rpcapi
 """
 
-import mock
+from unittest import mock
 
 from cinder.backup import rpcapi as backup_rpcapi
 from cinder import objects
@@ -41,7 +41,7 @@ class BackupRPCAPITestCase(test.RPCAPITestCase):
         self._test_rpc_api('restore_backup',
                            rpc_method='cast',
                            server='fake_volume_host',
-                           volume_host='fake_volume_host',
+                           backup_host='fake_volume_host',
                            backup=self.fake_backup_obj,
                            volume_id=fake.VOLUME_ID)
 

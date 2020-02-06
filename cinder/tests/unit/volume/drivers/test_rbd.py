@@ -14,19 +14,19 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import errno
 import math
 import os
 import tempfile
+import time
+from unittest import mock
+from unittest.mock import call
 import uuid
 
 import castellan
 import ddt
-import errno
-import mock
-from mock import call
 from oslo_utils import imageutils
 from oslo_utils import units
-import time
 
 from cinder import context
 from cinder import db
@@ -168,37 +168,51 @@ class MockDriverConfig(object):
         return getattr(self, value, self._default)
 
 
-def mock_driver_configuration(value):
-    if value == 'max_over_subscription_ratio':
-        return 1.0
-    if value == 'reserved_percentage':
-        return 0
-    return 'RBD'
-
-
 @ddt.ddt
 class RBDTestCase(test.TestCase):
+
+    @staticmethod
+    def _make_configuration(conf_in=None):
+        cfg = mock.Mock(spec=conf.Configuration)
+        cfg.image_conversion_dir = None
+        cfg.rbd_cluster_name = 'nondefault'
+        cfg.rbd_pool = 'rbd'
+        cfg.rbd_ceph_conf = '/etc/ceph/my_ceph.conf'
+        cfg.rbd_keyring_conf = '/etc/ceph/my_ceph.client.keyring'
+        cfg.rbd_secret_uuid = None
+        cfg.rbd_user = 'cinder'
+        cfg.volume_backend_name = None
+        cfg.volume_dd_blocksize = '1M'
+        cfg.rbd_store_chunk_size = 4
+        cfg.rados_connection_retries = 3
+        cfg.rados_connection_interval = 5
+        cfg.backup_use_temp_snapshot = False
+        cfg.enable_deferred_deletion = False
+
+        if conf_in is not None:
+            for k in conf_in:
+                setattr(cfg, k, conf_in[k])
+
+        return cfg
+
+    @staticmethod
+    def _make_drv(conf_in):
+        cfg = RBDTestCase._make_configuration(conf_in)
+
+        mock_exec = mock.Mock(return_value=('', ''))
+
+        drv = driver.RBDDriver(execute=mock_exec,
+                               configuration=cfg,
+                               rbd=mock.MagicMock())
+        drv.set_initialized()
+        return drv
 
     def setUp(self):
         global RAISED_EXCEPTIONS
         RAISED_EXCEPTIONS = []
         super(RBDTestCase, self).setUp()
 
-        self.cfg = mock.Mock(spec=conf.Configuration)
-        self.cfg.image_conversion_dir = None
-        self.cfg.rbd_cluster_name = 'nondefault'
-        self.cfg.rbd_pool = 'rbd'
-        self.cfg.rbd_ceph_conf = '/etc/ceph/my_ceph.conf'
-        self.cfg.rbd_keyring_conf = '/etc/ceph/my_ceph.client.keyring'
-        self.cfg.rbd_secret_uuid = None
-        self.cfg.rbd_user = 'cinder'
-        self.cfg.volume_backend_name = None
-        self.cfg.volume_dd_blocksize = '1M'
-        self.cfg.rbd_store_chunk_size = 4
-        self.cfg.rados_connection_retries = 3
-        self.cfg.rados_connection_interval = 5
-        self.cfg.backup_use_temp_snapshot = False
-        self.cfg.enable_deferred_deletion = False
+        self.cfg = self._make_configuration()
 
         mock_exec = mock.Mock()
         mock_exec.return_value = ('', '')
@@ -401,18 +415,19 @@ class RBDTestCase(test.TestCase):
         'image.features()'will be both called for 'exclusive-lock' and
         'journaling' in this order.
         """
-        journaling_feat = 1
-        exclusive_lock_feat = 2
-        self.driver.rbd.RBD_FEATURE_JOURNALING = journaling_feat
-        self.driver.rbd.RBD_FEATURE_EXCLUSIVE_LOCK = exclusive_lock_feat
         image = self.mock_proxy.return_value.__enter__.return_value
-        image.features.return_value = 0
+
+        image_features = 0
         if exclusive_lock_enabled:
-            image.features.return_value += exclusive_lock_feat
+            image_features |= self.driver.RBD_FEATURE_EXCLUSIVE_LOCK
         if journaling_enabled:
-            image.features.return_value += journaling_feat
+            image_features |= self.driver.RBD_FEATURE_JOURNALING
+
+        image.features.return_value = image_features
+
         journaling_status = str(journaling_enabled).lower()
         exclusive_lock_status = str(exclusive_lock_enabled).lower()
+
         expected = {
             'replication_driver_data': ('{"had_exclusive_lock":%s,'
                                         '"had_journaling":%s}' %
@@ -422,14 +437,15 @@ class RBDTestCase(test.TestCase):
         }
         res = self.driver._enable_replication(self.volume_a)
         self.assertEqual(expected, res)
+
         if exclusive_lock_enabled and journaling_enabled:
             image.update_features.assert_not_called()
         elif exclusive_lock_enabled and not journaling_enabled:
-            image.update_features.assert_called_once_with(journaling_feat,
-                                                          True)
+            image.update_features.assert_called_once_with(
+                self.driver.RBD_FEATURE_JOURNALING, True)
         else:
-            calls = [call(exclusive_lock_feat, True),
-                     call(journaling_feat, True)]
+            calls = [call(self.driver.RBD_FEATURE_EXCLUSIVE_LOCK, True),
+                     call(self.driver.RBD_FEATURE_JOURNALING, True)]
             image.update_features.assert_has_calls(calls, any_order=False)
         image.mirror_image_enable.assert_called_once_with()
 
@@ -452,10 +468,10 @@ class RBDTestCase(test.TestCase):
             image.update_features.assert_not_called()
         elif had_journaling == 'false' and had_exclusive_lock == 'true':
             image.update_features.assert_called_once_with(
-                self.driver.rbd.RBD_FEATURE_JOURNALING, False)
+                self.driver.RBD_FEATURE_JOURNALING, False)
         else:
-            calls = [call(self.driver.rbd.RBD_FEATURE_JOURNALING, False),
-                     call(self.driver.rbd.RBD_FEATURE_EXCLUSIVE_LOCK,
+            calls = [call(self.driver.RBD_FEATURE_JOURNALING, False),
+                     call(self.driver.RBD_FEATURE_EXCLUSIVE_LOCK,
                           False)]
             image.update_features.assert_has_calls(calls, any_order=False)
 
@@ -678,109 +694,101 @@ class RBDTestCase(test.TestCase):
 
     @common_mocks
     def test_deferred_deletion(self):
+        drv = self._make_drv({'enable_deferred_deletion': True,
+                              'deferred_deletion_delay': 0})
+
         client = self.mock_client.return_value
 
-        self.driver.rbd.Image.return_value.list_snaps.return_value = []
-
-        with mock.patch.object(self.driver, '_get_clone_info') as \
+        with mock.patch.object(drv, '_get_clone_info') as \
                 mock_get_clone_info:
-            with mock.patch.object(self.driver, '_delete_backup_snaps') as \
+            with mock.patch.object(drv, '_delete_backup_snaps') as \
                     mock_delete_backup_snaps:
                 mock_get_clone_info.return_value = (None, None, None)
-                self.cfg.enable_deferred_deletion = True
-                self.cfg.deferred_deletion_delay = 0
 
-                self.driver.delete_volume(self.volume_a)
+                drv.delete_volume(self.volume_a)
 
                 mock_get_clone_info.assert_called_once_with(
-                    self.mock_rbd.Image.return_value,
+                    drv.rbd.Image.return_value,
                     self.volume_a.name,
                     None)
-                (self.driver.rbd.Image.return_value
-                    .list_snaps.assert_called_once_with())
+                drv.rbd.Image.return_value.list_snaps.assert_called_once_with()
                 client.__enter__.assert_called_once_with()
                 client.__exit__.assert_called_once_with(None, None, None)
                 mock_delete_backup_snaps.assert_called_once_with(
-                    self.mock_rbd.Image.return_value)
+                    drv.rbd.Image.return_value)
                 self.assertFalse(
-                    self.driver.rbd.Image.return_value.unprotect_snap.called)
+                    drv.rbd.Image.return_value.unprotect_snap.called)
                 self.assertEqual(
-                    1, self.driver.rbd.RBD.return_value.trash_move.call_count)
+                    1, drv.rbd.RBD.return_value.trash_move.call_count)
 
     @common_mocks
     def test_deferred_deletion_periodic_task(self):
-        self.cfg.rados_connect_timeout = -1
-        self.cfg.enable_deferred_deletion = True
-        self.cfg.deferred_deletion_purge_interval = 1
-
-        self.driver._start_periodic_tasks()
+        drv = self._make_drv({'rados_connect_timeout': -1,
+                              'enable_deferred_deletion': True,
+                              'deferred_deletion_purge_interval': 1})
+        drv._start_periodic_tasks()
 
         time.sleep(1)
-        self.assertTrue(self.driver.rbd.RBD.return_value.trash_list.called)
-        self.assertFalse(self.driver.rbd.RBD.return_value.trash_remove.called)
+        self.assertTrue(drv.rbd.RBD.return_value.trash_list.called)
+        self.assertFalse(drv.rbd.RBD.return_value.trash_remove.called)
 
     @common_mocks
     def test_deferred_deletion_trash_purge(self):
-        with mock.patch.object(self.driver.rbd.RBD(), 'trash_list') as \
-                mock_trash_list:
+        drv = self._make_drv({'enable_deferred_deletion': True})
+        with mock.patch.object(drv.rbd.RBD(), 'trash_list') as mock_trash_list:
             mock_trash_list.return_value = [self.volume_a]
-            self.cfg.enable_deferred_deletion = True
-
-            self.driver._trash_purge()
+            drv._trash_purge()
 
             self.assertEqual(
-                1, self.driver.rbd.RBD.return_value.trash_list.call_count)
+                1, drv.rbd.RBD.return_value.trash_list.call_count)
             self.assertEqual(
-                1, self.driver.rbd.RBD.return_value.trash_remove.call_count)
+                1, drv.rbd.RBD.return_value.trash_remove.call_count)
 
     @common_mocks
     def test_deferred_deletion_trash_purge_not_expired(self):
-        with mock.patch.object(self.driver.rbd.RBD(), 'trash_list') as \
-                mock_trash_list:
+        drv = self._make_drv({'enable_deferred_deletion': True})
+        with mock.patch.object(drv.rbd.RBD(), 'trash_list') as mock_trash_list:
             mock_trash_list.return_value = [self.volume_a]
-            self.mock_rbd.RBD.return_value.trash_remove.side_effect = (
+            drv.rbd.RBD.return_value.trash_remove.side_effect = (
                 self.mock_rbd.PermissionError)
-            self.cfg.enable_deferred_deletion = True
 
-            self.driver._trash_purge()
+            drv._trash_purge()
 
             self.assertEqual(
-                1, self.driver.rbd.RBD.return_value.trash_list.call_count)
+                1, drv.rbd.RBD.return_value.trash_list.call_count)
             self.assertEqual(
-                1, self.driver.rbd.RBD.return_value.trash_remove.call_count)
+                1, drv.rbd.RBD.return_value.trash_remove.call_count)
             # Make sure the exception was raised
             self.assertEqual(1, len(RAISED_EXCEPTIONS))
             self.assertIn(self.mock_rbd.PermissionError, RAISED_EXCEPTIONS)
 
     @common_mocks
     def test_deferred_deletion_w_parent(self):
+        drv = self._make_drv({'enable_deferred_deletion': True,
+                              'deferred_deletion_delay': 0})
         _get_clone_info_return_values = [
             (None, self.volume_b.name, None),
             (None, None, None)]
-        with mock.patch.object(self.driver, '_get_clone_info',
+        with mock.patch.object(drv, '_get_clone_info',
                                side_effect = _get_clone_info_return_values):
-            self.cfg.enable_deferred_deletion = True
-            self.cfg.deferred_deletion_delay = 0
-
-            self.driver.delete_volume(self.volume_a)
+            drv.delete_volume(self.volume_a)
 
             self.assertEqual(
-                1, self.driver.rbd.RBD.return_value.trash_move.call_count)
+                1, drv.rbd.RBD.return_value.trash_move.call_count)
 
     @common_mocks
     def test_deferred_deletion_w_deleted_parent(self):
+        drv = self._make_drv({'enable_deferred_deletion': True,
+                              'deferred_deletion_delay': 0})
         _get_clone_info_return_values = [
             (None, "%s.deleted" % self.volume_b.name, None),
             (None, None, None)]
-        with mock.patch.object(self.driver, '_get_clone_info',
+        with mock.patch.object(drv, '_get_clone_info',
                                side_effect = _get_clone_info_return_values):
-            self.cfg.enable_deferred_deletion = True
-            self.cfg.deferred_deletion_delay = 0
-
-            self.driver.delete_volume(self.volume_a)
+            drv.delete_volume(self.volume_a)
 
             self.assertEqual(
-                2, self.driver.rbd.RBD.return_value.trash_move.call_count)
+                2, drv.rbd.RBD.return_value.trash_move.call_count)
 
     @common_mocks
     def delete_volume_not_found(self):
@@ -2444,6 +2452,55 @@ class RBDTestCase(test.TestCase):
 
         ret = driver.get_backup_device(self.context, backup)
         self.assertEqual(ret, (self.volume_b, False))
+
+    @common_mocks
+    def test_multiattach_exclusions(self):
+        self.assertEqual(
+            self.driver.RBD_FEATURE_JOURNALING |
+            self.driver.RBD_FEATURE_FAST_DIFF |
+            self.driver.RBD_FEATURE_OBJECT_MAP |
+            self.driver.RBD_FEATURE_EXCLUSIVE_LOCK,
+            self.driver.MULTIATTACH_EXCLUSIONS)
+
+    MULTIATTACH_FULL_FEATURES = (
+        driver.RBDDriver.RBD_FEATURE_LAYERING |
+        driver.RBDDriver.RBD_FEATURE_EXCLUSIVE_LOCK |
+        driver.RBDDriver.RBD_FEATURE_OBJECT_MAP |
+        driver.RBDDriver.RBD_FEATURE_FAST_DIFF |
+        driver.RBDDriver.RBD_FEATURE_JOURNALING)
+
+    MULTIATTACH_REDUCED_FEATURES = (
+        driver.RBDDriver.RBD_FEATURE_LAYERING |
+        driver.RBDDriver.RBD_FEATURE_EXCLUSIVE_LOCK)
+
+    @ddt.data(MULTIATTACH_FULL_FEATURES, MULTIATTACH_REDUCED_FEATURES)
+    @common_mocks
+    def test_enable_multiattach(self, features):
+        image = self.mock_proxy.return_value.__enter__.return_value
+        image_features = features
+        image.features.return_value = image_features
+
+        ret = self.driver._enable_multiattach(self.volume_a)
+
+        image.update_features.assert_called_once_with(
+            self.driver.MULTIATTACH_EXCLUSIONS & image_features, False)
+
+        self.assertEqual(
+            {'provider_location':
+             "{\"saved_features\":%s}" % image_features}, ret)
+
+    @ddt.data(MULTIATTACH_FULL_FEATURES, MULTIATTACH_REDUCED_FEATURES)
+    @common_mocks
+    def test_disable_multiattach(self, features):
+        image = self.mock_proxy.return_value.__enter__.return_value
+        self.volume_a.provider_location = '{"saved_features": %s}' % features
+
+        ret = self.driver._disable_multiattach(self.volume_a)
+
+        image.update_features.assert_called_once_with(
+            self.driver.MULTIATTACH_EXCLUSIONS & features, True)
+
+        self.assertEqual({'provider_location': None}, ret)
 
 
 class ManagedRBDTestCase(test_driver.BaseDriverTestCase):

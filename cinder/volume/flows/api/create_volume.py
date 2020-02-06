@@ -11,10 +11,10 @@
 #    under the License.
 
 import collections
-import six
 
 from oslo_config import cfg
 from oslo_log import log as logging
+import six
 import taskflow.engines
 from taskflow.patterns import linear_flow
 from taskflow.types import failure as ft
@@ -799,7 +799,7 @@ class VolumeCastTask(flow_utils.CinderTask):
         exc_info = False
         if all(flow_failures[-1].exc_info):
             exc_info = flow_failures[-1].exc_info
-        LOG.error('Unexpected build error:', exc_info=exc_info)
+        LOG.error('Unexpected build error:', exc_info=exc_info)  # noqa
 
 
 def get_flow(db_api, image_service_api, availability_zones, create_what,

@@ -16,9 +16,8 @@
 #    under the License.
 #
 
-"""
-Cinder Volume driver for Fujitsu ETERNUS DX S3 series.
-"""
+"""Cinder Volume driver for Fujitsu ETERNUS DX S3 series."""
+
 import ast
 import base64
 import hashlib
@@ -36,6 +35,9 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import utils
 from cinder.volume import configuration as conf
+from cinder.volume.drivers.fujitsu.eternus_dx import constants as CONSTANTS
+from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_cli
+from cinder.volume import volume_utils
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -46,98 +48,11 @@ try:
 except ImportError:
     pywbemAvailable = False
 
-VOL_PREFIX = "FJosv_"
-RAIDGROUP = 2
-TPPOOL = 5
-SNAPOPC = 4
-OPC = 5
-RETURN_TO_RESOURCEPOOL = 19
-DETACH = 8
-INITIALIZED = 2
-UNSYNCHRONIZED = 3
-BROKEN = 5
-PREPARED = 11
-REPL = "FUJITSU_ReplicationService"
-STOR_CONF = "FUJITSU_StorageConfigurationService"
-CTRL_CONF = "FUJITSU_ControllerConfigurationService"
-STOR_HWID = "FUJITSU_StorageHardwareIDManagementService"
-
-UNDEF_MSG = 'Undefined Error!!'
-JOB_RETRIES = 60
-JOB_INTERVAL_SEC = 10
-
-# Error code keyword.
-VOLUME_IS_BUSY = 32786
-DEVICE_IS_BUSY = 32787
-VOLUMENAME_IN_USE = 32788
-COPYSESSION_NOT_EXIST = 32793
-LUNAME_IN_USE = 4102
-LUNAME_NOT_EXIST = 4097  # Only for InvokeMethod(HidePaths).
-EC_REC = 3
 FJ_ETERNUS_DX_OPT_opts = [
     cfg.StrOpt('cinder_eternus_config_file',
                default='/etc/cinder/cinder_fujitsu_eternus_dx.xml',
-               help='config file for cinder eternus_dx volume driver'),
+               help='Config file for cinder eternus_dx volume driver.'),
 ]
-
-POOL_TYPE_dic = {
-    RAIDGROUP: 'RAID_GROUP',
-    TPPOOL: 'Thinporvisioning_POOL',
-}
-
-OPERATION_dic = {
-    SNAPOPC: RETURN_TO_RESOURCEPOOL,
-    OPC: DETACH,
-    EC_REC: DETACH,
-}
-
-RETCODE_dic = {
-    '0': 'Success',
-    '1': 'Method Not Supported',
-    '4': 'Failed',
-    '5': 'Invalid Parameter',
-    '4096': 'Method Parameters Checked - Job Started',
-    '4097': 'Size Not Supported',
-    '4101': 'Target/initiator combination already exposed',
-    '4102': 'Requested logical unit number in use',
-    '32769': 'Maximum number of Logical Volume in a RAID group '
-             'has been reached',
-    '32770': 'Maximum number of Logical Volume in the storage device '
-             'has been reached',
-    '32771': 'Maximum number of registered Host WWN '
-             'has been reached',
-    '32772': 'Maximum number of affinity group has been reached',
-    '32773': 'Maximum number of host affinity has been reached',
-    '32785': 'The RAID group is in busy state',
-    '32786': 'The Logical Volume is in busy state',
-    '32787': 'The device is in busy state',
-    '32788': 'Element Name is in use',
-    '32792': 'No Copy License',
-    '32793': 'Session is not exist',
-    '32796': 'Quick Format Error',
-    '32801': 'The CA port is in invalid setting',
-    '32802': 'The Logical Volume is Mainframe volume',
-    '32803': 'The RAID group is not operative',
-    '32804': 'The Logical Volume is not operative',
-    '32808': 'No Thin Provisioning License',
-    '32809': 'The Logical Element is ODX volume',
-    '32811': 'This operation cannot be performed to the NAS resources',
-    '32812': 'This operation cannot be performed to the Storage Cluster '
-             'resources',
-    '32816': 'Fatal error generic',
-    '35302': 'Invalid LogicalElement',
-    '35304': 'LogicalElement state error',
-    '35316': 'Multi-hop error',
-    '35318': 'Maximum number of multi-hop has been reached',
-    '35324': 'RAID is broken',
-    '35331': 'Maximum number of session has been reached(per device)',
-    '35333': 'Maximum number of session has been reached(per SourceElement)',
-    '35334': 'Maximum number of session has been reached(per TargetElement)',
-    '35335': 'Maximum number of Snapshot generation has been reached '
-             '(per SourceElement)',
-    '35346': 'Copy table size is not setup',
-    '35347': 'Copy table size is not enough',
-}
 
 CONF.register_opts(FJ_ETERNUS_DX_OPT_opts, group=conf.SHARED_CONF_GROUP)
 
@@ -148,10 +63,7 @@ class FJDXCommon(object):
     VERSION = "1.3.0"
     stats = {
         'driver_version': VERSION,
-        'free_capacity_gb': 0,
-        'reserved_percentage': 0,
         'storage_protocol': None,
-        'total_capacity_gb': 0,
         'vendor_name': 'FUJITSU',
         'QoS_support': False,
         'volume_backend_name': None,
@@ -169,6 +81,9 @@ class FJDXCommon(object):
             # Get iSCSI ipaddress from driver configuration file.
             self.configuration.iscsi_ip_address = (
                 self._get_drvcfg('EternusISCSIIP'))
+        self.conn = None
+        self.fjdxcli = {}
+        self._check_user()
 
     @staticmethod
     def get_driver_options():
@@ -190,16 +105,16 @@ class FJDXCommon(object):
                    'volumesize': volumesize})
 
         # get poolname from driver configuration file
-        eternus_pool = self._get_drvcfg('EternusPool')
+        eternus_pool = volume_utils.extract_host(volume['host'], 'pool')
         # Existence check the pool
         pool = self._find_pool(eternus_pool)
 
         if 'RSP' in pool['InstanceID']:
-            pooltype = RAIDGROUP
+            pooltype = CONSTANTS.RAIDGROUP
         else:
-            pooltype = TPPOOL
+            pooltype = CONSTANTS.TPPOOL
 
-        configservice = self._find_eternus_service(STOR_CONF)
+        configservice = self._find_eternus_service(CONSTANTS.STOR_CONF)
         if configservice is None:
             msg = (_('create_volume, volume: %(volume)s, '
                      'volumename: %(volumename)s, '
@@ -233,7 +148,7 @@ class FJDXCommon(object):
             ElementType=self._pywbem_uint(pooltype, '16'),
             Size=self._pywbem_uint(volumesize, '64'))
 
-        if rc == VOLUMENAME_IN_USE:  # Element Name is in use
+        if rc == CONSTANTS.VOLUMENAME_IN_USE:  # Element Name is in use
             LOG.warning('create_volume, '
                         'volumename: %(volumename)s, '
                         'Element Name is in use.',
@@ -280,7 +195,7 @@ class FJDXCommon(object):
                    'errordesc': errordesc,
                    'backend': systemnamelist[0]['IdentifyingNumber'],
                    'eternus_pool': eternus_pool,
-                   'pooltype': POOL_TYPE_dic[pooltype]})
+                   'pooltype': CONSTANTS.POOL_TYPE_dic[pooltype]})
 
         # Create return value.
         element_path = {
@@ -299,9 +214,52 @@ class FJDXCommon(object):
                     'FJ_Volume_Name': volumename,
                     'FJ_Volume_No': volume_no,
                     'FJ_Pool_Name': eternus_pool,
-                    'FJ_Pool_Type': POOL_TYPE_dic[pooltype]}
+                    'FJ_Pool_Type': CONSTANTS.POOL_TYPE_dic[pooltype]}
 
         return (element_path, metadata)
+
+    def create_pool_info(self, pool_instance, volume_count, pool_type):
+        """Create pool information from pool instance."""
+        LOG.debug('create_pool_info, pool_instance: %(pool)s, '
+                  'volume_count: %(volcount)s, pool_type: %(ptype)s.',
+                  {'pool': pool_instance,
+                   'volcount': volume_count, 'ptype': pool_type})
+
+        if pool_type not in CONSTANTS.POOL_TYPE_list:
+            msg = (_('Invalid pool type was specified : %s.') % pool_type)
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        total_gb = pool_instance['TotalManagedSpace'] / units.Gi
+        free_gb = pool_instance['RemainingManagedSpace'] / units.Gi
+
+        if hasattr(pool_instance, 'provisioned_capacity_gb'):
+            prov_gb = pool_instance.provisioned_capacity_gb
+        else:
+            prov_gb = total_gb - free_gb
+
+        if pool_type == 'RAID':
+            useable_gb = free_gb
+        else:
+            # If the ratio is less than the value on ETERNUS,
+            # useable_gb may be negative. Avoid over-allocation.
+            max_capacity = total_gb * float(
+                self.configuration.max_over_subscription_ratio)
+            useable_gb = max_capacity - prov_gb
+
+        pool = {
+            'name': pool_instance['ElementName'],
+            'path': pool_instance.path,
+            'total_capacity_gb': total_gb,
+            'free_capacity_gb': free_gb,
+            'type': pool_type,
+            'volume_count': volume_count,
+            'provisioned_capacity_gb': prov_gb,
+            'useable_capacity_gb': useable_gb
+        }
+
+        LOG.debug('create_pool_info, pool: %s.', pool)
+        return pool
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot."""
@@ -390,8 +348,8 @@ class FJDXCommon(object):
                   {'t_volumename': t_volumename,
                    's_volumename': s_volumename})
 
-        # Get replicationservice for CreateElementReplica.
-        repservice = self._find_eternus_service(REPL)
+        # Get replication service for CreateElementReplica.
+        repservice = self._find_eternus_service(CONSTANTS.REPL)
 
         if repservice is None:
             msg = _('_create_local_cloned_volume, '
@@ -513,7 +471,7 @@ class FJDXCommon(object):
 
         volumename = vol_instance['ElementName']
 
-        configservice = self._find_eternus_service(STOR_CONF)
+        configservice = self._find_eternus_service(CONSTANTS.STOR_CONF)
         if configservice is None:
             msg = (_('_delete_volume, volumename: %(volumename)s, '
                      'Storage Configuration Service not found.')
@@ -565,7 +523,7 @@ class FJDXCommon(object):
         d_volumename = self._create_volume_name(snapshot['id'])
         s_volumename = self._create_volume_name(vol_id)
         vol_instance = self._find_lun(volume)
-        repservice = self._find_eternus_service(REPL)
+        repservice = self._find_eternus_service(CONSTANTS.REPL)
 
         # Check the existence of volume.
         if vol_instance is None:
@@ -803,32 +761,30 @@ class FJDXCommon(object):
                    'vol_instance': vol_instance.path})
 
         # Get poolname from driver configuration file.
-        eternus_pool = self._get_drvcfg('EternusPool')
-        # Check the existence of volume.
-        pool = self._find_pool(eternus_pool)
+        pool_name, pool = self._find_pool_from_volume(vol_instance)
         if pool is None:
             msg = (_('extend_volume, '
                      'eternus_pool: %(eternus_pool)s, '
                      'pool not found.')
-                   % {'eternus_pool': eternus_pool})
+                   % {'eternus_pool': pool_name})
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
         # Set pooltype.
         if 'RSP' in pool['InstanceID']:
-            pooltype = RAIDGROUP
+            pooltype = CONSTANTS.RAIDGROUP
         else:
-            pooltype = TPPOOL
+            pooltype = CONSTANTS.TPPOOL
 
-        configservice = self._find_eternus_service(STOR_CONF)
-        if configservice is None:
+        configservice = self._find_eternus_service(CONSTANTS.STOR_CONF)
+        if not configservice:
             msg = (_('extend_volume, volume: %(volume)s, '
                      'volumename: %(volumename)s, '
                      'eternus_pool: %(eternus_pool)s, '
                      'Storage Configuration Service not found.')
                    % {'volume': volume,
                       'volumename': volumename,
-                      'eternus_pool': eternus_pool})
+                      'eternus_pool': pool_name})
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
@@ -842,7 +798,7 @@ class FJDXCommon(object):
                   'TheElement: %(vol_instance)s.',
                   {'service': configservice,
                    'volumename': volumename,
-                   'eternus_pool': eternus_pool,
+                   'eternus_pool': pool_name,
                    'pooltype': pooltype,
                    'volumesize': volumesize,
                    'vol_instance': vol_instance.path})
@@ -866,7 +822,7 @@ class FJDXCommon(object):
                    % {'volumename': volumename,
                       'rc': rc,
                       'errordesc': errordesc,
-                      'pooltype': POOL_TYPE_dic[pooltype]})
+                      'pooltype': CONSTANTS.POOL_TYPE_dic[pooltype]})
 
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
@@ -880,48 +836,21 @@ class FJDXCommon(object):
                   {'volumename': volumename,
                    'rc': rc,
                    'errordesc': errordesc,
-                   'eternus_pool': eternus_pool,
-                   'pooltype': POOL_TYPE_dic[pooltype]})
+                   'eternus_pool': pool_name,
+                   'pooltype': CONSTANTS.POOL_TYPE_dic[pooltype]})
 
-        return eternus_pool
+        return pool_name
 
     @lockutils.synchronized('ETERNUS-update', 'cinder-', True)
     def update_volume_stats(self):
-        """get pool capacity."""
+        """Get pool capacity."""
 
         self.conn = self._get_eternus_connection()
-        eternus_pool = self._get_drvcfg('EternusPool')
 
-        LOG.debug('update_volume_stats, pool name: %s.', eternus_pool)
+        poolname_list = self._get_drvcfg('EternusPool', multiple=True)
+        self._find_pools(poolname_list, self.conn)
 
-        pool = self._find_pool(eternus_pool, True)
-        if pool:
-            # pool is found
-            self.stats['total_capacity_gb'] = (
-                pool['TotalManagedSpace'] / units.Gi)
-
-            self.stats['free_capacity_gb'] = (
-                pool['RemainingManagedSpace'] / units.Gi)
-        else:
-            # if pool information is unknown, set 0 GB to capacity information
-            LOG.warning('update_volume_stats, '
-                        'eternus_pool:%(eternus_pool)s, '
-                        'specified pool is not found.',
-                        {'eternus_pool': eternus_pool})
-            self.stats['total_capacity_gb'] = 0
-            self.stats['free_capacity_gb'] = 0
-
-        self.stats['multiattach'] = False
-
-        LOG.debug('update_volume_stats, '
-                  'eternus_pool:%(eternus_pool)s, '
-                  'total capacity[%(total)s], '
-                  'free capacity[%(free)s].',
-                  {'eternus_pool': eternus_pool,
-                   'total': self.stats['total_capacity_gb'],
-                   'free': self.stats['free_capacity_gb']})
-
-        return (self.stats, eternus_pool)
+        return (self.stats, poolname_list)
 
     def _get_mapdata(self, vol_instance, connector, target_portlist):
         """return mapping information."""
@@ -1099,9 +1028,9 @@ class FJDXCommon(object):
         return mapdata
 
     def _get_drvcfg(self, tagname, filename=None, multiple=False):
-        """read from driver configuration file."""
-        if filename is None:
-            # set default configuration file name
+        """Read from driver configuration file."""
+        if not filename:
+            # Set default configuration file name.
             filename = self.configuration.cinder_eternus_config_file
 
         LOG.debug("_get_drvcfg, input[%(filename)s][%(tagname)s].",
@@ -1110,7 +1039,6 @@ class FJDXCommon(object):
         tree = ET.parse(filename)
         elem = tree.getroot()
 
-        ret = None
         if not multiple:
             ret = elem.findtext(".//" + tagname)
         else:
@@ -1179,7 +1107,7 @@ class FJDXCommon(object):
 
         # pylint: disable=E1121
         volumename = base64.urlsafe_b64encode(m.digest()).decode()
-        ret = VOL_PREFIX + six.text_type(volumename)
+        ret = CONSTANTS.VOL_PREFIX + six.text_type(volumename)
 
         LOG.debug('_create_volume_name, ret: %s', ret)
         return ret
@@ -1228,6 +1156,138 @@ class FJDXCommon(object):
         LOG.debug('_find_pool, pool: %s.', ret)
         return ret
 
+    def _find_pools(self, poolname_list, conn):
+        """Find Instance or InstanceName of pool by pool name on ETERNUS."""
+        LOG.debug('_find_pool, pool name: %s.', poolname_list)
+
+        target_poolname = list(poolname_list)
+        pools = []
+
+        # Get pools info from CIM instance(include info about instance path).
+        try:
+            tppoollist = self._enum_eternus_instances(
+                'FUJITSU_ThinProvisioningPool', conn=conn)
+            rgpoollist = self._enum_eternus_instances(
+                'FUJITSU_RAIDStoragePool', conn=conn)
+        except Exception:
+            msg = (_('_find_pool, '
+                     'eternus_pool:%(eternus_pool)s, '
+                     'EnumerateInstances, '
+                     'cannot connect to ETERNUS.')
+                   % {'eternus_pool': target_poolname})
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        # Make total pools list.
+        tppools = [(tppool, 'TPP') for tppool in tppoollist]
+        rgpools = [(rgpool, 'RAID') for rgpool in rgpoollist]
+        poollist = tppools + rgpools
+
+        # One eternus backend has only one special pool name
+        # so just use pool name can get the target pool.
+        for pool, ptype in poollist:
+            poolname = pool['ElementName']
+
+            LOG.debug('_find_pools, '
+                      'pool: %(pool)s, ptype: %(ptype)s.',
+                      {'pool': poolname, 'ptype': ptype})
+            if poolname in target_poolname:
+                try:
+                    volume_list = self._assoc_eternus_names(
+                        pool.path,
+                        conn=conn,
+                        AssocClass='FUJITSU_AllocatedFromStoragePool',
+                        ResultClass='FUJITSU_StorageVolume')
+
+                    volume_count = len(volume_list)
+                except Exception:
+                    msg = (_('_find_pools, '
+                             'poolname: %(poolname)s, '
+                             'pooltype: %(ptype)s, '
+                             'Associator Names, '
+                             'cannot connect to ETERNUS.')
+                           % {'ptype': ptype,
+                              'poolname': poolname})
+                    LOG.error(msg)
+                    raise exception.VolumeBackendAPIException(data=msg)
+
+                if ptype == 'TPP':
+                    param_dict = {
+                        'pool-name': poolname
+                    }
+                    rc, errordesc, data = self._exec_eternus_cli(
+                        'show_pool_provision', **param_dict)
+
+                    if rc != 0:
+                        msg = (_('_find_pools, show_pool_provision, '
+                                 'pool name: %(pool_name)s, '
+                                 'Return code: %(rc)lu, '
+                                 'Error: %(errordesc)s, '
+                                 'Message: %(job)s.')
+                               % {'pool_name': poolname,
+                                  'rc': rc,
+                                  'errordesc': errordesc,
+                                  'job': data})
+                        LOG.error(msg)
+                        raise exception.VolumeBackendAPIException(data=msg)
+
+                    pool.provisioned_capacity_gb = data
+
+                poolinfo = self.create_pool_info(pool, volume_count, ptype)
+
+                target_poolname.remove(poolname)
+                pools.append((poolinfo, poolname))
+
+            if not target_poolname:
+                break
+
+        if not pools:
+            LOG.warning('_find_pools, all the EternusPools in driver '
+                        'configuration file do not exist. '
+                        'Please edit the driver configuration file '
+                        'to include EternusPool names.')
+
+        # Sort pools in the order defined in driver configuration file.
+        sorted_pools = (
+            [pool for name in poolname_list for pool, pname in pools
+             if name == pname])
+
+        LOG.debug('_find_pools, '
+                  'pools: %(pools)s, '
+                  'notfound_pools: %(notfound_pools)s.',
+                  {'pools': pools,
+                   'notfound_pools': target_poolname})
+        pools_stats = {'pools': []}
+        for pool in sorted_pools:
+            single_pool = {}
+            if pool['type'] == 'TPP':
+                thin_enabled = True
+                max_ratio = self.configuration.max_over_subscription_ratio
+            else:
+                thin_enabled = False
+                max_ratio = 1
+
+            single_pool.update(dict(
+                path=pool['path'],
+                pool_name=pool['name'],
+                total_capacity_gb=pool['total_capacity_gb'],
+                total_volumes=pool['volume_count'],
+                free_capacity_gb=pool['free_capacity_gb'],
+                provisioned_capacity_gb=pool['provisioned_capacity_gb'],
+                useable_capacity_gb=pool['useable_capacity_gb'],
+                thin_provisioning_support=thin_enabled,
+                thick_provisioning_support=not thin_enabled,
+                max_over_subscription_ratio=max_ratio,
+            ))
+            single_pool['multiattach'] = False
+            pools_stats['pools'].append(single_pool)
+
+        self.stats['shared_targets'] = True
+        self.stats['backend_state'] = 'up'
+        self.stats['pools'] = pools_stats['pools']
+
+        return self.stats, target_poolname
+
     def _find_eternus_service(self, classname):
         """find CIM instance about service information."""
         LOG.debug('_find_eternus_service, '
@@ -1263,7 +1323,8 @@ class FJDXCommon(object):
                   {'a': classname,
                    'b': instanceNameList,
                    'c': param_dict})
-
+        rc = None
+        retdata = None
         # Use InvokeMethod.
         try:
             rc, retdata = self.conn.InvokeMethod(
@@ -1284,11 +1345,12 @@ class FJDXCommon(object):
         if "Job" in retdata:
             rc = self._wait_for_job_complete(self.conn, retdata)
 
-        if rc == DEVICE_IS_BUSY:
+        if rc == CONSTANTS.DEVICE_IS_BUSY:
             msg = _('Device is in Busy state')
             raise exception.VolumeBackendAPIException(data=msg)
 
-        errordesc = RETCODE_dic.get(six.text_type(rc), UNDEF_MSG)
+        errordesc = CONSTANTS.RETCODE_dic.get(six.text_type(rc),
+                                              CONSTANTS.UNDEF_MSG)
 
         ret = (rc, errordesc, retdata)
 
@@ -1309,11 +1371,14 @@ class FJDXCommon(object):
 
     @lockutils.synchronized('ETERNUS-SMIS-other', 'cinder-', True)
     @utils.retry(exception.VolumeBackendAPIException)
-    def _enum_eternus_instances(self, classname):
+    def _enum_eternus_instances(self, classname, conn=None, **param_dict):
         """Enumerate Instances."""
         LOG.debug('_enum_eternus_instances, classname: %s.', classname)
 
-        ret = self.conn.EnumerateInstances(classname)
+        if not conn:
+            conn = self.conn
+
+        ret = conn.EnumerateInstances(classname, **param_dict)
 
         LOG.debug('_enum_eternus_instances, enum %d instances.', len(ret))
         return ret
@@ -1344,26 +1409,32 @@ class FJDXCommon(object):
 
     @lockutils.synchronized('ETERNUS-SMIS-other', 'cinder-', True)
     @utils.retry(exception.VolumeBackendAPIException)
-    def _assoc_eternus(self, classname, **param_dict):
+    def _assoc_eternus(self, classname, conn=None, **param_dict):
         """Associator."""
         LOG.debug('_assoc_eternus, '
                   'classname: %(cls)s, param: %(param)s.',
                   {'cls': classname, 'param': param_dict})
 
-        ret = self.conn.Associators(classname, **param_dict)
+        if not conn:
+            conn = self.conn
+
+        ret = conn.Associators(classname, **param_dict)
 
         LOG.debug('_assoc_eternus, enum %d instances.', len(ret))
         return ret
 
     @lockutils.synchronized('ETERNUS-SMIS-other', 'cinder-', True)
     @utils.retry(exception.VolumeBackendAPIException)
-    def _assoc_eternus_names(self, classname, **param_dict):
+    def _assoc_eternus_names(self, classname, conn=None, **param_dict):
         """Associator Names."""
         LOG.debug('_assoc_eternus_names, '
                   'classname: %(cls)s, param: %(param)s.',
                   {'cls': classname, 'param': param_dict})
 
-        ret = self.conn.AssociatorNames(classname, **param_dict)
+        if not conn:
+            conn = self.conn
+
+        ret = conn.AssociatorNames(classname, **param_dict)
 
         LOG.debug('_assoc_eternus_names, enum %d names.', len(ret))
         return ret
@@ -1528,7 +1599,7 @@ class FJDXCommon(object):
                       'find target copysession, '
                       'wait for end of copysession.')
 
-            if cpsession_instance['CopyState'] == BROKEN:
+            if cpsession_instance['CopyState'] == CONSTANTS.BROKEN:
                 msg = (_('_wait_for_copy_complete, '
                          'cpsession: %(cpsession)s, '
                          'copysession state is BROKEN.')
@@ -1557,7 +1628,7 @@ class FJDXCommon(object):
         # SnapOPC: 19 (Return To ResourcePool)
         # OPC:8 (Detach)
         # EC/REC:8 (Detach)
-        operation = OPERATION_dic.get(copytype, None)
+        operation = CONSTANTS.OPERATION_dic.get(copytype, None)
         if operation is None:
             msg = (_('_delete_copysession, '
                      'copy session type is undefined! '
@@ -1568,7 +1639,7 @@ class FJDXCommon(object):
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(data=msg)
 
-        repservice = self._find_eternus_service(REPL)
+        repservice = self._find_eternus_service(CONSTANTS.REPL)
         if repservice is None:
             msg = (_('_delete_copysession, '
                      'Cannot find Replication Service'))
@@ -1594,12 +1665,12 @@ class FJDXCommon(object):
                    'rc': rc,
                    'errordesc': errordesc})
 
-        if rc == COPYSESSION_NOT_EXIST:
+        if rc == CONSTANTS.COPYSESSION_NOT_EXIST:
             LOG.debug('_delete_copysession, '
                       'cpsession: %(cpsession)s, '
                       'copysession is not exist.',
                       {'cpsession': cpsession})
-        elif rc == VOLUME_IS_BUSY:
+        elif rc == CONSTANTS.VOLUME_IS_BUSY:
             msg = (_('_delete_copysession, '
                      'copysession: %(cpsession)s, '
                      'operation: %(operation)s, '
@@ -1688,7 +1759,7 @@ class FJDXCommon(object):
         volume_uid = vol_instance['Name']
         initiatorlist = self._find_initiator_names(connector)
         aglist = self._find_affinity_group(connector)
-        configservice = self._find_eternus_service(CTRL_CONF)
+        configservice = self._find_eternus_service(CONSTANTS.CTRL_CONF)
 
         if targetlist is None:
             targetlist = self._get_target_port()
@@ -1748,7 +1819,7 @@ class FJDXCommon(object):
                           {'errordesc': errordesc,
                            'rc': rc})
 
-                if rc != 0 and rc != LUNAME_IN_USE:
+                if rc != 0 and rc != CONSTANTS.LUNAME_IN_USE:
                     LOG.warning('_map_lun, '
                                 'lun_name: %(volume_uid)s, '
                                 'Initiator: %(initiator)s, '
@@ -1781,7 +1852,7 @@ class FJDXCommon(object):
                           {'errordesc': errordesc,
                            'rc': rc})
 
-                if rc != 0 and rc != LUNAME_IN_USE:
+                if rc != 0 and rc != CONSTANTS.LUNAME_IN_USE:
                     LOG.warning('_map_lun, '
                                 'lun_name: %(volume_uid)s, '
                                 'Initiator: %(initiator)s, '
@@ -1946,7 +2017,7 @@ class FJDXCommon(object):
                       {'volume': vol_instance.path,
                        'aglist': aglist})
 
-        configservice = self._find_eternus_service(CTRL_CONF)
+        configservice = self._find_eternus_service(CONSTANTS.CTRL_CONF)
         if configservice is None:
             msg = (_('_unmap_lun, '
                      'vol_instance.path: %(volume)s, '
@@ -1983,7 +2054,7 @@ class FJDXCommon(object):
                       {'errordesc': errordesc,
                        'rc': rc})
 
-            if rc == LUNAME_NOT_EXIST:
+            if rc == CONSTANTS.LUNAME_NOT_EXIST:
                 LOG.debug('_unmap_lun, '
                           'volumename: %(volumename)s, '
                           'Invalid LUNames.',
@@ -2118,7 +2189,7 @@ class FJDXCommon(object):
             """Called at an interval until the job is finished."""
             if self._is_job_finished(conn, job):
                 raise loopingcall.LoopingCallDone()
-            if self.retries > JOB_RETRIES:
+            if self.retries > CONSTANTS.JOB_RETRIES:
                 LOG.error("_wait_for_job_complete, "
                           "failed after %(retries)d tries.",
                           {'retries': self.retries})
@@ -2136,7 +2207,7 @@ class FJDXCommon(object):
 
         self.wait_for_job_called = False
         timer = loopingcall.FixedIntervalLoopingCall(_wait_for_job_complete)
-        timer.start(interval=JOB_INTERVAL_SEC).wait()
+        timer.start(interval=CONSTANTS.JOB_INTERVAL_SEC).wait()
 
         jobInstanceName = job['Job']
         jobinstance = conn.GetInstance(jobInstanceName,
@@ -2189,3 +2260,243 @@ class FJDXCommon(object):
             result = num
 
         return result
+
+    def _find_pool_from_volume(self, vol_instance, manage_type='volume'):
+        """Find Instance or InstanceName of pool by volume instance."""
+        LOG.debug('_find_pool_from_volume, volume: %(volume)s.',
+                  {'volume': vol_instance})
+        poolname = None
+        target_pool = None
+        filename = None
+        conn = self.conn
+
+        # Get poolname of volume on Eternus.
+        try:
+            pools = self._assoc_eternus(
+                vol_instance.path,
+                conn=conn,
+                AssocClass='FUJITSU_AllocatedFromStoragePool',
+                ResultClass='CIM_StoragePool')
+        except Exception:
+            msg = (_('_find_pool_from_volume, '
+                     'vol_instance: %s, '
+                     'Associators: FUJITSU_AllocatedFromStoragePool, '
+                     'cannot connect to ETERNUS.')
+                   % vol_instance.path)
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        if not pools:
+            msg = (_('_find_pool_from_volume, '
+                     'vol_instance: %s, '
+                     'pool not found.')
+                   % vol_instance.path)
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        # Get poolname from driver configuration file.
+        if manage_type == 'volume':
+            cfgpool_list = list(self._get_drvcfg('EternusPool',
+                                                 filename=filename,
+                                                 multiple=True))
+        elif manage_type == 'snapshot':
+            cfgpool_list = list(self._get_drvcfg('EternusSnapPool',
+                                                 filename=filename,
+                                                 multiple=True))
+        LOG.debug('_find_pool_from_volume, cfgpool_list: %(cfgpool_list)s.',
+                  {'cfgpool_list': cfgpool_list})
+        for pool in pools:
+            if pool['ElementName'] in cfgpool_list:
+                poolname = pool['ElementName']
+                target_pool = pool.path
+                break
+
+        if not target_pool:
+            msg = (_('_find_pool_from_volume, '
+                     'vol_instance: %s, '
+                     'the pool of volume not in driver configuration file.')
+                   % vol_instance.path)
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        LOG.debug('_find_pool_from_volume, poolname: %(poolname)s, '
+                  'target_pool: %(target_pool)s.',
+                  {'poolname': poolname, 'target_pool': target_pool})
+        return poolname, target_pool
+
+    def _check_user(self):
+        """Check whether user's role is accessible to ETERNUS and Software."""
+        ret = True
+        rc, errordesc, job = self._exec_eternus_cli('check_user_role')
+        if rc != 0:
+            msg = (_('_check_user, '
+                     'Return code: %(rc)lu, '
+                     'Error: %(errordesc)s, '
+                     'Message: %(job)s.')
+                   % {'rc': rc,
+                      'errordesc': errordesc,
+                      'job': job})
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        if job != 'Software':
+            msg = (_('_check_user, '
+                     'Specified user(%(user)s) does not have '
+                     'Software role: %(role)s.')
+                   % {'user': self._get_drvcfg('EternusUser'),
+                      'role': job})
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        return ret
+
+    def _exec_eternus_cli(self, command, retry=CONSTANTS.TIMES_MIN,
+                          retry_interval=CONSTANTS.RETRY_INTERVAL,
+                          retry_code=[32787], filename=None, timeout=None,
+                          **param_dict):
+        """Execute ETERNUS CLI."""
+        LOG.debug('_exec_eternus_cli, '
+                  'command: %(a)s, '
+                  'filename: %(f)s, '
+                  'timeout: %(t)s, '
+                  'parameters: %(b)s.',
+                  {'a': command,
+                   'f': filename,
+                   't': timeout,
+                   'b': param_dict})
+
+        result = None
+        rc = None
+        retdata = None
+        errordesc = None
+        filename = self.configuration.cinder_eternus_config_file
+        storage_ip = self._get_drvcfg('EternusIP')
+        if not self.fjdxcli.get(filename):
+            user = self._get_drvcfg('EternusUser')
+            password = self._get_drvcfg('EternusPassword')
+            self.fjdxcli[filename] = (
+                eternus_dx_cli.FJDXCLI(user, storage_ip,
+                                       password=password))
+
+        for retry_num in range(retry):
+            # Execute ETERNUS CLI and get return value.
+            try:
+                out_dict = self.fjdxcli[filename].done(command, **param_dict)
+                result = out_dict.get('result')
+                rc_str = out_dict.get('rc')
+                retdata = out_dict.get('message')
+            except Exception as ex:
+                msg = (_('_exec_eternus_cli, '
+                         'unexpected error: %(ex)s.')
+                       % {'ex': ex})
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
+
+            # Check ssh result.
+            if result == 255:
+                LOG.info('_exec_eternus_cli, retry, '
+                         'command: %(command)s, '
+                         'option: %(option)s, '
+                         'ip: %(ip)s, '
+                         'SSH Result: %(result)s, '
+                         'retdata: %(retdata)s, '
+                         'TryNum: %(rn)s.',
+                         {'command': command,
+                          'option': param_dict,
+                          'ip': storage_ip,
+                          'result': result,
+                          'retdata': retdata,
+                          'rn': (retry_num + 1)})
+                time.sleep(retry_interval)
+                continue
+            elif result != 0:
+                msg = (_('_exec_eternus_cli, '
+                         'unexpected error, '
+                         'command: %(command)s, '
+                         'option: %(option)s, '
+                         'ip: %(ip)s, '
+                         'resuslt: %(result)s, '
+                         'retdata: %(retdata)s.')
+                       % {'command': command,
+                          'option': param_dict,
+                          'ip': storage_ip,
+                          'result': result,
+                          'retdata': retdata})
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
+
+            # Check CLI return code.
+            if rc_str.isdigit():
+                # SMI-S style return code.
+                rc = int(rc_str)
+
+                try:
+                    errordesc = CONSTANTS.RETCODE_dic[str(rc)]
+                except Exception:
+                    errordesc = 'Undefined Error!!'
+
+                if rc in retry_code:
+                    LOG.info('_exec_eternus_cli, retry, '
+                             'ip: %(ip)s, '
+                             'RetryCode: %(rc)s, '
+                             'TryNum: %(rn)s.',
+                             {'ip': storage_ip,
+                              'rc': rc,
+                              'rn': (retry_num + 1)})
+                    time.sleep(retry_interval)
+                    continue
+                if rc == 4:
+                    if ('Authentication failed' in retdata and
+                            retry_num + 1 < retry):
+                        LOG.warning('_exec_eternus_cli, retry, ip: %(ip)s, '
+                                    'Message: %(message)s, '
+                                    'TryNum: %(rn)s.',
+                                    {'ip': storage_ip,
+                                     'message': retdata,
+                                     'rn': (retry_num + 1)})
+                        time.sleep(1)
+                        continue
+
+                break
+            else:
+                # CLI style return code.
+                LOG.warning('_exec_eternus_cli, '
+                            'WARNING!! '
+                            'ip: %(ip)s, '
+                            'ReturnCode: %(rc_str)s, '
+                            'ReturnData: %(retdata)s.',
+                            {'ip': storage_ip,
+                             'rc_str': rc_str,
+                             'retdata': retdata})
+
+                errordesc = rc_str
+                rc = 4  # Failed.
+                break
+        else:
+            if 0 < result:
+                msg = (_('_exec_eternus_cli, '
+                         'cannot connect to ETERNUS. '
+                         'SSH Result: %(result)s, '
+                         'retdata: %(retdata)s.')
+                       % {'result': result,
+                          'retdata': retdata})
+
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
+            else:
+                LOG.warning('_exec_eternus_cli, Retry was exceeded.')
+
+        ret = (rc, errordesc, retdata)
+
+        LOG.debug('_exec_eternus_cli, '
+                  'command: %(a)s, '
+                  'parameters: %(b)s, '
+                  'ip: %(ip)s, '
+                  'Return code: %(rc)s, '
+                  'Error: %(errordesc)s.',
+                  {'a': command,
+                   'b': param_dict,
+                   'ip': storage_ip,
+                   'rc': rc,
+                   'errordesc': errordesc})
+        return ret

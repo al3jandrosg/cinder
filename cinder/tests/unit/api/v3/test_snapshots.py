@@ -13,8 +13,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from unittest import mock
+
 import ddt
-import mock
 from oslo_utils import strutils
 
 from cinder.api import microversions as mv
@@ -44,7 +45,6 @@ def fake_get(self, context, *args, **kwargs):
            'host': 'fake-host',
            'status': 'available',
            'encryption_key_id': None,
-           'volume_type_id': None,
            'migration_status': None,
            'availability_zone': 'fake-zone',
            'attach_status': 'detached',

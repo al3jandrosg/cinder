@@ -12,12 +12,12 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-"""
-Volume driver for Pure Storage FlashArray storage system.
+"""Volume driver for Pure Storage FlashArray storage system.
 
 This driver requires Purity version 4.0.0 or later.
 """
 
+from distutils import version
 import functools
 import ipaddress
 import math
@@ -25,12 +25,15 @@ import platform
 import re
 import uuid
 
-from distutils import version
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import units
+try:
+    from purestorage import purestorage
+except ImportError:
+    purestorage = None
 import six
 
 from cinder import exception
@@ -44,11 +47,6 @@ from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume import volume_utils
 from cinder.zonemanager import utils as fczm_utils
-
-try:
-    from purestorage import purestorage
-except ImportError:
-    purestorage = None
 
 LOG = logging.getLogger(__name__)
 
@@ -650,10 +648,9 @@ class PureBaseVolumeDriver(san.SanDriver):
                     # Swallow any exception, just warn and continue
                     LOG.warning("Disconnect on secondary array failed with"
                                 " message: %(msg)s", {"msg": err.text})
-        # Now disconnect from the current array, removing any left over
-        # remote hosts that we maybe couldn't reach.
+        # Now disconnect from the current array
         self._disconnect(self._get_current_array(), volume,
-                         connector, remove_remote_hosts=True)
+                         connector, remove_remote_hosts=False)
 
     @pure_driver_debug_trace
     def _disconnect_host(self, array, host_name, vol_name):
@@ -1547,6 +1544,15 @@ class PureBaseVolumeDriver(san.SanDriver):
         """
         base_name = volume.name
 
+        # Some OpenStack deployments, eg PowerVC, create a volume.name that
+        # when appended with out '-cinder' string will exceed the maximum
+        # volume name length for Pure, so here we left truncate the true volume
+        # name before the opennstack volume_name_template affected it and
+        # then put back the template format
+        if len(base_name) > 56:
+            actual_name = base_name[7:]
+            base_name = "volume-" + actual_name[-52:]
+
         repl_type = self._get_replication_type_from_vol_type(
             volume.volume_type)
         if repl_type == REPLICATION_TYPE_SYNC:
@@ -2335,7 +2341,7 @@ class PureISCSIDriver(PureBaseVolumeDriver, san.SanISCSIDriver):
     the underlying storage connectivity with the FlashArray.
     """
 
-    VERSION = "9.0.0"
+    VERSION = "10.0.iscsi"
 
     def __init__(self, *args, **kwargs):
         execute = kwargs.pop("execute", utils.execute)
@@ -2582,7 +2588,7 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
     supports the Cinder Fibre Channel Zone Manager.
     """
 
-    VERSION = "7.0.0"
+    VERSION = "10.0.fc"
 
     def __init__(self, *args, **kwargs):
         execute = kwargs.pop("execute", utils.execute)

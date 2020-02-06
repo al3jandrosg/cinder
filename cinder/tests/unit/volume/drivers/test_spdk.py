@@ -12,16 +12,19 @@
 
 import copy
 import json
-import mock
+from unittest import mock
 
 from os_brick import initiator
 from os_brick.initiator import connector
+from oslo_utils import timeutils
 from oslo_utils import units
 
 from cinder import context
 from cinder import objects
 from cinder import test
+from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import utils as test_utils
 from cinder import utils
 from cinder.volume import configuration as conf
 from cinder.volume.drivers import spdk as spdk_driver
@@ -250,23 +253,23 @@ class JSONRPCException(Exception):
 
 class JSONRPCClient(object):
     def __init__(self, addr=None, port=None):
-        self.methods = {"get_bdevs": self.get_bdevs,
-                        "get_lvol_stores": self.get_lvol_stores,
-                        "destroy_lvol_bdev": self.destroy_lvol_bdev,
-                        "snapshot_lvol_bdev": self.snapshot_lvol_bdev,
-                        "clone_lvol_bdev": self.clone_lvol_bdev,
-                        "construct_lvol_bdev": self.construct_lvol_bdev,
-                        "resize_lvol_bdev": self.resize_lvol_bdev,
-                        "get_nvmf_subsystems": self.get_nvmf_subsystems,
+        self.methods = {"bdev_get_bdevs": self.get_bdevs,
+                        "bdev_lvol_get_lvstores": self.get_lvol_stores,
+                        "bdev_lvol_delete": self.destroy_lvol_bdev,
+                        "bdev_lvol_snapshot": self.snapshot_lvol_bdev,
+                        "bdev_lvol_clone": self.clone_lvol_bdev,
+                        "bdev_lvol_create": self.construct_lvol_bdev,
+                        "bdev_lvol_resize": self.resize_lvol_bdev,
+                        "nvmf_get_subsystems": self.get_nvmf_subsystems,
                         "construct_nvmf_subsystem":
                             self.construct_nvmf_subsystem,
-                        "nvmf_subsystem_create":
+                        "nvmf_create_subsystem":
                             self.nvmf_subsystem_create,
                         "nvmf_subsystem_add_listener":
                             self.nvmf_subsystem_add_listener,
                         "nvmf_subsystem_add_ns":
                             self.nvmf_subsystem_add_ns,
-                        "inflate_lvol_bdev": self.inflate_lvol_bdev}
+                        "bdev_lvol_inflate": self.inflate_lvol_bdev}
         self.bdevs = copy.deepcopy(BDEVS)
         self.nvmf_subsystems = copy.deepcopy(NVMF_SUBSYSTEMS)
         self.lvol_stores = copy.deepcopy(LVOL_STORES)
@@ -513,6 +516,8 @@ class SpdkDriverTestCase(test.TestCase):
         self.jsonrpcclient = JSONRPCClient()
         self.driver = spdk_driver.SPDKDriver(configuration=
                                              self.configuration)
+        self._context = context.get_admin_context()
+        self.updated_at = timeutils.utcnow()
 
     def test__update_volume_stats(self):
         with mock.patch.object(self.driver, "_rpc_call",
@@ -536,7 +541,7 @@ class SpdkDriverTestCase(test.TestCase):
         with mock.patch.object(self.driver, "_rpc_call",
                                self.jsonrpcclient.call):
             bdev = self.driver._rpc_call(
-                "get_bdevs", params={"name": "lvs_test/lvol0"})
+                "bdev_get_bdevs", params={"name": "lvs_test/lvol0"})
             self.assertEqual(
                 bdev[0]['driver_specific']['lvol']['lvol_store_uuid'],
                 self.driver._get_spdk_lvs_uuid(
@@ -547,7 +552,7 @@ class SpdkDriverTestCase(test.TestCase):
     def test__get_spdk_lvs_free_space(self):
         with mock.patch.object(self.driver, "_rpc_call",
                                self.jsonrpcclient.call):
-            lvs = self.driver._rpc_call("get_lvol_stores")
+            lvs = self.driver._rpc_call("bdev_lvol_get_lvstores")
             lvol_store = None
             for lvol in lvs:
                 if lvol['name'] == "lvs_test":
@@ -583,7 +588,7 @@ class SpdkDriverTestCase(test.TestCase):
                              bdev)
             volume_clone = Volume()
             volume_clone.name = "clone0"
-            self.driver._rpc_call("snapshot_lvol_bdev",
+            self.driver._rpc_call("bdev_lvol_snapshot",
                                   params={'snapshot_name': "snapshot0",
                                           'lvol_name': "lvs_test/lvol2"})
             bdev = self.driver._get_spdk_volume_name("lvs_test/snapshot0")
@@ -628,19 +633,19 @@ class SpdkDriverTestCase(test.TestCase):
             db_volume = objects.Volume._from_db_object(ctxt, objects.Volume(),
                                                        db_volume)
             volume_get.return_value = db_volume
-            start_bdevs_len = len(self.driver._rpc_call('get_bdevs'))
+            start_bdevs_len = len(self.driver._rpc_call('bdev_get_bdevs'))
             self.driver.create_volume(db_volume)
-            tmp_bdevs = self.driver._rpc_call('get_bdevs')
+            tmp_bdevs = self.driver._rpc_call('bdev_get_bdevs')
             self.assertEqual(start_bdevs_len + 1, len(tmp_bdevs))
             volume = Volume()
             volume.name = "lvs_test/%s" % db_volume.name
             volume_name = self.driver._get_spdk_volume_name(volume.name)
-            self.driver._rpc_call('destroy_lvol_bdev', {"name": volume_name})
+            self.driver._rpc_call('bdev_lvol_delete', {"name": volume_name})
             self.driver.delete_volume(volume)
             bdev = self.driver._get_spdk_volume_name("lvs_test/%s"
                                                      % db_volume.name)
             self.assertIsNone(bdev)
-            tmp_bdevs = self.driver._rpc_call('get_bdevs')
+            tmp_bdevs = self.driver._rpc_call('bdev_get_bdevs')
             self.assertEqual(start_bdevs_len, len(tmp_bdevs))
 
     def get_volume_stats(self):
@@ -654,7 +659,7 @@ class SpdkDriverTestCase(test.TestCase):
                                self.jsonrpcclient.call):
             volume_clone = Volume()
             volume_clone.name = "clone0"
-            self.driver._rpc_call("snapshot_lvol_bdev",
+            self.driver._rpc_call("bdev_lvol_snapshot",
                                   params={'snapshot_name': "snapshot0",
                                           'lvol_name': "lvs_test/lvol2"})
             snapshot = Snapshot()
@@ -688,7 +693,7 @@ class SpdkDriverTestCase(test.TestCase):
                                self.jsonrpcclient.call):
             snapshot = Snapshot()
             snapshot.name = "snapshot0"
-            self.driver._rpc_call("snapshot_lvol_bdev",
+            self.driver._rpc_call("bdev_lvol_snapshot",
                                   params = {'snapshot_name': snapshot.name})
             self.driver.delete_snapshot(snapshot)
             snapshot = self.driver._get_spdk_volume_name("lvs_test/" +
@@ -733,16 +738,24 @@ class SpdkDriverTestCase(test.TestCase):
     def test_copy_volume_to_image(self, volume_get):
         with mock.patch.object(self.driver, "_rpc_call",
                                self.jsonrpcclient.call):
-            db_volume = fake_volume.fake_db_volume()
-            db_volume['provider_location'] = "127.0.0.1:3262 RDMA " \
-                                             "2016-06.io.spdk:cnode2"
+            provider_location = "127.0.0.1:3262 RDMA 2016-06.io.spdk:cnode2"
+            volume = test_utils.create_volume(
+                self._context, volume_type_id=fake.VOLUME_TYPE_ID,
+                updated_at=self.updated_at,
+                provider_location=provider_location)
+            extra_specs = {
+                'image_service:store_id': 'fake-store'
+            }
+            test_utils.create_volume_type(self._context.elevated(),
+                                          id=fake.VOLUME_TYPE_ID,
+                                          name="test_type",
+                                          extra_specs=extra_specs)
+
             ctxt = context.get_admin_context()
-            db_volume = objects.Volume._from_db_object(ctxt, objects.Volume(),
-                                                       db_volume)
-            volume_get.return_value = db_volume
+            volume_get.return_value = volume
             with mock.patch.object(self.driver.target_driver, "_rpc_call",
                                    self.jsonrpcclient.call):
-                self.driver.copy_volume_to_image(ctxt, db_volume, None, None)
+                self.driver.copy_volume_to_image(ctxt, volume, None, None)
 
     def test_extend_volume(self):
         with mock.patch.object(self.driver, "_rpc_call",
@@ -750,7 +763,7 @@ class SpdkDriverTestCase(test.TestCase):
             volume = Volume()
             volume.name = "lvs_test/lvol0"
             self.driver.extend_volume(volume, 2)
-            bdev = self.driver._rpc_call("get_bdevs",
+            bdev = self.driver._rpc_call("bdev_get_bdevs",
                                          params={"name": "lvs_test/lvol0"})
             self.assertEqual(2 * units.Gi,
                              bdev[0]['num_blocks'] * bdev[0]['block_size'])

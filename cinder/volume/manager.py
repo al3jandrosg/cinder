@@ -35,8 +35,6 @@ intact.
 
 """
 
-
-import requests
 import time
 
 from castellan import key_manager
@@ -51,6 +49,7 @@ from oslo_utils import timeutils
 from oslo_utils import units
 from oslo_utils import uuidutils
 profiler = importutils.try_import('osprofiler.profiler')
+import requests
 import six
 from taskflow import exceptions as tfe
 
@@ -937,9 +936,6 @@ class VolumeManager(manager.CleanableManager,
                 LOG.exception("Failed to update usages deleting volume.",
                               resource=volume)
 
-        # Delete glance metadata if it exists
-        self.db.volume_glance_metadata_delete_by_volume(context, volume.id)
-
         volume.destroy()
 
         # If deleting source/destination volume in a migration or a temp
@@ -1611,9 +1607,17 @@ class VolumeManager(manager.CleanableManager,
 
         uri = 'cinder://%s' % image_volume.id
         image_registered = None
+
+        # retrieve store information from extra-specs
+        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
+        location_metadata = {}
+
+        if store_id:
+            location_metadata['store'] = store_id
+
         try:
             image_registered = image_service.add_location(
-                ctx, image_meta['id'], uri, {})
+                ctx, image_meta['id'], uri, location_metadata)
         except (exception.NotAuthorized, exception.Invalid,
                 exception.NotFound):
             LOG.exception('Failed to register image volume location '
@@ -1801,7 +1805,7 @@ class VolumeManager(manager.CleanableManager,
         driver_volume_type:
             a string to identify the type of volume.  This can be used by the
             calling code to determine the strategy for connecting to the
-            volume. This could be 'iscsi', 'rbd', 'sheepdog', etc.
+            volume. This could be 'iscsi', 'rbd', etc.
 
         data:
             this is the data that the calling code will use to connect to the
@@ -2416,7 +2420,7 @@ class VolumeManager(manager.CleanableManager,
         # swappy thing so it's a bit confusing, but it does unwind properly
         # when you step through it)
 
-        # In the new flow we simlified this and we don't need it, instead of
+        # In the new flow we simplified this and we don't need it, instead of
         # doing a bunch of swapping we just do attachment-create/delete on the
         # nova side, and then here we just do the ID swaps that are necessary
         # to maintain the old beahvior
@@ -2839,7 +2843,7 @@ class VolumeManager(manager.CleanableManager,
         new_reservations = reservations
 
         # If volume types have the same contents, no need to do anything.
-        # Use the admin contex to be able to access volume extra_specs
+        # Use the admin context to be able to access volume extra_specs
         retyped = False
         diff, all_equal = volume_types.volume_types_diff(
             context.elevated(), volume.volume_type_id, new_type_id)
@@ -3563,9 +3567,6 @@ class VolumeManager(manager.CleanableManager,
                               "failed to update usages.",
                               resource={'type': 'group',
                                         'id': group.id})
-
-            # Delete glance metadata if it exists
-            self.db.volume_glance_metadata_delete_by_volume(context, vol.id)
 
             vol.destroy()
 
