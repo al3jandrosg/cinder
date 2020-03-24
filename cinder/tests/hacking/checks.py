@@ -46,15 +46,8 @@ underscore_import_check = re.compile(r"(.)*i18n\s+import(.)* _$")
 underscore_import_check_multi = re.compile(r"(.)*i18n\s+import(.)* _, (.)*")
 # We need this for cases where they have created their own _ function.
 custom_underscore_check = re.compile(r"(.)*_\s*=\s*(.)*")
-no_audit_log = re.compile(r"(.)*LOG\.audit(.)*")
 no_print_statements = re.compile(r"\s*print\s*\(.+\).*")
 dict_constructor_with_list_copy_re = re.compile(r".*\bdict\((\[)?(\(|\[)")
-
-# NOTE(jsbryant): When other oslo libraries switch over non-namespaced
-# imports, we will need to add them to the regex below.
-oslo_namespace_imports = re.compile(r"from[\s]*oslo[.](concurrency|db"
-                                    "|config|utils|serialization|log)")
-no_contextlib_nested = re.compile(r"\s*with (contextlib\.)?nested\(")
 
 logging_instance = re.compile(
     r"(.)*LOG\.(warning|info|debug|error|exception)\(")
@@ -349,19 +342,6 @@ def check_no_print_statements(logical_line, filename, noqa):
         yield(0, msg)
 
 
-def check_no_log_audit(logical_line):
-    """Ensure that we are not using LOG.audit messages
-
-    Plans are in place going forward as discussed in the following
-    spec (https://review.openstack.org/#/c/91446/) to take out
-    LOG.audit messages.  Given that audit was a concept invented
-    for OpenStack we can enforce not using it.
-    """
-
-    if no_audit_log.match(logical_line):
-        yield(0, "C304: Found LOG.audit.  Use LOG.info instead.")
-
-
 def check_timeutils_strtime(logical_line):
     msg = ("C306: Found timeutils.strtime(). "
            "Please use datetime.datetime.isoformat() or datetime.strftime()")
@@ -384,19 +364,21 @@ def check_timeutils_isotime(logical_line):
 
 
 def no_test_log(logical_line, filename, noqa):
-    if ('cinder/tests/tempest' in filename or
-            'cinder/tests' not in filename or noqa):
+    if ('cinder/tests' not in filename or noqa):
         return
     msg = "C309: Unit tests should not perform logging."
     if logging_instance.match(logical_line):
         yield (0, msg)
 
 
-def validate_assertTrue(logical_line):
+def validate_assertTrue(logical_line, filename):
     # Note: a comparable check cannot be implemented for
     # assertFalse(), because assertFalse(None) passes.
     # Therefore, assertEqual(False, value) is required to
     # have the strongest test.
+    if 'cinder/tests/unit' not in filename:
+        return
+
     if re.match(assert_True, logical_line):
         msg = ("C313: Unit tests should use assertTrue(value) instead"
                " of using assertEqual(True, value).")
@@ -415,7 +397,6 @@ def factory(register):
     register(check_timeutils_isotime)
     register(check_unicode_usage)
     register(check_no_print_statements)
-    register(check_no_log_audit)
     register(dict_constructor_with_list_copy)
     register(no_test_log)
     register(validate_assertTrue)

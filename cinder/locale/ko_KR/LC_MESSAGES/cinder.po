@@ -15,7 +15,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2020-01-07 21:20+0000\n"
+"POT-Creation-Date: 2020-03-18 14:40+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -169,10 +169,6 @@ msgstr "%s는 유효한 로그 레벨이 아닙니다."
 #, python-format
 msgid "%s is not installed"
 msgstr "%s이(가) 설치되지 않음"
-
-#, python-format
-msgid "%s is not installed."
-msgstr "%s이(가) 설치되어 있지 않습니다. "
 
 #, python-format
 msgid "%s is not set"
@@ -821,6 +817,10 @@ msgstr "컨테이너 크기가 필요한 파일 크기보다 작습니다."
 #, python-format
 msgid "Converted to %(f1)s, but format is now %(f2)s"
 msgstr "%(f1)s(으)로 변환되었지만 이제 형식이 %(f2)s임"
+
+#, python-format
+msgid "Converted to %(vol_format)s, but format is now %(file_format)s"
+msgstr "%(vol_format)s(으)로 변환되었지만 이제 형식이 %(file_format)s임"
 
 #, python-format
 msgid "Converted to raw, but format is now %s"
@@ -1758,12 +1758,6 @@ msgstr "%s 배열에 로그온하지 못했습니다(올바르지 않은 로그�
 msgid "Failed to login with all rest URLs."
 msgstr "모든 나머지 URL로 로그인하지 못했습니다. "
 
-#, python-format
-msgid ""
-"Failed to make a request to Datera cluster endpoint due to the following "
-"reason: %s"
-msgstr "다음 이유로 Datera 클러스터 엔드포인트에 요청을 작성하지 못함: %s"
-
 msgid "Failed to manage api volume flow."
 msgstr "API 볼륨 플로우를 관리하지 못했습니다. "
 
@@ -1976,10 +1970,6 @@ msgstr "파이버 채널 연결 제어 실패: %(reason)s"
 #, python-format
 msgid "File %(file_path)s could not be found."
 msgstr "%(file_path)s 파일을 찾을 수 없습니다. "
-
-#, python-format
-msgid "File already exists at %s."
-msgstr "%s에 파일이 이미 있습니다. "
 
 #, python-format
 msgid "File already exists at: %s"
@@ -2379,14 +2369,6 @@ msgid "Invalid Replication Target: %(reason)s"
 msgstr "올바르지 않은 복제 대상: %(reason)s"
 
 #, python-format
-msgid ""
-"Invalid Virtuozzo Storage share specification: %r. Must be: [MDS1[,"
-"MDS2],...:/]<CLUSTER NAME>[:PASSWORD]."
-msgstr ""
-"올바르지 않은 Virtuozzo 스토리지 공유 스펙: %r. 다음이어야 함: [MDS1[,"
-"MDS2],...:/]<CLUSTER NAME>[:PASSWORD]."
-
-#, python-format
 msgid "Invalid XtremIO version %(cur)s, version %(min)s or up is required"
 msgstr "올바르지 않은 XtremIO 버전 %(cur)s, %(min)s 이상의 버전이 필요함"
 
@@ -2504,10 +2486,6 @@ msgid "Invalid mount point base: %s"
 msgstr "올바르지 않은 마운트 지점 기반: %s"
 
 #, python-format
-msgid "Invalid mount point base: %s."
-msgstr "올바르지 않은 마운트 지점 기반: %s."
-
-#, python-format
 msgid "Invalid new snapCPG name for retype.  new_snap_cpg='%s'."
 msgstr ""
 "새 snapCPG 이름이 재입력을 수행하기에 올바르지 않습니다. new_snap_cpg='%s'."
@@ -2618,10 +2596,6 @@ msgstr "동기화 대기 중에 문제가 발생했습니다."
 msgid ""
 "Issuing a fail-over failed because replication is not properly configured."
 msgstr "복제가 적절하게 구성되지 않았으므로 장애 복구 실행에 실패했습니다."
-
-#, python-format
-msgid "KeyError: %s"
-msgstr "KeyError: %s"
 
 msgid "Keystone version 3 or greater must be used to get nested quota support."
 msgstr "중첩 할당량 지원을 받기 위해 Keystone 버전 3 이상을 사용해야 합니다."
@@ -2969,9 +2943,6 @@ msgstr "마운트된 NFS 공유를 찾지 못함"
 msgid "No mounted SMBFS shares found."
 msgstr "마운트된 SMBFS 공유를 찾을 수 없습니다."
 
-msgid "No mounted Virtuozzo Storage shares found"
-msgstr "마운트된 Virtuozzo 스토리지 공유를 찾을 수 없습니다. "
-
 msgid "No mounted shares found"
 msgstr "마운트된 공유를 찾을 수 없음"
 
@@ -3315,11 +3286,6 @@ msgid "Request body contains too many items"
 msgstr "요청 본문에 너무 많은 항목이 들어있음"
 
 #, python-format
-msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
-msgstr ""
-"Datera 클러스터에 대한 요청이 잘못된 상태를 리턴함: %(status)s | %(reason)s"
-
-#, python-format
 msgid ""
 "Requested backup exceeds allowed Backup gigabytes quota. Requested "
 "%(requested)sG, quota is %(quota)sG and %(consumed)sG has been consumed."
@@ -3437,12 +3403,6 @@ msgstr "SMBFS 구성 파일이 %(config)s에 없습니다."
 
 msgid "SMBFS config file not set (smbfs_shares_config)."
 msgstr "SMBFS 구성 파일이 설정되지 않았습니다(smbfs_shares_config)."
-
-#, python-format
-msgid "SSH Command failed after '%(total_attempts)r' attempts : '%(command)s'"
-msgstr ""
-"'%(command)s' 명령을 '%(total_attempts)r'번 시도한 후에 SSH 명령이 실패했습니"
-"다. "
 
 #, python-format
 msgid "SSH command injection detected: %(command)s"
@@ -3950,10 +3910,6 @@ msgid "Type cannot be converted into NaElement."
 msgstr "유형을 NaElement로 변환할 수 없습니다."
 
 #, python-format
-msgid "TypeError: %s"
-msgstr "TypeError: %s"
-
-#, python-format
 msgid "UUIDs %s are in both add and remove volume list."
 msgstr "UUID %s이(가) 추가 및 제거 볼륨 목록에 있습니다. "
 
@@ -4221,9 +4177,6 @@ msgstr "알 수 없는 RemoteFS 예외"
 msgid "Unknown SMBFS exception."
 msgstr "알 수 없는 SMBFS 예외입니다."
 
-msgid "Unknown Virtuozzo Storage exception"
-msgstr "알 수 없는 Virtuozzo 스토리지 예외"
-
 msgid "Unknown action"
 msgstr "알 수 없는 조치"
 
@@ -4359,10 +4312,6 @@ msgid ""
 msgstr "값 \"%(value)s\"이(가) 구성 옵션 \"%(option)s\"에 대해 올바르지 않음"
 
 #, python-format
-msgid "ValueError: %s"
-msgstr "ValueError: %s"
-
-#, python-format
 msgid "Vdisk %(name)s not involved in mapping %(src)s -> %(tgt)s."
 msgstr "Vdisk %(name)s이(가) 맵핑 %(src)s -> %(tgt)s에 포함되지 않았습니다. "
 
@@ -4458,10 +4407,6 @@ msgstr "볼륨 %s이(가) Nexenta Store 어플라이언스에 없음"
 #, python-format
 msgid "Volume %s does not exist on the array."
 msgstr "배열에 %s 볼륨이 없습니다."
-
-#, python-format
-msgid "Volume %s does not have provider_location specified, skipping."
-msgstr "%s 볼륨에 지정된 provider_location이 없습니다. 건너뜁니다."
 
 #, python-format
 msgid "Volume %s doesn't exist on array."
@@ -4648,9 +4593,6 @@ msgstr "볼륨 크기는 1GB의 배수여야 합니다. "
 msgid "Volume size must multiple of 1 GB."
 msgstr "볼륨 크기는 1GB의 배수여야 합니다. "
 
-msgid "Volume status must be 'available'."
-msgstr "볼륨 상태가 '사용 가능'이어야 합니다. "
-
 msgid "Volume to Initiator Group mapping already exists"
 msgstr "개시자 그룹에 대한 볼륨 맵핑이 이미 있음"
 
@@ -4710,17 +4652,6 @@ msgstr "볼륨 타입의 가용 영역들이 올바르지 않은 %(az)s입니다
 msgid ""
 "Volumes/account exceeded on both primary and secondary SolidFire accounts."
 msgstr "기본 및 보조 SolidFire 계정 모두에서 볼륨/계정이 초과되었습니다."
-
-#, python-format
-msgid ""
-"VzStorage config 'vzstorage_used_ratio' invalid. Must be > 0 and <= 1.0: %s."
-msgstr ""
-"VzStorage 구성 'vzstorage_used_ratio'가 올바르지 않습니다. 0보다 크고 1.0 이"
-"하여야 함: %s."
-
-#, python-format
-msgid "VzStorage config file at %(config)s doesn't exist."
-msgstr "%(config)s의 VzStorage 구성 파일이 존재하지 않습니다. "
 
 #, python-format
 msgid "Wait synchronize failed. Running status: %s."

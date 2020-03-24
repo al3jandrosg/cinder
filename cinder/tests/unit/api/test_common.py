@@ -261,7 +261,9 @@ class MiscFunctionsTest(test.TestCase):
               ('http://cinder.example.com/v1.1/images/v10.5',
                'http://cinder.example.com/images/v10.5'),
               ('http://cinder.example.com/cinder/v2',
-               'http://cinder.example.com/cinder'))
+               'http://cinder.example.com/cinder'),
+              ('http://cinder.example.com/volume/v2/123',
+               'http://cinder.example.com/volume/123'))
     @ddt.unpack
     def test_remove_version_from_href(self, fixture, expected):
         """Test for removing version from href
@@ -477,7 +479,7 @@ class GeneralFiltersTest(test.TestCase):
                'expected': ["name", "status", "metadata",
                             "bootable", "migration_status",
                             "availability_zone", "group_id",
-                            "size"]},
+                            "size", "created_at", "updated_at"]},
               {'resource': 'backup',
                'expected': ["name", "status", "volume_id"]},
               {'resource': 'snapshot',

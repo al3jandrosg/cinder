@@ -25,12 +25,6 @@ backup_id_required:
   in: path
   required: true
   type: string
-cascade:
-  description: |
-    Remove any snapshots along with the volume. Default=False.
-  in: path
-  required: false
-  type: boolean
 cgsnapshot_id_path:
   description: |
     The ID of the consistency group snapshot.
@@ -49,14 +43,6 @@ encryption_id:
   in: path
   required: true
   type: string
-force_vol_del:
-  description: |
-    Indicates whether to force delete a volume even if
-    the volume is in deleting or error_deleting. Default is ``false``.
-  in: path
-  required: false
-  type: boolean
-  min_version: 3.23
 group_id_path:
   description: |
     The ID of the group.
@@ -208,6 +194,12 @@ bootable_query:
   in: query
   required: false
   type: boolean
+cascade:
+  description: |
+    Remove any snapshots along with the volume. Default=False.
+  in: query
+  required: false
+  type: boolean
 detail:
   description: |
     Indicates whether to show pool details or only
@@ -216,6 +208,26 @@ detail:
   in: query
   required: false
   type: boolean
+filter_created_at:
+  description: |
+    Filters reuslts by a time that resources are created at with time
+    comparison operators: gt/gte/eq/neq/lt/lte.
+    The date and time stamp format is ISO 8601: CCYY-MM-DDThh:mm:ss±hh:mm.
+    The ±hh:mm value, if included, returns the time zone as an offset from UTC.
+  in: query
+  required: false
+  type: string
+  min_version: 3.60
+filter_updated_at:
+  description: |
+    Filters reuslts by a time that resources are updated at with time
+    comaprison operators: gt/gte/eq/neq/lt/lte.
+    The date and time stamp format is ISO 8601: CCYY-MM-DDThh:mm:ss±hh:mm.
+    The ±hh:mm value, if included, returns the time zone as an offset from UTC.
+  in: query
+  required: false
+  type: string
+  min_version: 3.60
 fix_allocated_quotas:
   description: |
     Whether to fix all the non-leaf projects' ``allocation``
@@ -231,6 +243,14 @@ force_del_qos:
   in: query
   required: false
   type: boolean
+force_vol_del:
+  description: |
+    Indicates whether to force delete a volume even if
+    the volume is in deleting or error_deleting. Default is ``false``.
+  in: query
+  required: false
+  type: boolean
+  min_version: 3.23
 host_query:
   description: |
     Filter the service list result by host name of the service.
@@ -549,7 +569,19 @@ attachments:
     is attached to a server instance, the attachments list includes
     the UUID of the attached server, an attachment UUID, the name of
     the attached host, if any, the volume UUID, the device, and the
-    device UUID.  Otherwise, this list is empty.
+    device UUID.  Otherwise, this list is empty. For example::
+
+      [
+        {
+          'server_id': '6c8cf6e0-4c8f-442f-9196-9679737feec6',
+          'attachment_id': '3dafcac4-1cb9-4b60-a227-d729baa10cf6',
+          'attached_at': '2019-09-30T19:30:34.000000',
+          'host_name': null,
+          'volume_id': '5d95d5ee-4bdd-4452-b9d7-d44ca10d3d53',
+          'device': '/dev/vda',
+          'id': '5d95d5ee-4bdd-4452-b9d7-d44ca10d3d53'
+        }
+      ]
   in: body
   required: true
   type: array

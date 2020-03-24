@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2020-01-07 21:20+0000\n"
+"POT-Creation-Date: 2020-03-18 14:40+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -146,10 +146,6 @@ msgstr "%s 不是目錄。"
 #, python-format
 msgid "%s is not installed"
 msgstr "%s 未安裝"
-
-#, python-format
-msgid "%s is not installed."
-msgstr "未安裝 %s。"
 
 #, python-format
 msgid "%s is not set"
@@ -722,6 +718,10 @@ msgstr "儲存器大小小於必要的檔案大小。"
 #, python-format
 msgid "Converted to %(f1)s, but format is now %(f2)s"
 msgstr "已轉換為 %(f1)s，但格式現在為 %(f2)s"
+
+#, python-format
+msgid "Converted to %(vol_format)s, but format is now %(file_format)s"
+msgstr "已轉換為 %(vol_format)s，但格式現在為 %(file_format)s"
 
 #, python-format
 msgid "Converted to raw, but format is now %s"
@@ -1628,12 +1628,6 @@ msgstr "無法登入 %s 陣列（無效登入？）。"
 msgid "Failed to login with all rest URLs."
 msgstr "無法使用所有其餘 URL 進行登入。"
 
-#, python-format
-msgid ""
-"Failed to make a request to Datera cluster endpoint due to the following "
-"reason: %s"
-msgstr "無法對 Datera 叢集端點發出要求，原因如下：%s"
-
 msgid "Failed to manage api volume flow."
 msgstr "無法管理 API 磁區流程。"
 
@@ -1827,10 +1821,6 @@ msgstr "「光纖通道」連線控制失敗：%(reason)s"
 #, python-format
 msgid "File %(file_path)s could not be found."
 msgstr "找不到檔案 %(file_path)s。"
-
-#, python-format
-msgid "File already exists at %s."
-msgstr "%s 處已存在檔案。"
 
 #, python-format
 msgid "File already exists at: %s"
@@ -2168,14 +2158,6 @@ msgid "Invalid Replication Target: %(reason)s"
 msgstr "無效的抄寫目標：%(reason)s"
 
 #, python-format
-msgid ""
-"Invalid Virtuozzo Storage share specification: %r. Must be: [MDS1[,"
-"MDS2],...:/]<CLUSTER NAME>[:PASSWORD]."
-msgstr ""
-"Virtuozzo 儲存體共用項目規格無效：%r。必須是：[MDS1[,MDS2],...:/]<CLUSTER "
-"NAME>[:PASSWORD]。"
-
-#, python-format
 msgid "Invalid XtremIO version %(cur)s, version %(min)s or up is required"
 msgstr "XtremIO %(cur)s 版無效，需要 %(min)s 版或更高版本"
 
@@ -2278,10 +2260,6 @@ msgstr "無效的 meta 資料：%(reason)s"
 #, python-format
 msgid "Invalid mount point base: %s"
 msgstr "無效的裝載點基本程式：%s"
-
-#, python-format
-msgid "Invalid mount point base: %s."
-msgstr "無效的裝載點基本程式：%s。"
 
 #, python-format
 msgid "Invalid new snapCPG name for retype.  new_snap_cpg='%s'."
@@ -2389,10 +2367,6 @@ msgstr "等待同步時遇到問題。"
 msgid ""
 "Issuing a fail-over failed because replication is not properly configured."
 msgstr "發出失效接手失敗，因為未正確配置抄寫。"
-
-#, python-format
-msgid "KeyError: %s"
-msgstr "KeyError：%s"
 
 msgid "Keystone version 3 or greater must be used to get nested quota support."
 msgstr "Keystone 第 3 版或更高版本必須用於取得巢狀配額支援。"
@@ -2710,9 +2684,6 @@ msgstr "找不到已裝載的 NFS 共用"
 
 msgid "No mounted SMBFS shares found."
 msgstr "找不到已裝載的 SMBFS 共用項目。"
-
-msgid "No mounted Virtuozzo Storage shares found"
-msgstr "找不到已裝載的 Virtuozzo 儲存體共用項目"
 
 msgid "No mounted shares found"
 msgstr "找不到已裝載的共用項目"
@@ -3038,10 +3009,6 @@ msgid "Request body contains too many items"
 msgstr "要求內文包含太多項目"
 
 #, python-format
-msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
-msgstr "傳送至 Datera 叢集的要求，傳回了不正確的狀態：%(status)s | %(reason)s"
-
-#, python-format
 msgid ""
 "Requested backup exceeds allowed Backup gigabytes quota. Requested "
 "%(requested)sG, quota is %(quota)sG and %(consumed)sG has been consumed."
@@ -3148,10 +3115,6 @@ msgstr "%(config)s 處的 SMBFS 配置檔不存在。"
 
 msgid "SMBFS config file not set (smbfs_shares_config)."
 msgstr "未設定 SMBFS 配置檔 (smbfs_shares_config)。"
-
-#, python-format
-msgid "SSH Command failed after '%(total_attempts)r' attempts : '%(command)s'"
-msgstr "嘗試 '%(total_attempts)r' 次之後 SSH 指令仍失敗：'%(command)s'"
 
 #, python-format
 msgid "SSH command injection detected: %(command)s"
@@ -3621,10 +3584,6 @@ msgid "Type cannot be converted into NaElement."
 msgstr "無法將類型轉換為 NaElement。"
 
 #, python-format
-msgid "TypeError: %s"
-msgstr "TypeError：%s"
-
-#, python-format
 msgid "UUIDs %s are in both add and remove volume list."
 msgstr "UUID %s 同時位於新增和移除磁區清單中。"
 
@@ -3875,9 +3834,6 @@ msgstr "不明的 RemoteFS 異常狀況"
 msgid "Unknown SMBFS exception."
 msgstr "不明的 SMBFS 異常狀況。"
 
-msgid "Unknown Virtuozzo Storage exception"
-msgstr "「不明 Virtuozzo 儲存體」異常狀況"
-
 msgid "Unknown action"
 msgstr "不明動作"
 
@@ -4003,10 +3959,6 @@ msgid ""
 msgstr "值 \"%(value)s\" 不適用於配置選項 \"%(option)s\""
 
 #, python-format
-msgid "ValueError: %s"
-msgstr "ValueError：%s"
-
-#, python-format
 msgid "Vdisk %(name)s not involved in mapping %(src)s -> %(tgt)s."
 msgstr "從 %(src)s 到 %(tgt)s 的對映未涉及到 vdisk %(name)s。"
 
@@ -4097,10 +4049,6 @@ msgstr "磁區 %s 不存在於「Nexenta 儲存庫」軟體驅動裝置中"
 #, python-format
 msgid "Volume %s does not exist on the array."
 msgstr "磁區 %s 不在陣列上。"
-
-#, python-format
-msgid "Volume %s does not have provider_location specified, skipping."
-msgstr "沒有為磁區 %s 指定 provider_location，正在跳過。"
 
 #, python-format
 msgid "Volume %s doesn't exist on array."
@@ -4274,9 +4222,6 @@ msgstr "磁區大小必須是 1 GB 的倍數。"
 msgid "Volume size must multiple of 1 GB."
 msgstr "磁區大小必須是 1 GB 的倍數。"
 
-msgid "Volume status must be 'available'."
-msgstr "磁區狀態必須為「可用」。"
-
 msgid "Volume to Initiator Group mapping already exists"
 msgstr "磁區至起始器群組的對映已存在"
 
@@ -4327,16 +4272,6 @@ msgstr "找不到名稱為 %(volume_type_name)s 的磁區類型。"
 msgid ""
 "Volumes/account exceeded on both primary and secondary SolidFire accounts."
 msgstr "超過了主要及次要 SolidFire 帳戶上的磁區/帳戶。"
-
-#, python-format
-msgid ""
-"VzStorage config 'vzstorage_used_ratio' invalid. Must be > 0 and <= 1.0: %s."
-msgstr ""
-"VzStorage 配置 'vzstorage_used_ratio' 無效。必須大於 0 且小於或等於 1.0：%s。"
-
-#, python-format
-msgid "VzStorage config file at %(config)s doesn't exist."
-msgstr "%(config)s 處的 VzStorage 配置檔不存在。"
 
 #, python-format
 msgid "Wait synchronize failed. Running status: %s."

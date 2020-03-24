@@ -1,14 +1,67 @@
 CHANGES
 =======
 
+* Update weekly meeting location
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* PowerMax Driver - SRDF Enhancement
+* [Unity] Fix TypeError for test case test\_delete\_host\_wo\_lock
+* QNAP: Fix login on Python3
+* Update the title of Inspur G2 storage driver
+* PowerMax Driver - Safeguarding retype to some in-use replicated modes
+* RBD: fix volume reference handling in clone logic
+* Tests: Remove Python 2 compat file\_spec code
+* Make cinder-plugin-ceph-tempest job voting
+* Update in-tree Datera Cinder driver
+* Fix DriverFilter string evaluations
+* Ussuri contrib docs community goal
+* PowerMax Driver - Print extend volume info
+* Imported Translations from Zanata
+* Mark Huawei Fusionstorage Driver Supported
+* ChunkedBackupDriver: Freeing memory on restore
+* Revert "Remove Huawei FusionStorage Driver"
+* Support to query volume filter by updated\_at/created\_at
+* Cinder backup export broken
+* PowerMax Driver - Short host name and port group name override
+* Create backups via scheduler
+* Imported Translations from Zanata
+* Run cinder-plugin-ceph-tempest on py3
+* Add new license scheme for Flashsystem9000 series
+
+16.0.0.0b1
+----------
+
+* Tell reno to ignore the kilo branch
+* Install all requirements in docs builds
+* Change path to query in cinderAPI V3-volume delete
+* 3PAR: Revert flag for Active/Active High Availability Support
+* Fix stestr command error in doc
+* Seagate driver: Add Basic auth header when logging in via HTTPS
+* Support volume transfer \`name\` filters
+* PowerMax Driver - Get Manageable Volumes Fix
+* Fix volume unit test
+* NEC driver: fix migrate/retype an in-use volume
+* Update driver removal policy
+* Update reviewing doc with py3 usage guidelines
+* Add cryptsetup to bindep.txt
+* Skip cryptsetup password quality checking
+* Remove Dell EMC PS Series Driver
+* Configurable timeout of the QEMU img conversion
+* Handle retries in PowerMax unit tests
+* Add migration to make volume\_type\_id non nullable
 * Refactor README links
 * Support multiple stores of Glance
 * Add upgrade check for removed Veritas Access driver
 * RBD: catch argument exceptions when configuring multiattach
 * Bump paramiko requirement
+* Tests: hacking check tweaks
+* Hacking: Remove C304 check for LOG.audit
 * Update oslo.vmware version
+* Fix an issue in storwize unit test case
 * Mark MacroSAN Driver Unsupported
+* PowerMax Driver - Unisphere storage group/array tagging support
 * Add upgrade check for removed VZStorage driver
+* PowerMax Driver - RDF clean snapvx target fix
 * Remove the Veritas Access Driver
 * Mark Veritas CNFS Driver Unsupported
 * Remove the Virtuozzo Storage Driver
@@ -17,8 +70,10 @@ CHANGES
 * Add note that block-box is not supported
 * Enable flake8-logging-format extension
 * Clean up test requirements
+* Mark IET target driver deprecated
 * Imported Translations from Zanata
 * Fujitsu Driver: Change the calculation of TPP's capacity
+* Pure Storage - remove six due to Py2 support dropped
 * Fix: Create new cache entry when xtremio reaches snap limit
 * Update release notes for ibm storage
 * Introduce flake8-import-order extension
@@ -27,6 +82,7 @@ CHANGES
 * Add missing parameters in log messages
 * Drop requirements for unsupported python versions
 * Raise hacking version to 2.0.0
+* api-ref: give an example of volume['attachments']
 * Fix trivial typo in comment
 * Fix KeyError exception when volume filter file does not exist
 * Correct typos
@@ -73,6 +129,7 @@ CHANGES
 * RemoteFS: Use dest vol id instead of source id in snapshot temp name
 * Fix remotefs clone volume locking
 * Remove unnecessary saving of host and availability\_zone
+* Remove py2 mentions from contributor docs
 * SPDK drivers: Update RPC calls to match latest SPDK changes
 * NEC driver: fix a non-disruptive backup error
 * Use volume utils to clone encryption
@@ -110,7 +167,9 @@ CHANGES
 * NEC Driver : Code Refactoring
 * Tests: Fix retype unit test InvalidUUID warning
 * Fix: Online migrations for untyped volumes/snapshots
+* Automate generation of quotas api-ref samples
 * 3PAR: For Peer Persistence, add policy options in RCG
+* Automate generation of qos specs api-ref samples
 * Update master for stable/train
 
 15.0.0.0rc1
@@ -202,6 +261,7 @@ CHANGES
 * Address review comments for MacroSAN driver
 * 3PAR: Add config for NSP single path attach
 * Revert "3PAR: Provide new option to specify NSP for single path attachments"
+* Enable mutate for cinder scheduler
 * Create Seagate driver from dothill driver
 * Hedvig: Migration to py37
 * Fix "Fix upload volume to glance"
@@ -303,6 +363,7 @@ CHANGES
 * PowerMax driver - locking improvements
 * PowerMax driver - clone improvements
 * PowerMax driver - add 'target\_array\_model' to metadata
+* VMware: Implement clone\_image
 * Docs: Add new driver review checklist
 * Revert "Implement volume capacity stats for VMware"
 * PowerMax driver -  changing from 9.0 to 9.1 REST endpoints
@@ -476,6 +537,7 @@ CHANGES
 * Remove truncate from rootwrap filters
 * Trim test list for lio-barbican job
 * Tests: Fix up migrate notify tests
+* Extend remove\_version\_from\_href support
 * Pylint: Filter out cinder.objects and requests E1101
 * Fix version return incorrect when endpoint url end without /
 * Update section 'When do i need a new Microversion?'

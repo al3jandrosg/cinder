@@ -135,11 +135,6 @@ information needed to get started. This section should help get you started.
 Please feel free to also ask any questions in the **#openstack-cinder** IRC
 channel.
 
-Getting started
-~~~~~~~~~~~~~~~
-
-* `OpenStack Contributor Guide <https://docs.openstack.org/contributors/>`_
-
 Contributing to Cinder
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -151,8 +146,13 @@ Contents:
    contributor/index
    API Microversions </contributor/api_microversion_dev/>
 
+For reviewers
+-------------
+
+* :ref:`transition-guidelines`
+
 Additional reference
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 Contents:
 
@@ -165,7 +165,7 @@ Contents:
 .. only:: html
 
    Indices and tables
-   ~~~~~~~~~~~~~~~~~~
+   ------------------
 
    Contents:
 

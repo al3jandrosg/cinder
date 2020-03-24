@@ -75,6 +75,9 @@ websocket-client>=0.32.0
 [datacore]
 websocket-client>=0.32.0
 
+[datera]
+dfs_sdk>=1.2.25
+
 [ds8k]
 pyOpenSSL>=17.5.0
 

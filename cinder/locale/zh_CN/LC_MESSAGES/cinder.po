@@ -19,7 +19,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2020-01-07 21:20+0000\n"
+"POT-Creation-Date: 2020-03-18 14:40+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -176,10 +176,6 @@ msgstr "%s 不是一个目录。"
 #, python-format
 msgid "%s is not installed"
 msgstr "未安装 %s"
-
-#, python-format
-msgid "%s is not installed."
-msgstr "未安装 %s。"
 
 #, python-format
 msgid "%s is not set"
@@ -898,6 +894,10 @@ msgstr "容器大小小于所需文件大小。"
 #, python-format
 msgid "Converted to %(f1)s, but format is now %(f2)s"
 msgstr "已转换为 %(f1)s，但现在格式为 %(f2)s"
+
+#, python-format
+msgid "Converted to %(vol_format)s, but format is now %(file_format)s"
+msgstr "已转换为 %(vol_format)s，但现在格式为 %(file_format)s"
 
 #, python-format
 msgid "Converted to raw, but format is now %s"
@@ -1864,12 +1864,6 @@ msgstr "未能登录到 %s 阵列（无效登录？）。"
 msgid "Failed to login with all rest URLs."
 msgstr "未能使用所有 REST URL 进行登录。"
 
-#, python-format
-msgid ""
-"Failed to make a request to Datera cluster endpoint due to the following "
-"reason: %s"
-msgstr "由于以下原因，未能对 Datera 集群端点进行请求：%s"
-
 msgid "Failed to manage api volume flow."
 msgstr "未能管理 API 卷流。"
 
@@ -2067,10 +2061,6 @@ msgstr "光纤通道连接控制失败：%(reason)s"
 #, python-format
 msgid "File %(file_path)s could not be found."
 msgstr "找不到文件 %(file_path)s。"
-
-#, python-format
-msgid "File already exists at %s."
-msgstr "%s 处已存在文件。"
 
 #, python-format
 msgid "File already exists at: %s"
@@ -2519,14 +2509,6 @@ msgid "Invalid Replication Target: %(reason)s"
 msgstr "无效复制目标：%(reason)s"
 
 #, python-format
-msgid ""
-"Invalid Virtuozzo Storage share specification: %r. Must be: [MDS1[,"
-"MDS2],...:/]<CLUSTER NAME>[:PASSWORD]."
-msgstr ""
-"无效 Virtuozzo 存储器共享规范：%r。必须为 [MDS1[,MDS2],...:/]<CLUSTER NAME>[:"
-"PASSWORD]。"
-
-#, python-format
 msgid "Invalid XtremIO version %(cur)s, version %(min)s or up is required"
 msgstr "XtremIO V%(cur)s 无效，需要 V%(min)s 或更高版本"
 
@@ -2641,10 +2623,6 @@ msgstr "元数据无效：  %(reason)s"
 #, python-format
 msgid "Invalid mount point base: %s"
 msgstr "安装点基准无效：%s"
-
-#, python-format
-msgid "Invalid mount point base: %s."
-msgstr "安装点基准无效：%s。"
 
 #, python-format
 msgid "Invalid new snapCPG name for retype.  new_snap_cpg='%s'."
@@ -2773,10 +2751,6 @@ msgstr "Kaminario可重试异常:%(reason)s"
 #, python-format
 msgid "KaminarioCinderDriver failure: %(reason)s"
 msgstr "Kaminario Cinder 驱动程序故障:%(reason)s"
-
-#, python-format
-msgid "KeyError: %s"
-msgstr "KeyError：%s"
 
 msgid "Keystone version 3 or greater must be used to get nested quota support."
 msgstr "必须使用 Keystone 版本 3 或更高版本来获取嵌套配额支持。"
@@ -3143,9 +3117,6 @@ msgstr "找不到任何已安装的 NFS 共享项"
 msgid "No mounted SMBFS shares found."
 msgstr "找不到任何已安装的 SMBFS 共享项。"
 
-msgid "No mounted Virtuozzo Storage shares found"
-msgstr "找不到任何已安装的 Virtuozzo 存储器共享项"
-
 msgid "No mounted shares found"
 msgstr "找不到任何已安装的共享项"
 
@@ -3485,10 +3456,6 @@ msgid "Request body contains too many items"
 msgstr "请求主体包含太多items"
 
 #, python-format
-msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
-msgstr "针对 Datera 集群的请求返回了不正确的状态：%(status)s | %(reason)s"
-
-#, python-format
 msgid ""
 "Requested backup exceeds allowed Backup gigabytes quota. Requested "
 "%(requested)sG, quota is %(quota)sG and %(consumed)sG has been consumed."
@@ -3602,10 +3569,6 @@ msgstr "%(config)s 处不存在 SMBFS 配置文件。"
 
 msgid "SMBFS config file not set (smbfs_shares_config)."
 msgstr "SMBFS 配置文件未设置 (smbfs_shares_config)。"
-
-#, python-format
-msgid "SSH Command failed after '%(total_attempts)r' attempts : '%(command)s'"
-msgstr "SSH 命令在“%(total_attempts)r”之后失败，尝试次数：“%(command)s”"
 
 #, python-format
 msgid "SSH command injection detected: %(command)s"
@@ -3757,9 +3720,6 @@ msgstr "源卷未在迁移中。"
 
 msgid "Specified logical volume does not exist."
 msgstr "所指定的逻辑卷不存在。"
-
-msgid "Specifies IP pool to use for volume"
-msgstr "为使用卷指定IP池。"
 
 msgid ""
 "Specifies number of replicas for each volume. Can only be increased once "
@@ -3915,12 +3875,6 @@ msgstr "主机未准备好故障返回。请重新同步卷并在 LeftHand 后�
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "未实现方法 update_migrated_volume。"
-
-msgid "The name to use for storage instances created"
-msgstr "存储实例使用的名称已创建。"
-
-msgid "The name to use for volumes created"
-msgstr "卷使用的名称已创建。"
 
 msgid "The parent backup must be available for incremental backup."
 msgstr "父备份必须可用于增量备份。"
@@ -4143,10 +4097,6 @@ msgstr "类型访问修改不适用于公共卷类型。"
 
 msgid "Type cannot be converted into NaElement."
 msgstr "此类型不能转换为 NaElement。"
-
-#, python-format
-msgid "TypeError: %s"
-msgstr "TypeError：%s"
 
 #, python-format
 msgid "UUIDs %s are in both add and remove volume list."
@@ -4411,9 +4361,6 @@ msgstr "RemoteFS 异常未知"
 msgid "Unknown SMBFS exception."
 msgstr "SMBFS 异常未知。"
 
-msgid "Unknown Virtuozzo Storage exception"
-msgstr "未知 Virtuozzo 存储器异常"
-
 msgid "Unknown action"
 msgstr "操作未知"
 
@@ -4475,10 +4422,6 @@ msgid ""
 "or higher"
 msgstr ""
 "在交换机 %s 上存在不受支持的固件。请确保交换机正在运行固件 V6.4 或更高版本"
-
-#, python-format
-msgid "Unsupported volume format %s"
-msgstr "不支持的卷格式：%s"
 
 #, python-format
 msgid "Unsupported volume format: %s "
@@ -4548,10 +4491,6 @@ msgstr "验证卷连接失败（错误：%(err)s）。"
 msgid ""
 "Value \"%(value)s\" is not valid for configuration option \"%(option)s\""
 msgstr "值“%(value)s”对于配置选项“%(option)s”无效"
-
-#, python-format
-msgid "ValueError: %s"
-msgstr "ValueError：%s"
 
 #, python-format
 msgid "Vdisk %(name)s not involved in mapping %(src)s -> %(tgt)s."
@@ -4662,10 +4601,6 @@ msgstr "卷 %s 在 Nexenta 存储设备中不存在"
 #, python-format
 msgid "Volume %s does not exist on the array."
 msgstr "卷 %s 在阵列上不存在。"
-
-#, python-format
-msgid "Volume %s does not have provider_location specified, skipping."
-msgstr "卷 %s 没有指定 provider_location，正在跳过。"
 
 #, python-format
 msgid "Volume %s doesn't exist on array."
@@ -4850,13 +4785,6 @@ msgstr "卷大小必须为 1 GB 的倍数。"
 msgid "Volume size must multiple of 1 GB."
 msgstr "卷大小必须是 1 GB 的倍数。"
 
-msgid "Volume status must be 'available'."
-msgstr "卷状态必须为“可用”。"
-
-#, python-format
-msgid "Volume status must be available for snapshot %(id)s. (is %(status)s)"
-msgstr "对于快照 %(id)s，卷状态必须为“available”。（卷状态现在为 %(status)s）"
-
 msgid "Volume to Initiator Group mapping already exists"
 msgstr "卷至发起方组的映射已存在"
 
@@ -4907,16 +4835,6 @@ msgstr "名为 %(volume_type_name)s 的卷类型没有找到。"
 msgid ""
 "Volumes/account exceeded on both primary and secondary SolidFire accounts."
 msgstr "卷/帐户同时超出主 SolidFire 帐户和辅助 SolidFire 帐户的限制。"
-
-#, python-format
-msgid ""
-"VzStorage config 'vzstorage_used_ratio' invalid. Must be > 0 and <= 1.0: %s."
-msgstr ""
-"VzStorage 配置“vzstorage_used_ratio”无效。必须大于 0 并且小于或等于 1.0：%s。"
-
-#, python-format
-msgid "VzStorage config file at %(config)s doesn't exist."
-msgstr "%(config)s 处不存在 VzStorage 配置文件。"
 
 #, python-format
 msgid "Wait synchronize failed. Running status: %s."
@@ -5613,12 +5531,6 @@ msgid ""
 msgstr ""
 "将对象写入 swift 时出错，swift %(etag)s 中对象的 MD5 与发送至 swift %(md5)s "
 "的对象的 MD5 不同"
-
-msgid ""
-"existing_ref argument must be of this format:app_inst_name:storage_inst_name:"
-"vol_name"
-msgstr ""
-"参数 existing_ref 的格式必须为：app_inst_name:storage_inst_name:vol_name。"
 
 #, python-format
 msgid "extend_volume, eternus_pool: %(eternus_pool)s, pool not found."

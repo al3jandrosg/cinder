@@ -202,7 +202,7 @@ def remove_version_from_href(href):
 
     """
     parsed_url = urllib.parse.urlsplit(href)
-    url_parts = parsed_url.path.split('/', 2)
+    url_parts = parsed_url.path.split('/')
 
     # NOTE: this should match vX.X or vX
     expression = re.compile(r'^v([0-9]+|[0-9]+\.[0-9]+)(/.*|$)')
@@ -383,6 +383,14 @@ def get_enabled_resource_filters(resource=None):
     except Exception:
         LOG.debug("Failed to collect resource %s's filters.", resource)
         return {}
+
+
+def get_time_comparsion_operators():
+    """Get list of time comparsion operators.
+
+    This method returns list which contains the allowed comparsion operators.
+    """
+    return ["gt", "gte", "eq", "neq", "lt", "lte"]
 
 
 def convert_filter_attributes(filters, resource):

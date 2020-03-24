@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2020-01-07 21:20+0000\n"
+"POT-Creation-Date: 2020-03-18 14:40+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -185,10 +185,6 @@ msgstr "%s はディレクトリーではありません。"
 
 #, python-format
 msgid "%s is not installed"
-msgstr "%s がインストールされていません。"
-
-#, python-format
-msgid "%s is not installed."
 msgstr "%s がインストールされていません。"
 
 #, python-format
@@ -1025,6 +1021,10 @@ msgid "Converted to %(f1)s, but format is now %(f2)s"
 msgstr "%(f1)s に変換されましたが、現在の形式は %(f2)s です"
 
 #, python-format
+msgid "Converted to %(vol_format)s, but format is now %(file_format)s"
+msgstr "%(vol_format)s に変換されましたが、現在の形式は %(file_format)s です"
+
+#, python-format
 msgid "Converted to raw, but format is now %s"
 msgstr "ローに変換されましたが、現在の形式は %s です"
 
@@ -1660,11 +1660,6 @@ msgid "Exception: %s"
 msgstr "例外: %s"
 
 #, python-format
-msgid "Expected higher file exists for snapshot %s"
-msgstr ""
-"スナップショット %s には、上位のファイルが存在することが期待されています。"
-
-#, python-format
 msgid "Expected integer for node_count, svcinfo lsiogrp returned: %(node)s."
 msgstr ""
 "node_count に対して整数が予期され、svcinfo lsiogrp が返されました: %(node)s。"
@@ -2101,13 +2096,6 @@ msgstr "%s 配列へのログインに失敗しました (無効なログイン?
 msgid "Failed to login with all rest URLs."
 msgstr "すべての rest URL のログインに失敗しました。"
 
-#, python-format
-msgid ""
-"Failed to make a request to Datera cluster endpoint due to the following "
-"reason: %s"
-msgstr ""
-"次の理由で、Datera クラスターエンドポイントへの要求を実行できませんでした: %s"
-
 msgid "Failed to manage api volume flow."
 msgstr "API ボリュームフローの管理に失敗しました。"
 
@@ -2356,10 +2344,6 @@ msgstr "ファイバーチャネル接続制御障害: %(reason)s"
 #, python-format
 msgid "File %(file_path)s could not be found."
 msgstr "ファイル %(file_path)s が見つかりませんでした。"
-
-#, python-format
-msgid "File already exists at %s."
-msgstr "ファイルは %s に既に存在します。"
 
 #, python-format
 msgid "File already exists at: %s"
@@ -2705,6 +2689,9 @@ msgstr "ホスト %(host)s が見つかりませんでした。"
 msgid "Host %s has no FC initiators"
 msgstr "ホスト %s に FC イニシエーターがありません"
 
+msgid "Host attach volume failed!"
+msgstr "ホストへのボリュームの接続に失敗しました。"
+
 #, python-format
 msgid "Host not found. Failed to remove %(service)s on %(host)s."
 msgstr ""
@@ -2852,14 +2839,6 @@ msgid "Invalid Replication Target: %(reason)s"
 msgstr "無効なレプリケーションターゲット: %(reason)s"
 
 #, python-format
-msgid ""
-"Invalid Virtuozzo Storage share specification: %r. Must be: [MDS1[,"
-"MDS2],...:/]<CLUSTER NAME>[:PASSWORD]."
-msgstr ""
-"Virtuozzo Storage のシェアの指定が無効です: %r。[MDS1[,MDS2],...:/]<CLUSTER "
-"NAME>[:PASSWORD] である必要があります。"
-
-#, python-format
 msgid "Invalid XtremIO version %(cur)s, version %(min)s or up is required"
 msgstr ""
 "XtremIO バージョン %(cur)s は無効です。バージョン %(min)s 以上が必要です"
@@ -2976,10 +2955,6 @@ msgstr "メタデータが無効です: %(reason)s"
 
 #, python-format
 msgid "Invalid mount point base: %s"
-msgstr "無効なマウントポイントベース: %s"
-
-#, python-format
-msgid "Invalid mount point base: %s."
 msgstr "無効なマウントポイントベース: %s"
 
 #, python-format
@@ -3118,10 +3093,6 @@ msgstr "再試行可能な Kaminario 例外: %(reason)s"
 #, python-format
 msgid "KaminarioCinderDriver failure: %(reason)s"
 msgstr "Kaminario Cinder ドライバー障害です: %(reason)s"
-
-#, python-format
-msgid "KeyError: %s"
-msgstr "KeyError: %s"
 
 msgid "Keystone version 3 or greater must be used to get nested quota support."
 msgstr ""
@@ -3551,9 +3522,6 @@ msgstr "マウントされた NFS 共有が見つかりません"
 msgid "No mounted SMBFS shares found."
 msgstr "マウントされた SMBFS 共有が見つかりません。"
 
-msgid "No mounted Virtuozzo Storage shares found"
-msgstr "マウントされた Virtuozzo Storage 共有が見つかりません"
-
 msgid "No mounted shares found"
 msgstr "マウントされた共有が見つかりません"
 
@@ -3973,12 +3941,6 @@ msgid "Request body contains too many items"
 msgstr "要求本体に含まれる項目が多すぎます"
 
 #, python-format
-msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
-msgstr ""
-"Datera クラスターに対する要求から、正しくない状態が返されました: %(status)s "
-"| %(reason)s"
-
-#, python-format
 msgid ""
 "Requested backup exceeds allowed Backup gigabytes quota. Requested "
 "%(requested)sG, quota is %(quota)sG and %(consumed)sG has been consumed."
@@ -4109,11 +4071,6 @@ msgstr "%(config)s の SMBFS 構成ファイルは存在しません。"
 
 msgid "SMBFS config file not set (smbfs_shares_config)."
 msgstr "SMBFS 構成ファイルが設定されていません (smbfs_shares_config)。"
-
-#, python-format
-msgid "SSH Command failed after '%(total_attempts)r' attempts : '%(command)s'"
-msgstr ""
-"'%(total_attempts)r' 回の試行後に SSH コマンドが失敗しました: '%(command)s'"
 
 #, python-format
 msgid "SSH command injection detected: %(command)s"
@@ -4306,9 +4263,6 @@ msgstr "ソースボリュームはマイグレーション中ではありませ
 msgid "Specified logical volume does not exist."
 msgstr "指定された論理ボリュームは存在しません。"
 
-msgid "Specifies IP pool to use for volume"
-msgstr "ボリュームに用いる IP プールを指定します。"
-
 msgid ""
 "Specifies number of replicas for each volume. Can only be increased once "
 "volume is created"
@@ -4492,12 +4446,6 @@ msgstr ""
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "update_migrated_volume メソッドが実装されていません。"
-
-msgid "The name to use for storage instances created"
-msgstr "作成したストレージインスタンスにも用いる名前"
-
-msgid "The name to use for volumes created"
-msgstr "作成したボリュームに用いる名前"
 
 msgid "The parent backup must be available for incremental backup."
 msgstr "増分バックアップでは親バックアップが使用可能でなければなりません。"
@@ -4746,13 +4694,6 @@ msgstr ""
 msgid "Transfer %(transfer_id)s could not be found."
 msgstr "転送 %(transfer_id)s が見つかりませんでした。"
 
-msgid ""
-"True to set acl 'allow_all' on volumes created.  Cannot be changed on volume "
-"once set"
-msgstr ""
-"ボリューム作成時に acl 'allow_all'  を True に設定します。一度ボリュームに設"
-"定すると変更することはできません。"
-
 #, python-format
 msgid ""
 "Trying to import backup metadata from id %(meta_id)s into backup %(id)s."
@@ -4787,10 +4728,6 @@ msgstr ""
 
 msgid "Type cannot be converted into NaElement."
 msgstr "タイプは NaElement に変換できません。"
-
-#, python-format
-msgid "TypeError: %s"
-msgstr "TypeError: %s"
 
 #, python-format
 msgid "UUIDs %s are in both add and remove volume list."
@@ -5105,9 +5042,6 @@ msgstr "不明な RemoteFS 例外"
 msgid "Unknown SMBFS exception."
 msgstr "不明な SMBFS 例外。"
 
-msgid "Unknown Virtuozzo Storage exception"
-msgstr "Virtuozzo Storage で不明な例外が発生しました"
-
 msgid "Unknown action"
 msgstr "不明なアクション"
 
@@ -5174,10 +5108,6 @@ msgid ""
 msgstr ""
 "スイッチ %s でサポートされないファームウェアです。スイッチでファームウェア "
 "v6.4 以上が実行されていることを確認してください"
-
-#, python-format
-msgid "Unsupported volume format %s"
-msgstr "ボリューム形式はサポートされていません: %s "
 
 #, python-format
 msgid "Unsupported volume format: %s "
@@ -5262,10 +5192,6 @@ msgstr "ボリューム接続の検証に失敗しました (エラー: %(err)s)
 msgid ""
 "Value \"%(value)s\" is not valid for configuration option \"%(option)s\""
 msgstr "構成オプション \"%(option)s\" の値 \"%(value)s\" は無効です。"
-
-#, python-format
-msgid "ValueError: %s"
-msgstr "ValueError: %s"
 
 #, python-format
 msgid "Vdisk %(name)s not involved in mapping %(src)s -> %(tgt)s."
@@ -5386,11 +5312,6 @@ msgid "Volume %s does not exist on the array."
 msgstr "ボリューム %s does はアレイに存在しません。"
 
 #, python-format
-msgid "Volume %s does not have provider_location specified, skipping."
-msgstr ""
-"ボリューム %s で provider_location が指定されていません。スキップします。"
-
-#, python-format
 msgid "Volume %s doesn't exist on array."
 msgstr "ボリューム %s がアレイに存在しません。"
 
@@ -5457,10 +5378,6 @@ msgstr "ボリュームデバイスのファイルパス %s が存在しませ�
 #, python-format
 msgid "Volume device not found at %(device)s."
 msgstr "%(device)s でボリュームデバイスが見つかりません。"
-
-#, python-format
-msgid "Volume does not exists %s."
-msgstr "ボリュームが存在しません: %s"
 
 #, python-format
 msgid "Volume driver %s not initialized."
@@ -5606,15 +5523,6 @@ msgstr "ボリュームサイズは 1 GB の倍数である必要があります
 msgid "Volume size must multiple of 1 GB."
 msgstr "ボリュームサイズは 1 GB の倍数である必要があります"
 
-msgid "Volume status must be 'available'."
-msgstr "ボリュームの状態は「使用可能」でなければなりません。"
-
-#, python-format
-msgid "Volume status must be available for snapshot %(id)s. (is %(status)s)"
-msgstr ""
-"スナップショット %(id)s に関しては、ボリュームの状態が「利用可能」でなければ"
-"いけません。  (現在は %(status)s です)"
-
 msgid "Volume to Initiator Group mapping already exists"
 msgstr "ボリュームからイニシエーターグループへのマッピングは既に存在します。"
 
@@ -5673,17 +5581,6 @@ msgid ""
 msgstr ""
 " プライマリーとセカンダリーの SolidFire アカウント上で、ボリュームとアカウン"
 "トの数量が超過しました。"
-
-#, python-format
-msgid ""
-"VzStorage config 'vzstorage_used_ratio' invalid. Must be > 0 and <= 1.0: %s."
-msgstr ""
-"VzStorage の設定の 'vzstorage_used_ratio' が無効です。0 より大きく 1.0 以下で"
-"ある必要があります: %s。"
-
-#, python-format
-msgid "VzStorage config file at %(config)s doesn't exist."
-msgstr "%(config)s の VzStorage のコンフィグファイルが存在しません"
 
 #, python-format
 msgid "Wait synchronize failed. Running status: %s."
@@ -6453,13 +6350,6 @@ msgstr ""
 "Swift へのオブジェクトの書き込み中にエラーが発生しました。Swift 内のオブジェ"
 "クトの MD5 %(etag)s が Swift に送信されたオブジェクトの MD5 %(md5)s と同じで"
 "はありません"
-
-msgid ""
-"existing_ref argument must be of this format:app_inst_name:storage_inst_name:"
-"vol_name"
-msgstr ""
-"引数 existing_ref は 次の形式でなければいけません: app_inst_name:"
-"storage_inst_name:vol_name"
 
 #, python-format
 msgid "extend_volume, eternus_pool: %(eternus_pool)s, pool not found."

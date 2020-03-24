@@ -221,7 +221,7 @@ class PowerMaxUtilsTest(test.TestCase):
             extra_specs)
         self.assertTrue(do_disable_compression)
         # Compression disabled by no SL/WL combination
-        extra_specs2 = self.data.extra_specs
+        extra_specs2 = deepcopy(self.data.extra_specs)
         extra_specs2[utils.SLO] = None
         do_disable_compression2 = self.utils.is_compression_disabled(
             extra_specs2)
@@ -295,14 +295,29 @@ class PowerMaxUtilsTest(test.TestCase):
         rep_device_list6[0]['mode'] = 'metro'
         rep_config6 = self.utils.get_replication_config(rep_device_list6)
         self.assertFalse(rep_config6['metro_bias'])
-        self.assertFalse(rep_config6['allow_delete_metro'])
         # Success, mode is metro - metro options true
         rep_device_list7 = rep_device_list6
-        rep_device_list6[0].update(
-            {'allow_delete_metro': 'true', 'metro_use_bias': 'true'})
+        rep_device_list6[0].update({'metro_use_bias': 'true'})
         rep_config7 = self.utils.get_replication_config(rep_device_list7)
         self.assertTrue(rep_config7['metro_bias'])
-        self.assertTrue(rep_config7['allow_delete_metro'])
+
+    def test_get_replication_config_sync_retries_intervals(self):
+        # Default sync interval & retry values
+        rep_device_list1 = [{'target_device_id': self.data.remote_array,
+                             'remote_pool': self.data.srp,
+                             'remote_port_group': self.data.port_group_name_f,
+                             'rdf_group_label': self.data.rdf_group_name}]
+
+        rep_config1 = self.utils.get_replication_config(rep_device_list1)
+        self.assertEqual(200, rep_config1['sync_retries'])
+        self.assertEqual(3, rep_config1['sync_interval'])
+
+        # User set interval & retry values
+        rep_device_list2 = deepcopy(rep_device_list1)
+        rep_device_list2[0].update({'sync_retries': 300, 'sync_interval': 1})
+        rep_config2 = self.utils.get_replication_config(rep_device_list2)
+        self.assertEqual(300, rep_config2['sync_retries'])
+        self.assertEqual(1, rep_config2['sync_interval'])
 
     def test_is_volume_failed_over(self):
         vol = deepcopy(self.data.test_volume)
@@ -405,10 +420,10 @@ class PowerMaxUtilsTest(test.TestCase):
         metro_prefix = self.utils.get_replication_prefix(utils.REP_METRO)
         self.assertEqual('-RM', metro_prefix)
 
-    def test_get_async_rdf_managed_grp_name(self):
+    def test_get_rdf_management_group_name(self):
         rep_config = {'rdf_group_label': self.data.rdf_group_name,
                       'mode': utils.REP_ASYNC}
-        grp_name = self.utils.get_async_rdf_managed_grp_name(rep_config)
+        grp_name = self.utils.get_rdf_management_group_name(rep_config)
         self.assertEqual(self.data.rdf_managed_async_grp, grp_name)
 
     def test_is_metro_device(self):
@@ -422,9 +437,9 @@ class PowerMaxUtilsTest(test.TestCase):
         self.assertFalse(is_metro2)
 
     def test_does_vol_need_rdf_management_group(self):
-        self.assertFalse(self.utils.does_vol_need_rdf_management_group(
-            self.data.rep_extra_specs))
         extra_specs = deepcopy(self.data.rep_extra_specs)
+        self.assertFalse(self.utils.does_vol_need_rdf_management_group(
+            extra_specs))
         extra_specs[utils.REP_MODE] = utils.REP_ASYNC
         self.assertTrue(self.utils.does_vol_need_rdf_management_group(
             extra_specs))
@@ -450,6 +465,7 @@ class PowerMaxUtilsTest(test.TestCase):
 
     def test_get_child_sg_name(self):
         host_name = 'HostX'
+        port_group_label = self.data.port_group_name_f
         # Slo and rep enabled
         extra_specs1 = {
             'pool_name': u'Diamond+DSS+SRP_1+000197800123',
@@ -463,23 +479,24 @@ class PowerMaxUtilsTest(test.TestCase):
             'rep_mode': 'Synchronous',
             utils.PORTGROUPNAME: self.data.port_group_name_f}
 
-        child_sg_name, do_disable_compression, rep_enabled, pg_name = (
-            self.utils.get_child_sg_name(host_name, extra_specs1))
+        child_sg_name, do_disable_compression, rep_enabled = (
+            self.utils.get_child_sg_name(
+                host_name, extra_specs1, port_group_label))
         re_name = self.data.storagegroup_name_f + '-RE'
         self.assertEqual(re_name, child_sg_name)
         # Disable compression
         extra_specs2 = deepcopy(self.data.extra_specs_disable_compression)
-        extra_specs2[utils.PORTGROUPNAME] = self.data.port_group_name_f
-        child_sg_name, do_disable_compression, rep_enabled, pg_name = (
-            self.utils.get_child_sg_name(host_name, extra_specs2))
+        child_sg_name, do_disable_compression, rep_enabled = (
+            self.utils.get_child_sg_name(
+                host_name, extra_specs2, port_group_label))
         cd_name = self.data.storagegroup_name_f + '-CD'
         self.assertEqual(cd_name, child_sg_name)
         # No slo
         extra_specs3 = deepcopy(self.data.extra_specs)
         extra_specs3[utils.SLO] = None
-        extra_specs3[utils.PORTGROUPNAME] = self.data.port_group_name_f
-        child_sg_name, do_disable_compression, rep_enabled, pg_name = (
-            self.utils.get_child_sg_name(host_name, extra_specs3))
+        child_sg_name, do_disable_compression, rep_enabled = (
+            self.utils.get_child_sg_name(
+                host_name, extra_specs3, port_group_label))
         self.assertEqual(self.data.no_slo_sg_name, child_sg_name)
 
     def test_change_multiattach(self):
@@ -509,14 +526,13 @@ class PowerMaxUtilsTest(test.TestCase):
                 self.utils.is_snapshot_manageable(volume))
 
     def test_get_volume_attached_hostname(self):
-        device_info_pass = self.data.volume_details_attached
+
+        attached_volume = deepcopy(self.data.test_volume)
+        attached_volume.volume_attachment.objects = [
+            self.data.test_volume_attachment]
         # Success
-        hostname = self.utils.get_volume_attached_hostname(device_info_pass)
+        hostname = self.utils.get_volume_attached_hostname(attached_volume)
         self.assertEqual('HostX', hostname)
-        # Fail
-        device_info_fail = self.data.volume_details_no_sg
-        hostname = self.utils.get_volume_attached_hostname(device_info_fail)
-        self.assertIsNone(hostname)
 
     def test_validate_qos_input_exception(self):
         qos_extra_spec = {'total_iops_sec': 90, 'DistributionType': 'Wrong',
@@ -620,3 +636,582 @@ class PowerMaxUtilsTest(test.TestCase):
         sl_3, wl_3 = self.utils.get_service_level_workload(extra_specs)
         self.assertEqual('Diamond', sl_3)
         self.assertEqual('DSS', wl_3)
+
+    def test_get_new_tags_none(self):
+        list_str1 = 'finance, production,   test'
+        list_str2 = 'production,test,finance'
+
+        self.assertEqual(
+            [], self.utils.get_new_tags(list_str1, list_str2))
+
+    def test_get_new_tags_one(self):
+        list_str1 = 'finance, production,   test'
+        list_str2 = 'production,test'
+
+        self.assertEqual(
+            ['finance'], self.utils.get_new_tags(list_str1, list_str2))
+
+    def test_get_new_tags_two(self):
+        list_str1 = 'finance, production,   test, test2'
+        list_str2 = 'production,test'
+
+        self.assertEqual(
+            ['finance', 'test2'], self.utils.get_new_tags(
+                list_str1, list_str2))
+
+    def test_get_new_tags_case(self):
+        list_str1 = 'Finance, Production,   test, tEst2'
+        list_str2 = 'production,test'
+
+        self.assertEqual(
+            ['Finance', 'tEst2'], self.utils.get_new_tags(
+                list_str1, list_str2))
+
+    def test_get_new_tags_empty_string_first(self):
+        list_str1 = ''
+        list_str2 = 'production,test'
+
+        self.assertEqual(
+            [], self.utils.get_new_tags(
+                list_str1, list_str2))
+
+    def test_get_new_tags_empty_string_second(self):
+        list_str1 = 'production,test'
+        list_str2 = '  '
+
+        self.assertEqual(
+            ['production', 'test'], self.utils.get_new_tags(
+                list_str1, list_str2))
+
+    def test_get_intersection(self):
+        list_str1 = 'finance,production'
+        list_str2 = 'production'
+
+        common_list = self.utils._get_intersection(
+            list_str1, list_str2)
+
+        self.assertEqual(['production'], common_list)
+
+    def test_get_intersection_unordered_list(self):
+        list_str1 = 'finance,production'
+        list_str2 = 'production, finance'
+
+        common_list = (
+            self.utils._get_intersection(list_str1, list_str2))
+
+        self.assertEqual(['finance', 'production'], common_list)
+
+    def test_verify_tag_list_good(self):
+        tag_list = ['no', 'InValid', 'characters', 'dash-allowed',
+                    '123', 'underscore_allowed',
+                    ' leading_space', 'trailing-space ']
+        self.assertTrue(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_space(self):
+        tag_list = ['bad space']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_forward_slash(self):
+        tag_list = ['\\forward\\slash']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_square_bracket(self):
+        tag_list = ['[squareBrackets]']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_backward_slash(self):
+        tag_list = ['/backward/slash']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_curly_bracket(self):
+        tag_list = ['{curlyBrackets}']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_empty_list(self):
+        tag_list = []
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_not_a_list(self):
+        tag_list = '1,2,3,4'
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_verify_tag_list_exceeds_8(self):
+        tag_list = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+        self.assertFalse(self.utils.verify_tag_list(tag_list))
+
+    def test_convert_list_to_string(self):
+        input_list = ['one', 'two', 'three']
+        output_string = self.utils.convert_list_to_string(input_list)
+        self.assertEqual('one,two,three', output_string)
+
+    def test_convert_list_to_string_input_string(self):
+        input_list = 'one,two,three'
+        output_string = self.utils.convert_list_to_string(input_list)
+        self.assertEqual('one,two,three', output_string)
+
+    def test_regex_check_case_2(self):
+        test_template = 'shortHostName[:10]uuid[:5]'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertTrue(is_ok)
+        self.assertEqual('2', case)
+
+    def test_regex_check_case_3(self):
+        test_template = 'shortHostName[-10:]uuid[:5]'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertTrue(is_ok)
+        self.assertEqual('3', case)
+
+    def test_regex_check_case_4(self):
+        test_template = 'shortHostName[:7]finance'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertTrue(is_ok)
+        self.assertEqual('4', case)
+
+    def test_regex_check_case_5(self):
+        test_template = 'shortHostName[-6:]production'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertTrue(is_ok)
+        self.assertEqual('5', case)
+
+    def test_regex_check_case_2_misspelt(self):
+        test_template = 'shortHstName[:10]uuid[:5]'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_3_misspelt(self):
+        test_template = 'shortHostName[-10:]uud[:5]'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_4_misspelt(self):
+        test_template = 'shortHotName[:7]finance'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_5_misspelt(self):
+        test_template = 'shortHstName[-6:]production'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_4_invalid_chars(self):
+        test_template = 'shortHostName[:7]f*n&nce'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_5_invalid_chars(self):
+        test_template = 'shortHostName[-6:]pr*ducti*n'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_2_missing_square_bracket(self):
+        test_template = 'shortHostName[:10uuid[:5]'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_regex_check_case_4_missing_square_bracket(self):
+        test_template = 'shortHostName[:10finance'
+        is_ok, case = self.utils.regex_check(test_template, True)
+        self.assertFalse(is_ok)
+        self.assertEqual('0', case)
+
+    def test_prepare_string_entity_case_2(self):
+        test_template = 'shortHostName[:10]uuid[:5]'
+        altered_string = self.utils.prepare_string_entity(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[:10]uuid[:5]',
+            altered_string)
+
+    def test_prepare_string_entity_case_3(self):
+        test_template = 'shortHostName[-10:]uuid[:5]'
+        altered_string = self.utils.prepare_string_entity(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[-10:]uuid[:5]',
+            altered_string)
+
+    def test_prepare_string_entity_case_4(self):
+        test_template = 'shortHostName[:7]finance'
+        altered_string = self.utils.prepare_string_entity(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[:7]finance',
+            altered_string)
+
+    def test_prepare_string_entity_case_5(self):
+        test_template = 'shortHostName[-6:]production'
+        altered_string = self.utils.prepare_string_entity(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[-6:]production',
+            altered_string)
+
+    def test_prepare_string_with_uuid_case_2(self):
+        test_template = 'shortHostName[:10]uuid[:5]'
+        pass_two, uuid = self.utils.prepare_string_with_uuid(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[:10]944854dce45898b544a1cb9071d3cc35[:5]',
+            pass_two)
+        self.assertEqual('944854dce45898b544a1cb9071d3cc35', uuid)
+
+    def test_prepare_string_with_uuid_case_3(self):
+        test_template = 'shortHostName[-10:]uuid[:5]'
+        pass_two, uuid = self.utils.prepare_string_with_uuid(
+            test_template, 'my_short_host_name', True)
+        self.assertEqual(
+            'my_short_host_name[-10:]944854dce45898b544a1cb9071d3cc35[:5]',
+            pass_two)
+        self.assertEqual('944854dce45898b544a1cb9071d3cc35', uuid)
+
+    def test_check_upper_limit_short_host(self):
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.check_upper_limit,
+                          12, 12, True)
+
+    def test_check_upper_limit_short_host_case_4(self):
+        user_define_name = 'Little_too_long'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.check_upper_limit,
+                          12, len(user_define_name), True)
+
+    def test_validate_short_host_name_from_template_case_1(self):
+        test_template = 'shortHostName'
+        short_host_name = 'my_short_host'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('my_short_host', result_string)
+
+    def test_validate_short_host_name_from_template_case_1_exceeds_16char(
+            self):
+        test_template = 'shortHostName'
+        short_host_name = 'my_short_host_greater_than_16chars'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('6chars0bc43f914e', result_string)
+
+    def test_validate_short_host_name_from_template_case_1_template_misspelt(
+            self):
+        test_template = 'shortHstName'
+        short_host_name = 'my_short_host'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_short_host_name_from_template,
+                          test_template, short_host_name)
+
+    def test_validate_short_host_name_from_template_case_2(self):
+        test_template = 'shortHostName[:10]uuid[:5]'
+        short_host_name = 'my_short_host_name'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('my_short_h94485', result_string)
+
+    def test_validate_short_host_name_from_template_case_2_shorter_than(self):
+        test_template = 'shortHostName[:10]uuid[:5]'
+        short_host_name = 'HostX'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('HostX699ea', result_string)
+
+    def test_validate_short_host_name_from_template_case_3(self):
+        test_template = 'shortHostName[-10:]uuid[:5]'
+        short_host_name = 'my_short_host_name'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('_host_name94485', result_string)
+
+    def test_validate_short_host_name_from_template_case_3_shorter_than(self):
+        test_template = 'shortHostName[-10:]uuid[:5]'
+        short_host_name = 'HostX'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('HostX699ea', result_string)
+
+    def test_validate_short_host_name_from_template_case_4(self):
+        test_template = 'shortHostName[:7]finance'
+        short_host_name = 'my_short_host_name'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('my_shorfinance', result_string)
+
+    def test_validate_short_host_name_from_template_case_5(self):
+        test_template = 'shortHostName[-6:]production'
+        short_host_name = 'my_short_host_name'
+        result_string = self.utils.validate_short_host_name_from_template(
+            test_template, short_host_name)
+        self.assertEqual('t_nameproduction', result_string)
+
+    def test_validate_short_host_name_exception_missing_minus(self):
+        test_template = 'shortHostName[6:]production'
+        short_host_name = 'my_short_host_name'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_short_host_name_from_template,
+                          test_template, short_host_name)
+
+    def test_validate_port_group_from_template_case_1(self):
+        test_template = 'portGroupName'
+        port_group_name = 'my_pg'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('my_pg', result_string)
+
+    def test_validate_port_group_from_template_case_1_long(self):
+        test_template = 'portGroupName'
+        port_group_name = 'my_port_group_name'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('p_name5ba163', result_string)
+
+    def test_validate_port_group_from_template_case_1_misspelt(self):
+        test_template = 'portGr*upName'
+        port_group_name = 'my_port_group_name'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_port_group_name_from_template,
+                          test_template, port_group_name)
+
+    def test_validate_port_group_from_template_case_2(self):
+        test_template = 'portGroupName[:6]uuid[:5]'
+        port_group_name = 'my_port_group_name'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('my_por3b02c', result_string)
+
+    def test_validate_port_group_from_template_case_3(self):
+        test_template = 'portGroupName[-6:]uuid[:5]'
+        port_group_name = 'my_port_group_name'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('p_name3b02c', result_string)
+
+    def test_validate_port_group_from_template_case_4(self):
+        test_template = 'portGroupName[:6]test'
+        port_group_name = 'my_port_group_name'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('my_portest', result_string)
+
+    def test_validate_port_group_from_template_case_5(self):
+        test_template = 'portGroupName[-7:]test'
+        port_group_name = 'my_port_group_name'
+        result_string = self.utils.validate_port_group_name_from_template(
+            test_template, port_group_name)
+        self.assertEqual('up_nametest', result_string)
+
+    def test_validate_port_group_name_exception_missing_minus(self):
+        test_template = 'portGroupName[6:]test'
+        port_group_name = 'my_port_group_name'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_port_group_name_from_template,
+                          test_template, port_group_name)
+
+    def test_validate_port_group_name_exception_chars_exceeded(self):
+        test_template = 'portGroupName[:10]test'
+        port_group_name = 'my_port_group_name'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.validate_port_group_name_from_template,
+                          test_template, port_group_name)
+
+    def test_get_port_name_label_default(self):
+        port_name_in = 'my_port_group_name'
+        port_group_template = 'portGroupName'
+        port_name_out = self.utils.get_port_name_label(
+            port_name_in, port_group_template)
+        self.assertEqual('p_name5ba163', port_name_out)
+
+    def test_get_port_name_label_template(self):
+        port_name_in = 'my_port_group_name'
+        port_group_template = 'portGroupName[-6:]uuid[:5]'
+        port_name_out = self.utils.get_port_name_label(
+            port_name_in, port_group_template)
+        self.assertEqual('p_name3b02c', port_name_out)
+
+    def test_get_rdf_managed_storage_group(self):
+        rdf_component_dict = ('OS-23_24_007-Asynchronous-rdf-sg',
+                              {'prefix': 'OS',
+                               'rdf_label': '23_24_007',
+                               'sync_mode': 'Asynchronous',
+                               'after_mode': 'rdf-sg'})
+
+        async_rdf_details = (
+            self.utils.get_rdf_managed_storage_group(
+                self.data.volume_details_attached_async))
+        self.assertEqual(rdf_component_dict, async_rdf_details)
+
+    def test_get_storage_group_component_dict_no_slo(self):
+        """Test for get_storage_group_component_dict.
+
+        REST and no SLO.
+        """
+        sg_no_slo = 'OS-myhost-No_SLO-os-iscsi-pg'
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_no_slo)
+        self.assertEqual('myhost', component_dict['host'])
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('No_SLO', component_dict['no_slo'])
+        self.assertEqual('os-iscsi-pg', component_dict['portgroup'])
+        self.assertIsNone(component_dict['sloworkload'])
+        self.assertIsNone(component_dict['srp'])
+
+    def test_get_storage_group_component_dict_slo_workload_2(self):
+        """Test for get_storage_group_component_dict.
+
+        SLO, workload and test 2.
+        """
+        sg_slo_workload = 'OS-myhost-SRP_1-DiamodOLTP-os-iscsi-pg-RE'
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_slo_workload)
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('myhost', component_dict['host'])
+        self.assertEqual('SRP_1', component_dict['srp'])
+        self.assertEqual('os-iscsi-pg', component_dict['portgroup'])
+        self.assertEqual('DiamodOLTP', component_dict['sloworkload'])
+        self.assertIsNone(component_dict['no_slo'])
+
+    def test_get_storage_group_component_dict_compression_disabled(self):
+        """Test for get_storage_group_component_dict.
+
+        Compression disabled.
+        """
+        sg_compression_disabled = 'OS-myhost-SRP_1-DiamodNONE-os-iscsi-pg-CD'
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_compression_disabled)
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('myhost', component_dict['host'])
+        self.assertEqual('SRP_1', component_dict['srp'])
+        self.assertEqual('os-iscsi-pg', component_dict['portgroup'])
+        self.assertEqual('DiamodNONE', component_dict['sloworkload'])
+        self.assertEqual('-CD', component_dict['after_pg'])
+        self.assertIsNone(component_dict['no_slo'])
+
+    def test_get_storage_group_component_dict_replication_enabled(self):
+        """Test for get_storage_group_component_dict.
+
+        Replication enabled.
+        """
+        sg_slo_workload_rep = 'OS-myhost-SRP_1-DiamodOLTP-os-iscsi-pg-RE'
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_slo_workload_rep)
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('myhost', component_dict['host'])
+        self.assertEqual('SRP_1', component_dict['srp'])
+        self.assertEqual('os-iscsi-pg', component_dict['portgroup'])
+        self.assertEqual('DiamodOLTP', component_dict['sloworkload'])
+        self.assertEqual('-RE', component_dict['after_pg'])
+        self.assertIsNone(component_dict['no_slo'])
+
+    def test_get_storage_group_component_dict_slo_no_workload(self):
+        """Test for get_storage_group_component_dict.
+
+        SLO and no workload.
+        """
+        sg_slo_no_workload = 'OS-myhost-SRP_1-DiamodNONE-os-iscsi-pg'
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_slo_no_workload)
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('myhost', component_dict['host'])
+        self.assertEqual('SRP_1', component_dict['srp'])
+        self.assertEqual('os-iscsi-pg', component_dict['portgroup'])
+        self.assertEqual('DiamodNONE', component_dict['sloworkload'])
+        self.assertIsNone(component_dict['no_slo'])
+
+    def test_get_storage_group_component_dict_dashes(self):
+        """Test for get_storage_group_component_dict, dashes."""
+        sg_host_with_dashes = (
+            'OS-host-with-dashes-SRP_1-DiamodOLTP-myportgroup-RE')
+        component_dict = self.utils.get_storage_group_component_dict(
+            sg_host_with_dashes)
+        self.assertEqual('host-with-dashes', component_dict['host'])
+        self.assertEqual('OS', component_dict['prefix'])
+        self.assertEqual('SRP_1', component_dict['srp'])
+        self.assertEqual('DiamodOLTP', component_dict['sloworkload'])
+        self.assertEqual('myportgroup', component_dict['portgroup'])
+        self.assertEqual('-RE', component_dict['after_pg'])
+
+    def test_delete_values_from_dict(self):
+        """Test delete_values_from_dict"""
+        delete_list = ['rdf_group_no', 'rep_mode', 'target_array_model',
+                       'service_level', 'remote_array', 'target_device_id',
+                       'replication_status', 'rdf_group_label']
+        data_dict = self.utils.delete_values_from_dict(
+            self.data.retype_metadata_dict, delete_list)
+        self.assertEqual({'device_id': self.data.device_id}, data_dict)
+
+    def test_update_values_in_dict(self):
+        """Test delete_values_from_dict"""
+        update_list = [('default_sg_name', 'source_sg_name'),
+                       ('service_level', 'source_service_level')]
+
+        update_dict = {'default_sg_name': 'default-sg',
+                       'service_level': 'Diamond'}
+        ret_dict = {'source_sg_name': 'default-sg',
+                    'source_service_level': 'Diamond'}
+        data_dict = self.utils.update_values_in_dict(
+            update_dict, update_list)
+        self.assertEqual(ret_dict, data_dict)
+
+    def test_get_unique_device_ids_from_lists(self):
+        list_a = ['00001', '00002', '00003']
+        list_b = ['00002', '00003', '00004']
+        unique_ids = self.utils.get_unique_device_ids_from_lists(list_a,
+                                                                 list_b)
+        self.assertEqual(['00004'], unique_ids)
+
+    def test_update_payload_for_rdf_vol_create(self):
+        payload = {
+            'array': self.data.array,
+            'editStorageGroupActionParam': {
+                'expandStorageGroupParam': {
+                    'addVolumeParam': {}}}}
+
+        updated_payload = self.utils.update_payload_for_rdf_vol_create(
+            payload, self.data.remote_array, self.data.storagegroup_name_f)
+        expected_payload = {
+            'array': self.data.array,
+            'editStorageGroupActionParam': {
+                'expandStorageGroupParam': {
+                    'addVolumeParam': {
+                        'remoteSymmSGInfoParam': {
+                            'force': 'true',
+                            'remote_symmetrix_1_id': self.data.remote_array,
+                            'remote_symmetrix_1_sgs': [
+                                self.data.storagegroup_name_f]}}}}}
+        self.assertEqual(expected_payload, updated_payload)
+
+    def test_is_retype_supported(self):
+        # Volume source type not replicated, target type Metro replicated,
+        # volume is detached, host-assisted retype supported
+        volume = self.data.test_volume
+        volume.attach_status = 'detached'
+
+        src_extra_specs = deepcopy(self.data.extra_specs)
+        src_extra_specs['rep_mode'] = None
+
+        tgt_extra_specs = deepcopy(self.data.rep_extra_specs)
+        tgt_extra_specs['rep_mode'] = utils.REP_METRO
+
+        self.assertTrue(self.utils.is_retype_supported(volume, src_extra_specs,
+                                                       tgt_extra_specs))
+
+        # Volume source type not replicated, target type Metro replicated,
+        # volume is attached, host-assisted retype not supported
+        volume.attach_status = 'attached'
+        self.assertFalse(self.utils.is_retype_supported(
+            volume, src_extra_specs, tgt_extra_specs))
+
+        # Volume source type Async replicated, target type Metro replicated,
+        # volume is attached, host-assisted retype not supported
+        src_extra_specs['rep_mode'] = utils.REP_ASYNC
+        self.assertFalse(self.utils.is_retype_supported(
+            volume, src_extra_specs, tgt_extra_specs))
+
+        # Volume source type Metro replicated, target type Metro replicated,
+        # volume is attached, host-assisted retype supported
+        src_extra_specs['rep_mode'] = utils.REP_METRO
+        self.assertTrue(self.utils.is_retype_supported(
+            volume, src_extra_specs, tgt_extra_specs))

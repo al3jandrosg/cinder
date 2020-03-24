@@ -74,8 +74,6 @@ from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell_emc.powermax import common as \
     cinder_volume_drivers_dell_emc_powermax_common
-from cinder.volume.drivers.dell_emc import ps as \
-    cinder_volume_drivers_dell_emc_ps
 from cinder.volume.drivers.dell_emc.sc import storagecenter_common as \
     cinder_volume_drivers_dell_emc_sc_storagecentercommon
 from cinder.volume.drivers.dell_emc.unity import driver as \
@@ -88,6 +86,8 @@ from cinder.volume.drivers.dell_emc import xtremio as \
     cinder_volume_drivers_dell_emc_xtremio
 from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_common as \
     cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon
+from cinder.volume.drivers.fusionstorage import dsware as \
+    cinder_volume_drivers_fusionstorage_dsware
 from cinder.volume.drivers.hpe import hpe_3par_common as \
     cinder_volume_drivers_hpe_hpe3parcommon
 from cinder.volume.drivers.hpe import hpe_lefthand_iscsi as \
@@ -244,6 +244,8 @@ def list_opts():
                 cinder_volume_driver.scst_opts,
                 cinder_volume_driver.backup_opts,
                 cinder_volume_driver.image_opts,
+                cinder_volume_drivers_datera_dateraiscsi.d_opts,
+                cinder_volume_drivers_fusionstorage_dsware.volume_opts,
                 cinder_volume_drivers_infortrend_raidcmd_cli_commoncli.
                 infortrend_opts,
                 cinder_volume_drivers_inspur_as13000_as13000driver.
@@ -278,9 +280,7 @@ def list_opts():
                 cinder_volume_driver.nvmet_opts,
                 cinder_volume_driver.scst_opts,
                 cinder_volume_driver.image_opts,
-                cinder_volume_drivers_datera_dateraiscsi.d_opts,
                 cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
-                cinder_volume_drivers_dell_emc_ps.eqlx_opts,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
                 common_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
