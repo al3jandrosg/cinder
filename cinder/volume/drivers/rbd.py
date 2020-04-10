@@ -268,9 +268,12 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
             self.RBD_FEATURE_OBJECT_MAP |
             self.RBD_FEATURE_EXCLUSIVE_LOCK)
 
-    @staticmethod
-    def get_driver_options():
-        return RBD_OPTS
+    @classmethod
+    def get_driver_options(cls):
+        additional_opts = cls._get_oslo_driver_opts(
+            'replication_device', 'reserved_percentage',
+            'max_over_subscription_ratio', 'volume_dd_blocksize')
+        return RBD_OPTS + additional_opts
 
     def _get_target_config(self, target_id):
         """Get a replication target from known replication targets."""
@@ -1229,6 +1232,32 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                 LOG.info("Snapshot %s does not exist in backend.",
                          snap_name)
 
+    def snapshot_revert_use_temp_snapshot(self):
+        """Disable the use of a temporary snapshot on revert."""
+        return False
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert a volume to a given snapshot."""
+        # NOTE(rosmaita): The Ceph documentation notes that this operation is
+        # inefficient on the backend for large volumes, and that the preferred
+        # method of returning to a pre-existing state in Ceph is to clone from
+        # a snapshot.
+        # So why don't we do something like that here?
+        # (a) an end user can do the more efficient operation on their own if
+        #     they value speed over the convenience of reverting their existing
+        #     volume
+        # (b) revert-to-snapshot is properly a backend operation, and should
+        #     be handled by the backend -- trying to "fake it" in this driver
+        #     is both dishonest and likely to cause subtle bugs
+        # (c) the Ceph project undergoes continual improvement.  It may be
+        #     the case that there are things an operator can do on the Ceph
+        #     side (for example, use BlueStore for the Ceph backend storage)
+        #     to improve the efficiency of this operation.
+        # Thus, a motivated operator reading this is encouraged to consult
+        # the Ceph documentation.
+        with RBDVolumeProxy(self, volume.name) as image:
+            image.rollback_to_snap(snapshot.name)
+
     def _disable_replication(self, volume):
         """Disable replication on the given volume."""
         vol_name = utils.convert_str(volume.name)
@@ -1768,6 +1797,13 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
         name_id = None
         provider_location = None
 
+        if original_volume_status == 'in-use':
+            # The back-end will not be renamed.
+            name_id = new_volume['_name_id'] or new_volume['id']
+            provider_location = new_volume['provider_location']
+            return {'_name_id': name_id,
+                    'provider_location': provider_location}
+
         existing_name = CONF.volume_name_template % new_volume.id
         wanted_name = CONF.volume_name_template % volume.id
         with RADOSClient(self) as client:
@@ -1783,7 +1819,8 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                 # one from the new volume as well.
                 name_id = new_volume._name_id or new_volume.id
                 provider_location = new_volume['provider_location']
-        return {'_name_id': name_id, 'provider_location': provider_location}
+        return {'_name_id': name_id,
+                'provider_location': provider_location}
 
     def migrate_volume(self, context, volume, host):
 

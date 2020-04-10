@@ -1,5 +1,5 @@
-# (c) Copyright 2014-2016 Hewlett Packard Enterprise Development LP
-#    All Rights Reserved.
+# Copyright (c) 2019 ShenZhen SandStone Data Technologies Co., Ltd.
+# All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -12,17 +12,10 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-#
-"""Fake HPE client for testing LeftHand without installing the client."""
+"""SandStone iSCSI Driver Const."""
 
-import sys
-from unittest import mock
+CONNECT_ERROR = 403
 
-from cinder.tests.unit.volume.drivers.hpe \
-    import fake_hpe_client_exceptions as hpeexceptions
-
-hpelefthand = mock.Mock()
-hpelefthand.version = "2.1.0"
-hpelefthand.exceptions = hpeexceptions
-
-sys.modules['hpelefthandclient'] = hpelefthand
+BASIC_URI = '/api/storage/'
+OM_URI = '/api/om/'
+PAGESIZE = 1000

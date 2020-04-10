@@ -961,6 +961,17 @@ class RBDTestCase(test.TestCase):
                 self.assertFalse(proxy.remove_snap.called)
 
     @common_mocks
+    def test_snapshot_revert_use_temp_snapshot(self):
+        self.assertFalse(self.driver.snapshot_revert_use_temp_snapshot())
+
+    @common_mocks
+    def test_revert_to_snapshot(self):
+        image = self.mock_proxy.return_value.__enter__.return_value
+        self.driver.revert_to_snapshot(self.context, self.volume_a,
+                                       self.snapshot)
+        image.rollback_to_snap.assert_called_once_with(self.snapshot.name)
+
+    @common_mocks
     def test_get_children_info(self):
         volume = self.mock_proxy
         volume.set_snap = mock.Mock()
@@ -1835,6 +1846,24 @@ class RBDTestCase(test.TestCase):
                                            'volume-%s' % self.volume_a.id)
             self.assertEqual({'_name_id': None,
                               'provider_location': None}, model_update)
+
+    @common_mocks
+    def test_update_migrated_volume_in_use(self):
+        client = self.mock_client.return_value
+        client.__enter__.return_value = client
+
+        with mock.patch.object(self.driver.rbd.RBD(), 'rename') as mock_rename:
+            context = {}
+            mock_rename.return_value = 0
+            model_update = self.driver.update_migrated_volume(context,
+                                                              self.volume_a,
+                                                              self.volume_b,
+                                                              'in-use')
+            mock_rename.assert_not_called()
+            self.assertEqual({'_name_id': self.volume_b.id,
+                              'provider_location':
+                                  self.volume_b['provider_location']},
+                             model_update)
 
     @common_mocks
     def test_update_migrated_volume_image_exists(self):

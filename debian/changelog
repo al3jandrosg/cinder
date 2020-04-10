@@ -1,3 +1,12 @@
+cinder (2:16.0.0~b3~git2020041012.eb915e2db-0ubuntu1) focal; urgency=medium
+
+  * d/watch: Update tarball URL to opendev.org.
+  * New upstream snapshot for OpenStack Ussuri.
+  * d/cinder-common.postinst: Set ownership and permissions for all /var/lib
+    files and directories.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 10 Apr 2020 12:56:33 -0400
+
 cinder (2:16.0.0~b3~git2020032414.a0c0a9e23-0ubuntu1) focal; urgency=medium
 
   * New upstream snapshot for OpenStack Ussuri.

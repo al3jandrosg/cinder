@@ -56,28 +56,6 @@ class HackingTestCase(test.TestCase):
     should pass.
     """
 
-    def test_no_vi_headers(self):
-
-        lines = ['Line 1\n', 'Line 2\n', 'Line 3\n', 'Line 4\n', 'Line 5\n',
-                 'Line 6\n', 'Line 7\n', 'Line 8\n', 'Line 9\n', 'Line 10\n',
-                 'Line 11\n']
-
-        self.assertIsNone(checks.no_vi_headers(
-            "Test string foo", 1, lines))
-        self.assertEqual(2, len(list(checks.no_vi_headers(
-            "# vim: et tabstop=4 shiftwidth=4 softtabstop=4",
-            2, lines))))
-        self.assertEqual(2, len(list(checks.no_vi_headers(
-            "# vim: et tabstop=4 shiftwidth=4 softtabstop=4",
-            8, lines))))
-        self.assertIsNone(checks.no_vi_headers(
-            "Test end string for vi",
-            9, lines))
-        # vim header outside of boundary (first/last 5 lines)
-        self.assertIsNone(checks.no_vi_headers(
-            "# vim: et tabstop=4 shiftwidth=4 softtabstop=4",
-            6, lines))
-
     def test_no_translate_logs(self):
         self.assertEqual(1, len(list(checks.no_translate_logs(
             "LOG.debug(_('foo'))", "cinder/scheduler/foo.py"))))
@@ -241,12 +219,6 @@ class HackingTestCase(test.TestCase):
         self.assertEqual(0, len(list(checks.check_timeutils_strtime(
             "strftime"))))
 
-    def test_check_unicode_usage(self):
-        self.assertEqual(1, len(list(checks.check_unicode_usage(
-            "unicode(msg)", False))))
-        self.assertEqual(0, len(list(checks.check_unicode_usage(
-            "unicode(msg)  # noqa", True))))
-
     def test_no_print_statements(self):
         self.assertEqual(0, len(list(checks.check_no_print_statements(
             "a line with no print statement",
@@ -321,3 +293,13 @@ class HackingTestCase(test.TestCase):
     def test_no_test_log(self, first, second, third, fourth):
         self.assertEqual(first, len(list(checks.no_test_log(
             "%s('arg')" % second, third, fourth))))
+
+    @ddt.unpack
+    @ddt.data(
+        (1, 'import mock'),
+        (0, 'from unittest import mock'),
+        (1, 'from mock import patch'),
+        (0, 'from unittest.mock import patch'))
+    def test_no_third_party_mock(self, err_count, line):
+        self.assertEqual(err_count, len(list(checks.no_third_party_mock(
+            line))))

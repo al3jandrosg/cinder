@@ -924,6 +924,7 @@ class PowerMaxRest(object):
         task = self.wait_for_job('Create volume', status_code,
                                  job, extra_specs)
 
+        # Find the newly created volume.
         device_id = None
         if rep_info:
             updated_device_list = self.get_volume_list(
@@ -1039,8 +1040,12 @@ class PowerMaxRest(object):
                       'Device id = %(di)s',
                       {'en': element_name, 'vi': vol_identifier,
                        'di': device_id})
-            if vol_identifier == element_name:
+            if vol_identifier in element_name:
                 found_device_id = device_id
+                if vol_identifier != element_name:
+                    LOG.debug("Device %(di)s is a legacy volume created using "
+                              "SMI-S.",
+                              {'di': device_id})
             elif name_id:
                 # This may be host-assisted migration case
                 element_name = self.utils.get_volume_element_name(name_id)
@@ -2550,7 +2555,7 @@ class PowerMaxRest(object):
 
         # Metro specific configuration
         if replication_mode == utils.REP_METRO:
-            bias = "true" if extra_specs[utils.METROBIAS] else "False"
+            bias = "true" if extra_specs.get(utils.METROBIAS) else "false"
             payload.update({
                 "replicationMode": "Active", "metroBias": bias})
 
@@ -2601,14 +2606,14 @@ class PowerMaxRest(object):
         if group_state:
             group_state = [x.lower() for x in group_state]
 
-        if utils.RDF_SUSPENDED_STATE not in group_state:
+        if len(group_state) == 1 and utils.RDF_SUSPENDED_STATE in group_state:
+            LOG.info('SRDF Group %(grp_num)s is already in a suspended state',
+                     {'grp_num': rdf_group_no})
+        else:
             self.srdf_modify_group(
                 array_id, rdf_group_no, storage_group,
                 {"suspend": {"force": "true"}, "action": "Suspend"},
                 rep_extra_specs, 'Suspend SRDF Group Replication')
-        else:
-            LOG.info('SRDF Group %(grp_num)s is already in a suspended state',
-                     {'grp_num': rdf_group_no})
 
     def srdf_resume_replication(self, array_id, storage_group, rdf_group_no,
                                 rep_extra_specs, async_call=True):
@@ -3010,7 +3015,7 @@ class PowerMaxRest(object):
 
         :returns: unisphere_meets_min_req -- boolean
         """
-        running_version, _ = self.get_uni_version()
+        running_version, __ = self.get_uni_version()
         minimum_version = MIN_U4P_VERSION
         unisphere_meets_min_req = False
 

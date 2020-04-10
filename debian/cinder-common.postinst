@@ -27,15 +27,10 @@ if [ "$1" = "configure" ]; then
     find /etc/cinder/rootwrap.d -exec chown root:root "{}" +
     find /etc/cinder/rootwrap.d -type f -exec chmod 0644 "{}" + -o -type d -exec chmod 0755 "{}" +
 
-    chown cinder:cinder /var/lib/cinder
-    chmod 0750 /var/lib/cinder
-
     chmod 0440 /etc/sudoers.d/cinder_sudoers
 
-    if [ -e /var/lib/cinder/cinder.sqlite ]; then
-        chown cinder:cinder /var/lib/cinder/cinder.sqlite
-        chmod 0600 /var/lib/cinder/cinder.sqlite
-    fi
+    find /var/lib/cinder -exec chown cinder:cinder "{}" +
+    find /var/lib/cinder -type f -exec chmod 0640 "{}" + -o -type d -exec chmod 0750 "{}" +
 fi
 
 #DEBHELPER#

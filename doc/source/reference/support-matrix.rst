@@ -87,9 +87,5 @@ release.
    * Nexenta Edge Storage Driver
 
 * Ussuri
-   * Nimble Storage Driver
-   * ProphetStor Flexvisor Driver
+   * HPE Lefthand Driver (iSCSI)
    * Sheepdog Driver
-   * Veritas Access Storage Driver
-   * Virtuozzo Storage Driver
-

@@ -15,6 +15,7 @@
 import ast
 import re
 
+from hacking import core
 import six
 
 """
@@ -41,7 +42,6 @@ translated_log = re.compile(
     r"(.)*LOG\.(audit|debug|error|info|warn|warning|critical|exception)"
     r"\(\s*_\(\s*('|\")")
 string_translation = re.compile(r"(.)*_\(\s*('|\")")
-vi_header_re = re.compile(r"^#\s+vim?:.+")
 underscore_import_check = re.compile(r"(.)*i18n\s+import(.)* _$")
 underscore_import_check_multi = re.compile(r"(.)*i18n\s+import(.)* _, (.)*")
 # We need this for cases where they have created their own _ function.
@@ -102,20 +102,7 @@ class BaseASTChecker(ast.NodeVisitor):
         return False
 
 
-def no_vi_headers(physical_line, line_number, lines):
-    """Check for vi editor configuration in source files.
-
-    By default vi modelines can only appear in the first or
-    last 5 lines of a source file.
-
-    N314
-    """
-    # NOTE(gilliard): line_number is 1-indexed
-    if line_number <= 5 or line_number > len(lines) - 5:
-        if vi_header_re.match(physical_line):
-            return 0, "N314: Don't put vi configuration in source files"
-
-
+@core.flake8ext
 def no_translate_logs(logical_line, filename):
     """Check for 'LOG.*(_('
 
@@ -132,12 +119,14 @@ def no_translate_logs(logical_line, filename):
         yield(0, "C312: Log messages should not be translated!")
 
 
+@core.flake8ext
 def no_mutable_default_args(logical_line):
     msg = "N322: Method's default argument shouldn't be mutable!"
     if mutable_default_args.match(logical_line):
         yield (0, msg)
 
 
+@core.flake8ext
 def check_explicit_underscore_import(logical_line, filename):
     """Check for explicit import of the _ function
 
@@ -169,6 +158,9 @@ class CheckLoggingFormatArgs(BaseASTChecker):
     The format arguments should not be a tuple as it is easy to miss.
 
     """
+
+    name = 'check_logging_format_args'
+    version = '1.0'
 
     CHECK_DESC = 'C310 Log method arguments should not be a tuple.'
     LOG_METHODS = [
@@ -231,6 +223,9 @@ class CheckOptRegistrationArgs(BaseASTChecker):
     This class creates a check for single opt or list/tuple of
     opts when register_opt() or register_opts() are being called.
     """
+
+    name = 'check_opt_registrationg_args'
+    version = '1.0'
 
     CHECK_DESC = ('C311: Arguments being passed to register_opt/register_opts '
                   'must be a single option or list/tuple of options '
@@ -303,6 +298,7 @@ class CheckOptRegistrationArgs(BaseASTChecker):
         return super(CheckOptRegistrationArgs, self).generic_visit(node)
 
 
+@core.flake8ext
 def check_datetime_now(logical_line, noqa):
     if noqa:
         return
@@ -313,19 +309,7 @@ def check_datetime_now(logical_line, noqa):
         yield(0, msg)
 
 
-_UNICODE_USAGE_REGEX = re.compile(r'\bunicode *\(')
-
-
-def check_unicode_usage(logical_line, noqa):
-    if noqa:
-        return
-
-    msg = "C302: Found unicode() call. Please use six.text_type()."
-
-    if _UNICODE_USAGE_REGEX.search(logical_line):
-        yield(0, msg)
-
-
+@core.flake8ext
 def check_no_print_statements(logical_line, filename, noqa):
     # CLI and utils programs do need to use 'print()' so
     # we shouldn't check those files.
@@ -342,6 +326,7 @@ def check_no_print_statements(logical_line, filename, noqa):
         yield(0, msg)
 
 
+@core.flake8ext
 def check_timeutils_strtime(logical_line):
     msg = ("C306: Found timeutils.strtime(). "
            "Please use datetime.datetime.isoformat() or datetime.strftime()")
@@ -349,6 +334,7 @@ def check_timeutils_strtime(logical_line):
         yield(0, msg)
 
 
+@core.flake8ext
 def dict_constructor_with_list_copy(logical_line):
     msg = ("N336: Must use a dict comprehension instead of a dict constructor "
            "with a sequence of key-value pairs.")
@@ -356,6 +342,7 @@ def dict_constructor_with_list_copy(logical_line):
         yield (0, msg)
 
 
+@core.flake8ext
 def check_timeutils_isotime(logical_line):
     msg = ("C308: Found timeutils.isotime(). "
            "Please use datetime.datetime.isoformat()")
@@ -363,6 +350,7 @@ def check_timeutils_isotime(logical_line):
         yield(0, msg)
 
 
+@core.flake8ext
 def no_test_log(logical_line, filename, noqa):
     if ('cinder/tests' not in filename or noqa):
         return
@@ -371,6 +359,7 @@ def no_test_log(logical_line, filename, noqa):
         yield (0, msg)
 
 
+@core.flake8ext
 def validate_assertTrue(logical_line, filename):
     # Note: a comparable check cannot be implemented for
     # assertFalse(), because assertFalse(None) passes.
@@ -385,18 +374,16 @@ def validate_assertTrue(logical_line, filename):
         yield(0, msg)
 
 
-def factory(register):
-    register(no_vi_headers)
-    register(no_translate_logs)
-    register(no_mutable_default_args)
-    register(check_explicit_underscore_import)
-    register(CheckLoggingFormatArgs)
-    register(CheckOptRegistrationArgs)
-    register(check_datetime_now)
-    register(check_timeutils_strtime)
-    register(check_timeutils_isotime)
-    register(check_unicode_usage)
-    register(check_no_print_statements)
-    register(dict_constructor_with_list_copy)
-    register(no_test_log)
-    register(validate_assertTrue)
+third_party_mock = re.compile("^import.mock")
+from_third_party_mock = re.compile("^from.mock.import")
+
+
+@core.flake8ext
+def no_third_party_mock(logical_line):
+    # We should only use unittest.mock, not the third party mock library that
+    # was needed for py2 support.
+    if (re.match(third_party_mock, logical_line) or
+            re.match(from_third_party_mock, logical_line)):
+        msg = ('C337: Unit tests should use the standard library "mock" '
+               'module, not the third party mock lib.')
+        yield(0, msg)

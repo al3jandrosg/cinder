@@ -1,8 +1,43 @@
 CHANGES
 =======
 
+* Add hacking check for 3rd party mock
+* Imported Translations from Zanata
+* Add sandstone iscsi driver
+* Mark Nimble Storage Driver supported
+* Followup to address open review comments
+* Imported Translations from Zanata
+* RBD: add support for revert-to-snapshot
+* Revert "Remove ProphetStor Flexvisor Driver"
+* Adds support for min/max volume size on vol\_type
+* Revert "Remove the Virtuozzo Storage Driver"
+* Revert "Remove the Veritas Access Driver"
+* Correct ReST syntax
+* Add revert to snapshot support in VxFlex OS driver
+* Add support for volume migration in VxFlex OS driver
+* Add OpenStack volume replication v2.1 support in VxFlex OS driver
+* Add support for VxFlex OS 3.5 to VxFlex OS driver
+* Add features for add backup id to volume metadata
+* Remove HPE Lefthand Driver
+* PowerMax Driver - SRDF Replication Fixes
+* PowerMax Driver - Update single underscores
+* Imported Translations from Zanata
+* Move release note to correct directory
+* Revert "Remove Nimble Storage Driver"
+* Drop unicode() hacking check
+* [Unity] Support create volume with tiering policy
+* Correct two typos in support-matrix.ini
+* Re-enable local hacking checks
+* PowerMax Driver - Support of Multiple Replication
+* API: os-reset\_status notification fix
+* Remove suds from requirements
+* RBD: Add missing driver options
+* SAN: Add missing driver options
+* Do not rename rbd based volume after migration
+* Vmware: Revert the volume stats revert
 * Update weekly meeting location
 * Imported Translations from Zanata
+* PowerMax Driver - Legacy volume not found
 * Imported Translations from Zanata
 * PowerMax Driver - SRDF Enhancement
 * [Unity] Fix TypeError for test case test\_delete\_host\_wo\_lock
@@ -15,7 +50,10 @@ CHANGES
 * Update in-tree Datera Cinder driver
 * Fix DriverFilter string evaluations
 * Ussuri contrib docs community goal
+* PowerMax Driver - Replication array serial check
+* Blacklist stestr 2.3.0
 * PowerMax Driver - Print extend volume info
+* Port several legacy tempest jobs to Zuul v3
 * Imported Translations from Zanata
 * Mark Huawei Fusionstorage Driver Supported
 * ChunkedBackupDriver: Freeing memory on restore
