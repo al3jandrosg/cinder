@@ -1,3 +1,11 @@
+cinder (2:16.0.0~b3~git2020041012.eb915e2db-0ubuntu2) groovy; urgency=medium
+
+  * d/p/monkey-patch-original-current-thread.patch: Cherry-picked from
+    https://review.opendev.org/724754. This fixes neutron service failures
+    with Python 3.8 (LP: #1863021).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 30 Apr 2020 16:44:03 -0400
+
 cinder (2:16.0.0~b3~git2020041012.eb915e2db-0ubuntu1) focal; urgency=medium
 
   * d/watch: Update tarball URL to opendev.org.
