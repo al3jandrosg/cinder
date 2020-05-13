@@ -1,3 +1,13 @@
+cinder (2:16.0.0-0ubuntu1) groovy; urgency=medium
+
+  * d/watch: Update tarball version.
+  * d/p/py38skip.patch: Refresh patch.
+  * New upstream release for OpenStack Ussuri (LP: #1877642).
+  * d/p/monkey-patch-original-current-thread.patch: Removed as it is
+    merged into rc3 upstream.
+
+ -- Chris MacNaughton <chris.macnaughton@canonical.com>  Wed, 13 May 2020 15:20:20 +0000
+
 cinder (2:16.0.0~b3~git2020041012.eb915e2db-0ubuntu2) groovy; urgency=medium
 
   * d/p/monkey-patch-original-current-thread.patch: Cherry-picked from

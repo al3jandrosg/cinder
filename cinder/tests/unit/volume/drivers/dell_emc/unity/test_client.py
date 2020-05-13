@@ -59,6 +59,7 @@ class MockResource(object):
         self.lun = None
         self.tiering_policy = None
         self.pool_fast_vp = None
+        self.snap = True
 
     @property
     def id(self):
@@ -199,8 +200,11 @@ class MockResource(object):
     def storage_resource(self, value):
         self._storage_resource = value
 
-    def modify(self, name=None):
+    def modify(self, name=None, is_compression=None, io_limit_policy=None):
         self.name = name
+
+    def remove_from_storage(self, lun):
+        pass
 
     def thin_clone(self, name, io_limit_policy=None, description=None):
         if name == 'thin_clone_name_in_use':
@@ -213,10 +217,21 @@ class MockResource(object):
     def restore(self, delete_backup):
         return MockResource(_id='snap_1', name="internal_snap")
 
-    def migrate(self, dest_pool):
-        if dest_pool.id == 'pool_2':
+    def migrate(self, dest_pool, **kwargs):
+        if dest_pool.id == 'fail_migration_pool':
             return False
         return True
+
+    def replicate_cg_with_dst_resource_provisioning(self,
+                                                    max_time_out_of_sync,
+                                                    source_luns,
+                                                    dst_pool_id,
+                                                    remote_system=None,
+                                                    dst_cg_name=None):
+        return {'max_time_out_of_sync': max_time_out_of_sync,
+                'dst_pool_id': dst_pool_id,
+                'remote_system': remote_system,
+                'dst_cg_name': dst_cg_name}
 
     def replicate_with_dst_resource_provisioning(self, max_time_out_of_sync,
                                                  dst_pool_id,
@@ -232,6 +247,11 @@ class MockResource(object):
 
     def failback(self, force_full_copy=None):
         return {'force_full_copy': force_full_copy}
+
+    def check_cg_is_replicated(self):
+        if self.name == 'replicated_cg':
+            return True
+        return False
 
 
 class MockResourceList(object):
@@ -311,6 +331,12 @@ class MockSystem(object):
         return MockResource(name)
 
     @staticmethod
+    def get_cg(name):
+        if not name:
+            raise ex.UnityResourceNotFoundError()
+        return MockResource(name, _id=name)
+
+    @staticmethod
     def create_host(name):
         return MockResource(name)
 
@@ -370,6 +396,12 @@ class MockSystem(object):
         elif src_resource_id == 'lun_in_multiple_replications':
             return [MockResource(_id='lun_rep_session_1'),
                     MockResource(_id='lun_rep_session_2')]
+        elif src_resource_id and ('is_in_replication'
+                                  in src_resource_id):
+            return [MockResource(name='rep_session')]
+        elif dst_resource_id and ('is_in_replication'
+                                  in dst_resource_id):
+            return [MockResource(name='rep_session')]
         else:
             return {'name': name,
                     'src_resource_id': src_resource_id,
@@ -657,8 +689,16 @@ class ClientTest(unittest.TestCase):
         self.assertTrue(ret)
 
     def test_migrate_lun_failed(self):
-        ret = self.client.migrate_lun('lun_0', 'pool_2')
+        ret = self.client.migrate_lun('lun_0', 'fail_migration_pool')
         self.assertFalse(ret)
+
+    def test_migrate_lun_thick(self):
+        ret = self.client.migrate_lun('lun_thick', 'pool_2', 'thick')
+        self.assertTrue(ret)
+
+    def test_migrate_lun_compressed(self):
+        ret = self.client.migrate_lun('lun_compressed', 'pool_2', 'compressed')
+        self.assertTrue(ret)
 
     def test_get_pool_id_by_name(self):
         self.assertEqual('pool_3', self.client.get_pool_id_by_name('Pool 3'))
@@ -855,7 +895,7 @@ class ClientTest(unittest.TestCase):
     def test_failover_replication(self):
         rep_session = MockResource(_id='rep_id_1')
         called = self.client.failover_replication(rep_session)
-        self.assertEqual(called['sync'], False)
+        self.assertFalse(called['sync'])
 
     def test_failover_replication_raise(self):
         rep_session = MockResource(_id='rep_id_1')
@@ -871,7 +911,7 @@ class ClientTest(unittest.TestCase):
     def test_failback_replication(self):
         rep_session = MockResource(_id='rep_id_1')
         called = self.client.failback_replication(rep_session)
-        self.assertEqual(called['force_full_copy'], True)
+        self.assertTrue(called['force_full_copy'])
 
     def test_failback_replication_raise(self):
         rep_session = MockResource(_id='rep_id_1')
@@ -883,3 +923,38 @@ class ClientTest(unittest.TestCase):
         self.assertRaises(client.ClientReplicationError,
                           self.client.failback_replication,
                           rep_session)
+
+    def test_create_cg_replication(self):
+        remote_system = MockResource(_id='RS_2')
+        cg_name = 'test_cg'
+        called = self.client.create_cg_replication(
+            cg_name, 'pool_1', remote_system, 60)
+        self.assertEqual(60, called['max_time_out_of_sync'])
+        self.assertEqual('pool_1', called['dst_pool_id'])
+        self.assertEqual('test_cg', called['dst_cg_name'])
+        self.assertIs(remote_system, called['remote_system'])
+
+    def test_cg_in_replciation(self):
+        existing_cg = MockResource(_id='replicated_cg')
+        result = self.client.is_cg_replicated(existing_cg.id)
+        self.assertTrue(result)
+
+    def test_cg_not_in_replciation(self):
+        existing_cg = MockResource(_id='test_cg')
+        result = self.client.is_cg_replicated(existing_cg.id)
+        self.assertFalse(result)
+
+    def test_delete_cg_rep_session(self):
+        src_cg = MockResource(_id='cg_is_in_replication')
+        result = self.client.delete_cg_rep_session(src_cg.id)
+        self.assertIsNone(result)
+
+    def test_failover_cg_rep_session(self):
+        src_cg = MockResource(_id='failover_cg_is_in_replication')
+        result = self.client.failover_cg_rep_session(src_cg.id, True)
+        self.assertIsNone(result)
+
+    def test_failback_cg_rep_session(self):
+        src_cg = MockResource(_id='failback_cg_is_in_replication')
+        result = self.client.failback_cg_rep_session(src_cg.id)
+        self.assertIsNone(result)

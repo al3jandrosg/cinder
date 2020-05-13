@@ -119,6 +119,10 @@ class MockClient(object):
         return test_client.MockResource(_id=lun_id, name=name)
 
     @staticmethod
+    def lun_has_snapshot(lun):
+        return lun.name == 'volume_has_snapshot'
+
+    @staticmethod
     def get_lun(name=None, lun_id=None):
         if lun_id is None:
             lun_id = 'lun_4'
@@ -214,7 +218,9 @@ class MockClient(object):
 
     @staticmethod
     def get_io_limit_policy(specs):
-        return None
+        mock_io_policy = (test_client.MockResource(name=specs.get('id'))
+                          if specs else None)
+        return mock_io_policy
 
     @staticmethod
     def extend_lun(lun_id, size_gib):
@@ -257,7 +263,7 @@ class MockClient(object):
                  'PoolC': 'pool_3'}
         return pools.get(name, None)
 
-    def migrate_lun(self, lun_id, dest_pool_id):
+    def migrate_lun(self, lun_id, dest_pool_id, provision=None):
         if dest_pool_id == 'pool_2':
             return True
         if dest_pool_id == 'pool_3':
@@ -296,6 +302,29 @@ class MockClient(object):
     def failback_replication(self, rep_session):
         if rep_session.name != 'rep_session_name_1':
             raise client.ClientReplicationError()
+
+    def is_cg_replicated(self, cg_id):
+        return cg_id and 'is_replicated' in cg_id
+
+    def get_cg(self, name):
+        return test_client.MockResource(_id=name)
+
+    def create_cg_replication(self, group_id, pool_id, remote_system,
+                              max_time):
+        if group_id and 'error' in group_id:
+            raise Exception('has issue when creating cg replication session.')
+
+    def delete_cg_rep_session(self, group_id):
+        if group_id and 'error' in group_id:
+            raise Exception('has issue when deleting cg replication session.')
+
+    def failover_cg_rep_session(self, group_id, need_sync):
+        if group_id and 'error' in group_id:
+            raise Exception('has issue when failover cg replication session.')
+
+    def failback_cg_rep_session(self, group_id):
+        if group_id and 'error' in group_id:
+            raise Exception('has issue when failback cg replication session.')
 
 
 class MockLookupService(object):
@@ -386,6 +415,20 @@ def get_connection_info(adapter, hlu, host, connector):
     return {}
 
 
+def get_volume_type_qos_specs(qos_id):
+    if qos_id == 'qos':
+        return {'qos_specs': {'id': u'qos_type_id_1',
+                              'consumer': u'back-end',
+                              u'maxBWS': u'102400',
+                              u'maxIOPS': u'500'}}
+    if qos_id == 'qos_2':
+        return {'qos_specs': {'id': u'qos_type_id_2',
+                              'consumer': u'back-end',
+                              u'maxBWS': u'102402',
+                              u'maxIOPS': u'502'}}
+    return {'qos_specs': {}}
+
+
 def get_volume_type_extra_specs(type_id):
     if type_id == 'thick':
         return {'provisioning:type': 'thick',
@@ -396,16 +439,37 @@ def get_volume_type_extra_specs(type_id):
     if type_id == 'tier_lowest':
         return {'storagetype:tiering': 'LowestAvailable',
                 'fast_support': '<is> True'}
+    if type_id == 'compressed':
+        return {'provisioning:type': 'compressed',
+                'compression_support': '<is> True'}
     return {}
+
+
+def get_group_type_specs(group_type_id):
+    if group_type_id == '':
+        return {'consistent_group_snapshot_enabled': '<is> True',
+                'group_type_id': group_type_id}
+    return {}
+
+
+def group_is_cg(group):
+    return group.id != 'not_cg'
 
 
 def patch_for_unity_adapter(func):
     @functools.wraps(func)
     @mock.patch('cinder.volume.volume_types.get_volume_type_extra_specs',
                 new=get_volume_type_extra_specs)
+    @mock.patch('cinder.volume.group_types.get_group_type_specs',
+                new=get_group_type_specs)
+    @mock.patch('cinder.volume.volume_types.get_volume_type_qos_specs',
+                new=get_volume_type_qos_specs)
     @mock.patch('cinder.volume.drivers.dell_emc.unity.utils.'
                 'get_backend_qos_specs',
                 new=get_backend_qos_specs)
+    @mock.patch('cinder.volume.drivers.dell_emc.unity.utils.'
+                'group_is_cg',
+                new=group_is_cg)
     @mock.patch('cinder.utils.brick_get_connector_properties',
                 new=get_connector_properties)
     def func_wrapper(*args, **kwargs):
@@ -561,6 +625,65 @@ class CommonAdapterTest(test.TestCase):
     def test_delete_volume(self):
         volume = MockOSResource(provider_location='id^lun_4')
         self.adapter.delete_volume(volume)
+
+    @patch_for_unity_adapter
+    def test_retype_volume_has_snapshot(self):
+        volume = MockOSResource(name='volume_has_snapshot', size=5,
+                                host='HostA@BackendB#PoolB')
+        ctxt = None
+        diff = None
+        new_type = {'name': u'type01', 'id': 'compressed'}
+        host = {'host': 'HostA@BackendB#PoolB'}
+        result = self.adapter.retype(ctxt, volume, new_type, diff, host)
+        self.assertFalse(result)
+
+    @patch_for_unity_adapter
+    def test_retype_volume_thick_to_compressed(self):
+        volume = MockOSResource(name='thick_volume', size=5,
+                                host='HostA@BackendB#PoolA',
+                                provider_location='id^lun_33')
+        ctxt = None
+        diff = None
+        new_type = {'name': u'compressed_type', 'id': 'compressed'}
+        host = {'host': 'HostA@BackendB#PoolB'}
+        result = self.adapter.retype(ctxt, volume, new_type, diff, host)
+        self.assertEqual((True, {}), result)
+
+    @patch_for_unity_adapter
+    def test_retype_volume_to_compressed(self):
+        volume = MockOSResource(name='thin_volume', size=5,
+                                host='HostA@BackendB#PoolB')
+        ctxt = None
+        diff = None
+        new_type = {'name': u'compressed_type', 'id': 'compressed'}
+        host = {'host': 'HostA@BackendB#PoolB'}
+        result = self.adapter.retype(ctxt, volume, new_type, diff, host)
+        self.assertTrue(result)
+
+    @patch_for_unity_adapter
+    def test_retype_volume_to_qos(self):
+        volume = MockOSResource(name='thin_volume', size=5,
+                                host='HostA@BackendB#PoolB')
+        ctxt = None
+        diff = None
+        new_type = {'name': u'qos_type', 'id': 'qos'}
+        host = {'host': 'HostA@BackendB#PoolB'}
+        result = self.adapter.retype(ctxt, volume, new_type,
+                                     diff, host)
+        self.assertTrue(result)
+
+    @patch_for_unity_adapter
+    def test_retype_volume_revert_qos(self):
+        volume = MockOSResource(name='qos_volume', size=5,
+                                host='HostA@BackendB#PoolB',
+                                volume_type_id='qos_2')
+        ctxt = None
+        diff = None
+        new_type = {'name': u'no_qos_type', 'id': ''}
+        host = {'host': 'HostA@BackendB#PoolB'}
+        result = self.adapter.retype(ctxt, volume, new_type,
+                                     diff, host)
+        self.assertTrue(result)
 
     def test_get_pool_stats(self):
         stats_list = self.adapter.get_pools_stats()
@@ -1427,6 +1550,133 @@ class CommonAdapterTest(test.TestCase):
             model_update['updates'])
         self.assertFalse(
             self.adapter.replication_manager.is_service_failed_over)
+
+    @patch_for_unity_adapter
+    def test_failed_enable_replication(self):
+        cg = MockOSResource(id='not_cg', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        self.assertRaises(exception.InvalidGroupType,
+                          self.adapter.enable_replication, None,
+                          cg, volumes)
+
+    @patch_for_unity_adapter
+    def test_enable_replication(self):
+        cg = MockOSResource(id='test_cg_1', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        secondary_device = mock_replication_device()
+        self.adapter.replication_manager.replication_devices = {
+            'secondary_unity': secondary_device
+        }
+        result = self.adapter.enable_replication(None, cg, volumes)
+        self.assertEqual(({'replication_status': 'enabled'}, None), result)
+
+    @patch_for_unity_adapter
+    def test_cannot_disable_replication_on_generic_group(self):
+        cg = MockOSResource(id='not_cg', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        self.assertRaises(exception.InvalidGroupType,
+                          self.adapter.disable_replication, None,
+                          cg, volumes)
+
+    @patch_for_unity_adapter
+    def test_disable_replication(self):
+        cg = MockOSResource(id='cg_is_replicated', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        result = self.adapter.disable_replication(None, cg, volumes)
+        self.assertEqual(({'replication_status': 'disabled'}, None), result)
+
+    @patch_for_unity_adapter
+    def test_failover_replication(self):
+        cg = MockOSResource(id='cg_is_replicated', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        real_secondary_id = 'secondary_unity'
+        secondary_device = mock_replication_device()
+        self.adapter.replication_manager.replication_devices = {
+            real_secondary_id: secondary_device
+        }
+        result = self.adapter.failover_replication(None, cg, volumes,
+                                                   real_secondary_id)
+        self.assertEqual(({'replication_status': 'failed-over'},
+                          [{'id': 'volume-3',
+                            'replication_status': 'failed-over'},
+                           {'id': 'volume-4',
+                            'replication_status': 'failed-over'}]), result)
+
+    @patch_for_unity_adapter
+    def test_failback_replication(self):
+        cg = MockOSResource(id='cg_is_replicated', name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        input_secondary_id = 'default'
+        real_secondary_id = 'secondary_unity'
+        secondary_device = mock_replication_device()
+        self.adapter.replication_manager.replication_devices = {
+            real_secondary_id: secondary_device
+        }
+        result = self.adapter.failover_replication(None, cg, volumes,
+                                                   input_secondary_id)
+        self.assertEqual(({'replication_status': 'enabled'},
+                          [{'id': 'volume-3',
+                            'replication_status': 'enabled'},
+                           {'id': 'volume-4',
+                            'replication_status': 'enabled'}]),
+                         result)
+
+        failed_cg = MockOSResource(id='cg_is_replicated_but_has_error',
+                                   name='cg_name',
+                                   description='cg_description')
+        failed_result = self.adapter.failover_replication(
+            None, failed_cg, volumes, real_secondary_id)
+        self.assertEqual(({'replication_status': 'error'},
+                          [{'id': 'volume-3',
+                            'replication_status': 'error'},
+                           {'id': 'volume-4',
+                            'replication_status': 'error'}]), failed_result)
+
+    @patch_for_unity_adapter
+    def test_failover_replication_error(self):
+        cg = MockOSResource(id='cg_is_replicated_but_has_error',
+                            name='cg_name',
+                            description='cg_description')
+        volumes = [MockOSResource(id=vol_id,
+                                  provider_location=get_lun_pl(lun_id))
+                   for vol_id, lun_id in (('volume-3', 'sv_3'),
+                                          ('volume-4', 'sv_4'))]
+        real_secondary_id = 'default'
+        secondary_device = mock_replication_device()
+        self.adapter.replication_manager.replication_devices = {
+            real_secondary_id: secondary_device
+        }
+        result = self.adapter.failover_replication(
+            None, cg, volumes, real_secondary_id)
+        self.assertEqual(({'replication_status': 'error'},
+                          [{'id': 'volume-3',
+                            'replication_status': 'error'},
+                           {'id': 'volume-4',
+                            'replication_status': 'error'}]), result)
 
 
 class FCAdapterTest(test.TestCase):

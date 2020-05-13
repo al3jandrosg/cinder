@@ -1,14 +1,76 @@
 CHANGES
 =======
 
+16.0.0
+------
+
+* Monkey patch original current\_thread \_active
+
+16.0.0.0rc2
+-----------
+
+* Nit: Update comment and release note on Quobyte driver bugfix
+* Fix nits from RBD volume migration changes
+* Add glance image colocation feature for Virtuozzo driver
+* NetApp SolidFire: Fix pylint issues
+* NetApp ONTAP: Fix iSCSI multiattach volume terminates connection
+* Imported Translations from Zanata
+* Correct unsupported drivers release note
+* Revert "Mark MacroSAN Driver Unsupported"
+* Update TOX\_CONSTRAINTS\_FILE for stable/ussuri
+* Update .gitreview for stable/ussuri
+
+16.0.0.0rc1
+-----------
+
+* Add ussuri prelude to release notes
+* Remove XIV part from configuration docs
+* update typo and official brandname in RN
+* Update NetApp SolidFire Active/Active support in Support Matrix
+* Add release note for drivers unsupported in Train
+* Fix driver doc ordering do to file casing
+* Add filter\_function and goodness\_function to pools
+* Updating docs for Datera driver
+* HPE 3PAR: Support duplicated FQDN in network
+* Add support for IBM GPFS Driver
+* PowerMax Driver - RDF status validation
+* Imported Translations from Zanata
+* add docs and release note for sandstone iscsi driver Partially-implements: bp add-sandstone-driver
+* Update HACKING document to match current checks
+* Cleanup py27 support
+* Correct description for encryption-type policies
+* Resolve deprecation of encryption policy target
+* PowerMax Driver - PowerMax Pools Fix
+* PowerMax Driver - Compression Change Bug Fix
+* Fix volume migration fails in the same ceph RBD pool
+* Imported Translations from Zanata
+* Updating release notes for Datera driver
+* Fix arguments order inside assertEqual
+* PowerMax Driver - Detach RepConfig logging & Retype rename remote fix
+* Add tests for volume type encryption type policies
+* Fix missing print format in log messages
+* Update upgrade check removed drivers for ussuri
+* Prevent creation of ssh\_known\_hosts file in UT run
+* Handle py38 unit test changes
+* [DS8000] Update cinder driver configuration guide
+* Support Glance image data colocation
+* NetApp SolidFire: Add active/active replication
+* NetApp SolidFire: Fix failback failing after service restart
+* [Unity] Retype volume support
+* [Unity] Support consistency group replication
 * Add hacking check for 3rd party mock
 * Imported Translations from Zanata
 * Add sandstone iscsi driver
 * Mark Nimble Storage Driver supported
+* PowerMax Driver - Manage volume emulation check
+* PowerMax Driver - Deletion of group with volumes
+* PowerMax Driver - Replication Metadata Fix
 * Followup to address open review comments
 * Imported Translations from Zanata
+* validator: Replace InvalidInput exception w/ InvalidName
 * RBD: add support for revert-to-snapshot
 * Revert "Remove ProphetStor Flexvisor Driver"
+* PowerMax Driver - Version comparison correction
 * Adds support for min/max volume size on vol\_type
 * Revert "Remove the Virtuozzo Storage Driver"
 * Revert "Remove the Veritas Access Driver"
@@ -19,24 +81,33 @@ CHANGES
 * Add support for VxFlex OS 3.5 to VxFlex OS driver
 * Add features for add backup id to volume metadata
 * Remove HPE Lefthand Driver
+* PowerMax Driver - Limit replication devices
 * PowerMax Driver - SRDF Replication Fixes
 * PowerMax Driver - Update single underscores
 * Imported Translations from Zanata
 * Move release note to correct directory
 * Revert "Remove Nimble Storage Driver"
 * Drop unicode() hacking check
+* Fix revert snapshot issue
 * [Unity] Support create volume with tiering policy
 * Correct two typos in support-matrix.ini
+* Update hacking to 3.x release
 * Re-enable local hacking checks
+* Add test coverage for manage\_existing API revert
 * PowerMax Driver - Support of Multiple Replication
+* Change \_get\_volume\_size\_gb to \_get\_volume\_size\_bytes
+* Preserve request id in Cinder logs when creating boot volume
+* Allow creating volumes from snapshots during backups for Quobyte
 * API: os-reset\_status notification fix
 * Remove suds from requirements
 * RBD: Add missing driver options
 * SAN: Add missing driver options
 * Do not rename rbd based volume after migration
+* PowerMax Driver - Allowing for default volume type in group
 * Vmware: Revert the volume stats revert
 * Update weekly meeting location
 * Imported Translations from Zanata
+* Add configuration item for infortrend document
 * PowerMax Driver - Legacy volume not found
 * Imported Translations from Zanata
 * PowerMax Driver - SRDF Enhancement
@@ -48,6 +119,7 @@ CHANGES
 * Tests: Remove Python 2 compat file\_spec code
 * Make cinder-plugin-ceph-tempest job voting
 * Update in-tree Datera Cinder driver
+* Always use the current volume URL in the Quobyte driver
 * Fix DriverFilter string evaluations
 * Ussuri contrib docs community goal
 * PowerMax Driver - Replication array serial check
@@ -89,6 +161,7 @@ CHANGES
 * Add migration to make volume\_type\_id non nullable
 * Refactor README links
 * Support multiple stores of Glance
+* Fix some typos in docs
 * Add upgrade check for removed Veritas Access driver
 * RBD: catch argument exceptions when configuring multiattach
 * Bump paramiko requirement

@@ -28,7 +28,6 @@ from oslo_utils import excutils
 from oslo_utils import timeutils
 from oslo_utils import units
 import requests
-from requests.packages.urllib3 import exceptions
 import six
 
 from cinder import context
@@ -223,9 +222,16 @@ class SolidFireDriver(san.SanISCSIDriver):
           2.0.15 - Fix bug #1834013 NetApp SolidFire replication errors
           2.0.16 - Add options for replication mode (Async, Sync and
                    SnapshotsOnly)
+          2.0.17 - Fix bug #1859653 SolidFire fails to failback when volume
+                   service is restarted
+          2.1.0  - Add Cinder Active/Active support
+                    - Enable Active/Active support flag
+                    - Implement Active/Active replication support
     """
 
-    VERSION = '2.0.16'
+    VERSION = '2.1.0'
+
+    SUPPORTS_ACTIVE_ACTIVE = True
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "NetApp_SolidFire_CI"
@@ -300,15 +306,13 @@ class SolidFireDriver(san.SanISCSIDriver):
             self.active_cluster = self._create_cluster_reference(
                 remote_endpoint)
 
-            # When in failed-over state, we have only endpoint info from the
-            # primary cluster.
-            self.primary_cluster = {"endpoint": self._build_endpoint_info()}
             self.failed_over = True
+            self.replication_enabled = True
         else:
-            self.primary_cluster = self._create_cluster_reference()
-            self.active_cluster = self.primary_cluster
+            self.active_cluster = self._create_cluster_reference()
             if self.configuration.replication_device:
                 self._set_cluster_pairs()
+                self.replication_enabled = True
 
         LOG.debug("Active cluster: %s", self.active_cluster)
 
@@ -441,9 +445,11 @@ class SolidFireDriver(san.SanISCSIDriver):
             # clusterPairID in remote_info for us
             self._create_remote_pairing(remote_info)
 
+        if self.cluster_pairs:
+            self.cluster_pairs.clear()
+
         self.cluster_pairs.append(remote_info)
         LOG.debug("Available cluster pairs: %s", self.cluster_pairs)
-        self.replication_enabled = True
 
     def _create_cluster_reference(self, endpoint=None):
         cluster_ref = {}
@@ -594,7 +600,9 @@ class SolidFireDriver(san.SanISCSIDriver):
         payload = {'method': method, 'params': params}
         url = '%s/json-rpc/%s/' % (endpoint['url'], version)
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", exceptions.InsecureRequestWarning)
+            warnings.simplefilter(
+                "ignore",
+                requests.packages.urllib3.exceptions.InsecureRequestWarning)
             req = requests.post(url,
                                 data=json.dumps(payload),
                                 auth=(endpoint['login'], endpoint['passwd']),
@@ -2345,7 +2353,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         self._issue_api_request('ModifyVolume', params,
                                 endpoint=tgt_cluster['endpoint'])
 
-    def failover_host(self, context, volumes, secondary_id=None, groups=None):
+    def failover(self, context, volumes, secondary_id=None, groups=None):
         """Failover to replication target.
 
         In order to do failback, you MUST specify the original/default cluster
@@ -2356,8 +2364,13 @@ class SolidFireDriver(san.SanISCSIDriver):
         failback = False
         volume_updates = []
 
-        LOG.info("Failing over. Secondary ID is: %s",
-                 secondary_id)
+        if not self.replication_enabled:
+            LOG.error("SolidFire driver received failover_host "
+                      "request, however replication is NOT "
+                      "enabled.")
+            raise exception.UnableToFailOver(reason=_("Failover requested "
+                                                      "on non replicated "
+                                                      "backend."))
 
         # NOTE(erlon): For now we only support one replication target device.
         # So, there are two cases we have to deal with here:
@@ -2375,8 +2388,10 @@ class SolidFireDriver(san.SanISCSIDriver):
                     "state.")
             raise exception.InvalidReplicationTarget(msg)
         elif secondary_id == "default" and self.failed_over:
-            remote = self.primary_cluster
+            LOG.info("Failing back to primary cluster.")
+            remote = self._create_cluster_reference()
             failback = True
+
         else:
             repl_configs = self.configuration.replication_device[0]
             if secondary_id and repl_configs['backend_id'] != secondary_id:
@@ -2384,25 +2399,24 @@ class SolidFireDriver(san.SanISCSIDriver):
                         "one in cinder.conf.") % secondary_id
                 raise exception.InvalidReplicationTarget(msg)
 
+            LOG.info("Failing over to secondary cluster %s.", secondary_id)
             remote = self.cluster_pairs[0]
 
-        if not remote or not self.replication_enabled:
-            LOG.error("SolidFire driver received failover_host "
-                      "request, however replication is NOT "
-                      "enabled, or there are no available "
-                      "targets to fail-over to.")
-            raise exception.UnableToFailOver(reason=_("Failover requested "
-                                                      "on non replicated "
-                                                      "backend."))
+        LOG.debug("Target cluster to failover: %s.",
+                  {'name': remote['name'],
+                   'mvip': remote['mvip'],
+                   'clusterAPIVersion': remote['clusterAPIVersion']})
 
         target_vols = self._map_sf_volumes(volumes,
                                            endpoint=remote['endpoint'])
-        LOG.debug("Mapped target_vols: %s", target_vols)
+        LOG.debug("Total Cinder volumes found in target: %d",
+                  len(target_vols))
 
         primary_vols = None
         try:
             primary_vols = self._map_sf_volumes(volumes)
-            LOG.debug("Mapped Primary_vols: %s", target_vols)
+            LOG.debug("Total Cinder volumes found in primary cluster: %d",
+                      len(primary_vols))
         except SolidFireAPIException:
             # API Request failed on source. Failover/failback will skip next
             # calls to it.
@@ -2437,14 +2451,26 @@ class SolidFireDriver(san.SanISCSIDriver):
                 else:
                     primary_vol = None
 
-                LOG.debug('Failing-over volume %s, target vol %s, '
-                          'primary vol %s', v, target_vol, primary_vol)
+                LOG.info('Failing-over volume %s.', v.id)
+                LOG.debug('Target vol: %s',
+                          {'access': target_vol['access'],
+                           'accountID': target_vol['accountID'],
+                           'name': target_vol['name'],
+                           'status': target_vol['status'],
+                           'volumeID': target_vol['volumeID']})
+                LOG.debug('Primary vol: %s',
+                          {'access': primary_vol['access'],
+                           'accountID': primary_vol['accountID'],
+                           'name': primary_vol['name'],
+                           'status': primary_vol['status'],
+                           'volumeID': primary_vol['volumeID']})
 
                 try:
                     self._failover_volume(target_vol, remote, primary_vol)
 
                     sf_account = self._get_create_account(
                         v.project_id, endpoint=remote['endpoint'])
+                    LOG.debug("Target account: %s", sf_account['accountID'])
 
                     conn_info = self._build_connection_info(
                         sf_account, target_vol, endpoint=remote['endpoint'])
@@ -2464,42 +2490,48 @@ class SolidFireDriver(san.SanISCSIDriver):
                         }
                     }
                     vol_updates['updates'].update(conn_info)
-
                     volume_updates.append(vol_updates)
-                    LOG.debug("Updates for volume: %(id)s %(updates)s",
-                              {'id': v.id, 'updates': vol_updates})
 
-                except Exception as e:
+                except Exception:
                     volume_updates.append({'volume_id': v['id'],
                                            'updates': {'status': 'error', }})
-
-                    if failback:
-                        LOG.error("Error trying to failback volume %s", v.id)
-                    else:
-                        LOG.error("Error trying to failover volume %s", v.id)
-
-                    msg = e.message if hasattr(e, 'message') else e
-                    LOG.exception(msg)
-
+                    LOG.exception("Error trying to failover volume %s.",
+                                  v['id'])
             else:
                 volume_updates.append({'volume_id': v['id'],
                                        'updates': {'status': 'error', }})
 
-        # FIXME(jdg): This introduces a problem for us, up until now our driver
-        # has been pretty much stateless and has allowed customers to run
-        # active/active HA c-vol services with SolidFire.  The introduction of
-        # the active_cluster and failed_over attributes is going to break that
-        # but for now that's going to be the trade off of using replication
-        if failback:
-            active_cluster_id = None
+        return '' if failback else remote['backend_id'], volume_updates, []
+
+    def failover_completed(self, context, active_backend_id=None):
+        """Update volume node when `failover` is completed.
+
+        Expects the following scenarios:
+            1) active_backend_id='' when failing back
+            2) active_backend_id=<secondary_backend_id> when failing over
+            3) When `failover` raises an Exception, this will be called
+                with the previous active_backend_id (Will be empty string
+                in case backend wasn't in failed-over state).
+        """
+        if not active_backend_id:
+            LOG.info("Failback completed. "
+                     "Switching active cluster back to default.")
+            self.active_cluster = self._create_cluster_reference()
             self.failed_over = False
+            # Recreating cluster pairs after a successful failback
+            self._set_cluster_pairs()
         else:
-            active_cluster_id = remote['backend_id']
+            LOG.info("Failover completed. "
+                     "Switching active cluster to %s.", active_backend_id)
+            self.active_cluster = self.cluster_pairs[0]
             self.failed_over = True
 
-        self.active_cluster = remote
-
-        return active_cluster_id, volume_updates, []
+    def failover_host(self, context, volumes, secondary_id=None, groups=None):
+        """Failover to replication target in non-clustered deployment."""
+        active_cluster_id, volume_updates, group_updates = (
+            self.failover(context, volumes, secondary_id, groups))
+        self.failover_completed(context, active_cluster_id)
+        return active_cluster_id, volume_updates, group_updates
 
     def freeze_backend(self, context):
         """Freeze backend notification."""

@@ -774,6 +774,18 @@ class PowerMaxRestTest(test.TestCase):
                 self.data.array, self.data.device_id, element_name)
         self.assertIsNone(found_dev_id)
 
+    def test_check_volume_device_id_volume_identifier_none(self):
+        element_name = self.utils.get_volume_element_name(
+            self.data.test_volume.id)
+        vol_details_vol_identifier_none = deepcopy(
+            self.data.volume_details_legacy)
+        vol_details_vol_identifier_none['volume_identifier'] = None
+        with mock.patch.object(self.rest, 'get_volume',
+                               return_value=vol_details_vol_identifier_none):
+            found_dev_id = self.rest.check_volume_device_id(
+                self.data.array, self.data.device_id, element_name)
+        self.assertIsNone(found_dev_id)
+
     def test_find_mv_connections_for_vol(self):
         device_id = self.data.device_id
         ref_lun_id = int(
@@ -1804,6 +1816,20 @@ class PowerMaxRestTest(test.TestCase):
             self.data.array, 'replication', ref_get_resource)
         self.assertEqual(states, [utils.RDF_SUSPENDED_STATE])
 
+    @mock.patch.object(rest.PowerMaxRest, 'get_resource',
+                       return_value={'rdfgs': [100, 200]})
+    def test_get_storage_group_rdf_groups(self, mck_get):
+        rdf_groups = self.rest.get_storage_group_rdf_groups(
+            self.data.array, self.data.storagegroup_name_f)
+        self.assertEqual([100, 200], rdf_groups)
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_resource',
+                       return_value={"name": ["00038", "00039"]})
+    def test_get_rdf_group_volume_list(self, mck_get):
+        volumes_list = self.rest.get_rdf_group_volume_list(
+            self.data.array, self.data.rdf_group_no_1)
+        self.assertEqual(["00038", "00039"], volumes_list)
+
     @mock.patch.object(rest.PowerMaxRest, 'get_resource')
     def test_get_rdf_pair_volume(self, mck_get):
         rdf_grp_no = self.data.rdf_group_no_1
@@ -2183,3 +2209,34 @@ class PowerMaxRestTest(test.TestCase):
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.rest.wait_for_rdf_pair_sync,
                           array_id, sg_name, rdf_group_no, rep_extra_specs)
+
+    def test_validate_unisphere_version_unofficial_success(self):
+        version = 'T9.1.0.1054'
+        returned_version = {'version': version}
+        with mock.patch.object(self.rest, "request",
+                               return_value=(200,
+                                             returned_version)) as mock_req:
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertTrue(valid_version)
+        request_count = mock_req.call_count
+        self.assertEqual(1, request_count)
+
+    def test_validate_unisphere_version_unofficial_failure(self):
+        version = 'T9.0.0.1054'
+        returned_version = {'version': version}
+        with mock.patch.object(self.rest, "request",
+                               return_value=(200,
+                                             returned_version)):
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertFalse(valid_version)
+
+    def test_validate_unisphere_version_unofficial_greater_than(self):
+        version = 'T9.2.0.1054'
+        returned_version = {'version': version}
+        with mock.patch.object(self.rest, "request",
+                               return_value=(200,
+                                             returned_version)) as mock_req:
+            valid_version = self.rest.validate_unisphere_version()
+            self.assertTrue(valid_version)
+        request_count = mock_req.call_count
+        self.assertEqual(1, request_count)

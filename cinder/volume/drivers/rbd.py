@@ -1626,9 +1626,6 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                                              volume_id=volume.id)
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
-        # retrieve store information from extra-specs
-        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
-
         tmp_dir = volume_utils.image_conversion_dir()
         tmp_file = os.path.join(tmp_dir,
                                 volume.name + '-' + image_meta['id'])
@@ -1638,9 +1635,9 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                     volume.name, tmp_file]
             args.extend(self._ceph_args())
             self._try_execute(*args)
-            image_utils.upload_volume(context, image_service,
-                                      image_meta, tmp_file,
-                                      store_id=store_id)
+            volume_utils.upload_volume(context, image_service,
+                                       image_meta, tmp_file,
+                                       volume)
         os.unlink(tmp_file)
 
     def extend_volume(self, volume, new_size):
@@ -1826,9 +1823,11 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
 
         refuse_to_migrate = (False, None)
 
-        if volume.status not in ('available', 'retyping', 'maintenance'):
-            LOG.debug('Only available volumes can be migrated using backend '
-                      'assisted migration. Falling back to generic migration.')
+        if volume.status not in ('available', 'retyping', 'maintenance',
+                                 'in-use'):
+            LOG.debug('Only available or in-use volumes can be migrated using '
+                      'backend assisted migration. Falling back to generic '
+                      'migration.')
             return refuse_to_migrate
 
         if (host['capabilities']['storage_protocol'] != 'ceph'):
@@ -1865,6 +1864,16 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                         target.client.get_fsid())):
                 LOG.info('Migration between clusters is not supported. '
                          'Falling back to generic migration.')
+                return refuse_to_migrate
+
+            if rbd_pool == self.configuration.rbd_pool:
+                LOG.debug('Migration in the same pool, just need to update '
+                          "volume's host value to destination host.")
+                return (True, None)
+
+            if volume.status == 'in-use':
+                LOG.debug('Migration in-use volume between different pools. '
+                          'Falling back to generic migration.')
                 return refuse_to_migrate
 
             with RBDVolumeProxy(self, volume.name, read_only=True) as source:

@@ -1,8 +1,10 @@
 Skip failing tests with Python3.8
 LP: https://bugs.launchpad.net/cinder/+bug/1861506
 
---- a/cinder/tests/unit/test_hacking.py
-+++ b/cinder/tests/unit/test_hacking.py
+Index: cinder/cinder/tests/unit/test_hacking.py
+===================================================================
+--- cinder.orig/cinder/tests/unit/test_hacking.py
++++ cinder/cinder/tests/unit/test_hacking.py
 @@ -14,6 +14,8 @@
  
  import textwrap
@@ -12,7 +14,7 @@ LP: https://bugs.launchpad.net/cinder/+bug/1861506
  
  import ddt
  import pycodestyle
-@@ -154,6 +156,7 @@
+@@ -130,6 +132,7 @@ class HackingTestCase(test.TestCase):
      def _assert_has_no_errors(self, code, checker, filename=None):
          self._assert_has_errors(code, checker, filename=filename)
  
@@ -20,16 +22,18 @@ LP: https://bugs.launchpad.net/cinder/+bug/1861506
      def test_logging_format_args(self):
          checker = checks.CheckLoggingFormatArgs
          code = """
-@@ -185,6 +188,7 @@
+@@ -165,6 +168,7 @@ class HackingTestCase(test.TestCase):
          self._assert_has_errors(code, checker,
-                                 expected_errors=[(4, 37, 'C310')])
+                                 expected_errors=[(4, mock.ANY, 'C310')])
  
 +    @testtools.skipIf(sys.version_info >= (3, 8), "Skipping test for Python 3.8")
      def test_opt_type_registration_args(self):
          checker = checks.CheckOptRegistrationArgs
          code = """
---- a/cinder/tests/unit/volume/drivers/dell_emc/unity/test_client.py
-+++ b/cinder/tests/unit/volume/drivers/dell_emc/unity/test_client.py
+Index: cinder/cinder/tests/unit/volume/drivers/dell_emc/unity/test_client.py
+===================================================================
+--- cinder.orig/cinder/tests/unit/volume/drivers/dell_emc/unity/test_client.py
++++ cinder/cinder/tests/unit/volume/drivers/dell_emc/unity/test_client.py
 @@ -14,6 +14,8 @@
  # under the License.
  import unittest
@@ -39,7 +43,7 @@ LP: https://bugs.launchpad.net/cinder/+bug/1861506
  
  import ddt
  from oslo_utils import units
-@@ -645,6 +647,7 @@
+@@ -710,6 +712,7 @@ class ClientTest(unittest.TestCase):
          back_snap = self.client.restore_snapshot('snap1')
          self.assertEqual("internal_snap", back_snap.name)
  

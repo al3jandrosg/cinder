@@ -38,7 +38,6 @@ FC = 'fc'
 INTERVAL = 'interval'
 RETRIES = 'retries'
 VOLUME_ELEMENT_NAME_PREFIX = 'OS-'
-VMAX_AFA_MODELS = ['VMAX250F', 'VMAX450F', 'VMAX850F', 'VMAX950F']
 MAX_SRP_LENGTH = 16
 TRUNCATE_5 = 5
 TRUNCATE_27 = 27
@@ -79,6 +78,11 @@ RDF_FAILEDOVER_STATE = 'failed over'
 RDF_ACTIVE = 'active'
 RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
+RDF_VALID_STATES_SYNC = [RDF_SYNC_STATE, RDF_SYNCINPROG_STATE]
+RDF_VALID_STATES_ASYNC = [RDF_CONSISTENT_STATE, RDF_SUSPENDED_STATE,
+                          RDF_SYNCINPROG_STATE]
+RDF_VALID_STATES_METRO = [RDF_ACTIVEBIAS, RDF_ACTIVEACTIVE,
+                          RDF_SUSPENDED_STATE, RDF_SYNCINPROG_STATE]
 RDF_CONS_EXEMPT = 'exempt'
 RDF_ALLOW_METRO_DELETE = 'allow_delete_metro'
 RDF_GROUP_NO = 'rdf_group_number'
@@ -130,6 +134,22 @@ POWERMAX_ARRAY_TAG_LIST = 'powermax_array_tag_list'
 POWERMAX_SHORT_HOST_NAME_TEMPLATE = 'powermax_short_host_name_template'
 POWERMAX_PORT_GROUP_NAME_TEMPLATE = 'powermax_port_group_name_template'
 PORT_GROUP_LABEL = 'port_group_label'
+
+# Array Models, Service Levels & Workloads
+VMAX_HYBRID_MODELS = ['VMAX100K', 'VMAX200K', 'VMAX400K']
+VMAX_AFA_MODELS = ['VMAX250F', 'VMAX450F', 'VMAX850F', 'VMAX950F']
+PMAX_MODELS = ['PowerMax_2000', 'PowerMax_8000']
+
+HYBRID_SLS = ['Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze', 'Optimized',
+              'None', 'NONE']
+HYBRID_WLS = ['OLTP', 'OLTP_REP', 'DSS', 'DSS_REP', 'NONE', 'None']
+AFA_H_SLS = ['Diamond', 'Optimized', 'None', 'NONE']
+AFA_P_SLS = ['Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze', 'Optimized',
+             'None', 'NONE']
+AFA_WLS = ['OLTP', 'OLTP_REP', 'DSS', 'DSS_REP', 'NONE', 'None']
+PMAX_SLS = ['Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze', 'Optimized',
+            'None', 'NONE']
+PMAX_WLS = ['NONE', 'None']
 
 
 class PowerMaxUtils(object):
@@ -414,18 +434,28 @@ class PowerMaxUtils(object):
                 message=exception_message)
         return array, device_id.upper()
 
-    @staticmethod
-    def is_compression_disabled(extra_specs):
+    def is_compression_disabled(self, extra_specs):
         """Check is compression is to be disabled.
 
         :param extra_specs: extra specifications
         :returns: boolean
         """
-        do_disable_compression = False
-        if (DISABLECOMPRESSION in extra_specs and strutils.bool_from_string(
-                extra_specs[DISABLECOMPRESSION])) or not extra_specs.get(SLO):
-            do_disable_compression = True
-        return do_disable_compression
+        compression_disabled = False
+
+        if extra_specs.get(DISABLECOMPRESSION, False):
+            if strutils.bool_from_string(extra_specs.get(DISABLECOMPRESSION)):
+                compression_disabled = True
+        else:
+            if extra_specs.get(SLO):
+                service_level = extra_specs.get(SLO)
+            else:
+                __, __, service_level, __ = self.parse_specs_from_pool_name(
+                    extra_specs.get('pool_name'))
+
+            if not service_level:
+                compression_disabled = True
+
+        return compression_disabled
 
     def change_compression_type(self, is_source_compr_disabled, new_type):
         """Check if volume type have different compression types
@@ -636,28 +666,28 @@ class PowerMaxUtils(object):
         """
         arrays = set()
         # Check if it is a generic volume group instance
+        intervals_retries_dict = {INTERVAL: interval, RETRIES: retries}
         if isinstance(group, Group):
             for volume_type in group.volume_types:
                 extra_specs = self.update_extra_specs(volume_type.extra_specs)
-                arrays.add(extra_specs[ARRAY])
+                try:
+                    arrays.add(extra_specs[ARRAY])
+                except KeyError:
+                    return None, intervals_retries_dict
         else:
             msg = (_("Unable to get volume type ids."))
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(message=msg)
 
-        if len(arrays) != 1:
-            if not arrays:
-                msg = (_("Failed to get an array associated with "
-                         "volume group: %(groupid)s.")
-                       % {'groupid': group.id})
-            else:
-                msg = (_("There are multiple arrays "
-                         "associated with volume group: %(groupid)s.")
-                       % {'groupid': group.id})
+        if len(arrays) > 1:
+            msg = (_("There are multiple arrays "
+                     "associated with volume group: %(groupid)s.")
+                   % {'groupid': group.id})
             LOG.error(msg)
             raise exception.VolumeBackendAPIException(message=msg)
         array = arrays.pop()
-        intervals_retries_dict = {INTERVAL: interval, RETRIES: retries}
+        LOG.debug("Serial number %s retrieved from the volume type extra "
+                  "specs.", array)
         return array, intervals_retries_dict
 
     def update_volume_group_name(self, group):
@@ -1094,6 +1124,15 @@ class PowerMaxUtils(object):
         backend_ids = set()
         rep_modes = set()
         target_arrays = set()
+
+        repdev_count = len(rep_devices)
+        if repdev_count > 3:
+            msg = (_('Up to three replication_devices are currently '
+                     'supported, one for each replication mode. '
+                     '%d replication_devices found in cinder.conf.')
+                   % repdev_count)
+            raise exception.InvalidConfigurationValue(msg)
+
         for rep_device in rep_devices:
             backend_id = rep_device.get(BACKEND_ID)
             if backend_id:
@@ -1119,7 +1158,13 @@ class PowerMaxUtils(object):
                 raise exception.InvalidConfigurationValue(msg)
             rdf_group_labels.add(rdf_group_label)
 
-            rep_mode = rep_device.get('mode', REP_SYNC)
+            rep_mode = rep_device.get('mode', '')
+            if rep_mode.lower() in ['async', 'asynchronous']:
+                rep_mode = REP_ASYNC
+            elif rep_mode.lower() == 'metro':
+                rep_mode = REP_METRO
+            else:
+                rep_mode = REP_SYNC
             if rep_mode in rep_modes:
                 msg = (_('RDF Modes must be unique across all '
                          'replication_device. Found multiple instances of %s '
@@ -1695,13 +1740,20 @@ class PowerMaxUtils(object):
                 if rep_config[BACKEND_ID] == backend_id:
                     rep_device = rep_config
             if rep_device is None:
-                msg = _('Could not find a rep_device with a backend_id of '
-                        '%s. Please confirm that the '
-                        'replication_device_backend_id extra spec for this '
-                        'volume type matches the backend_id of the intended '
-                        'rep_device in cinder.conf') % backend_id
+                msg = (_('Could not find a replication_device with a '
+                         'backend_id of "%s" in cinder.conf. Please confirm '
+                         'that the replication_device_backend_id extra spec '
+                         'for this volume type matches the backend_id of the '
+                         'intended replication_device in '
+                         'cinder.conf.') % backend_id)
+                if BACKEND_ID_LEGACY_REP in msg:
+                    msg = (_('Could not find replication_device. Legacy '
+                             'replication_device key found, please ensure the '
+                             'backend_id for the legacy replication_device in '
+                             'cinder.conf has been changed to '
+                             '"%s".') % BACKEND_ID_LEGACY_REP)
                 LOG.error(msg)
-                raise exception.InvalidInput('Unable to get rep config.')
+                raise exception.InvalidInput(msg)
         return rep_device
 
     @staticmethod
@@ -1871,3 +1923,48 @@ class PowerMaxUtils(object):
         else:
             extra_specs.pop(IS_RE, None)
         return extra_specs
+
+    @staticmethod
+    def version_meet_req(version, minimum_version):
+        """Check if current version meets the minimum version allowed
+
+        :param version: unisphere version
+        :param minimum_version: minimum version allowed
+        :returns: boolean
+        """
+        from pkg_resources import parse_version
+        return parse_version(version) >= parse_version(minimum_version)
+
+    @staticmethod
+    def parse_specs_from_pool_name(pool_name):
+        """Parse basic volume type specs from pool_name.
+
+        :param pool_name: the pool name -- str
+        :returns: array_id, srp, service_level, workload -- str, str, str, str
+        """
+        array_id, srp, service_level, workload = str(), str(), str(), str()
+        pool_details = pool_name.split('+')
+        if len(pool_details) == 4:
+            array_id = pool_details[3]
+            srp = pool_details[2]
+            service_level = pool_details[0]
+            if not pool_details[1].lower() == 'none':
+                workload = pool_details[1]
+        elif len(pool_details) == 3:
+            service_level = pool_details[0]
+            srp = pool_details[1]
+            array_id = pool_details[2]
+        else:
+            if not pool_name:
+                msg = (_('No pool_name specified in volume-type.'))
+            else:
+                msg = (_("There has been a problem parsing the pool "
+                         "information from pool_name '%(pool)s'." % {
+                             'pool': pool_name}))
+
+            raise exception.VolumeBackendAPIException(msg)
+
+        if service_level.lower() == 'none':
+            service_level = str()
+
+        return array_id, srp, service_level, workload

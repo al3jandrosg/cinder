@@ -29,6 +29,7 @@ from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
+from cinder.volume import group_types
 from cinder.volume import volume_types
 from cinder.volume import volume_utils
 from cinder.zonemanager import utils as zm_utils
@@ -37,6 +38,11 @@ LOG = logging.getLogger(__name__)
 BACKEND_QOS_CONSUMERS = frozenset(['back-end', 'both'])
 QOS_MAX_IOPS = 'maxIOPS'
 QOS_MAX_BWS = 'maxBWS'
+PROVISIONING_TYPE = 'provisioning:type'
+PROVISIONING_COMPRESSED = 'compressed'
+QOS_SPECS = 'qos_specs'
+SPECS_OF_QOS = 'specs'
+QOS_ID = 'id'
 
 
 def dump_provider_location(location_dict):
@@ -110,6 +116,36 @@ def validate_pool_names(conf_pools, array_pools):
         raise exception.VolumeBackendAPIException(data=msg)
 
     return existed
+
+
+def retype_need_migration(volume, old_provision, new_provision, host):
+    if volume['host'] != host['host']:
+        return True
+
+    if old_provision != new_provision:
+        if retype_need_change_compression(old_provision, new_provision)[0]:
+            return False
+        else:
+            return True
+    return False
+
+
+def retype_need_change_compression(old_provision, new_provision):
+    """:return: whether need change compression and the new value"""
+    if ((not old_provision or old_provision == 'thin') and
+            new_provision == PROVISIONING_COMPRESSED):
+        return True, True
+    elif (old_provision == PROVISIONING_COMPRESSED and
+          (not new_provision or old_provision == 'thin')):
+        return True, False
+    # no need change compression
+    return False, None
+
+
+def retype_need_change_qos(old_qos=None, new_qos=None):
+    old = old_qos.get(QOS_SPECS).get(QOS_ID) if old_qos.get(QOS_SPECS) else ''
+    new = new_qos.get(QOS_SPECS).get(QOS_ID) if new_qos.get(QOS_SPECS) else ''
+    return old != new
 
 
 def extract_iscsi_uids(connector):
@@ -204,6 +240,20 @@ def get_extra_spec(volume, spec_key):
     return spec_value
 
 
+def group_is_cg(group):
+    result = get_group_specs(group, 'consistent_group_snapshot_enabled')
+    return result == '<is> True'
+
+
+def get_group_specs(group, spec_key):
+    spec_value = None
+    if group.group_type_id:
+        group_specs = group_types.get_group_type_specs(group.group_type_id)
+        if spec_key in group_specs:
+            spec_value = group_specs[spec_key]
+    return spec_value
+
+
 def ignore_exception(func, *args, **kwargs):
     try:
         func(*args, **kwargs)
@@ -266,7 +316,7 @@ def get_backend_qos_specs(volume):
     if qos_specs is None:
         return None
 
-    qos_specs = qos_specs['qos_specs']
+    qos_specs = qos_specs[QOS_SPECS]
     if qos_specs is None:
         return None
 
@@ -275,8 +325,8 @@ def get_backend_qos_specs(volume):
     if consumer not in BACKEND_QOS_CONSUMERS:
         return None
 
-    max_iops = qos_specs['specs'].get(QOS_MAX_IOPS)
-    max_bws = qos_specs['specs'].get(QOS_MAX_BWS)
+    max_iops = qos_specs[SPECS_OF_QOS].get(QOS_MAX_IOPS)
+    max_bws = qos_specs[SPECS_OF_QOS].get(QOS_MAX_BWS)
     if max_iops is None and max_bws is None:
         return None
 
@@ -326,7 +376,8 @@ def append_capabilities(func):
         'thin_provisioning_support': True,
         'thick_provisioning_support': True,
         'consistent_group_snapshot_enabled': True,
-        'fast_support': True
+        'fast_support': True,
+        'consistent_group_replication_enabled': True
     }
 
     @six.wraps(func)

@@ -30,6 +30,7 @@ from cinder.objects import fields
 from cinder import utils as cinder_utils
 from cinder.volume.drivers.dell_emc.unity import client
 from cinder.volume.drivers.dell_emc.unity import utils
+from cinder.volume import volume_types
 from cinder.volume import volume_utils
 
 storops = importutils.try_import('storops')
@@ -48,7 +49,7 @@ PROTOCOL_ISCSI = 'iSCSI'
 
 
 class VolumeParams(object):
-    def __init__(self, adapter, volume):
+    def __init__(self, adapter, volume, group_specs=None):
         self._adapter = adapter
         self._volume = volume
 
@@ -65,6 +66,7 @@ class VolumeParams(object):
         self._is_in_cg = None
         self._is_replication_enabled = None
         self._tiering_policy = None
+        self.group_specs = group_specs if group_specs else {}
 
     @property
     def volume_id(self):
@@ -119,7 +121,8 @@ class VolumeParams(object):
     @property
     def is_thick(self):
         if self._is_thick is None:
-            provision = utils.get_extra_spec(self._volume, 'provisioning:type')
+            provision = utils.get_extra_spec(self._volume,
+                                             utils.PROVISIONING_TYPE)
             support = utils.get_extra_spec(self._volume,
                                            'thick_provisioning_support')
             self._is_thick = (provision == 'thick' and support == '<is> True')
@@ -128,10 +131,12 @@ class VolumeParams(object):
     @property
     def is_compressed(self):
         if self._is_compressed is None:
-            provision = utils.get_extra_spec(self._volume, 'provisioning:type')
+            provision = utils.get_extra_spec(self._volume,
+                                             utils.PROVISIONING_TYPE)
             compression = utils.get_extra_spec(self._volume,
                                                'compression_support')
-            if provision == 'compressed' and compression == '<is> True':
+            if (provision == utils.PROVISIONING_COMPRESSED and
+                    compression == '<is> True'):
                 self._is_compressed = True
         return self._is_compressed
 
@@ -411,14 +416,26 @@ class CommonAdapter(object):
             is_compressed=params.is_compressed,
             tiering_policy=params.tiering_policy)
         if params.cg_id:
-            LOG.debug('Adding lun %(lun)s to cg %(cg)s.',
-                      {'lun': lun.get_id(), 'cg': params.cg_id})
+            if self.client.is_cg_replicated(params.cg_id):
+                msg = (_('Consistency group %(cg_id)s is in '
+                         'replication status, cannot add lun to it.')
+                       % {'cg_id': params.cg_id})
+                raise exception.InvalidGroupStatus(reason=msg)
+            LOG.info('Adding lun %(lun)s to cg %(cg)s.',
+                     {'lun': lun.get_id(), 'cg': params.cg_id})
             self.client.update_cg(params.cg_id, [lun.get_id()], ())
 
         model_update = self.makeup_model(lun.get_id())
 
         if params.is_replication_enabled:
-            model_update = self.setup_replications(lun, model_update)
+            if not params.cg_id:
+                model_update = self.setup_replications(
+                    lun, model_update)
+            else:
+                # Volume replication_status need be disabled
+                # And be controlled by group replication
+                model_update['replication_status'] = (
+                    fields.ReplicationStatus.DISABLED)
         return model_update
 
     def delete_volume(self, volume):
@@ -429,6 +446,60 @@ class CommonAdapter(object):
                      {'volume_name': volume.name})
         else:
             self.client.delete_lun(lun_id)
+
+    def retype(self, ctxt, volume, new_type, diff, host):
+        """Changes volume from one type to another."""
+        old_qos_specs = {utils.QOS_SPECS: None}
+        old_provision = None
+        new_specs = volume_types.get_volume_type_extra_specs(
+            new_type.get(utils.QOS_ID))
+        new_qos_specs = volume_types.get_volume_type_qos_specs(
+            new_type.get(utils.QOS_ID))
+        lun = self.client.get_lun(name=volume.name)
+        volume_type_id = volume.volume_type_id
+        if volume_type_id:
+            old_provision = utils.get_extra_spec(volume,
+                                                 utils.PROVISIONING_TYPE)
+            old_qos_specs = volume_types.get_volume_type_qos_specs(
+                volume_type_id)
+
+        need_migration = utils.retype_need_migration(
+            volume, old_provision,
+            new_specs.get(utils.PROVISIONING_TYPE), host)
+        need_change_compress = utils.retype_need_change_compression(
+            old_provision, new_specs.get(utils.PROVISIONING_TYPE))
+        need_change_qos = utils.retype_need_change_qos(
+            old_qos_specs, new_qos_specs)
+
+        if need_migration or need_change_compress[0] or need_change_qos:
+            if self.client.lun_has_snapshot(lun):
+                LOG.warning('Driver is not able to do retype because '
+                            'the volume %s has snapshot(s).',
+                            volume.id)
+                return False
+
+        new_qos_dict = new_qos_specs.get(utils.QOS_SPECS)
+        if need_change_qos:
+            new_io_policy = (self.client.get_io_limit_policy(new_qos_dict)
+                             if need_change_qos else None)
+            # Modify lun to change qos settings
+            if new_io_policy:
+                lun.modify(io_limit_policy=new_io_policy)
+            else:
+                # remove current qos settings
+                old_qos_dict = old_qos_specs.get(utils.QOS_SPECS)
+                old_io_policy = self.client.get_io_limit_policy(old_qos_dict)
+                old_io_policy.remove_from_storage(lun)
+
+        if need_migration:
+            LOG.debug('Driver needs to use storage-assisted migration '
+                      'to retype the volume.')
+            return self.migrate_volume(volume, host, new_specs)
+
+        if need_change_compress[0]:
+            # Modify lun to change compression
+            lun.modify(is_compression=need_change_compress[1])
+        return True
 
     def _create_host_and_attach(self, host_name, lun_or_snap):
         @utils.lock_if(self.to_lock_host, '{lock_name}')
@@ -895,18 +966,22 @@ class CommonAdapter(object):
     def restore_snapshot(self, volume, snapshot):
         return self.client.restore_snapshot(snapshot.name)
 
-    def migrate_volume(self, volume, host):
+    def migrate_volume(self, volume, host, extra_specs=None):
         """Leverage the Unity move session functionality.
 
         This method is invoked at the source backend.
+
+        :param extra_specs: Instance of ExtraSpecs. The new volume will be
+            changed to align with the new extra specs.
         """
         log_params = {
             'name': volume.name,
             'src_host': volume.host,
-            'dest_host': host['host']
+            'dest_host': host['host'],
+            'extra_specs': extra_specs,
         }
         LOG.info('Migrate Volume: %(name)s, host: %(src_host)s, destination: '
-                 '%(dest_host)s', log_params)
+                 '%(dest_host)s, extra_specs: %(extra_specs)s', log_params)
 
         src_backend = utils.get_backend_name_from_volume(volume)
         dest_backend = utils.get_backend_name_from_host(host)
@@ -917,10 +992,12 @@ class CommonAdapter(object):
             return False, None
 
         lun_id = self.get_lun_id(volume)
+        provision = None
+        if extra_specs:
+            provision = extra_specs.get(utils.PROVISIONING_TYPE)
         dest_pool_name = utils.get_pool_name_from_host(host)
         dest_pool_id = self.get_pool_id_by_name(dest_pool_name)
-
-        if self.client.migrate_lun(lun_id, dest_pool_id):
+        if self.client.migrate_lun(lun_id, dest_pool_id, provision):
             LOG.debug('Volume migrated successfully.')
             model_update = {}
             return True, model_update
@@ -950,7 +1027,10 @@ class CommonAdapter(object):
         """
 
         # Deleting cg will also delete all the luns in it.
-        self.client.delete_cg(group.id)
+        group_id = group.id
+        if self.client.is_cg_replicated(group_id):
+            self.client.delete_cg_rep_session(group_id)
+        self.client.delete_cg(group_id)
         return None, None
 
     def update_group(self, group, add_volumes, remove_volumes):
@@ -1017,6 +1097,173 @@ class CommonAdapter(object):
         cg_snap = self.client.get_snap(group_snapshot.id)
         self.client.delete_snap(cg_snap)
         return None, None
+
+    def enable_replication(self, context, group, volumes):
+        """Enable the group replication."""
+
+        @cinder_utils.retry(exception.InvalidGroup, interval=20, retries=6)
+        def _wait_until_cg_not_replicated(_client, _cg_id):
+            cg = _client.get_cg(name=_cg_id)
+            if cg.check_cg_is_replicated():
+                msg = _('The remote cg (%s) is still in replication status, '
+                        'maybe the source cg was just deleted, '
+                        'retrying.') % group_id
+                LOG.info(msg)
+                raise exception.InvalidGroup(reason=msg)
+
+            return cg
+
+        group_update = {}
+        group_id = group.id
+        if not volumes:
+            LOG.warning('There is no Volume in group: %s, cannot enable '
+                        'group replication', group_id)
+            return group_update, []
+        # check whether the group was created as cg in unity
+        group_is_cg = utils.group_is_cg(group)
+        if not group_is_cg:
+            msg = (_('Cannot enable replication on generic group '
+                     '%(group_id)s, need to use CG type instead '
+                     '(need to enable consistent_group_snapshot_enabled in '
+                     'the group type).')
+                   % {'group_id': group_id})
+            raise exception.InvalidGroupType(reason=msg)
+
+        cg = self.client.get_cg(name=group_id)
+        try:
+            if not cg.check_cg_is_replicated():
+                rep_devices = self.replication_manager.replication_devices
+                for backend_id, dst in rep_devices.items():
+                    remote_serial_number = dst.adapter.serial_number
+                    max_time = dst.max_time_out_of_sync
+                    pool_id = dst.destination_pool.get_id()
+                    _client = dst.adapter.client
+                    remote_system = self.client.get_remote_system(
+                        remote_serial_number)
+                    # check if remote cg exists and delete it
+                    # before enable replication
+                    remote_cg = _wait_until_cg_not_replicated(_client,
+                                                              group_id)
+                    remote_cg.delete()
+                    # create cg replication session
+                    self.client.create_cg_replication(
+                        group_id, pool_id, remote_system, max_time)
+                    group_update.update({
+                        'replication_status':
+                            fields.ReplicationStatus.ENABLED})
+            else:
+                LOG.info('group: %s is already in replication, no need to '
+                         'enable again.', group_id)
+        except Exception as e:
+            group_update.update({
+                'replication_status': fields.ReplicationStatus.ERROR})
+            LOG.error("Error enabling replication on group %(group)s. "
+                      "Exception received: %(e)s.",
+                      {'group': group.id, 'e': e})
+        return group_update, None
+
+    def disable_replication(self, context, group, volumes):
+        """Disable the group replication."""
+        group_update = {}
+        group_id = group.id
+        if not volumes:
+            # Return if empty group
+            LOG.warning('There is no Volume in group: %s, cannot disable '
+                        'group replication', group_id)
+            return group_update, []
+        group_is_cg = utils.group_is_cg(group)
+        if not group_is_cg:
+            msg = (_('Cannot disable replication on generic group '
+                     '%(group_id)s, need use CG type instead of '
+                     'that (need enable '
+                     'consistent_group_snapshot_enabled in '
+                     'group type).')
+                   % {'group_id': group_id})
+            raise exception.InvalidGroupType(reason=msg)
+        try:
+            if self.client.is_cg_replicated(group_id):
+                # delete rep session if exists
+                self.client.delete_cg_rep_session(group_id)
+            if not self.client.is_cg_replicated(group_id):
+                LOG.info('Group is not in replication, '
+                         'not need to disable replication again.')
+
+            group_update.update({
+                'replication_status': fields.ReplicationStatus.DISABLED})
+        except Exception as e:
+            group_update.update({
+                'replication_status': fields.ReplicationStatus.ERROR})
+            LOG.error("Error disabling replication on group %(group)s. "
+                      "Exception received: %(e)s.",
+                      {'group': group.id, 'e': e})
+        return group_update, None
+
+    def failover_replication(self, context, group, volumes,
+                             secondary_id):
+        """"Fail-over the consistent group."""
+        group_update = {}
+        volume_update_list = []
+        if not volumes:
+            # Return if empty group
+            return group_update, volume_update_list
+
+        group_is_cg = utils.group_is_cg(group)
+        group_id = group.id
+        if not group_is_cg:
+            msg = (_('Cannot failover replication on generic group '
+                     '%(group_id)s, need use CG type instead of '
+                     'that (need enable '
+                     'consistent_group_snapshot_enabled in '
+                     'group type).')
+                   % {'group_id': group_id})
+            raise exception.InvalidGroupType(reason=msg)
+
+        real_secondary_id = random.choice(
+            list(self.replication_manager.replication_devices))
+
+        group_update = {'replication_status': group.replication_status}
+        if self.client.is_cg_replicated(group_id):
+            try:
+                if secondary_id != 'default':
+                    try:
+                        # Planed failover after sync date when the source unity
+                        # is in health status
+                        self.client.failover_cg_rep_session(group_id, True)
+                    except Exception as ex:
+                        LOG.warning('ERROR happened when failover from source '
+                                    'unity, issue details: %s. Try failover '
+                                    'from target unity', ex)
+                        # Something wrong with the source unity, try failover
+                        # from target unity without sync date
+                        _adapter = self.replication_manager.replication_devices
+                        [real_secondary_id].adapter
+                        _client = _adapter.client
+                        _client.failover_cg_rep_session(group_id, False)
+                    rep_status = fields.ReplicationStatus.FAILED_OVER
+                else:
+                    # start failback when secondary_id is 'default'
+                    _adapter = self.replication_manager.replication_devices[
+                        real_secondary_id].adapter
+                    _client = _adapter.client
+                    _client.failback_cg_rep_session(group_id)
+                    rep_status = fields.ReplicationStatus.ENABLED
+            except Exception as ex:
+                rep_status = fields.ReplicationStatus.ERROR
+                LOG.error("Error failover replication on group %(group)s. "
+                          "Exception received: %(e)s.",
+                          {'group': group_id, 'e': ex})
+
+            group_update['replication_status'] = rep_status
+            for volume in volumes:
+                volume_update = {
+                    'id': volume.id,
+                    'replication_status': rep_status}
+                volume_update_list.append(volume_update)
+        return group_update, volume_update_list
+
+    def get_replication_error_status(self, context, groups):
+        """The failover only happens manually, no need to update the status."""
+        return [], []
 
     @cinder_utils.trace
     def failover(self, volumes, secondary_id=None, groups=None):

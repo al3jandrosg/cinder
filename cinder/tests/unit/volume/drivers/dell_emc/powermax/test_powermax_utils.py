@@ -223,11 +223,9 @@ class PowerMaxUtilsTest(test.TestCase):
             extra_specs)
         self.assertTrue(do_disable_compression)
         # Compression disabled by no SL/WL combination
-        extra_specs2 = deepcopy(self.data.extra_specs)
-        extra_specs2[utils.SLO] = None
-        do_disable_compression2 = self.utils.is_compression_disabled(
-            extra_specs2)
-        self.assertTrue(do_disable_compression2)
+        extra_specs = deepcopy(self.data.vol_type_extra_specs_none_pool)
+        self.assertTrue(self.utils.is_compression_disabled(
+            extra_specs))
 
     def test_is_compression_disabled_false(self):
         # Path 1: no compression extra spec set
@@ -243,19 +241,19 @@ class PowerMaxUtilsTest(test.TestCase):
         self.assertFalse(do_disable_compression2)
 
     def test_change_compression_type_true(self):
-        source_compr_disabled_true = 'true'
+        source_compr_disabled = True
         new_type_compr_disabled = {
-            'extra_specs': {utils.DISABLECOMPRESSION: 'no'}}
+            'extra_specs': {utils.DISABLECOMPRESSION: 'false'}}
         ans = self.utils.change_compression_type(
-            source_compr_disabled_true, new_type_compr_disabled)
+            source_compr_disabled, new_type_compr_disabled)
         self.assertTrue(ans)
 
     def test_change_compression_type_false(self):
-        source_compr_disabled_true = True
+        source_compr_disabled = True
         new_type_compr_disabled = {
             'extra_specs': {utils.DISABLECOMPRESSION: 'true'}}
         ans = self.utils.change_compression_type(
-            source_compr_disabled_true, new_type_compr_disabled)
+            source_compr_disabled, new_type_compr_disabled)
         self.assertFalse(ans)
 
     def test_is_replication_enabled(self):
@@ -1272,40 +1270,57 @@ class PowerMaxUtilsTest(test.TestCase):
         self.utils.validate_multiple_rep_device(self.data.multi_rep_device)
 
     def test_validate_multiple_rep_device_non_unique_backend_id(self):
-        rep_devices = self.data.multi_rep_device
+        rep_devices = deepcopy(self.data.multi_rep_device)
         rep_devices[0][utils.BACKEND_ID] = rep_devices[1][utils.BACKEND_ID]
         self.assertRaises(
             exception.InvalidConfigurationValue,
             self.utils.validate_multiple_rep_device,
-            self.data.multi_rep_device)
+            rep_devices)
 
     def test_validate_multiple_rep_device_missing_backend_id(self):
-        rep_devices = self.data.multi_rep_device
+        rep_devices = deepcopy(self.data.multi_rep_device)
         rep_devices[0].pop(utils.BACKEND_ID)
         self.assertRaises(
             exception.InvalidConfigurationValue,
             self.utils.validate_multiple_rep_device,
-            self.data.multi_rep_device)
+            rep_devices)
 
     def test_validate_multiple_rep_device_non_unique_rdf_label(self):
-        rep_devices = self.data.multi_rep_device
+        rep_devices = deepcopy(self.data.multi_rep_device)
         rep_devices[0]['rdf_group_label'] = rep_devices[1]['rdf_group_label']
         self.assertRaises(
             exception.InvalidConfigurationValue,
             self.utils.validate_multiple_rep_device,
-            self.data.multi_rep_device)
+            rep_devices)
 
     def test_validate_multiple_rep_device_non_unique_rdf_modes(self):
-        rep_devices = [self.data.rep_dev_1, self.data.rep_dev_2]
+        rep_devices = [self.data.rep_dev_1, deepcopy(self.data.rep_dev_2)]
         rep_devices[1]['mode'] = rep_devices[0]['mode']
         self.assertRaises(
             exception.InvalidConfigurationValue,
             self.utils.validate_multiple_rep_device,
             rep_devices)
 
+    def test_validate_multiple_rep_device_defaulting_rdf_modes(self):
+        rep_devices = [
+            deepcopy(self.data.rep_dev_1), deepcopy(self.data.rep_dev_2)]
+        rep_devices[0]['mode'] = ''
+        rep_devices[1]['mode'] = 'testing'
+        self.assertRaises(
+            exception.InvalidConfigurationValue,
+            self.utils.validate_multiple_rep_device,
+            rep_devices)
+
     def test_validate_multiple_rep_device_multiple_targets(self):
-        rep_devices = [self.data.rep_dev_1, self.data.rep_dev_2]
+        rep_devices = [self.data.rep_dev_1, deepcopy(self.data.rep_dev_2)]
         rep_devices[1]['target_device_id'] = 1234
+        self.assertRaises(
+            exception.InvalidConfigurationValue,
+            self.utils.validate_multiple_rep_device,
+            rep_devices)
+
+    def test_validate_multiple_rep_device_length(self):
+        rep_devices = [1, 2, 3, 4]
         self.assertRaises(
             exception.InvalidConfigurationValue,
             self.utils.validate_multiple_rep_device,
@@ -1322,11 +1337,25 @@ class PowerMaxUtilsTest(test.TestCase):
         rep_device = self.utils.get_rep_config(backend_id, rep_configs)
         self.assertEqual(rep_configs[0], rep_device)
 
-    def test_get_rep_config_fail(self):
+    def test_get_rep_config_fail_non_legacy_backend_id_message(self):
         rep_configs = self.data.multi_rep_config_list
-        backend_id = 'invalid key'
-        self.assertRaises(exception.InvalidInput, self.utils.get_rep_config,
-                          backend_id, rep_configs)
+        backend_id = 'invalid_backend_id'
+        try:
+            self.utils.get_rep_config(backend_id, rep_configs)
+        except exception.InvalidInput as e:
+            expected_str = 'Could not find replication_device. Legacy'
+            excep_msg = str(e)
+            self.assertNotIn(expected_str, excep_msg)
+
+    def test_get_rep_config_fail_legacy_backend_id_message(self):
+        rep_configs = self.data.multi_rep_config_list
+        backend_id = utils.BACKEND_ID_LEGACY_REP
+        try:
+            self.utils.get_rep_config(backend_id, rep_configs)
+        except exception.InvalidInput as e:
+            expected_str = 'Could not find replication_device. Legacy'
+            excep_msg = str(e)
+            self.assertIn(expected_str, excep_msg)
 
     def test_get_replication_targets(self):
         rep_targets_expected = [self.data.remote_array]
@@ -1543,3 +1572,52 @@ class PowerMaxUtilsTest(test.TestCase):
         updated_extra_specs = self.utils.get_migration_delete_extra_specs(
             volume, extra_specs, None)
         self.assertEqual(self.data.extra_specs, updated_extra_specs)
+
+    def test_version_meet_req_true(self):
+        version = '9.1.0.14'
+        minimum_version = '9.1.0.5'
+        self.assertTrue(
+            self.utils.version_meet_req(version, minimum_version))
+
+    def test_version_meet_req_false(self):
+        version = '9.1.0.3'
+        minimum_version = '9.1.0.5'
+        self.assertFalse(
+            self.utils.version_meet_req(version, minimum_version))
+
+    def test_version_meet_req_major_true(self):
+        version = '9.2.0.1'
+        minimum_version = '9.1.0.5'
+        self.assertTrue(
+            self.utils.version_meet_req(version, minimum_version))
+
+    def test_parse_specs_from_pool_name_workload_included(self):
+        pool_name = self.data.vol_type_extra_specs.get('pool_name')
+        array_id, srp, service_level, workload = (
+            self.utils.parse_specs_from_pool_name(pool_name))
+        pool_details = pool_name.split('+')
+        self.assertEqual(array_id, pool_details[3])
+        self.assertEqual(srp, pool_details[2])
+        self.assertEqual(workload, pool_details[1])
+        self.assertEqual(service_level, pool_details[0])
+
+    def test_parse_specs_from_pool_name_workload_not_included(self):
+        pool_name = (
+            self.data.vol_type_extra_specs_next_gen_pool.get('pool_name'))
+        array_id, srp, service_level, workload = (
+            self.utils.parse_specs_from_pool_name(pool_name))
+
+        pool_details = pool_name.split('+')
+        self.assertEqual(array_id, pool_details[2])
+        self.assertEqual(srp, pool_details[1])
+        self.assertEqual(service_level, pool_details[0])
+        self.assertEqual(workload, str())
+
+    def test_parse_specs_from_pool_name_invalid_pool(self):
+        pool_name = 'This+Is+An+Invalid+Pool'
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.parse_specs_from_pool_name, pool_name)
+
+    def test_parse_specs_from_pool_name_no_pool(self):
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.utils.parse_specs_from_pool_name, '')

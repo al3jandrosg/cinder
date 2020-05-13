@@ -36,6 +36,7 @@ from cinder.volume import configuration
 from cinder.volume import driver_utils
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import throttling
+from cinder.volume import volume_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -328,6 +329,16 @@ image_opts = [
                      'section or in [backend_defaults] section as a common '
                      'configuration for all backends.'),
 ]
+fqdn_opts = [
+    cfg.BoolOpt('unique_fqdn_network',
+                default=True,
+                help="Whether or not our private network has unique FQDN on "
+                     "each initiator or not. For example networks with QA "
+                     "systems usually have multiple servers/VMs with the same "
+                     "FQDN. When true this will create host entries on 3PAR "
+                     "using the FQDN, when false it will use the reversed "
+                     "IQN/WWNN."),
+]
 
 
 CONF = cfg.CONF
@@ -342,6 +353,7 @@ CONF.register_opts(nvmet_opts)
 CONF.register_opts(scst_opts)
 CONF.register_opts(backup_opts)
 CONF.register_opts(image_opts)
+CONF.register_opts(fqdn_opts, group=configuration.SHARED_CONF_GROUP)
 CONF.import_opt('backup_use_same_host', 'cinder.backup.api')
 
 
@@ -403,6 +415,7 @@ class BaseVD(object):
             self.configuration.append_config_values(scst_opts)
             self.configuration.append_config_values(backup_opts)
             self.configuration.append_config_values(image_opts)
+            self.configuration.append_config_values(fqdn_opts)
             utils.setup_tracing(self.configuration.safe_get('trace_flags'))
 
             # NOTE(geguileo): Don't allow to start if we are enabling
@@ -902,16 +915,13 @@ class BaseVD(object):
                                                           enforce_multipath)
         attach_info, volume = self._attach_volume(context, volume, properties)
 
-        # retrieve store information from extra-specs
-        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
-
         try:
-            image_utils.upload_volume(context,
-                                      image_service,
-                                      image_meta,
-                                      attach_info['device']['path'],
-                                      compress=True,
-                                      store_id=store_id)
+            volume_utils.upload_volume(context,
+                                       image_service,
+                                       image_meta,
+                                       attach_info['device']['path'],
+                                       volume,
+                                       compress=True)
         finally:
             # Since attached volume was not used for writing we can force
             # detach it

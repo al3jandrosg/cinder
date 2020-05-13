@@ -82,9 +82,11 @@ class UnityDriver(driver.ManageableVD,
         6.0.0 - Support generic group and consistent group
         6.1.0 - Support volume replication
         7.0.0 - Support tiering policy
+        7.1.0 - Support consistency group replication
+        7.2.0 - Support retype volume
     """
 
-    VERSION = '07.00.00'
+    VERSION = '07.02.00'
     VENDOR = 'Dell EMC'
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "EMC_UNITY_CI"
@@ -140,6 +142,10 @@ class UnityDriver(driver.ManageableVD,
     def migrate_volume(self, context, volume, host):
         """Migrates a volume."""
         return self.adapter.migrate_volume(volume, host)
+
+    def retype(self, ctxt, volume, new_type, diff, host):
+        """Convert the volume to be of the new type."""
+        return self.adapter.retype(ctxt, volume, new_type, diff, host)
 
     def create_snapshot(self, snapshot):
         """Creates a snapshot."""
@@ -329,3 +335,17 @@ class UnityDriver(driver.ManageableVD,
         """Failovers volumes to secondary backend."""
         return self.adapter.failover(volumes,
                                      secondary_id=secondary_id, groups=groups)
+
+    def enable_replication(self, context, group, volumes):
+        return self.adapter.enable_replication(context, group, volumes)
+
+    def disable_replication(self, context, group, volumes):
+        return self.adapter.disable_replication(context, group, volumes)
+
+    def failover_replication(self, context, group, volumes,
+                             secondary_backend_id=None):
+        return self.adapter.failover_replication(
+            context, group, volumes, secondary_backend_id)
+
+    def get_replication_error_status(self, context, groups):
+        return self.adapter.get_replication_error_status(context, groups)

@@ -555,7 +555,7 @@ class QuobyteDriverTestCase(test.TestCase):
             mock_get_mount_point.assert_called_once_with(
                 self.TEST_QUOBYTE_VOLUME)
             mock_mount.assert_called_once_with(
-                self.TEST_QUOBYTE_VOLUME,
+                self.TEST_QUOBYTE_VOLUME_WITHOUT_PROTOCOL,
                 mock_get_mount_point.return_value,
                 ensure=True)
 
@@ -1189,8 +1189,10 @@ class QuobyteDriverTestCase(test.TestCase):
         shutil.copyfile.assert_called_once_with(cache_path, dest_vol_path)
         drv._set_rw_permissions.assert_called_once_with(dest_vol_path)
 
-    def test_create_volume_from_snapshot_status_not_available(self):
-        """Expect an error when the snapshot's status is not 'available'."""
+    @ddt.data(['available', True], ['backing-up', True],
+              ['creating', False], ['deleting', False])
+    @ddt.unpack
+    def test_create_volume_from_snapshot(self, state, should_work):
         drv = self._driver
 
         src_volume = self._simple_volume()
@@ -1202,29 +1204,7 @@ class QuobyteDriverTestCase(test.TestCase):
             volume_size=src_volume.size,
             volume_id=src_volume.id,
             id=self.SNAP_UUID,
-            status='error')
-        snap_ref.volume = src_volume
-
-        new_volume = self._simple_volume(size=snap_ref.volume_size)
-
-        self.assertRaises(exception.InvalidSnapshot,
-                          drv.create_volume_from_snapshot,
-                          new_volume,
-                          snap_ref)
-
-    def test_create_volume_from_snapshot(self):
-        drv = self._driver
-
-        src_volume = self._simple_volume()
-
-        snap_ref = fake_snapshot.fake_snapshot_obj(
-            self.context,
-            volume_name=src_volume.name,
-            display_name='clone-snap-%s' % src_volume.id,
-            volume_size=src_volume.size,
-            volume_id=src_volume.id,
-            id=self.SNAP_UUID,
-            status='available')
+            status=state)
         snap_ref.volume = src_volume
 
         new_volume = self._simple_volume(size=snap_ref.volume_size)
@@ -1233,12 +1213,18 @@ class QuobyteDriverTestCase(test.TestCase):
         drv._find_share = mock.Mock(return_value=self.TEST_QUOBYTE_VOLUME)
         drv._copy_volume_from_snapshot = mock.Mock()
 
-        drv.create_volume_from_snapshot(new_volume, snap_ref)
+        if should_work:
+            drv.create_volume_from_snapshot(new_volume, snap_ref)
 
-        drv._ensure_shares_mounted.assert_called_once_with()
-        drv._find_share.assert_called_once_with(new_volume)
-        (drv._copy_volume_from_snapshot.
-         assert_called_once_with(snap_ref, new_volume, new_volume['size']))
+            drv._ensure_shares_mounted.assert_called_once_with()
+            drv._find_share.assert_called_once_with(new_volume)
+            (drv._copy_volume_from_snapshot.
+             assert_called_once_with(snap_ref, new_volume, new_volume['size']))
+        else:
+            self.assertRaises(exception.InvalidSnapshot,
+                              drv.create_volume_from_snapshot,
+                              new_volume,
+                              snap_ref)
 
     def test_initialize_connection(self):
         drv = self._driver
@@ -1271,7 +1257,8 @@ class QuobyteDriverTestCase(test.TestCase):
         self.assertEqual(self.TEST_MNT_POINT_BASE,
                          conn_info['mount_point_base'])
 
-    def test_copy_volume_to_image_raw_image(self):
+    @mock.patch('cinder.db.volume_glance_metadata_get', return_value={})
+    def test_copy_volume_to_image_raw_image(self, vol_glance_metadata):
         drv = self._driver
 
         volume_type_id = db.volume_type_create(
@@ -1315,10 +1302,12 @@ class QuobyteDriverTestCase(test.TestCase):
                                                        run_as_root=False)
             mock_upload_volume.assert_called_once_with(
                 mock.ANY, mock.ANY, mock.ANY, upload_path, run_as_root=False,
-                store_id=None)
+                store_id=None, base_image_ref=None, compress=True,
+                volume_format='raw')
             self.assertTrue(mock_create_temporary_file.called)
 
-    def test_copy_volume_to_image_qcow2_image(self):
+    @mock.patch('cinder.db.volume_glance_metadata_get', return_value={})
+    def test_copy_volume_to_image_qcow2_image(self, vol_glance_metadata):
         """Upload a qcow2 image file which has to be converted to raw first."""
         drv = self._driver
 
@@ -1367,10 +1356,12 @@ class QuobyteDriverTestCase(test.TestCase):
                 volume_path, upload_path, 'raw', run_as_root=False)
             mock_upload_volume.assert_called_once_with(
                 mock.ANY, mock.ANY, mock.ANY, upload_path, run_as_root=False,
-                store_id=None)
+                store_id=None, base_image_ref=None, compress=True,
+                volume_format='raw')
             self.assertTrue(mock_create_temporary_file.called)
 
-    def test_copy_volume_to_image_snapshot_exists(self):
+    @mock.patch('cinder.db.volume_glance_metadata_get', return_value={})
+    def test_copy_volume_to_image_snapshot_exists(self, vol_glance_metadata):
         """Upload an active snapshot which has to be converted to raw first."""
         drv = self._driver
 
@@ -1421,7 +1412,8 @@ class QuobyteDriverTestCase(test.TestCase):
                 volume_path, upload_path, 'raw', run_as_root=False)
             mock_upload_volume.assert_called_once_with(
                 mock.ANY, mock.ANY, mock.ANY, upload_path, run_as_root=False,
-                store_id=None)
+                store_id=None, base_image_ref=None, compress=True,
+                volume_format='raw')
             self.assertTrue(mock_create_temporary_file.called)
 
     def test_set_nas_security_options_default(self):

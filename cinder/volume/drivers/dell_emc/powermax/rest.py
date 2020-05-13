@@ -36,7 +36,7 @@ SLOPROVISIONING = 'sloprovisioning'
 REPLICATION = 'replication'
 SYSTEM = 'system'
 U4V_VERSION = '91'
-MIN_U4P_VERSION = '9.1.0.5'
+MIN_U4P_VERSION = '9.1.0.14'
 UCODE_5978 = '5978'
 retry_exc_tuple = (exception.VolumeBackendAPIException,)
 # HTTP constants
@@ -1040,17 +1040,18 @@ class PowerMaxRest(object):
                       'Device id = %(di)s',
                       {'en': element_name, 'vi': vol_identifier,
                        'di': device_id})
-            if vol_identifier in element_name:
-                found_device_id = device_id
-                if vol_identifier != element_name:
-                    LOG.debug("Device %(di)s is a legacy volume created using "
-                              "SMI-S.",
-                              {'di': device_id})
-            elif name_id:
-                # This may be host-assisted migration case
-                element_name = self.utils.get_volume_element_name(name_id)
-                if vol_identifier == element_name:
+            if vol_identifier:
+                if vol_identifier in element_name:
                     found_device_id = device_id
+                    if vol_identifier != element_name:
+                        LOG.debug("Device %(di)s is a legacy volume created "
+                                  "using SMI-S.",
+                                  {'di': device_id})
+                elif name_id:
+                    # This may be host-assisted migration case
+                    element_name = self.utils.get_volume_element_name(name_id)
+                    if vol_identifier == element_name:
+                        found_device_id = device_id
         return found_device_id
 
     def add_vol_to_sg(self, array, storagegroup_name, device_id, extra_specs,
@@ -2272,12 +2273,36 @@ class PowerMaxRest(object):
 
         return rdf_group.get('states', list()) if rdf_group else dict()
 
+    def get_storage_group_rdf_groups(self, array, storage_group):
+        """Get a list of rdf group numbers used by a storage group.
+
+        :param array: the array serial number -- str
+        :param storage_group: the storage group name to check -- str
+        :return: RDFGs associated with the storage group -- dict
+        """
+        resource = ('storagegroup/%(storage_group)s/rdf_group' % {
+            'storage_group': storage_group})
+        storage_group_details = self.get_resource(array, REPLICATION, resource)
+        return storage_group_details['rdfgs']
+
     def get_rdf_group_list(self, array):
         """Get rdf group list from array.
 
         :param array: the array serial number
         """
         return self.get_resource(array, REPLICATION, 'rdf_group')
+
+    def get_rdf_group_volume_list(self, array, rdf_group_no):
+        """Get a list of all volumes in an RDFG.
+
+        :param array: the array serial number -- str
+        :param rdf_group_no: the RDF group number -- str
+        :return: RDFG volume list -- list
+        """
+        resource = ('rdf_group/%(rdf_group)s/volume' % {
+            'rdf_group': rdf_group_no})
+        rdf_group_volumes = self.get_resource(array, REPLICATION, resource)
+        return rdf_group_volumes['name']
 
     def get_rdf_group_volume(self, array, src_device_id):
         """Get the RDF details for a volume.
@@ -3015,14 +3040,20 @@ class PowerMaxRest(object):
 
         :returns: unisphere_meets_min_req -- boolean
         """
-        running_version, __ = self.get_uni_version()
+        running_version, major_version = self.get_uni_version()
         minimum_version = MIN_U4P_VERSION
         unisphere_meets_min_req = False
 
         if running_version and (running_version[0].isalpha()):
             # remove leading letter
-            version = running_version[1:]
-            unisphere_meets_min_req = version >= minimum_version
+            if running_version.lower()[0] == 'v':
+                version = running_version[1:]
+                unisphere_meets_min_req = (
+                    self.utils.version_meet_req(version, minimum_version))
+            elif running_version.lower()[0] == 't':
+                LOG.warning("%(version)s This is not a official release of "
+                            "Unisphere.", {'version': running_version})
+                return major_version >= U4V_VERSION
 
         if unisphere_meets_min_req:
             LOG.info("Unisphere version %(running_version)s meets minimum "

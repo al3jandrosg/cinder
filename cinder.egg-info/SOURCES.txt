@@ -1116,6 +1116,7 @@ cinder/tests/unit/policies/test_base.py
 cinder/tests/unit/policies/test_volume.py
 cinder/tests/unit/policies/test_volume_actions.py
 cinder/tests/unit/policies/test_volume_metadata.py
+cinder/tests/unit/policies/test_volume_type.py
 cinder/tests/unit/scheduler/__init__.py
 cinder/tests/unit/scheduler/fake_hosts.py
 cinder/tests/unit/scheduler/fakes.py
@@ -1748,7 +1749,6 @@ doc/source/configuration/block-storage/backup/nfs-backup-driver.rst
 doc/source/configuration/block-storage/backup/posix-backup-driver.rst
 doc/source/configuration/block-storage/backup/swift-backup-driver.rst
 doc/source/configuration/block-storage/backup/tsm-backup-driver.rst
-doc/source/configuration/block-storage/drivers/MacroSAN-storage-driver.rst
 doc/source/configuration/block-storage/drivers/ceph-rbd-volume-driver.rst
 doc/source/configuration/block-storage/drivers/datera-volume-driver.rst
 doc/source/configuration/block-storage/drivers/dell-emc-powermax-driver.rst
@@ -1775,6 +1775,7 @@ doc/source/configuration/block-storage/drivers/kaminario-driver.rst
 doc/source/configuration/block-storage/drivers/lenovo-driver.rst
 doc/source/configuration/block-storage/drivers/linstor-driver.rst
 doc/source/configuration/block-storage/drivers/lvm-volume-driver.rst
+doc/source/configuration/block-storage/drivers/macrosan-storage-driver.rst
 doc/source/configuration/block-storage/drivers/nec-storage-m-series-driver.rst
 doc/source/configuration/block-storage/drivers/netapp-volume-driver.rst
 doc/source/configuration/block-storage/drivers/nexentastor4-driver.rst
@@ -1784,6 +1785,7 @@ doc/source/configuration/block-storage/drivers/nimble-volume-driver.rst
 doc/source/configuration/block-storage/drivers/prophetstor-dpl-driver.rst
 doc/source/configuration/block-storage/drivers/pure-storage-driver.rst
 doc/source/configuration/block-storage/drivers/quobyte-driver.rst
+doc/source/configuration/block-storage/drivers/sandstone-storage-driver.rst
 doc/source/configuration/block-storage/drivers/seagate-driver.rst
 doc/source/configuration/block-storage/drivers/solidfire-volume-driver.rst
 doc/source/configuration/block-storage/drivers/spdk-volume-driver.rst
@@ -1989,6 +1991,7 @@ releasenotes/notes/balanced-fc-port-selection-fbf6b841fea99156.yaml
 releasenotes/notes/bdd-pools-stats-afb4398daa9248de.yaml
 releasenotes/notes/bp-add-volume-backup-id-e10d053638cb2e78.yaml
 releasenotes/notes/bp-datera-cinder-driver-update-2.1-5c6455b45563adc5.yaml
+releasenotes/notes/bp-ibm-gpfs-supported-26ae5381dd2a47ad.yaml
 releasenotes/notes/bp-inspur-instorage-driver-40371862c9559238.yaml
 releasenotes/notes/bp-netapp-solidfire-revert-to-snapshot-741b7c204cc99546.yaml
 releasenotes/notes/bp-nvmeof-lvm-target-b7771955b426abe7.yaml
@@ -2019,6 +2022,7 @@ releasenotes/notes/bug-1690954-40fc21683977e996.yaml
 releasenotes/notes/bug-1691771-fix-netapp-manage-volumes-62bec192a08b3ceb.yaml
 releasenotes/notes/bug-1693084-fix-az-cache-invalid-6td4q74q28uxcd68.yaml
 releasenotes/notes/bug-1699936-fix-host-show-incorrect-fg8698gu7y6r7d15.yaml
+releasenotes/notes/bug-1703405-53f09205024f2095.yaml
 releasenotes/notes/bug-1705375-prohibit-group-deletion-if-groupsnapshot-exists.yaml
 releasenotes/notes/bug-1706888-update-backend-when-extending-3e4a9831a0w29d68.yaml
 releasenotes/notes/bug-1712651-7bc90264eb5001ea.yaml
@@ -2045,10 +2049,14 @@ releasenotes/notes/bug-1809323-fix-invalid-backup-4a341dc362ded88e.yaml
 releasenotes/notes/bug-1812685-powermax-replication-specs-fix-aa6b13b93b4059d6.yaml
 releasenotes/notes/bug-1813851-60a4f0ffe386d9b6.yaml
 releasenotes/notes/bug-1833115-fix-netapp-ontap-python3-failures-dd869e602f9539e1.yaml
+releasenotes/notes/bug-1859653-solidfire-fix-failover-after-service-restart-77e5e4da45c9c1aa.yaml
 releasenotes/notes/bug-1860100-8c542363def7d408.yaml
+releasenotes/notes/bug-1871524-5f6df9a61bf6b775.yaml
+releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
 releasenotes/notes/bug-reno-69539ecb9b0b5464.yaml
+releasenotes/notes/bug_1828993-8e78d7bbee16ca08.yaml
 releasenotes/notes/bugfix-1744692-5aebd0c97ae66407.yaml
 releasenotes/notes/bugfix-netapp-driver-cinder-ipv6-c3c4d0d6a7d0de91.yaml
 releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml
@@ -2083,6 +2091,7 @@ releasenotes/notes/datacore-mark-unsupported-2399bc19a789fb4c.yaml
 releasenotes/notes/datera-2.2-driver-update-28b97aa2aaf333b6.yaml
 releasenotes/notes/datera-2.3-driver-update-12d0221fd4bb9fb0.yaml
 releasenotes/notes/datera-2.4.0-driver-update-164bbc77e6b45eb7.yaml
+releasenotes/notes/datera-2019.12.10.0-driver-update-cadadf95e4725164.yaml
 releasenotes/notes/datera-driver-v2-update-930468e8259c8e86.yaml
 releasenotes/notes/datera-mark-unsupported-7b71d9124b3fded2.yaml
 releasenotes/notes/db-schema-from-kilo-e6e952744531caa2.yaml
@@ -2203,6 +2212,7 @@ releasenotes/notes/hnas_deprecate_xml-16840b5a8c25d15e.yaml
 releasenotes/notes/hpe-3par-peer-persistence.yaml-91cc84bf89dbb462.yaml
 releasenotes/notes/hpe-3par-pp-rcg-policy-options-53271f38c315779f.yaml
 releasenotes/notes/hpe-3par-specify-nsp-for-fc-bootable-volume-f372879e1b625b4d.yaml
+releasenotes/notes/hpe-3par-support-duplicated-fqdn-751ad1dbcd137fbb.yaml
 releasenotes/notes/hpe3par-replication-group-a18a28d18de09e95.yaml
 releasenotes/notes/hpe_3par_multiattach-bf98a9e5c2208902.yaml
 releasenotes/notes/hpe_3par_multiattach_detach_fix-d2d3785d656fba90.yaml
@@ -2261,7 +2271,6 @@ releasenotes/notes/live_migration_v3-ae98c0d00e64c954.yaml
 releasenotes/notes/lvm-ipv6-fix-e8d418726c92bbd5.yaml
 releasenotes/notes/lvm-thin-overprovision-1d279f66ee2252ff.yaml
 releasenotes/notes/lvm-type-default-to-auto-a2ad554fc8bb25f2.yaml
-releasenotes/notes/macrosan_driver_unsupported-b25f7a3b8270fa61.yaml
 releasenotes/notes/manage-resources-v3-c06096f75927fd3b.yaml
 releasenotes/notes/mark-blockbridge-unsupported-c9e55df0eb2e3c9f.yaml
 releasenotes/notes/mark-brocade-unsupported-d5760b4bb8173652.yaml
@@ -2315,6 +2324,7 @@ releasenotes/notes/netapp-eseries-consistency-groups-4f6b2af2d20c94e9.yaml
 releasenotes/notes/netapp-log-filter-f3256f55c3ac3faa.yaml
 releasenotes/notes/netapp-nfs-consistency-group-support-83eccc2da91ee19b.yaml
 releasenotes/notes/netapp-non-discovery-19af4e10f7b190ea.yaml
+releasenotes/notes/netapp-ontap-fix-detach-multiattach-d99d33dff2fefb4c.yaml
 releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml
 releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml
 releasenotes/notes/netapp-solidfire-add-replication-mode-eb26535d0ec78cb4.yaml
@@ -2481,6 +2491,7 @@ releasenotes/notes/rpc-apis-3.0-b745f429c11d8198.yaml
 releasenotes/notes/rpc-update-50bef83f48d4f96f.yaml
 releasenotes/notes/rpc_compatibility-375be8ac3158981d.yaml
 releasenotes/notes/rsd-cinder-driver-d71b88292536bfea.yaml
+releasenotes/notes/sandstone-iscsi-driver-31ed72d5657a4307.yaml
 releasenotes/notes/sc-handle-multiattach-onterminate-6ab1f96f21bb284d.yaml
 releasenotes/notes/scaleio-backup-via-snapshot-8e75aa3f4570e17c.yaml
 releasenotes/notes/scaleio-consistency-groups-707f9b4ffcb3c14c.yaml
@@ -2515,6 +2526,7 @@ releasenotes/notes/smbfs-removed-options-2c86101340273252.yaml
 releasenotes/notes/smbfs-revert-snapshot-5b265ed5ded951dc.yaml
 releasenotes/notes/smbfs-snapshot-attach-14742fe8f5864ac6.yaml
 releasenotes/notes/snapshot_backing_up_status_support-164fbbb2a564e137.yaml
+releasenotes/notes/solidfire-active-active-replication-support-f77e0e12320f8b21.yaml
 releasenotes/notes/solidfire-scaled-qos-9b8632453909e2db.yaml
 releasenotes/notes/solidfire-v2.1-replication-570a1f12f70e67b4.yaml
 releasenotes/notes/spdk-add-config-parameter-39a880ec22956fd2.yaml
@@ -2572,10 +2584,12 @@ releasenotes/notes/unity-compressed-volume-support-4998dee84534a324.yaml
 releasenotes/notes/unity-enable-ssl-14db2497225c4395.yaml
 releasenotes/notes/unity-fast-clone-02ae88ba8fdef145.yaml
 releasenotes/notes/unity-force-detach-7c89e72105f9de61.yaml
+releasenotes/notes/unity-group-replication-support-97d74275a84b06af.yaml
 releasenotes/notes/unity-multiattach-support-993b997e522d9e84.yaml
 releasenotes/notes/unity-remove-empty-host-17d567dbb6738e4e.yaml
 releasenotes/notes/unity-replication-support-2ab121a5ea5a2ade.yaml
 releasenotes/notes/unity-return-logged-out-initiator-6ab1f96f21bb284c.yaml
+releasenotes/notes/unity-retype-volume-support-773ae17b8811fb3f.yaml
 releasenotes/notes/unity-storage-assisted-migration-support-145fce87f36f1ecc.yaml
 releasenotes/notes/unity-thick-support-fdbef833f2b4d54f.yaml
 releasenotes/notes/unity-volume-tiering-policy-support-c6d0aaff4b141bd3.yaml
@@ -2585,9 +2599,12 @@ releasenotes/notes/untyped_to_default_type-0068e6bc8000986c.yaml
 releasenotes/notes/update_config_options_disco_volume_driver-07e52aa43e83c243.yaml
 releasenotes/notes/updated-at-list-0f899098f7258331.yaml
 releasenotes/notes/upgrade-checks-e58c4a81c857847d.yaml
+releasenotes/notes/upload-volume-to-multiple-stores-ab130774897e41c3.yaml
 releasenotes/notes/use-castellan-key-manager-4911c3c4908ca633.yaml
 releasenotes/notes/use-glance-v2-api-and-deprecate-glance_api_version-1a3b698429cb754e.yaml
 releasenotes/notes/use-oslo_middleware_sizelimit-5f171cf1c44444f8.yaml
+releasenotes/notes/ussuri-release-prelude-ceeb11bc7fe46191.yaml
+releasenotes/notes/ussuri-unsupported-drivers-not-removed-8cfb3e01b720e9d1.yaml
 releasenotes/notes/validate-expired-user-tokens-40b15322197653ae.yaml
 releasenotes/notes/validate_vol_create_uuids-4f08b4ef201385f6.yaml
 releasenotes/notes/verbose-online-migrations-94fb7e8a85cdbc10.yaml
@@ -2665,6 +2682,7 @@ releasenotes/notes/vnx-revert-to-snapshot-e5494b6fb5ad5a1e.yaml
 releasenotes/notes/vnx-update-sg-in-cache-3ecb673727bea79b.yaml
 releasenotes/notes/vnx_clone_cg-db74ee2ea71bedcb.yaml
 releasenotes/notes/volume-filtering-for-quoted-display-name-7f5e8ac888a73001.yaml
+releasenotes/notes/volume-type-encryption-api-policy-base-4334ca94d73df238.yaml
 releasenotes/notes/volume-type-encryption-api-policy-granularity-7071e45f4c7894c5.yaml
 releasenotes/notes/volume_init_max_objects_retrieval-966f607c46190946.yaml
 releasenotes/notes/volumes-summary-6b2485f339c88a91.yaml
@@ -2707,7 +2725,6 @@ releasenotes/source/train.rst
 releasenotes/source/unreleased.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
-releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po
 tools/check_exec.py
 tools/coding-checks.sh
 tools/fast8.sh

@@ -355,6 +355,12 @@ class PowerMaxData(object):
 
     # extra-specs
     vol_type_extra_specs = {'pool_name': u'Diamond+DSS+SRP_1+000197800123'}
+    vol_type_extra_specs_none_pool = {
+        'pool_name': u'None+NONE+SRP_1+000197800123'}
+    vol_type_extra_specs_optimised_pool = {
+        'pool_name': u'Optimized+NONE+SRP_1+000197800123'}
+    vol_type_extra_specs_next_gen_pool = {
+        'pool_name': u'Optimized+SRP_1+000197800123'}
     vol_type_extra_specs_compr_disabled = {
         'pool_name': u'Diamond+DSS+SRP_1+000197800123',
         'storagetype:disablecompression': 'true'}
@@ -380,6 +386,10 @@ class PowerMaxData(object):
                    'array': array,
                    'interval': 3,
                    'retries': 120}
+    extra_specs_optimized = {
+        'pool_name': u'Optimized+None+SRP_1+000197800123',
+        'slo': 'Optimized', 'workload': 'None',
+        'srp': srp, 'array': array, 'interval': 3, 'retries': 120}
 
     vol_type_extra_specs_tags = {
         'storagetype:storagegrouptags': u'good, comma,  separated,list'}
@@ -1263,7 +1273,7 @@ class PowerMaxData(object):
 
     data_dict = {volume_id: volume_info_dict}
     platform = 'Linux-4.4.0-104-generic-x86_64-with-Ubuntu-16.04-xenial'
-    unisphere_version = u'V9.1.0.5'
+    unisphere_version = u'V9.1.0.14'
     unisphere_version_90 = "V9.0.0.1"
     openstack_release = '12.0.0.0b3.dev401'
     openstack_version = '12.0.0'
@@ -1482,3 +1492,33 @@ class PowerMaxData(object):
                   rdf_managed_async_grp]
 
     r2_sg_list = deepcopy(r1_sg_list)
+    replication_model = (
+        {'provider_location': six.text_type(provider_location),
+         'metadata': {'DeviceID': device_id,
+                      'DeviceLabel': 'OS-%s' % volume_id,
+                      'ArrayID': array,
+                      'ArrayModel': array_model,
+                      'ServiceLevel': 'Silver',
+                      'Workload': 'NONE',
+                      'Emulation': 'FBA',
+                      'Configuration': 'TDEV',
+                      'CompressionDisabled': False,
+                      'R2-DeviceID': device_id2,
+                      'R2-ArrayID': remote_array,
+                      'R2-ArrayModel': array_model,
+                      'ReplicationMode': 'Synchronous',
+                      'RDFG-Label': rdf_group_name_1,
+                      'R1-RDFG': rdf_group_no_1,
+                      'R2-RDFG': rdf_group_no_1}})
+
+    non_replication_model = (
+        {'provider_location': six.text_type(provider_location),
+         'metadata': {'DeviceID': device_id,
+                      'DeviceLabel': 'OS-%s' % volume_id,
+                      'ArrayID': array,
+                      'ArrayModel': array_model,
+                      'ServiceLevel': 'Silver',
+                      'Workload': 'NONE',
+                      'Emulation': 'FBA',
+                      'Configuration': 'TDEV',
+                      'CompressionDisabled': False}})

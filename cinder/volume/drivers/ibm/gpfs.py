@@ -166,9 +166,6 @@ class GPFSDriver(driver.CloneableImageVD,
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "IBM_GPFS_CI"
 
-    # TODO(jsbryant) Remove driver in the 'U' release if CI is not fixed.
-    SUPPORTED = False
-
     def __init__(self, *args, **kwargs):
         super(GPFSDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(gpfs_opts)
@@ -994,13 +991,11 @@ class GPFSDriver(driver.CloneableImageVD,
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
-        # retrieve store information from extra-specs
-        store_id = volume.volume_type.extra_specs.get('image_service:store_id')
-        image_utils.upload_volume(context,
-                                  image_service,
-                                  image_meta,
-                                  self.local_path(volume),
-                                  store_id=store_id)
+        volume_utils.upload_volume(context,
+                                   image_service,
+                                   image_meta,
+                                   self.local_path(volume),
+                                   volume)
 
     def _migrate_volume(self, volume, host):
         """Migrate vol if source and dest are managed by same GPFS cluster."""
