@@ -1,2 +1,3 @@
+skip-victoria-failures.patch
 fix-test-setup-mysql8.patch
 py38skip.patch
