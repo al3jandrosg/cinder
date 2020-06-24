@@ -1333,7 +1333,7 @@ class SolidFireDriver(san.SanISCSIDriver):
     def _retrieve_qos_setting(self, volume, extended_size=0):
         qos = {}
         if (self.configuration.sf_allow_tenant_qos and
-                volume.get('volume_metadata')is not None):
+                volume.get('volume_metadata') is not None):
             qos = self._set_qos_presets(volume)
 
         ctxt = context.get_admin_context()
@@ -2086,7 +2086,14 @@ class SolidFireDriver(san.SanISCSIDriver):
         sfaccount = self._get_sfaccount(volume['project_id'])
         params = {'accountID': sfaccount['accountID']}
 
-        sf_vol = self._get_sf_volume(volume['id'], params)
+        # In a retype of an attached volume scenario, the volume id will be
+        # as a target on 'migration_status', otherwise it'd be None.
+        migration_status = volume.get('migration_status')
+        if migration_status and 'target' in migration_status:
+            __, vol_id = migration_status.split(':')
+        else:
+            vol_id = volume['id']
+        sf_vol = self._get_sf_volume(vol_id, params)
         if sf_vol is None:
             LOG.error("Volume ID %s was not found on "
                       "the SolidFire Cluster while attempting "

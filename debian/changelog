@@ -1,3 +1,20 @@
+cinder (2:17.0.0~b1~git2020062409.85fcf1057-0ubuntu1) groovy; urgency=medium
+
+  * SECURITY UPDATE: Dell EMC ScaleIO/VxFlex OS Backend Credentials Exposure
+    (LP: #1823200)
+    - Remove VxFlex OS credentials from connection_properties. Passwords are
+      now stored in separate file and are retrieved during each attach/detach
+      operation. Cinder is patched in 16.1.0 stable point release.
+    - d/control: Align (Build-)Depends with min version of python3-os-brick
+      required to fix credential exposure.
+    - CVE-2020-10755
+  * New upstream snapshot for OpenStack Victoria.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/py38skip.patch: Dropped. No longer needed.
+  * d/p/skip-victoria-failures.patch: Rebased and updated with upstream bug.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 24 Jun 2020 09:10:19 -0400
+
 cinder (2:16.0.0-0ubuntu2) groovy; urgency=medium
 
   * d/p/skip-victoria-failures.patch: Temporarily skipping groovy

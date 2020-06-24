@@ -18,12 +18,12 @@
 
 from unittest import mock
 
-from defusedxml import lxml as etree
+from lxml import etree
 import requests
 
 from cinder import exception
 from cinder.objects import fields
-from cinder import test
+from cinder.tests.unit import test
 import cinder.volume.drivers.stx.client
 import cinder.volume.drivers.stx.common
 import cinder.volume.drivers.stx.exception as stx_exception
@@ -215,7 +215,7 @@ class TestSeagateClient(test.TestCase):
                                      RequestException("error")]
         mock_requests_get.return_value = m
         ret = self.client._api_request('/path')
-        self.assertTrue(type(ret) == etree.RestrictedElement)
+        self.assertTrue(type(ret) == etree._Element)
         self.assertRaises(stx_exception.ConnectionError,
                           self.client._api_request,
                           '/path')

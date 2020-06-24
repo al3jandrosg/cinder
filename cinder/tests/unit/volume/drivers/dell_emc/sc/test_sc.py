@@ -13,17 +13,16 @@
 #    under the License.
 
 from unittest import mock
-import uuid
 
 import eventlet
 
 from cinder import context
 from cinder import exception
 from cinder.objects import fields
-from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder.volume.drivers.dell_emc.sc import storagecenter_api
 from cinder.volume.drivers.dell_emc.sc import storagecenter_iscsi
 from cinder.volume import volume_types
@@ -252,7 +251,7 @@ class DellSCSanISCSIDriverTestCase(test.TestCase):
 
         self.mock_sleep = self.mock_object(eventlet, 'sleep')
 
-        self.volid = str(uuid.uuid4())
+        self.volid = fake.VOLUME_ID
         self.volume_name = "volume" + self.volid
         self.connector = {
             'ip': '10.0.0.2',

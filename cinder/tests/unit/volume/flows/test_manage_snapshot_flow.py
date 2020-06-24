@@ -22,10 +22,10 @@ import ddt
 
 from cinder import context
 from cinder import exception
-from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder.volume.flows.manager import manage_existing_snapshot as manager
 
 
@@ -213,6 +213,25 @@ class ManageSnapshotFlowTestCase(test.TestCase):
         task.execute(self.ctxt, fake_snapshot, mock_status)
         mock_snap_create.assert_called_once_with(self.ctxt, fake_snapshot,
                                                  mock_status)
+
+    @mock.patch('cinder.objects.snapshot.Snapshot.get_by_id')
+    @mock.patch('cinder.volume.volume_utils.notify_about_snapshot_usage')
+    def test_create_snap_on_finish_task_notify(self,
+                                               mock_notify_about_usage,
+                                               _mock_get_by_id):
+        mock_status = mock.MagicMock()
+        mock_db = mock.MagicMock()
+        mock_event_suffix = mock.MagicMock()
+        mock_host = mock.MagicMock()
+
+        fake_snap = fake_snapshot.fake_snapshot_obj(self.ctxt,
+                                                    volume_size=1)
+
+        task = manager.CreateSnapshotOnFinishTask(mock_db, mock_event_suffix,
+                                                  mock_host)
+        task.execute(self.ctxt, fake_snap, mock_status)
+        mock_notify_about_usage.assert_called_once_with(
+            self.ctxt, fake_snap, mock_event_suffix, host=mock_host)
 
     @mock.patch('cinder.volume.flows.manager.manage_existing_snapshot.'
                 'taskflow.engines.load')

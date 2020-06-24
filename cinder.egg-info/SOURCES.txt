@@ -8,7 +8,6 @@ ChangeLog
 HACKING.rst
 LICENSE
 README.rst
-babel.cfg
 bindep.txt
 driver-requirements.txt
 lower-constraints.txt
@@ -434,7 +433,6 @@ cinder/rpc.py
 cinder/service.py
 cinder/service_auth.py
 cinder/ssh_utils.py
-cinder/test.py
 cinder/utils.py
 cinder/version.py
 cinder.egg-info/PKG-INFO
@@ -642,6 +640,9 @@ cinder/db/sqlalchemy/migrate_repo/versions/133_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/134_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/135_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/136_make_vol_type_col_non_nullable.py
+cinder/db/sqlalchemy/migrate_repo/versions/137_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/138_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/139_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/group/__init__.py
 cinder/group/api.py
@@ -793,6 +794,7 @@ cinder/tests/functional/test_group_replication.py
 cinder/tests/functional/test_group_snapshots.py
 cinder/tests/functional/test_groups.py
 cinder/tests/functional/test_login.py
+cinder/tests/functional/test_middleware.py
 cinder/tests/functional/test_quotas.py
 cinder/tests/functional/test_volumes.py
 cinder/tests/functional/api/__init__.py
@@ -910,6 +912,7 @@ cinder/tests/unit/fake_snapshot.py
 cinder/tests/unit/fake_utils.py
 cinder/tests/unit/fake_volume.py
 cinder/tests/unit/policy.json
+cinder/tests/unit/test.py
 cinder/tests/unit/test_api.py
 cinder/tests/unit/test_api_urlmap.py
 cinder/tests/unit/test_cleanable_manager.py
@@ -924,7 +927,6 @@ cinder/tests/unit/test_fixtures.py
 cinder/tests/unit/test_hacking.py
 cinder/tests/unit/test_image_utils.py
 cinder/tests/unit/test_interface.py
-cinder/tests/unit/test_macrosan_drivers.py
 cinder/tests/unit/test_manager.py
 cinder/tests/unit/test_paginate_query.py
 cinder/tests/unit/test_policy.py
@@ -1171,6 +1173,7 @@ cinder/tests/unit/volume/drivers/test_infinidat.py
 cinder/tests/unit/volume/drivers/test_kaminario.py
 cinder/tests/unit/volume/drivers/test_linstordrv.py
 cinder/tests/unit/volume/drivers/test_lvm_driver.py
+cinder/tests/unit/volume/drivers/test_macrosan_drivers.py
 cinder/tests/unit/volume/drivers/test_nfs.py
 cinder/tests/unit/volume/drivers/test_nimble.py
 cinder/tests/unit/volume/drivers/test_prophetstor_dpl.py
@@ -1899,12 +1902,6 @@ etc/cinder/rootwrap.conf
 etc/cinder/rootwrap.d/volume.filters
 playbooks/post-cinderlib.yaml
 playbooks/tempest-and-cinderlib-run.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-bak/post.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-bak/run.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-volbak/post.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-volbak/run.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-volschbak/post.yaml
-playbooks/legacy/grenade-dsvm-cinder-mn-sub-volschbak/run.yaml
 rally-jobs/README.rst
 rally-jobs/cinder.yaml
 rally-jobs/extra/README.rst
@@ -2048,10 +2045,14 @@ releasenotes/notes/bug-1805550-default-policy-file-db15eaa76fefa115.yaml
 releasenotes/notes/bug-1809323-fix-invalid-backup-4a341dc362ded88e.yaml
 releasenotes/notes/bug-1812685-powermax-replication-specs-fix-aa6b13b93b4059d6.yaml
 releasenotes/notes/bug-1813851-60a4f0ffe386d9b6.yaml
+releasenotes/notes/bug-1823200-victoria-ecd2d99c9223d84b.yaml
 releasenotes/notes/bug-1833115-fix-netapp-ontap-python3-failures-dd869e602f9539e1.yaml
+releasenotes/notes/bug-1859652-netapp-fix-retype-attached-volume-to-solidfire-1933f03673ff078d.yaml
 releasenotes/notes/bug-1859653-solidfire-fix-failover-after-service-restart-77e5e4da45c9c1aa.yaml
 releasenotes/notes/bug-1860100-8c542363def7d408.yaml
 releasenotes/notes/bug-1871524-5f6df9a61bf6b775.yaml
+releasenotes/notes/bug-1874134-netapp-ONTAP-fix-max-resize-size-ad2d88da8721560e.yaml
+releasenotes/notes/bug-1875570-nfs-image-volume-cache-c45e840a6ec2a702.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
@@ -2155,6 +2156,8 @@ releasenotes/notes/feature-abort-restore-fe1252288c59e105.yaml
 releasenotes/notes/feature-cross-az-backups-6b68c4c4456f2fd7.yaml
 releasenotes/notes/feature-multi-process-backup-8cf5ad5a0cf9b2d5.yaml
 releasenotes/notes/feature-rbd-exclusive-pool-a9bdebdeb1f0bf37.yaml
+releasenotes/notes/fix-3par-live-migration-0065bd2626fdb4a1.yaml
+releasenotes/notes/fix-3par-migrate-rename-662d984e070a1de2.yaml
 releasenotes/notes/fix-abort-backup-df196e9dcb992586.yaml
 releasenotes/notes/fix-backup-handling-of-encryption-key-id-f2fa56cadd80d582.yaml
 releasenotes/notes/fix-cross-az-migration-ce97eff61280e1c7.yaml
@@ -2162,6 +2165,7 @@ releasenotes/notes/fix-extend-volume-939e30f2e9e516bc.yaml
 releasenotes/notes/fix-extend-volume-in-thin-pools-57a3d53be4d47704.yaml
 releasenotes/notes/fix-hnas-clone-with-different-volume-type-b969897cba2610cc.yaml
 releasenotes/notes/fix-hnas-stats-reporting-1335e582e46ff440.yaml
+releasenotes/notes/fix-host-info-in-volume-details-1759280bd236421e.yaml
 releasenotes/notes/fix-import-backup-quota-issue-8yh69hd19u7tuu23.yaml
 releasenotes/notes/fix-multiattach-deletion-b3990acf1f5fd378.yaml
 releasenotes/notes/fix-netapp-cg-da4fd6c396e5bedb.yaml
@@ -2194,6 +2198,7 @@ releasenotes/notes/group-snapshots-36264409bbb8850c.yaml
 releasenotes/notes/group-type-group-specs-531e33ee0ae9f822.yaml
 releasenotes/notes/group-update-d423eaa18dbcecc1.yaml
 releasenotes/notes/hbsd-driver-deletion-d81f7c4513f45d7b.yaml
+releasenotes/notes/healthcheck-449ed4292e6bfa22.yaml
 releasenotes/notes/hedvig-cinder-driver-e7b98f4bc214bc49.yaml
 releasenotes/notes/hgst-mark-unsupported-b2886de36421c8b0.yaml
 releasenotes/notes/hitachi-unsupported-drivers-37601e5bfabcdb8f.yaml
@@ -2233,6 +2238,7 @@ releasenotes/notes/ibm-flashsystem-unsupported-28f9aaf11b56fb2f.yaml
 releasenotes/notes/ibm-gpfs-unsupported-b95274829573835d.yaml
 releasenotes/notes/ibm-storage-supported-a373a54777333929.yaml
 releasenotes/notes/ibm-storage-unsupported-9e8ea6ce9cea503d.yaml
+releasenotes/notes/ibm-storwize-removehostmappings-e7eeaf898786c6bf.yaml
 releasenotes/notes/ibm-storwize-supported-6518628fb78d58a4.yaml
 releasenotes/notes/ibm-storwize-unsupported-e79cfd27523f013c.yaml
 releasenotes/notes/ibm-storwzie-mirror-volume-ffe4c9bde78cdf1d.yaml
@@ -2367,6 +2373,7 @@ releasenotes/notes/policy-for-type-list-and-show-apis-rt56uy78crt5e378.yaml
 releasenotes/notes/policy-in-code-226f71562ab28195.yaml
 releasenotes/notes/powermax-90-to-91-endpoints-a92c4d158cb63fe4.yaml
 releasenotes/notes/powermax-bug-1853589-f6c7164177da0496.yaml
+releasenotes/notes/powermax-bug-1875478-8c9072ad9a87b83d.yaml
 releasenotes/notes/powermax-disable-inuse-metro-89e9f398ec9e2672.yaml
 releasenotes/notes/powermax-inuse-retype-support-64bd35adab17420d.yaml
 releasenotes/notes/powermax-multiple-replication-devices-0cc532ae621ea9a5.yaml
@@ -2393,6 +2400,7 @@ releasenotes/notes/pure-host-personality-3512f7ccd961d4ad.yaml
 releasenotes/notes/pure-iscsi-cidr-cbc1afb3850a9217.yaml
 releasenotes/notes/pure-list-mangeable-fed4a1b23212f545.yaml
 releasenotes/notes/pure-storage-multiattach-support-994da363e181d627.yaml
+releasenotes/notes/pure-storage-revert-snapshot-b7e0ec4f958418c4.yaml
 releasenotes/notes/pure-v2.1-replication-0246223caaa8a9b5.yaml
 releasenotes/notes/pure-verify-https-requests-464320c97ba77a1f.yaml
 releasenotes/notes/qb-backup-5b1f2161d160648a.yaml
@@ -2723,8 +2731,11 @@ releasenotes/source/rocky.rst
 releasenotes/source/stein.rst
 releasenotes/source/train.rst
 releasenotes/source/unreleased.rst
+releasenotes/source/ussuri.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
+releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po
+releasenotes/source/locale/ja/LC_MESSAGES/releasenotes.po
 tools/check_exec.py
 tools/coding-checks.sh
 tools/fast8.sh

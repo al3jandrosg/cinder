@@ -22,9 +22,9 @@ import six
 
 from cinder import exception
 from cinder.objects import fields
-from cinder import test
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder.tests.unit.volume.drivers.dell_emc.powermax import (
     powermax_data as tpd)
 from cinder.tests.unit.volume.drivers.dell_emc.powermax import (
@@ -543,6 +543,32 @@ class PowerMaxCommonTest(test.TestCase):
         self.assertEqual(0, mck_remove.call_count)
         self.assertEqual(1, mck_info.call_count)
 
+    @mock.patch.object(provision.PowerMaxProvision, 'verify_slo_workload')
+    @mock.patch.object(common.PowerMaxCommon, '_remove_members')
+    @mock.patch.object(common.PowerMaxCommon, 'find_host_lun_id',
+                       return_value=(tpd.PowerMaxData.iscsi_device_info,
+                                     False))
+    @mock.patch.object(
+        common.PowerMaxCommon, '_get_replication_extra_specs',
+        return_value=tpd.PowerMaxData.rep_extra_specs_rep_config)
+    @mock.patch.object(
+        common.PowerMaxCommon, '_initial_setup',
+        return_value=tpd.PowerMaxData.rep_extra_specs_rep_config)
+    def test_unmap_lun_replication_force_flag(
+            self, mck_setup, mck_rep, mck_find, mck_rem, mck_slo):
+        volume = deepcopy(self.data.test_volume)
+        connector = deepcopy(self.data.connector)
+        device_info = self.data.provider_location['device_id']
+        volume.volume_attachment.objects = [
+            deepcopy(self.data.test_volume_attachment)]
+        extra_specs = deepcopy(self.data.rep_extra_specs_rep_config)
+        array = extra_specs[utils.ARRAY]
+        extra_specs[utils.FORCE_VOL_REMOVE] = True
+        self.common._unmap_lun(volume, connector)
+        mck_rem.assert_called_once_with(array, volume, device_info,
+                                        extra_specs, connector, False,
+                                        async_grp=None, host_template=None)
+
     def test_initialize_connection_already_mapped(self):
         volume = self.data.test_volume
         connector = self.data.connector
@@ -703,6 +729,8 @@ class PowerMaxCommonTest(test.TestCase):
         self.common.extend_volume(volume, new_size)
         mck_extend.assert_called_once_with(
             array, device_id, new_size, ref_extra_specs, '1')
+        mck_ode.assert_called_once_with(
+            array, ref_extra_specs[utils.REP_CONFIG], True)
 
     @mock.patch.object(provision.PowerMaxProvision, 'extend_volume')
     @mock.patch.object(common.PowerMaxCommon, '_extend_legacy_replicated_vol')
@@ -729,6 +757,8 @@ class PowerMaxCommonTest(test.TestCase):
         mck_leg_extend.assert_called_once_with(
             array, volume, device_id, volume.name, new_size,
             ref_extra_specs, '1')
+        mck_ode.assert_called_once_with(
+            array, ref_extra_specs[utils.REP_CONFIG], True)
         mck_extend.assert_not_called()
 
     @mock.patch.object(provision.PowerMaxProvision, 'extend_volume')
@@ -756,6 +786,8 @@ class PowerMaxCommonTest(test.TestCase):
         mck_leg_extend.assert_called_once_with(
             array, volume, device_id, volume.name, new_size,
             ref_extra_specs, '1')
+        mck_ode.assert_called_once_with(
+            array, ref_extra_specs[utils.REP_CONFIG], True)
         mck_extend.assert_not_called()
 
     @mock.patch.object(common.PowerMaxCommon, '_array_ode_capabilities_check',
@@ -3281,7 +3313,7 @@ class PowerMaxCommonTest(test.TestCase):
             False, True, target_extra_specs['rep_mode'])
         mck_move_vol.assert_called_once_with(
             array, device_id, self.data.volume_details[0]['storageGroupId'][0],
-            group_name, extra_specs, force=True)
+            group_name, extra_specs, force=True, parent_sg=None)
         mck_return_vol.assert_called_once_with(
             array, volume, device_id, volume_name, extra_specs)
         mck_is_vol.assert_called_once_with(array, device_id, group_name)

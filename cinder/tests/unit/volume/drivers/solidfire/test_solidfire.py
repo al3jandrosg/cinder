@@ -29,12 +29,12 @@ import six
 from cinder import context
 from cinder import exception
 from cinder.objects import fields
-from cinder import test
 from cinder.tests.unit.api import fakes
 from cinder.tests.unit import fake_group_snapshot
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.tests.unit.image import fake as fake_image
+from cinder.tests.unit import test
 from cinder.tests.unit import utils as test_utils
 from cinder.volume import configuration as conf
 from cinder.volume.drivers import solidfire
@@ -1342,6 +1342,35 @@ class SolidFireVolumeTestCase(test.TestCase):
         self.assertTrue(migrated)
         self.assertEqual({}, updates)
 
+    @data(None, 'Success', 'Error', f'target:{f_uuid[0]}')
+    @mock.patch.object(solidfire.SolidFireDriver, '_get_sf_volume')
+    @mock.patch.object(solidfire.SolidFireDriver, '_get_sfaccount')
+    def test_attach_volume(self, mig_status, mock_get_sfaccount,
+                           mock_get_sf_volume):
+        mock_get_sfaccount.return_value = self.fake_sfaccount
+        i_uuid = 'fake_instance_uuid'
+        ctx = context.get_admin_context()
+        type_fields = {}
+        vol_type = fake_volume.fake_volume_type_obj(ctx, **type_fields)
+        utc_now = timeutils.utcnow().isoformat()
+        vol_fields = {
+            'id': f_uuid[0],
+            'created_at': utc_now,
+            'volume_type': vol_type,
+            'volume_type_id': vol_type.id,
+            'migration_status': mig_status,
+        }
+        vol = fake_volume.fake_volume_obj(ctx, **vol_fields)
+        sf_vol = self.fake_sfvol
+        mock_get_sf_volume.return_value = sf_vol
+
+        sfv = solidfire.SolidFireDriver(configuration=self.configuration)
+        sfv.attach_volume(ctx, vol, i_uuid, 'fake_host', '/dev/sdf')
+        self.assertEqual(sf_vol['attributes']['attached_to'],
+                         i_uuid)
+        mock_get_sfaccount.assert_called()
+        mock_get_sf_volume.assert_called()
+
     def test_retype_with_qos_spec(self):
         test_type = {'name': 'sf-1',
                      'qos_specs_id': 'fb0576d7-b4b5-4cad-85dc-ca92e6a497d1',
@@ -1823,7 +1852,7 @@ class SolidFireVolumeTestCase(test.TestCase):
         def _fake_issue_api_req(method, params, version=0):
             if 'ListActiveVolumes' in method:
                 return {'result': {'volumes': sf_vols}}
-            if 'ListSnapshots'in method:
+            if 'ListSnapshots' in method:
                 return {'result': {'snapshots': sf_snaps}}
 
         with mock.patch.object(sfv, '_issue_api_request',

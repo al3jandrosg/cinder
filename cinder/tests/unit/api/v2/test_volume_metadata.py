@@ -14,7 +14,6 @@
 #    under the License.
 
 from unittest import mock
-import uuid
 
 from oslo_config import cfg
 from oslo_serialization import jsonutils
@@ -27,11 +26,11 @@ from cinder.api.v2 import volumes
 from cinder import db
 from cinder import exception
 from cinder import objects
-from cinder import test
 from cinder.tests.unit.api import fakes
 from cinder.tests.unit.api.v2 import fakes as v2_fakes
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder import volume
 from cinder.volume import api as volume_api
 
@@ -128,7 +127,7 @@ class VolumeMetaDataTest(test.TestCase):
         self.ext_mgr.extensions = {}
         self.volume_controller = volumes.VolumeController(self.ext_mgr)
         self.controller = volume_metadata.Controller()
-        self.req_id = str(uuid.uuid4())
+        self.req_id = fake.REQUEST_ID
         self.url = '/v2/%s/volumes/%s/metadata' % (
             fake.PROJECT_ID, self.req_id)
 

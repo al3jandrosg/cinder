@@ -751,6 +751,7 @@ class PowerMaxCommon(object):
             backend_id = self._get_replicated_volume_backend_id(volume)
             rep_config = self.utils.get_rep_config(
                 backend_id, self.rep_configs)
+            extra_specs[utils.FORCE_VOL_REMOVE] = True
             rep_extra_specs = self._get_replication_extra_specs(
                 extra_specs, rep_config)
             if self.utils.is_volume_failed_over(volume):
@@ -1091,7 +1092,7 @@ class PowerMaxCommon(object):
             rep_config = ex_specs[utils.REP_CONFIG]
             rdf_grp_no, __ = self.get_rdf_details(array, rep_config)
             r1_ode, r1_ode_metro, r2_ode, r2_ode_metro = (
-                self._array_ode_capabilities_check(array, True))
+                self._array_ode_capabilities_check(array, rep_config, True))
 
             if self.next_gen:
                 if self.utils.is_metro_device(rep_config, ex_specs):
@@ -3819,6 +3820,7 @@ class PowerMaxCommon(object):
         """
 
         is_re, rep_mode, mgmt_sg_name = False, None, None
+        parent_sg = None
         if self.utils.is_replication_enabled(target_extra_specs):
             is_re, rep_mode = True, target_extra_specs['rep_mode']
             mgmt_sg_name = self.utils.get_rdf_management_group_name(
@@ -3876,7 +3878,7 @@ class PowerMaxCommon(object):
         # Move the volume from the source to target storage group
         self.masking.move_volume_between_storage_groups(
             array, device_id, source_sg_name, target_sg_name, extra_specs,
-            force=True)
+            force=True, parent_sg=parent_sg)
 
         # Check if volume should be member of GVG
         self.masking.return_volume_to_volume_group(

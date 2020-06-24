@@ -791,7 +791,7 @@ class VolumeManager(manager.CleanableManager,
             if res_backend != backend:
                 msg = (_('Invalid %(resource)s: %(resource)s %(id)s is not '
                          'local to %(backend)s.') %
-                       {'resource': resource.obj_name, 'id': resource.id,
+                       {'resource': resource.obj_name(), 'id': resource.id,
                         'backend': backend})
                 raise exception.Invalid(msg)
 
@@ -2423,7 +2423,7 @@ class VolumeManager(manager.CleanableManager,
         # In the new flow we simplified this and we don't need it, instead of
         # doing a bunch of swapping we just do attachment-create/delete on the
         # nova side, and then here we just do the ID swaps that are necessary
-        # to maintain the old beahvior
+        # to maintain the old behavior
 
         # Restore the attachments for old flow use-case
         if orig_volume_status == 'in-use' and volume.status in ['available',

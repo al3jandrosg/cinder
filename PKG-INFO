@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: cinder
-Version: 16.0.0
+Version: 16.1.0.dev131
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -54,19 +54,20 @@ Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
 Requires-Python: >=3.6
 Provides-Extra: all
 Provides-Extra: datacore
-Provides-Extra: powermax
-Provides-Extra: vnx
-Provides-Extra: unity
+Provides-Extra: datera
+Provides-Extra: ds8k
 Provides-Extra: fujitsu
 Provides-Extra: hpe3par
-Provides-Extra: kaminario
-Provides-Extra: ds8k
 Provides-Extra: infinidat
+Provides-Extra: kaminario
+Provides-Extra: powermax
 Provides-Extra: pure
 Provides-Extra: rsd
 Provides-Extra: storpool
-Provides-Extra: datera
 Provides-Extra: test
+Provides-Extra: unity
+Provides-Extra: vnx

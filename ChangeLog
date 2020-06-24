@@ -1,54 +1,113 @@
 CHANGES
 =======
 
-16.0.0
-------
-
-* Monkey patch original current\_thread \_active
-
-16.0.0.0rc2
------------
-
-* Nit: Update comment and release note on Quobyte driver bugfix
-* Fix nits from RBD volume migration changes
-* Add glance image colocation feature for Virtuozzo driver
-* NetApp SolidFire: Fix pylint issues
-* NetApp ONTAP: Fix iSCSI multiattach volume terminates connection
 * Imported Translations from Zanata
-* Correct unsupported drivers release note
-* Revert "Mark MacroSAN Driver Unsupported"
-* Update TOX\_CONSTRAINTS\_FILE for stable/ussuri
-* Update .gitreview for stable/ussuri
+* PowerMax Driver - Ussuri Documentation
+* Drop one more use of mock lib
+* Imported Translations from Zanata
+* Update Pure to support revert\_to\_snapshot
+* Stop to use the \_\_future\_\_ module
+* Tests: Mock out compute class for NfsDriverDoSetupTestCase
+* docs: fixes wrong config file reference
+* 3PAR: Fix live migration
+* bump pycodestyle to 2.6.0
+* Bump taskflow requirement to 3.8.0
+* NetApp ONTAP: Fix extend volume for iSCSI/FCP
+* Remove VxFlex OS credentials from connection\_properties
+* Add revert to snapshot support for Pure Storage drivers
+* Google backup support client 1.8.2
+* Improve tenacity retry sleep mocking
+* PowerMax Driver - Array capabilities extend fix
+* Correct formatting in release note
+* Creating image-volume cache on NFS backend fails
+* Imported Translations from Zanata
+* Fix a misspelling error in QNAP driver
+* Switch to newer openstackdocstheme and reno versions
+* Add log if resource\_filters json does not exist
+* Cap jsonschema 3.2.0 as the minimal version
+* Remove reference to ThinLVMVolumeDrive
+* Fix a grammar error in explanatory notes
+* Add releasenote/ to doc8 ignore list
+* [SPDK] Add https protocol option to communicate with SPDK
+* Update Nimble features in Support matrix
+* Fix Invalid() exception msg
+* 3PAR - Fix renaming volume after migration
+* Imported Translations from Zanata
+* Fix nfs\_mount\_options description
+* Remove translation sections from setup.cfg
+* Raise lower constraints to meet our minimums
+* Fix hacking min version to 3.0.1
+* Fix api-ref for GET snapshot response
+* Don't show host info to non-admins
+* Fix compliance tests
+* Make py3 default tox target flexible
+* Tests: Make tests less random
+* Add a /healthcheck middleware
+* Fixed issues with Pure syncrep iSCSI CIDRs
+* Switch from retrying to tenacity
+* Fix typo on service cluster change method
+* Move macrosan unit tests to driver directory
+* PowerMax Driver - Concurrent live migrations failure
+* Fix outdated comment in rootwrap filter
+* Imported Translations from Zanata
+* Update api-ref mv history file
+* Monkey patch original current\_thread \_active
+* Fix doc: s/cgroup-bin/cgroup-tools/
+* Native Zuul v3 cinder-grenade jobs
+* Move unit test code under tests/unit/
+* Make releasenotes build parallel
+* PowerMax Driver - U4P failover lock not released on exception
+* NetApp ONTAP NFS driver fail to flexclone glance image
+* Reserve migrations for DB backports
+* Imported Translations from Zanata
+* NetApp SolidFire: Fix pylint issues
+* PowerMax Driver - Live migrate remove rep vol from sg
+* NetApp ONTAP: Fix iSCSI multiattach volume terminates connection
+* Stop invoking Python 2
+* Imported Translations from Zanata
+* Switch to py38 and update version metadata
+* Add Python3 victoria unit tests
+* Update master for stable/ussuri
 
 16.0.0.0rc1
 -----------
 
+* Nit: Update comment and release note on Quobyte driver bugfix
 * Add ussuri prelude to release notes
+* Add test coverage for manage\_snapshot\_flow
 * Remove XIV part from configuration docs
 * update typo and official brandname in RN
 * Update NetApp SolidFire Active/Active support in Support Matrix
 * Add release note for drivers unsupported in Train
+* Delete volume with additional removehostmappings parameter
 * Fix driver doc ordering do to file casing
+* Fix nits from RBD volume migration changes
+* Revert "Mark MacroSAN Driver Unsupported"
 * Add filter\_function and goodness\_function to pools
 * Updating docs for Datera driver
 * HPE 3PAR: Support duplicated FQDN in network
+* NetApp SolidFire: Fix retype to SolidFire
 * Add support for IBM GPFS Driver
 * PowerMax Driver - RDF status validation
 * Imported Translations from Zanata
 * add docs and release note for sandstone iscsi driver Partially-implements: bp add-sandstone-driver
 * Update HACKING document to match current checks
+* Fix service-get-log to respect server filters
+* Add glance image colocation feature for Virtuozzo driver
 * Cleanup py27 support
 * Correct description for encryption-type policies
 * Resolve deprecation of encryption policy target
 * PowerMax Driver - PowerMax Pools Fix
 * PowerMax Driver - Compression Change Bug Fix
 * Fix volume migration fails in the same ceph RBD pool
+* Fix TypeError when doing glance retry
 * Imported Translations from Zanata
 * Updating release notes for Datera driver
 * Fix arguments order inside assertEqual
 * PowerMax Driver - Detach RepConfig logging & Retype rename remote fix
 * Add tests for volume type encryption type policies
 * Fix missing print format in log messages
+* Reduce deprecation warnings
 * Update upgrade check removed drivers for ussuri
 * Prevent creation of ssh\_known\_hosts file in UT run
 * Handle py38 unit test changes
@@ -102,6 +161,7 @@ CHANGES
 * Remove suds from requirements
 * RBD: Add missing driver options
 * SAN: Add missing driver options
+* Fix a spelling mistake
 * Do not rename rbd based volume after migration
 * PowerMax Driver - Allowing for default volume type in group
 * Vmware: Revert the volume stats revert
@@ -149,6 +209,7 @@ CHANGES
 * Seagate driver: Add Basic auth header when logging in via HTTPS
 * Support volume transfer \`name\` filters
 * PowerMax Driver - Get Manageable Volumes Fix
+* Update api-ref
 * Fix volume unit test
 * NEC driver: fix migrate/retype an in-use volume
 * Update driver removal policy

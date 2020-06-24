@@ -19,8 +19,8 @@ from unittest import mock
 from ddt import data
 from ddt import ddt
 from ddt import unpack
-from defusedxml import cElementTree as ET
 import eventlet
+from lxml import etree as ET
 from oslo_config import cfg
 from oslo_utils import units
 import requests
@@ -28,7 +28,7 @@ import six
 from six.moves import urllib
 
 from cinder import exception
-from cinder import test
+from cinder.tests.unit import test
 from cinder import utils
 from cinder.volume import driver
 from cinder.volume.drivers import qnap

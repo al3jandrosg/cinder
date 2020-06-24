@@ -25,9 +25,9 @@ from cinder import context
 from cinder import exception
 from cinder.image import image_utils
 from cinder.objects import fields
-from cinder import test
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder import utils
 from cinder.volume.drivers import remotefs
 from cinder.volume import volume_utils
@@ -280,7 +280,9 @@ class RemoteFsSnapDriverTestCase(test.TestCase):
         exp_acceptable_states = ['available', 'in-use', 'backing-up']
         if tmp_snap:
             exp_acceptable_states.append('downloading')
-            self._fake_snapshot.id = 'tmp-snap-%s' % self._fake_snapshot.id
+            self._fake_snapshot.volume.status = 'downloading'
+            display_name = 'tmp-snap-%s' % self._fake_snapshot.id
+            self._fake_snapshot.display_name = display_name
 
         if volume_in_use:
             self._fake_snapshot.volume.status = 'backing-up'
@@ -314,6 +316,9 @@ class RemoteFsSnapDriverTestCase(test.TestCase):
         self.assertRaises(exception.InvalidVolume,
                           self._driver._create_snapshot,
                           self._fake_snapshot)
+
+    def test_create_snapshot_w_image_caching(self):
+        self._test_create_snapshot(tmp_snap=True)
 
     @mock.patch('cinder.db.snapshot_get')
     @mock.patch('time.sleep')

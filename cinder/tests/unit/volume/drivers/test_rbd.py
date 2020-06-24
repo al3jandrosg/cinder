@@ -35,11 +35,11 @@ import cinder.image.glance
 from cinder.image import image_utils
 from cinder import objects
 from cinder.objects import fields
-from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.tests.unit.keymgr import fake as fake_keymgr
+from cinder.tests.unit import test
 from cinder.tests.unit import utils
 from cinder.tests.unit.volume import test_driver
 from cinder.volume import configuration as conf
@@ -91,14 +91,7 @@ def common_mocks(f):
     The point of doing these mocks here is so that we don't accidentally set
     mocks that can't/don't get unset.
     """
-    def _FakeRetrying(wait_func=None,
-                      original_retrying = driver.utils.retrying.Retrying,
-                      *args, **kwargs):
-        return original_retrying(wait_func=lambda *a, **k: 0,
-                                 *args, **kwargs)
-
     def _common_inner_inner1(inst, *args, **kwargs):
-        @mock.patch('retrying.Retrying', _FakeRetrying)
         @mock.patch.object(driver.RBDDriver, '_get_usage_info')
         @mock.patch('cinder.volume.drivers.rbd.RBDVolumeProxy')
         @mock.patch('cinder.volume.drivers.rbd.RADOSClient')

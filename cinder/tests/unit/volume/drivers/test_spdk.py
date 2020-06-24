@@ -21,9 +21,9 @@ from oslo_utils import units
 
 from cinder import context
 from cinder import objects
-from cinder import test
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_volume
+from cinder.tests.unit import test
 from cinder.tests.unit import utils as test_utils
 from cinder import utils
 from cinder.volume import configuration as conf
@@ -510,6 +510,7 @@ class SpdkDriverTestCase(test.TestCase):
         self.configuration.target_protocol = "nvmet_rdma"
         self.configuration.spdk_rpc_ip = "127.0.0.1"
         self.configuration.spdk_rpc_port = 8000
+        self.configuration.spdk_rpc_protocol = "https"
         mock_safe_get = mock.Mock()
         mock_safe_get.return_value = 'spdk-nvmeof'
         self.configuration.safe_get = mock_safe_get

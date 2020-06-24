@@ -1,7 +1,6 @@
-Description: Skipping these for now to unblock ussuri final release
-  for focal. Will revisit in victoria.
+Description: Skip failing NFS tests until fixed upstream.
 Author: Corey Bryant <corey.bryant@canonical.com>
-Bug: https://bugs.launchpad.net/bugs/1878987
+Bug: https://bugs.launchpad.net/bugs/1841671
 Forwarded: no
 
 --- a/cinder/tests/unit/volume/drivers/test_nfs.py
@@ -12,9 +11,9 @@ Forwarded: no
  import os
 +import unittest
  from unittest import mock
- import uuid
  
-@@ -708,6 +709,7 @@
+ import ddt
+@@ -705,6 +706,7 @@
  
              self.assertEqual(ret, 0.14)
  
@@ -22,7 +21,7 @@ Forwarded: no
      def test_create_sparsed_volume(self):
          self._set_driver()
          drv = self._driver
-@@ -725,6 +727,7 @@
+@@ -722,6 +724,7 @@
                                                                   mock.ANY)
                  mock_set_rw_permissions.assert_called_once_with(mock.ANY)
  
@@ -30,21 +29,3 @@ Forwarded: no
      def test_create_nonsparsed_volume(self):
          self._set_driver()
          drv = self._driver
---- a/cinder/tests/unit/volume/drivers/test_rbd.py
-+++ b/cinder/tests/unit/volume/drivers/test_rbd.py
-@@ -19,6 +19,7 @@
- import os
- import tempfile
- import time
-+import unittest
- from unittest import mock
- from unittest.mock import call
- import uuid
-@@ -663,6 +664,7 @@
-             self.assertTrue(
-                 self.driver.rbd.Image.return_value.remove_snap.called)
- 
-+    @unittest.skip("Skipped by Ubuntu")
-     @common_mocks
-     def test_delete_volume(self):
-         client = self.mock_client.return_value
