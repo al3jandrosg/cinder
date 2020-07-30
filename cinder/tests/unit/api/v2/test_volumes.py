@@ -46,7 +46,6 @@ from cinder.tests.unit.image import fake as fake_image
 from cinder.tests.unit import test
 from cinder.tests.unit import utils
 from cinder.volume import api as volume_api
-from cinder.volume import volume_types
 
 CONF = cfg.CONF
 
@@ -275,10 +274,6 @@ class VolumeApiTest(test.TestCase):
             self.controller.volume_api, context,
             vol['size'], v2_fakes.DEFAULT_VOL_NAME,
             v2_fakes.DEFAULT_VOL_DESCRIPTION,
-            volume_type=
-            objects.VolumeType.get_by_name_or_id(
-                context,
-                volume_types.get_default_volume_type()['id']),
             **kwargs)
 
     @mock.patch.object(volume_api.API, 'get_snapshot', autospec=True)
@@ -340,10 +335,6 @@ class VolumeApiTest(test.TestCase):
             self.controller.volume_api, context,
             vol['size'], v2_fakes.DEFAULT_VOL_NAME,
             v2_fakes.DEFAULT_VOL_DESCRIPTION,
-            volume_type=
-            objects.VolumeType.get_by_name_or_id(
-                context,
-                volume_types.get_default_volume_type()['id']),
             **kwargs)
 
     @mock.patch.object(volume_api.API, 'get_volume', autospec=True)
@@ -925,6 +916,33 @@ class VolumeApiTest(test.TestCase):
             tzinfo=iso8601.UTC)
         expected = {'volumes': [exp_vol['volume']]}
         self.assertEqual(expected, res_dict)
+
+    def test_volume_list_detail_host_name_admin_non_admin(self):
+        fake_host = 'fake_host'
+        volume = v2_fakes.create_fake_volume(fake.VOLUME_ID)
+        del volume['name']
+        del volume['volume_type']
+        db.volume_create(context.get_admin_context(), volume)
+        values = {'volume_id': fake.VOLUME_ID, }
+        attachment = db.volume_attach(context.get_admin_context(), values)
+        db.volume_attached(context.get_admin_context(),
+                           attachment['id'], fake.INSTANCE_ID, fake_host, '/')
+        db.volume_attachment_get(context.get_admin_context(),
+                                 attachment['id'])
+
+        req = fakes.HTTPRequest.blank('/v2/volumes/detail')
+        res_dict = self.controller.detail(req)
+        # host_name will always be None for non-admins
+        self.assertIsNone(
+            res_dict['volumes'][0]['attachments'][0]['host_name'])
+
+        admin_ctx = context.RequestContext(fake.USER_ID, fake.PROJECT_ID, True)
+        req.environ['cinder.context'] = admin_ctx
+        res_dict = self.controller.detail(req)
+        # correct host_name is returned for admins
+        self.assertEqual(fake_host,
+                         res_dict['volumes'][0]['attachments'][0]['host_name']
+                         )
 
     def test_volume_index_with_marker(self):
         def fake_volume_get_all_by_project(context, project_id, marker, limit,

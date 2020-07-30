@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2019 Dell Inc. or its subsidiaries.
+# Copyright (c) 2020 Dell Inc. or its subsidiaries.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -281,6 +281,8 @@ class FakeConfiguration(object):
         self.retries = retries
         self.volume_backend_name = volume_backend_name
         self.config_group = volume_backend_name
+        self.filter_function = None
+        self.goodness_function = None
         self.san_is_local = False
         if replication_device:
             self.replication_device = replication_device

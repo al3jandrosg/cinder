@@ -1,0 +1,355 @@
+---
+file-contents:
+  releasenotes/notes/1884495-173f375dc5274fe6.yaml:
+    features:
+    - 'Nimble driver now supports discard.
+
+      '
+  releasenotes/notes/SC-included_domain_ips_ListOpt-61bacddee199ce83.yaml:
+    features:
+    - Added an ``included_domain_ips`` option to the Dell EMC SC driver. This option
+      takes a comma separated list of target IP addresses listed under the fault domains
+      to whitelisted. This option only applies to the ISCSI driver.
+  releasenotes/notes/bp-nfs-volume-encryption-3d8362843caeb39c.yaml:
+    features:
+    - 'The NFS driver now supports the creation of encrypted volumes.
+
+      '
+  releasenotes/notes/bp-powerstore-cinder-driver-94f8c7f1371eafe7.yaml:
+    features:
+    - 'Add Dell EMC PowerStore Storage Driver (iSCSI, FC).
+
+      '
+  releasenotes/notes/bug-1823200-victoria-ecd2d99c9223d84b.yaml:
+    fixes:
+    - '`Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_:
+
+      This release contains an updated Dell EMC VxFlex OS driver.  It must
+
+      be used with ``os-brick`` version 3.1.0 or greater and requires that
+
+      a new configuration file be deployed on compute nodes, cinder nodes,
+
+      and anywhere you would perform a volume attachment in your deployment.
+
+      See the `Dell EMC VxFlex OS (ScaleIO) Storage driver
+
+      <https://docs.openstack.org/cinder/latest/configuration/block-storage/drivers/dell-emc-vxflex-driver.html>`_
+
+      documentation for details about the configuration file, and see
+
+      `OSSN-0086 <https://wiki.openstack.org/wiki/OSSN/OSSN-0086>`_ for
+
+      more information about the security vulnerability.
+
+      '
+    security:
+    - 'Dell EMC VxFlex OS driver: This release contains a fix for
+
+      `Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_.
+
+      See `OSSN-0086 <https://wiki.openstack.org/wiki/OSSN/OSSN-0086>`_
+
+      for details.
+
+      '
+    upgrade:
+    - 'The fix for `Bug #1823200
+
+      <https://bugs.launchpad.net/cinder/+bug/1823200>`_ requires
+
+      ``os-brick`` version 3.1.0 or greater.
+
+      '
+  releasenotes/notes/bug-1828386-fix-retype-rbd-backend.yaml:
+    fixes:
+    - 'Fix the bug that a volume retyped from
+
+      other volume type to replicated or
+
+      multiattach type cannot be enabled replicated
+
+      or multiattach in rbd driver. (Bug #1828386)
+
+      '
+  releasenotes/notes/bug-1859652-netapp-fix-retype-attached-volume-to-solidfire-1933f03673ff078d.yaml:
+    fixes:
+    - 'Fixed `bug #1859652 <https://bugs.launchpad.net/cinder/+bug/1859652>`_
+
+      to allow retyping an attached volume to SolidFire.
+
+      '
+  releasenotes/notes/bug-1869746-cross-project-incremental-backup-error.yaml:
+    fixes:
+    - 'Cinder no longer allows an incremental backup to be
+
+      created while having the parent backup in another
+
+      project.
+
+      '
+  releasenotes/notes/bug-1874134-netapp-ONTAP-fix-max-resize-size-ad2d88da8721560e.yaml:
+    fixes:
+    - 'Fix bug `#1874134 <https://bugs.launchpad.net/cinder/+bug/1874134>`_,
+
+      allowing an iSCSI or FCP volume to be extended to a size up to 16TB
+
+      regardless of its original size, even if it''s attached to an instance.
+
+      '
+  releasenotes/notes/bug-1875570-nfs-image-volume-cache-c45e840a6ec2a702.yaml:
+    fixes:
+    - '`Bug #1875570 <https://bugs.launchpad.net/cinder/+bug/1875570>`_:
+
+      Fixed issue with NFS backend where the image-volume cache was
+
+      never used to create a volume, even when the cache was enabled.
+
+      '
+  releasenotes/notes/bug-1879578-volume_type-regression-de82f4152c7b2f77.yaml:
+    fixes:
+    - "`Bug #1879578 <https://bugs.launchpad.net/cinder/+bug/1879578>`_:\nA regression\
+      \ in the Train release caused Cinder to assign the default\nvolume type too\
+      \ aggressively when a volume type was not specified in\na volume-create request.\
+      \  As a result, some alternative methods of\nspecifying the volume type were\
+      \ ignored and the default type (either\nconfigured by the operator or the system\
+      \ default) would be assigned.\n\nThis release restores the intended behavior,\
+      \ which is described as\nfollows:\n\nIf a ``volume_type`` is not specified when\
+      \ a volume is created, Cinder\ntries to infer the volume type from other information\
+      \ in the\nvolume-create request:\n\n* if a ``source_volid`` is supplied in the\
+      \ request, the volume type\n  is inferred from the source volume's volume type\n\
+      * if a ``snapshot_id`` is supplied in the request, the volume type\n  is inferred\
+      \ from the volume type associated with the snapshot\n* if an ``imageRef`` is\
+      \ supplied in the request, and the image has\n  a ``cinder_img_volume_type``\
+      \ image property, the volume type is\n  inferred from the value of that image\
+      \ property\n\nOtherwise, the volume type is the default volume type configured\
+      \ by\nthe operator, and if no volume type is so configured, the volume type\n\
+      is the system default volume type, namely, ``__DEFAULT__``.\n\nWhen a volume\
+      \ type is specified explicitly in a volume-create call, Cinder\nwill use the\
+      \ specified type.  If the specified type cannot be assigned due\nto a conflict\
+      \ with other parameters in the volume-create call, however, the\ncall will result\
+      \ in a 400 (Bad Request) response.\n"
+  releasenotes/notes/bug-1886222-nfs-snapshot-82b5519175c48a6f.yaml:
+    fixes:
+    - '`Bug #1886222 <https://bugs.launchpad.net/cinder/+bug/1886222>`_:
+
+      Fixed an issue with creating a snapshot on an NFS backend
+
+      if the snapshot name is not specified.
+
+      '
+  releasenotes/notes/cleanup-rbd-temp-file-during-convert-fail-3848e9dbe7e15fc6.yaml:
+    fixes:
+    - '`Bug #1873738 <https://bugs.launchpad.net/cinder/+bug/1873738>`_: RBD Driver:
+
+      Added cleanup for residue destination file if the copy image to encrypted volume
+
+      operation fails.'
+  releasenotes/notes/fix-3par-live-migration-0065bd2626fdb4a1.yaml:
+    fixes:
+    - 'Fix HPE 3PAR driver issue where volumes that were live migrated to it would
+
+      end up being inaccessible.  We would no longer be able to use the volume
+
+      for any operation, such as attach, detach, delete, snapshot, etc.
+
+      (bug 1697422)
+
+      '
+  releasenotes/notes/fix-3par-migrate-rename-662d984e070a1de2.yaml:
+    fixes:
+    - 'Fix the HPE 3PAR driver''s attempt to rename the backend volume after
+
+      it was migrated. If the original volume resides on the same 3PAR backend
+
+      then the pre and post migration volume names are swapped. Otherwise, the
+
+      newly migrated volume is renamed to match the original name.
+
+      (bug 1858119)
+
+      '
+  releasenotes/notes/fix-host-info-in-volume-details-1759280bd236421e.yaml:
+    fixes:
+    - '`Bug #1740950 <https://bugs.launchpad.net/cinder/+bug/1740950>`_:
+
+      the ``host_name`` field in any object in the ``attachments`` array
+
+      of the volume detail response is populated only when the call is
+
+      made in an administrative context.  Otherwise, its value is the
+
+      JSON ``null`` value.'
+    security:
+    - 'It was possible under certain circumstances for the host name
+
+      of an instance to be leaked in the volume detail response.  This
+
+      has been fixed in the current release.  The ``host_name`` field
+
+      in any object in the ``attachments`` array of the volume
+
+      detail response is populated only when the call is made in an
+
+      administrative context.  Otherwise, its value is the JSON ``null``
+
+      value.
+
+      '
+    upgrade:
+    - 'Due to the fix for `Bug #1740950
+
+      <https://bugs.launchpad.net/cinder/+bug/1740950>`_, the
+
+      ``host_name`` field in any object in the ``attachments``
+
+      array of the volume detail response is populated only when
+
+      the call is made in an administrative context.  Otherwise,
+
+      its value is the JSON ``null`` value.  This is consistent with
+
+      prior API behavior, as it has always been possible for the
+
+      value of that field to be ``null``.
+
+      '
+  releasenotes/notes/fix-kaminario-unique_fqdn_network-ecde36f614c30733.yaml:
+    fixes:
+    - 'Fix ``unique_fqdn_network`` configuration option for the Kaminario driver,
+
+      as it was being ignored when defined in the driver section, which used to
+
+      work.
+
+      (Bug #1886042).
+
+      '
+  releasenotes/notes/healthcheck-449ed4292e6bfa22.yaml:
+    features:
+    - 'The oslo.middleware /healthcheck is now activated by default in the Cinder
+
+      api-paste.ini. Operators can use it to configure HAproxy or the monitoring
+
+      of Cinder APIs. Edit the ``api-paste.ini`` file and remove any healthcheck
+
+      entries to disable this functionality.
+
+      '
+  releasenotes/notes/hitachi-storage-driver-d38dbd990730388d.yaml:
+    features:
+    - New Cinder Hitachi driver based on REST API for Hitachi VSP storages.
+  releasenotes/notes/ibm-storwize-removehostmappings-e7eeaf898786c6bf.yaml:
+    upgrade:
+    - 'IBM Spectrum Virtualize Family (previously known as Storwize) driver
+
+      cannot delete volume which has host mapping in some rare cases while
+
+      code_level of IBM Spectrum Virtualize Family storage lower than
+
+      7.7.0.0. Please upgrade to latest code to avoid this kind of issue.
+
+      '
+  releasenotes/notes/netapp-ontap-fix-detach-multiattach-d99d33dff2fefb4c.yaml:
+    fixes:
+    - 'NetApp ONTAP: Fixes `bug 1839384
+
+      <https://bugs.launchpad.net/cinder/+bug/1839384>`__ Detaching any instance
+
+      from multiattached volume terminates connection. Now the connection is
+
+      terminated only if there''re no other instances using the same initiator.
+
+      '
+  releasenotes/notes/powermax-91-to-92-endpoints-bb467c8aca0165dd.yaml:
+    other:
+    - 'PowerMax driver - the minimum version of Unisphere for PowerMax required
+
+      for Victoria is 9.2, so all the latest 92 REST endpoints will be used.
+
+      '
+  releasenotes/notes/powermax-bug-1875478-8c9072ad9a87b83d.yaml:
+    fixes:
+    - 'PowerMax Driver - Concurrent live migrations can sometimes fail when one
+
+      thread deletes a storage group that another thread may need.
+
+      '
+  releasenotes/notes/pure-storage-revert-snapshot-b7e0ec4f958418c4.yaml:
+    features:
+    - Add reverting to snapshot support in Pure Storage Cinder driver.
+notes:
+- files:
+  - - releasenotes/notes/1884495-173f375dc5274fe6.yaml
+    - !!binary |
+      YzM1NGQ1YmQwNDUzN2Y3ZWZhNmZhZTJlYWNmODk4MGNjMDJiZWY1Zg==
+  - - releasenotes/notes/SC-included_domain_ips_ListOpt-61bacddee199ce83.yaml
+    - !!binary |
+      OGE5OTdkODhhZTJiM2MxYTkyNWVjZDEwN2M1MGZjMzEyMmUwNTAyOQ==
+  - - releasenotes/notes/bp-nfs-volume-encryption-3d8362843caeb39c.yaml
+    - !!binary |
+      NDRjN2RhOWE0NGNjMjM1YjUxNGUxYjcxNGNjNzg4MjY4M2E4NDkxZA==
+  - - releasenotes/notes/bp-powerstore-cinder-driver-94f8c7f1371eafe7.yaml
+    - !!binary |
+      NTE3Y2I2NDQ4YjYxM2I4ODg0NzZmNWRhNzVhZTRhZDI4ZjYwZjc0NA==
+  - - releasenotes/notes/bug-1823200-victoria-ecd2d99c9223d84b.yaml
+    - !!binary |
+      YjJjOTU5MjI4MWIyNDgyNGMyMTU4ZjkxYTkyOTUyODhmNDFkZDgxYQ==
+  - - releasenotes/notes/bug-1828386-fix-retype-rbd-backend.yaml
+    - !!binary |
+      MGQyMjU0N2ZkMjQ2YmU0YjA5NTM2YzJkYTYzM2FmNDIxZTljN2RmMA==
+  - - releasenotes/notes/bug-1859652-netapp-fix-retype-attached-volume-to-solidfire-1933f03673ff078d.yaml
+    - !!binary |
+      Y2E0NzVhM2RhZDk5MzYyNDkyMGQyYmNiZTY1YmY5ODE2MmYzMmUyZg==
+  - - releasenotes/notes/bug-1869746-cross-project-incremental-backup-error.yaml
+    - !!binary |
+      OGViZWFmY2JiYWZiNzAwMDUyZjNhYmZjMWY3YmEwMDQyNjlhOTJlOA==
+  - - releasenotes/notes/bug-1874134-netapp-ONTAP-fix-max-resize-size-ad2d88da8721560e.yaml
+    - !!binary |
+      NTEwNjEzZTEzNWI2Mzk3NzYyNDZkNDZjM2Q3OTc3MjA4ZDBmYmZkOA==
+  - - releasenotes/notes/bug-1875570-nfs-image-volume-cache-c45e840a6ec2a702.yaml
+    - !!binary |
+      ZjY5MDMyN2I1NWNhYzc5NTQwYzliYjdiMTBjMzkwYjczYWEzZmM2Mg==
+  - - releasenotes/notes/bug-1879578-volume_type-regression-de82f4152c7b2f77.yaml
+    - !!binary |
+      Njc0YzhlNzI4Njk5OWJiNjQwODI5MWRlMWRjNjM5NWFhYzJiMDRiMQ==
+  - - releasenotes/notes/bug-1886222-nfs-snapshot-82b5519175c48a6f.yaml
+    - !!binary |
+      MTFiNWM5ZDk3YmQ2OWY5ZThiNWRiMGQzMmJmZTI1NzA2MzE3MDE1NQ==
+  - - releasenotes/notes/cleanup-rbd-temp-file-during-convert-fail-3848e9dbe7e15fc6.yaml
+    - !!binary |
+      N2M5NWYzOTY5ZjRjMGRmNWY4MThmOTZjYjY2MmRkZGMxN2E4ZGQ2Zg==
+  - - releasenotes/notes/fix-3par-live-migration-0065bd2626fdb4a1.yaml
+    - !!binary |
+      ZmM1MTY3ODI5OGEzOGRjZDk0YmNmZTkyYzU5MGIzOGZkYjcxOTNlNA==
+  - - releasenotes/notes/fix-3par-migrate-rename-662d984e070a1de2.yaml
+    - !!binary |
+      ZDgwNjIwNjNhMzVhYjIzMDdlZGJlMzY4MjZmMzUwZjI3NjdlYTA4ZA==
+  - - releasenotes/notes/fix-host-info-in-volume-details-1759280bd236421e.yaml
+    - !!binary |
+      OWQ1YzM0MDEzMGFjMDU2ZTc1NTg0NjhjYzYxODcyZGI2NTE0MGM5Yg==
+  - - releasenotes/notes/fix-kaminario-unique_fqdn_network-ecde36f614c30733.yaml
+    - !!binary |
+      NTM1MDRmODJhNTMxNDYxNTE5MzVlNmFhYzMwMWE0MWUyYjM4NzYyMw==
+  - - releasenotes/notes/healthcheck-449ed4292e6bfa22.yaml
+    - !!binary |
+      Njk2ZWYxMmY0ZTY3NTgyYjgzNDVmN2FlOTdiNmRmNTUwNDM2NjYyZA==
+  - - releasenotes/notes/hitachi-storage-driver-d38dbd990730388d.yaml
+    - !!binary |
+      OGFhZjZhNjhiMzg1ODBlMjZjMTJmZjc1OWVlNjg3YTI2ODhiOTllNA==
+  - - releasenotes/notes/ibm-storwize-removehostmappings-e7eeaf898786c6bf.yaml
+    - !!binary |
+      YmRiOWUwYzVmMWE0ODgyOTYwZmQxOTUwZDQxNTdiMGZjYjZkMjAwMQ==
+  - - releasenotes/notes/netapp-ontap-fix-detach-multiattach-d99d33dff2fefb4c.yaml
+    - !!binary |
+      ZTI3ZDgzZjRkMDNhODlkOTgyYWViYmIzZmI4YThkMWFkYWZiZGZjNQ==
+  - - releasenotes/notes/powermax-91-to-92-endpoints-bb467c8aca0165dd.yaml
+    - !!binary |
+      ZDU5MmIyYWQwZDRlZWFiMmZiYmYyNTQyN2Q2M2I4MGZkMGM1ZDcyYg==
+  - - releasenotes/notes/powermax-bug-1875478-8c9072ad9a87b83d.yaml
+    - !!binary |
+      MDNmNWRjZTMzMjlmMmVjM2IzZmE0OWI5YWQ2OGZmYTFkMWYyN2ViOQ==
+  - - releasenotes/notes/pure-storage-revert-snapshot-b7e0ec4f958418c4.yaml
+    - !!binary |
+      ODExNmRlODllYThjYzQxMDE1MGIzYjkwMDZhYWE4ZDdiMGEzNjVmZA==
+  version: 16.0.0.0rc1-107

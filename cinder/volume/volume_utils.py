@@ -1047,17 +1047,6 @@ def get_max_over_subscription_ratio(str_value, supports_auto=False):
     return mosr
 
 
-def make_initiator_target_all2all_map(initiator_wwpns, target_wwpns):
-    """Build a simplistic all-to-all mapping."""
-    i_t_map = {}
-    for i_wwpn in initiator_wwpns:
-        i_t_map[str(i_wwpn)] = []
-        for t_wwpn in target_wwpns:
-            i_t_map[i_wwpn].append(t_wwpn)
-
-    return i_t_map
-
-
 def check_image_metadata(image_meta, vol_size):
     """Validates the image metadata."""
     # Check whether image is active
@@ -1194,6 +1183,11 @@ def check_encryption_provider(db, volume, context):
     """
 
     encryption = db.volume_encryption_metadata_get(context, volume.id)
+
+    if 'provider' not in encryption:
+        message = _("Invalid encryption spec.")
+        raise exception.VolumeDriverException(message=message)
+
     provider = encryption['provider']
     if provider in encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP:
         provider = encryptors.LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP[provider]

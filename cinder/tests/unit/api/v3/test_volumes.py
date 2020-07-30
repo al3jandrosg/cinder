@@ -47,7 +47,6 @@ from cinder.tests.unit import test
 from cinder.tests.unit import utils as test_utils
 from cinder.volume import api as volume_api
 from cinder.volume import api as vol_get
-from cinder.volume import volume_types
 
 DEFAULT_AZ = "zone1:host1"
 
@@ -347,9 +346,6 @@ class VolumeApiTest(test.TestCase):
             self.controller.volume_api, context,
             vol['size'], v2_fakes.DEFAULT_VOL_NAME,
             v2_fakes.DEFAULT_VOL_DESCRIPTION,
-            volume_type=objects.VolumeType.get_by_name_or_id(
-                context,
-                volume_types.get_default_volume_type()['id']),
             **kwargs)
 
     def test_volumes_summary_in_unsupport_version(self):
@@ -680,9 +676,6 @@ class VolumeApiTest(test.TestCase):
             self.controller.volume_api, context,
             vol['size'], v2_fakes.DEFAULT_VOL_NAME,
             v2_fakes.DEFAULT_VOL_DESCRIPTION,
-            volume_type=objects.VolumeType.get_by_name_or_id(
-                context,
-                volume_types.get_default_volume_type()['id']),
             **kwargs)
 
     @ddt.data(mv.VOLUME_CREATE_FROM_BACKUP,
@@ -723,9 +716,6 @@ class VolumeApiTest(test.TestCase):
             vol['size'],
             v2_fakes.DEFAULT_VOL_NAME,
             v2_fakes.DEFAULT_VOL_DESCRIPTION,
-            volume_type=objects.VolumeType.get_by_name_or_id(
-                context,
-                volume_types.get_default_volume_type()['id']),
             **kwargs)
 
     def test_volume_creation_with_scheduler_hints(self):
@@ -985,7 +975,7 @@ class VolumeApiTest(test.TestCase):
 
         # get_attachments should only return attachments with the
         # attached status = ATTACHED
-        attachments = ViewBuilder()._get_attachments(fake_volume)
+        attachments = ViewBuilder()._get_attachments(fake_volume, True)
 
         self.assertEqual(1, len(attachments))
         self.assertEqual(fake.UUID3, attachments[0]['attachment_id'])
@@ -994,6 +984,10 @@ class VolumeApiTest(test.TestCase):
         self.assertEqual('host1', attachments[0]['host_name'])
         self.assertEqual('na', attachments[0]['device'])
         self.assertEqual(att_time, attachments[0]['attached_at'])
+
+        # When admin context is false (non-admin), host_name will be None
+        attachments = ViewBuilder()._get_attachments(fake_volume, False)
+        self.assertIsNone(attachments[0]['host_name'])
 
     @ddt.data(('created_at=gt:', 0), ('created_at=lt:', 2))
     @ddt.unpack

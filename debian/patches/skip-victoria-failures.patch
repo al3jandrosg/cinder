@@ -12,8 +12,8 @@ Forwarded: no
 +import unittest
  from unittest import mock
  
- import ddt
-@@ -705,6 +706,7 @@
+ import castellan
+@@ -774,6 +775,7 @@ class NfsDriverTestCase(test.TestCase):
  
              self.assertEqual(ret, 0.14)
  
@@ -21,7 +21,7 @@ Forwarded: no
      def test_create_sparsed_volume(self):
          self._set_driver()
          drv = self._driver
-@@ -722,6 +724,7 @@
+@@ -791,6 +793,7 @@ class NfsDriverTestCase(test.TestCase):
                                                                   mock.ANY)
                  mock_set_rw_permissions.assert_called_once_with(mock.ANY)
  

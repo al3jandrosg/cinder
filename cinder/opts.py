@@ -74,6 +74,8 @@ from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell_emc.powermax import common as \
     cinder_volume_drivers_dell_emc_powermax_common
+from cinder.volume.drivers.dell_emc.powerstore import driver as \
+    cinder_volume_drivers_dell_emc_powerstore_driver
 from cinder.volume.drivers.dell_emc.sc import storagecenter_common as \
     cinder_volume_drivers_dell_emc_sc_storagecentercommon
 from cinder.volume.drivers.dell_emc.unity import driver as \
@@ -88,6 +90,12 @@ from cinder.volume.drivers.fujitsu.eternus_dx import eternus_dx_common as \
     cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon
 from cinder.volume.drivers.fusionstorage import dsware as \
     cinder_volume_drivers_fusionstorage_dsware
+from cinder.volume.drivers.hitachi import hbsd_common as \
+    cinder_volume_drivers_hitachi_hbsdcommon
+from cinder.volume.drivers.hitachi import hbsd_fc as \
+    cinder_volume_drivers_hitachi_hbsdfc
+from cinder.volume.drivers.hitachi import hbsd_rest as \
+    cinder_volume_drivers_hitachi_hbsdrest
 from cinder.volume.drivers.hpe import hpe_3par_common as \
     cinder_volume_drivers_hpe_hpe3parcommon
 from cinder.volume.drivers.huawei import common as \
@@ -290,6 +298,8 @@ def list_opts():
                 cinder_volume_driver.image_opts,
                 cinder_volume_driver.fqdn_opts,
                 cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
+                cinder_volume_drivers_dell_emc_powerstore_driver.
+                POWERSTORE_OPTS,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
                 common_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,
@@ -298,6 +308,9 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_xtremio.XTREMIO_OPTS,
                 cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
+                cinder_volume_drivers_hitachi_hbsdcommon.COMMON_VOLUME_OPTS,
+                cinder_volume_drivers_hitachi_hbsdfc.FC_VOLUME_OPTS,
+                cinder_volume_drivers_hitachi_hbsdrest.REST_VOLUME_OPTS,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
                 cinder_volume_drivers_huawei_common.huawei_opts,
                 cinder_volume_drivers_ibm_flashsystemcommon.flashsystem_opts,

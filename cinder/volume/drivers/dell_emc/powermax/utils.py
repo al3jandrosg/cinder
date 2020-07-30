@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2018 Dell Inc. or its subsidiaries.
+# Copyright (c) 2020 Dell Inc. or its subsidiaries.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -78,7 +78,8 @@ RDF_FAILEDOVER_STATE = 'failed over'
 RDF_ACTIVE = 'active'
 RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
-RDF_VALID_STATES_SYNC = [RDF_SYNC_STATE, RDF_SYNCINPROG_STATE]
+RDF_VALID_STATES_SYNC = [RDF_SYNC_STATE, RDF_SUSPENDED_STATE,
+                         RDF_SYNCINPROG_STATE]
 RDF_VALID_STATES_ASYNC = [RDF_CONSISTENT_STATE, RDF_SUSPENDED_STATE,
                           RDF_SYNCINPROG_STATE]
 RDF_VALID_STATES_METRO = [RDF_ACTIVEBIAS, RDF_ACTIVEACTIVE,

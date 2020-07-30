@@ -1,10 +1,32 @@
 CHANGES
 =======
 
+* Add Cinder driver for Dell EMC PowerStore
+* Creating snapshot on NFS backend fails
+* zuul: collect cinderlib logs from tempest node(s) only
+* Bump hacking version to 3.1.0
+* PowerMax Driver - Volume Migrate Exception Handling
+* Correct new\_type type in VolumeManager retype method
+* Add Hitachi Block Storage Driver
+* PowerMax Driver -  Changing from 91 to 92 REST endpoints
+* Correct a typo of the hpe driver
+* Imported Translations from Zanata
+* cinder:api-ref replace mention of "policy.json"
+* Kaminario: Fix unique\_fqdn\_network option
+* Don't show host\_name to non-admins
+* Move get\_volume\_stats impl to the base volume driver
+* Add non-voting code coverage job
+* Disable siblings for the cindelib functional tests
+* Default volume\_type set too early
+* Add cinder discard in nimble driver
+* NFS encrypted volume support
+* RBD: Cleanup temporary file during exception
+* PowerMax Driver - Create vol suspend fix & DeviceID check
 * Imported Translations from Zanata
 * PowerMax Driver - Ussuri Documentation
 * Drop one more use of mock lib
 * Imported Translations from Zanata
+* PowerMax Driver - RDF State Validation Enhancements
 * Update Pure to support revert\_to\_snapshot
 * Stop to use the \_\_future\_\_ module
 * Tests: Mock out compute class for NfsDriverDoSetupTestCase
@@ -12,6 +34,7 @@ CHANGES
 * 3PAR: Fix live migration
 * bump pycodestyle to 2.6.0
 * Bump taskflow requirement to 3.8.0
+* Dell EMC Sc: Add support for whitelisting fault domains
 * NetApp ONTAP: Fix extend volume for iSCSI/FCP
 * Remove VxFlex OS credentials from connection\_properties
 * Add revert to snapshot support for Pure Storage drivers
@@ -29,8 +52,11 @@ CHANGES
 * Fix a grammar error in explanatory notes
 * Add releasenote/ to doc8 ignore list
 * [SPDK] Add https protocol option to communicate with SPDK
+* Fix cross-project incremental backups
 * Update Nimble features in Support matrix
 * Fix Invalid() exception msg
+* tests: remove self.injected
+* Move make\_initiator\_target\_all2all\_map out of vutils
 * 3PAR - Fix renaming volume after migration
 * Imported Translations from Zanata
 * Fix nfs\_mount\_options description
@@ -50,6 +76,7 @@ CHANGES
 * PowerMax Driver - Concurrent live migrations failure
 * Fix outdated comment in rootwrap filter
 * Imported Translations from Zanata
+* Add missing context to function call
 * Update api-ref mv history file
 * Monkey patch original current\_thread \_active
 * Fix doc: s/cgroup-bin/cgroup-tools/
@@ -61,6 +88,7 @@ CHANGES
 * Reserve migrations for DB backports
 * Imported Translations from Zanata
 * NetApp SolidFire: Fix pylint issues
+* PowerMax Driver - Rep validation fix & Retype suspension fix
 * PowerMax Driver - Live migrate remove rep vol from sg
 * NetApp ONTAP: Fix iSCSI multiattach volume terminates connection
 * Stop invoking Python 2
