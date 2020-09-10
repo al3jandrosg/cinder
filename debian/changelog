@@ -1,3 +1,13 @@
+cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu1) groovy; urgency=medium
+
+  * d/control: Remove Breaks/Replaces that are older than Focal (LP: #1878419).
+  * New upstream snapshot for OpenStack Victoria.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/*: Removed. Changes landed upstream and tests fixed.
+  * d/control: Add new python3-zstd package to depends.
+
+ -- Chris MacNaughton <chris.macnaughton@canonical.com>  Thu, 10 Sep 2020 07:36:05 +0000
+
 cinder (2:17.0.0~b2~git2020073012.2124f39f9-0ubuntu1) groovy; urgency=medium
 
   * New upstream snapshot for OpenStack Victoria.

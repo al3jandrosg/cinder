@@ -1,9 +1,51 @@
 CHANGES
 =======
 
+* Add support volume local cache
+* Add release note for zstd compression
+* PowerMax Driver - Failover abilities promotion
+* Handle oslo.messaging ping endpoint
+* Add multiattach in Nimble driver
+* Remove Train online data migrations
+* Deprecate TSM Backup driver
+* Show cluster\_name in volume details
+* Mark Active-Active mode as supported
+* Add cinder-plugin-ceph-tempest-mn-aa job
+* PowerMax Driver - Failover abilities legacy improvements
+* RBD: remove rbd\_keyring\_conf option
+* Remove unnecessary releasenote
+* PowerMax Driver -  Replacing generations with snap\_ids
+* Modify default/delete volume type logic
+* Normalize release note bug links
+* Use resource\_backend for volumes and groups
+* Change default glance\_num\_retries to 3
+* Updating the release notes for PowerFlex Driver Rebrand
+* Brocade: Fix lookup UnboundLocalError
+* Doc note warning about retyping unencrypted/encrypted volume
+* Docs: Improve contributor's release notes
+* [vmware] ensure datastores exist while fetching stats
+* PowerMax Driver - Legacy volumes fail to live migrate
+* Uncomment psycopg2 in test-requirements.txt
+* Fix lower-constraints conflicts
+* Fix: show volume transfer by name for non-admins
+* Add online extend support for Dell EMC PowerStore driver
+* Doc note warning about retyping an unencrypted/encrypted volume
+* Fix revert to snapshot for non admins
+* 3PAR: Set the right minimum client version
+* PowerMax Driver - Port Group & Port Load Balancing
+* Brocade: Fix AttributeError when raising exception
+* Brocade: Python 3 support
+* Add lsscsi to bindep
+* Rebranding of VxFlex OS driver to PowerFlex
+* Remove "cinder-manage shell" commands
+* drop use of pkg\_resources
 * Add Cinder driver for Dell EMC PowerStore
+* Set cluster name for volume groups
+* Remove exception.Error class
+* Remove unused exceptions
 * Creating snapshot on NFS backend fails
 * zuul: collect cinderlib logs from tempest node(s) only
+* Support modern compression algorithms in cinder backup
 * Bump hacking version to 3.1.0
 * PowerMax Driver - Volume Migrate Exception Handling
 * Correct new\_type type in VolumeManager retype method
@@ -11,6 +53,8 @@ CHANGES
 * PowerMax Driver -  Changing from 91 to 92 REST endpoints
 * Correct a typo of the hpe driver
 * Imported Translations from Zanata
+* smbfs: pick up remotefs method signature change
+* Fix rekeying volume with legacy encryption provider
 * cinder:api-ref replace mention of "policy.json"
 * Kaminario: Fix unique\_fqdn\_network option
 * Don't show host\_name to non-admins
@@ -21,9 +65,12 @@ CHANGES
 * Add cinder discard in nimble driver
 * NFS encrypted volume support
 * RBD: Cleanup temporary file during exception
+* Make test-setup.sh compatible with mysql8
 * PowerMax Driver - Create vol suspend fix & DeviceID check
 * Imported Translations from Zanata
 * PowerMax Driver - Ussuri Documentation
+* Backup: Limit number of concurent operations
+* Add generated doc output path to doc8 ignore list
 * Drop one more use of mock lib
 * Imported Translations from Zanata
 * PowerMax Driver - RDF State Validation Enhancements
@@ -44,7 +91,9 @@ CHANGES
 * Correct formatting in release note
 * Creating image-volume cache on NFS backend fails
 * Imported Translations from Zanata
+* NetApp SolidFire: Fix bug on update cluster stats
 * Fix a misspelling error in QNAP driver
+* Fix leave volume mapped on attach failure
 * Switch to newer openstackdocstheme and reno versions
 * Add log if resource\_filters json does not exist
 * Cap jsonschema 3.2.0 as the minimal version
@@ -68,6 +117,7 @@ CHANGES
 * Fix compliance tests
 * Make py3 default tox target flexible
 * Tests: Make tests less random
+* Fix dfs-sdk package name in extra reqs
 * Add a /healthcheck middleware
 * Fixed issues with Pure syncrep iSCSI CIDRs
 * Switch from retrying to tenacity
@@ -91,6 +141,7 @@ CHANGES
 * PowerMax Driver - Rep validation fix & Retype suspension fix
 * PowerMax Driver - Live migrate remove rep vol from sg
 * NetApp ONTAP: Fix iSCSI multiattach volume terminates connection
+* Nexenta unit tests: add mock for \_read\_mounts call
 * Stop invoking Python 2
 * Imported Translations from Zanata
 * Switch to py38 and update version metadata

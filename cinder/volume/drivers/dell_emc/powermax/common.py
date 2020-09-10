@@ -34,6 +34,8 @@ from cinder.utils import retry
 from cinder.volume import configuration
 from cinder.volume.drivers.dell_emc.powermax import masking
 from cinder.volume.drivers.dell_emc.powermax import metadata as volume_metadata
+from cinder.volume.drivers.dell_emc.powermax import migrate
+from cinder.volume.drivers.dell_emc.powermax import performance
 from cinder.volume.drivers.dell_emc.powermax import provision
 from cinder.volume.drivers.dell_emc.powermax import rest
 from cinder.volume.drivers.dell_emc.powermax import utils
@@ -146,7 +148,34 @@ powermax_opts = [
                help='User defined override for short host name.'),
     cfg.StrOpt(utils.POWERMAX_PORT_GROUP_NAME_TEMPLATE,
                default='portGroupName',
-               help='User defined override for port group name.')]
+               help='User defined override for port group name.'),
+    cfg.BoolOpt(utils.LOAD_BALANCE,
+                default=False,
+                help='Enable/disable load balancing for a PowerMax backend.'),
+    cfg.BoolOpt(utils.LOAD_BALANCE_RT,
+                default=False,
+                help='Enable/disable real-time performance metrics for Port '
+                     'level load balancing for a PowerMax backend.'),
+    cfg.StrOpt(utils.PERF_DATA_FORMAT,
+               default='Avg',
+               help='Performance data format, not applicable for real-time '
+                    'metrics. Available options are "avg" and "max".'),
+    cfg.IntOpt(utils.LOAD_LOOKBACK,
+               default=60,
+               help='How far in minutes to look back for diagnostic '
+                    'performance metrics in load calculation, minimum of 0 '
+                    'maximum of 1440 (24 hours).'),
+    cfg.IntOpt(utils.LOAD_LOOKBACK_RT,
+               default=1,
+               help='How far in minutes to look back for real-time '
+                    'performance metrics in load calculation, minimum of 1 '
+                    'maximum of 10.'),
+    cfg.StrOpt(utils.PORT_GROUP_LOAD_METRIC,
+               default='PercentBusy',
+               help='Metric used for port group load calculation.'),
+    cfg.StrOpt(utils.PORT_LOAD_METRIC,
+               default='PercentBusy',
+               help='Metric used for port load calculation.')]
 
 
 CONF.register_opts(powermax_opts, group=configuration.SHARED_CONF_GROUP)
@@ -176,6 +205,7 @@ class PowerMaxCommon(object):
         self.provision = provision.PowerMaxProvision(self.rest)
         self.volume_metadata = volume_metadata.PowerMaxVolumeMetadata(
             self.rest, version, LOG.isEnabledFor(logging.DEBUG))
+        self.migrate = migrate.PowerMaxMigrate(prtcl, self.rest)
 
         # Configuration/Attributes
         self.protocol = prtcl
@@ -189,14 +219,18 @@ class PowerMaxCommon(object):
         self.replication_enabled = False
         self.rep_devices = []
         self.failover = True if active_backend_id else False
+        self.promotion = False
         self.powermax_array_tag_list = None
         self.powermax_short_host_name_template = None
         self.powermax_port_group_name_template = None
+        if active_backend_id == utils.PMAX_FAILOVER_START_ARRAY_PROMOTION:
+            self.promotion = True
 
         # Gather environment info
         self._get_replication_info()
         self._get_u4p_failover_info()
         self._gather_info()
+        self._get_performance_config()
         self.rest.validate_unisphere_version()
 
     def _gather_info(self):
@@ -250,6 +284,20 @@ class PowerMaxCommon(object):
         LOG.debug(
             "Updating volume stats on Cinder backend %(backendName)s.",
             {'backendName': self.pool_info['backend_name']})
+
+    def _get_performance_config(self):
+        """Gather performance configuration, if provided in cinder.conf."""
+        performance_config = {'load_balance': False}
+        self.performance = performance.PowerMaxPerformance(
+            self.rest, performance_config)
+
+        if self.configuration.safe_get(utils.LOAD_BALANCE):
+            LOG.info(
+                "Updating performance config for Cinder backend %(be)s.",
+                {'be': self.pool_info['backend_name']})
+            array_info = self.get_attributes_from_cinder_config()
+            self.performance.set_performance_configuration(
+                array_info['SerialNumber'], self.configuration)
 
     def _get_u4p_failover_info(self):
         """Gather Unisphere failover target information, if provided."""
@@ -665,15 +713,17 @@ class PowerMaxCommon(object):
 
         model_update = {
             'provider_location': six.text_type(snapshot_dict)}
+        snapshot_metadata = self.get_snapshot_metadata(
+            extra_specs.get('array'), snapshot_dict.get('source_id'),
+            snapshot_dict.get('snap_name'))
         model_update = self.update_metadata(
-            model_update, snapshot.metadata, self.get_snapshot_metadata(
-                extra_specs['array'], snapshot_dict['source_id'],
-                snapshot_dict['snap_name']))
+            model_update, snapshot.metadata, snapshot_metadata)
         if snapshot.metadata:
             model_update['metadata'].update(snapshot.metadata)
-
+        snapshot_metadata.update(
+            {'snap_display_name': snapshot_dict.get('snap_name')})
         self.volume_metadata.capture_snapshot_info(
-            volume, extra_specs, 'createSnapshot', snapshot_dict['snap_name'])
+            volume, extra_specs, 'createSnapshot', snapshot_metadata)
 
         return model_update
 
@@ -686,7 +736,7 @@ class PowerMaxCommon(object):
         LOG.info("Delete Snapshot: %(snapshotName)s.",
                  {'snapshotName': snapshot.name})
         extra_specs = self._initial_setup(volume)
-        sourcedevice_id, snap_name = self._parse_snap_info(
+        sourcedevice_id, snap_name, snap_id_list = self._parse_snap_info(
             extra_specs[utils.ARRAY], snapshot)
         if not sourcedevice_id and not snap_name:
             # Check if legacy snapshot
@@ -700,9 +750,10 @@ class PowerMaxCommon(object):
             LOG.info("No snapshot found on the array")
         else:
             # Ensure snap has not been recently deleted
-            self.provision.delete_volume_snap_check_for_links(
-                extra_specs[utils.ARRAY], snap_name,
-                sourcedevice_id, extra_specs)
+            for snap_id in snap_id_list:
+                self.provision.delete_volume_snap_check_for_links(
+                    extra_specs[utils.ARRAY], snap_name,
+                    sourcedevice_id, extra_specs, snap_id)
 
             LOG.info("Leaving delete_snapshot: %(ssname)s.",
                      {'ssname': snap_name})
@@ -726,6 +777,9 @@ class PowerMaxCommon(object):
         volume_name = volume.name
         LOG.debug("Detaching volume %s.", volume_name)
         reset = False if is_multiattach else True
+        if is_multiattach:
+            storage_group_names = self.rest.get_storage_groups_from_volume(
+                array, device_id)
         self.masking.remove_and_reset_members(
             array, volume, device_id, volume_name,
             extra_specs, reset, connector, async_grp=async_grp,
@@ -733,6 +787,8 @@ class PowerMaxCommon(object):
         if is_multiattach:
             self.masking.return_volume_to_fast_managed_group(
                 array, device_id, extra_specs)
+            self.migrate.cleanup_staging_objects(
+                array, storage_group_names, extra_specs)
 
     def _unmap_lun(self, volume, connector):
         """Unmaps a volume from the host.
@@ -797,7 +853,8 @@ class PowerMaxCommon(object):
                 array, volume, device_info['device_id'], extra_specs,
                 connector, is_multiattach, async_grp=mgmt_sg_name,
                 host_template=self.powermax_short_host_name_template)
-            if self.utils.is_metro_device(rep_config, extra_specs):
+            if (self.utils.is_metro_device(rep_config, extra_specs) and
+                    not self.promotion):
                 # Need to remove from remote masking view
                 device_info, __ = (self.find_host_lun_id(
                     volume, host_name, extra_specs, rep_extra_specs))
@@ -822,6 +879,31 @@ class PowerMaxCommon(object):
             volume, extra_specs, device_info['device_id'], mv_list,
             sg_list)
 
+    def _unmap_lun_promotion(self, volume, connector):
+        """Unmaps a volume from the host during promotion.
+
+        :param volume: the volume Object
+        :param connector: the connector Object
+        """
+        extra_specs = self._initial_setup(volume)
+        if not self.utils.is_replication_enabled(extra_specs):
+            LOG.error('Unable to terminate connections for non-replicated '
+                      'volumes during promotion failover. Could not unmap '
+                      'volume %s', volume.id)
+        else:
+            mode = extra_specs[utils.REP_MODE]
+            if mode == utils.REP_METRO:
+                self._unmap_lun(volume, connector)
+            else:
+                # During a promotion scenario only Metro volumes will have
+                # connections present on their remote volumes.
+                loc = ast.literal_eval(volume.provider_location)
+                device_id = loc.get('device_id')
+                promotion_key = [utils.PMAX_FAILOVER_START_ARRAY_PROMOTION]
+                self.volume_metadata.capture_detach_info(
+                    volume, extra_specs, device_id, promotion_key,
+                    promotion_key)
+
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns device and connection info.
 
@@ -844,21 +926,19 @@ class PowerMaxCommon(object):
                          type. These are precreated. If the portGroup does not
                          exist then an error will be returned to the user
          maskingview_name  = OS-<shortHostName>-<srpName>-<shortProtocol>-MV
-                        e.g OS-myShortHost-SRP_1-I-MV
+                           e.g OS-myShortHost-SRP_1-I-MV
 
         :param volume: volume Object
         :param connector: the connector Object
         :returns: dict -- device_info_dict - device information dict
         """
-        extra_specs = self._initial_setup(volume)
+        LOG.info("Initialize connection: %(vol)s.", {'vol': volume.name})
+        extra_specs = self._initial_setup(volume, init_conn=True)
         is_multipath = connector.get('multipath', False)
         rep_config = extra_specs.get(utils.REP_CONFIG)
         rep_extra_specs = self._get_replication_extra_specs(
             extra_specs, rep_config)
         remote_port_group = None
-        volume_name = volume.name
-        LOG.info("Initialize connection: %(volume)s.",
-                 {'volume': volume_name})
         if (self.utils.is_metro_device(rep_config, extra_specs)
                 and not is_multipath and self.protocol.lower() == 'iscsi'):
             LOG.warning("Either multipathing is not correctly/currently "
@@ -871,7 +951,8 @@ class PowerMaxCommon(object):
         if self.utils.is_volume_failed_over(volume):
             extra_specs = rep_extra_specs
         device_info_dict, is_multiattach = (
-            self.find_host_lun_id(volume, connector.get('host'), extra_specs))
+            self.find_host_lun_id(volume, connector.get('host'), extra_specs,
+                                  connector=connector))
         masking_view_dict = self._populate_masking_dict(
             volume, connector, extra_specs)
         masking_view_dict[utils.IS_MULTIATTACH] = is_multiattach
@@ -889,7 +970,7 @@ class PowerMaxCommon(object):
             hostlunid = device_info_dict['hostlunid']
             LOG.info("Volume %(volume)s is already mapped to host %(host)s. "
                      "The hostlunid is  %(hostlunid)s.",
-                     {'volume': volume_name, 'host': connector['host'],
+                     {'volume': volume.name, 'host': connector['host'],
                       'hostlunid': hostlunid})
             port_group_name = (
                 self.get_port_group_from_masking_view(
@@ -1064,7 +1145,10 @@ class PowerMaxCommon(object):
         volume_name = volume.name
         LOG.info("Terminate connection: %(volume)s.",
                  {'volume': volume_name})
-        self._unmap_lun(volume, connector)
+        if self.promotion:
+            self._unmap_lun_promotion(volume, connector)
+        else:
+            self._unmap_lun(volume, connector)
 
     def extend_volume(self, volume, new_size):
         """Extends an existing volume.
@@ -1281,7 +1365,7 @@ class PowerMaxCommon(object):
         for array_info in array_info_list:
             if self.failover:
                 rep_config = self.utils.get_rep_config(
-                    self.active_backend_id, self.rep_configs)
+                    self.active_backend_id, self.rep_configs, True)
                 array_info = self.get_secondary_stats_info(
                     rep_config, array_info)
             # Add both SLO & Workload name in the pool name
@@ -1341,6 +1425,9 @@ class PowerMaxCommon(object):
 
             pools.append(pool)
         pools = self.utils.add_legacy_pools(pools)
+        if self.promotion:
+            primary_array = self.configuration.safe_get('powermax_array')
+            pools = self.utils.add_promotion_pools(pools, primary_array)
         data = {'vendor_name': "Dell EMC",
                 'driver_version': self.version,
                 'storage_protocol': 'unknown',
@@ -1510,11 +1597,12 @@ class PowerMaxCommon(object):
                 backend_id = volume_backend_id
         return backend_id
 
-    def _find_device_on_array(self, volume, extra_specs):
+    def _find_device_on_array(self, volume, extra_specs, remote_device=False):
         """Given the volume get the PowerMax/VMAX device Id.
 
         :param volume: volume object
         :param extra_specs: the extra Specs
+        :param remote_device: find remote device for replicated volumes
         :returns: array, device_id
         """
         founddevice_id = None
@@ -1523,7 +1611,11 @@ class PowerMaxCommon(object):
             name_id = volume._name_id
         except AttributeError:
             name_id = None
-        loc = volume.provider_location
+
+        if remote_device:
+            loc = volume.replication_driver_data
+        else:
+            loc = volume.provider_location
 
         if isinstance(loc, six.string_types):
             name = ast.literal_eval(loc)
@@ -1552,19 +1644,28 @@ class PowerMaxCommon(object):
         return founddevice_id
 
     def find_host_lun_id(self, volume, host, extra_specs,
-                         rep_extra_specs=None):
+                         rep_extra_specs=None, connector=None):
         """Given the volume dict find the host lun id for a volume.
 
         :param volume: the volume dict
         :param host: host from connector (can be None on a force-detach)
         :param extra_specs: the extra specs
         :param rep_extra_specs: rep extra specs, passed in if metro device
+        :param connector: connector object can be none.
         :returns: dict -- the data dict
         """
         maskedvols = {}
         is_multiattach = False
         volume_name = volume.name
         device_id = self._find_device_on_array(volume, extra_specs)
+        if connector:
+            if self.migrate.do_migrate_if_candidate(
+                    extra_specs[utils.ARRAY], extra_specs[utils.SRP],
+                    device_id, volume, connector):
+                LOG.debug("MIGRATE - Successfully migrated from device "
+                          "%(dev)s from legacy shared storage groups, "
+                          "pre Pike release.",
+                          {'dev': device_id})
         if rep_extra_specs:
             rdf_pair_info = self.rest.get_rdf_pair_volume(
                 extra_specs[utils.ARRAY], rep_extra_specs['rdf_group_no'],
@@ -1696,15 +1797,18 @@ class PowerMaxCommon(object):
             final_masking_view_list.extend(masking_view_list)
         return final_masking_view_list, storage_group_list
 
-    def _initial_setup(self, volume, volume_type_id=None):
+    def _initial_setup(self, volume, volume_type_id=None,
+                       init_conn=False):
         """Necessary setup to accumulate the relevant information.
 
         The volume object has a host in which we can parse the
         config group name. The config group name is the key to our EMC
         configuration file. The emc configuration file contains srp name
         and array name which are mandatory fields.
-        :param volume: the volume object
+        :param volume: the volume object -- obj
         :param volume_type_id: optional override of volume.volume_type_id
+                               -- str
+        :param init_conn: if extra specs are for initialize connection -- bool
         :returns: dict -- extra spec dict
         :raises: VolumeBackendAPIException:
         """
@@ -1723,7 +1827,8 @@ class PowerMaxCommon(object):
                 raise exception.VolumeBackendAPIException(
                     message=exception_message)
 
-            extra_specs = self._set_vmax_extra_specs(extra_specs, array_info)
+            extra_specs = self._set_vmax_extra_specs(
+                extra_specs, array_info, init_conn)
             if qos_specs and qos_specs.get('consumer') != "front-end":
                 extra_specs['qos'] = qos_specs.get('specs')
         except Exception:
@@ -1847,7 +1952,7 @@ class PowerMaxCommon(object):
                 message=exception_message)
 
         if from_snapvx:
-            source_device_id, snap_name = self._parse_snap_info(
+            source_device_id, snap_name, __ = self._parse_snap_info(
                 array, source_volume)
         else:
             source_device_id = self._find_device_on_array(
@@ -1884,10 +1989,13 @@ class PowerMaxCommon(object):
 
         :param array: the array serial number
         :param snapshot: the snapshot object
-        :returns: sourcedevice_id, foundsnap_name
+        :returns: sourcedevice_id -- str
+                  foundsnap_name -- str
+                  found_snap_id_list -- list
         """
         foundsnap_name = None
         sourcedevice_id = None
+        found_snap_id_list = list()
         volume_name = snapshot.id
 
         loc = snapshot.provider_location
@@ -1900,19 +2008,21 @@ class PowerMaxCommon(object):
             except KeyError:
                 LOG.info("Error retrieving snapshot details. Assuming "
                          "legacy structure of snapshot...")
-                return None, None
-            # Ensure snapvx is on the array.
+                return None, None, None
             try:
-                snap_details = self.rest.get_volume_snap(
+                snap_detail_list = self.rest.get_volume_snaps(
                     array, sourcedevice_id, snap_name)
-                if snap_details:
+                for snap_details in snap_detail_list:
                     foundsnap_name = snap_name
+                    found_snap_id_list.append(snap_details.get(
+                        'snap_id') if self.rest.is_snap_id else (
+                        snap_details.get('generation')))
             except Exception as e:
                 LOG.info("Exception in retrieving snapshot: %(e)s.",
                          {'e': e})
                 foundsnap_name = None
 
-        if foundsnap_name is None or sourcedevice_id is None:
+        if not foundsnap_name or not sourcedevice_id or not found_snap_id_list:
             LOG.debug("Error retrieving snapshot details. "
                       "Snapshot name: %(snap)s",
                       {'snap': volume_name})
@@ -1920,9 +2030,10 @@ class PowerMaxCommon(object):
             LOG.debug("Source volume: %(volume_name)s  Snap name: "
                       "%(foundsnap_name)s.",
                       {'volume_name': sourcedevice_id,
-                       'foundsnap_name': foundsnap_name})
+                       'foundsnap_name': foundsnap_name,
+                       'snap_ids': found_snap_id_list})
 
-        return sourcedevice_id, foundsnap_name
+        return sourcedevice_id, foundsnap_name, found_snap_id_list
 
     def _create_snapshot(self, array, snapshot,
                          source_device_id, extra_specs):
@@ -2197,7 +2308,8 @@ class PowerMaxCommon(object):
                 # from error status codes returned from the various REST jobs.
                 raise e
 
-    def _set_vmax_extra_specs(self, extra_specs, pool_record):
+    def _set_vmax_extra_specs(self, extra_specs, pool_record,
+                              init_conn=False):
         """Set the PowerMax/VMAX extra specs.
 
         The pool_name extra spec must be set, otherwise a default slo/workload
@@ -2205,25 +2317,17 @@ class PowerMaxCommon(object):
         on the volume type (e.g. 'storagetype:portgroupname = os-pg1-pg'), or
         can be chosen from a list provided in the cinder.conf
 
-        :param extra_specs: extra specifications
-        :param pool_record: pool record
-        :returns: dict -- the extra specifications dictionary
+        :param extra_specs: extra specifications -- dict
+        :param pool_record: pool record -- dict
+        :param: init_conn: if extra specs are for initialize connection -- bool
+        :returns: the extra specifications -- dict
         """
         # set extra_specs from pool_record
         extra_specs[utils.SRP] = pool_record['srpName']
         extra_specs[utils.ARRAY] = pool_record['SerialNumber']
-        try:
-            if not extra_specs.get(utils.PORTGROUPNAME):
-                extra_specs[utils.PORTGROUPNAME] = pool_record['PortGroup']
-        except Exception:
-            error_message = (_("Port group name has not been provided - "
-                               "please configure the "
-                               "'storagetype:portgroupname' extra spec on "
-                               "the volume type, or enter a list of "
-                               "portgroups in the cinder.conf associated with "
-                               "this backend."))
-            LOG.error(error_message)
-            raise exception.VolumeBackendAPIException(message=error_message)
+        extra_specs[utils.PORTGROUPNAME] = (
+            self._select_port_group_for_extra_specs(extra_specs, pool_record,
+                                                    init_conn))
 
         self._validate_storage_group_tag_list(extra_specs)
 
@@ -2306,6 +2410,74 @@ class PowerMaxCommon(object):
                     extra_specs[utils.ARRAY]))
 
         return extra_specs
+
+    def _select_port_group_for_extra_specs(self, extra_specs, pool_record,
+                                           init_conn=False):
+        """Determine Port Group for operation extra specs.
+
+        :param extra_specs: existing extra specs -- dict
+        :param pool_record: pool record -- dict
+        :param init_conn: if extra specs are for initialize connection -- bool
+        :returns: Port Group -- str
+        :raises: exception.VolumeBackendAPIException
+        """
+        port_group = None
+        conf_port_groups = pool_record.get(utils.PORT_GROUP, [])
+        vt_port_group = extra_specs.get(utils.PORTGROUPNAME, None)
+
+        # Scenario 1: Port Group is set in volume-type extra specs, over-rides
+        # any settings in cinder.conf
+        if vt_port_group:
+            port_group = vt_port_group
+            LOG.info("Using Port Group '%(pg)s' from volume-type extra specs.",
+                     {'pg': port_group})
+
+        # Scenario 2: Port Group(s) set in cinder.conf and not in volume-type
+        elif conf_port_groups:
+            # Scenario 2-1: There is only one Port Group defined, no load
+            # balance or random selection required
+            if len(conf_port_groups) == 1:
+                port_group = conf_port_groups[0]
+                LOG.info(
+                    "Using Port Group '%(pg)s' from cinder.conf backend "
+                    "configuration.", {'pg': port_group})
+
+            # Scenario 2-2: Else more than one Port Group in cinder.conf
+            else:
+                # Scenario 2-2-1: If load balancing is enabled and the extra
+                # specs are for initialize_connection() method then use load
+                # balance selection
+                if init_conn and (
+                        self.performance.config.get('load_balance', False)):
+                    try:
+                        load, metric, port_group = (
+                            self.performance.process_port_group_load(
+                                extra_specs[utils.ARRAY], conf_port_groups))
+                        LOG.info(
+                            "Selecting Port Group %(pg)s with %(met)s load of "
+                            "%(load)s", {'pg': port_group, 'met': metric,
+                                         'load': load})
+                    except exception.VolumeBackendAPIException:
+                        LOG.error(
+                            "There has been a problem calculating Port Group "
+                            "load, reverting to default random selection.")
+                # Scenario 2-2-2: If the call is not for initialize_connection,
+                # load balancing is not enabled, or there was an error while
+                # calculating PG load, revert to random PG selection method
+                if not port_group:
+                    port_group = random.choice(conf_port_groups)
+
+        # Port group not extracted from volume-type or cinder.conf, raise
+        if not port_group:
+            error_message = (_(
+                "Port Group name has not been provided - please configure the "
+                "'storagetype:portgroupname' extra spec on the volume type, "
+                "or enter a list of Port Groups in the cinder.conf associated "
+                "with this backend."))
+            LOG.error(error_message)
+            raise exception.VolumeBackendAPIException(message=error_message)
+
+        return port_group
 
     def _validate_storage_group_tag_list(self, extra_specs):
         """Validate the storagetype:storagegrouptags list
@@ -2627,33 +2799,36 @@ class PowerMaxCommon(object):
             array, portgroup_name, initiator_group_name)
         return masking_view_list
 
-    def _get_ip_and_iqn(self, array, port):
-        """Get ip and iqn from the director port.
+    def _get_iscsi_ip_iqn_port(self, array, port):
+        """Get ip and iqn from a virtual director port.
 
-        :param array: the array serial number
-        :param port: the director port on the array
-        :returns: ip_and_iqn - dict
+        :param array: the array serial number -- str
+        :param port: the director & virtual port on the array -- str
+        :returns: ip_and_iqn -- dict
         """
         ip_iqn_list = []
         ip_addresses, iqn = self.rest.get_iscsi_ip_address_and_iqn(
             array, port)
         for ip in ip_addresses:
-            ip_iqn_list.append({'iqn': iqn, 'ip': ip})
+            physical_port = self.rest.get_ip_interface_physical_port(
+                array, port.split(':')[0], ip)
+            ip_iqn_list.append({'iqn': iqn, 'ip': ip,
+                                'physical_port': physical_port})
         return ip_iqn_list
 
     def _find_ip_and_iqns(self, array, port_group_name):
-        """Find the list of ips and iqns for the ports in a portgroup.
+        """Find the list of ips and iqns for the ports in a port group.
 
-        :param array: the array serial number
-        :param port_group_name: the portgroup name
-        :returns: ip_and_iqn - list of dicts
+        :param array: the array serial number -- str
+        :param port_group_name: the port group name -- str
+        :returns: ip_and_iqn -- list of dicts
         """
         ips_and_iqns = []
         LOG.debug("The portgroup name for iscsiadm is %(pg)s",
                   {'pg': port_group_name})
         ports = self.rest.get_port_ids(array, port_group_name)
         for port in ports:
-            ip_and_iqn = self._get_ip_and_iqn(array, port)
+            ip_and_iqn = self._get_iscsi_ip_iqn_port(array, port)
             ips_and_iqns.extend(ip_and_iqn)
         return ips_and_iqns
 
@@ -2733,24 +2908,24 @@ class PowerMaxCommon(object):
 
     def _cleanup_target(
             self, array, target_device_id, source_device_id,
-            clone_name, snap_name, extra_specs, generation=0,
-            target_volume=None):
+            clone_name, snap_name, extra_specs, target_volume=None):
         """Cleanup target volume on failed clone/ snapshot creation.
 
         :param array: the array serial number
         :param target_device_id: the target device ID
         :param source_device_id: the source device ID
         :param clone_name: the name of the clone volume
+        :param snap_name: the snapVX name
         :param extra_specs: the extra specifications
-        :param generation: the generation number of the snapshot
         :param target_volume: the target volume object
         """
+        snap_id = self.rest.get_snap_id(array, source_device_id, snap_name)
         snap_session = self.rest.get_sync_session(
-            array, source_device_id, snap_name, target_device_id, generation)
+            array, source_device_id, snap_name, target_device_id, snap_id)
         if snap_session:
             self.provision.unlink_snapvx_tgt_volume(
                 array, target_device_id, source_device_id,
-                snap_name, extra_specs, generation)
+                snap_name, extra_specs, snap_id)
         self._remove_vol_and_cleanup_replication(
             array, target_device_id, clone_name, extra_specs, target_volume)
         self._delete_from_srp(
@@ -2811,7 +2986,8 @@ class PowerMaxCommon(object):
                 self._unlink_targets_and_delete_temp_snapvx(
                     tgt_session, array, extra_specs)
             if src_sessions and not tgt_only:
-                src_sessions.sort(key=lambda k: k['generation'], reverse=True)
+                if not self.rest.is_snap_id:
+                    src_sessions.sort(key=lambda k: k['snapid'], reverse=True)
                 for session in src_sessions:
                     self._unlink_targets_and_delete_temp_snapvx(
                         session, array, extra_specs)
@@ -2826,7 +3002,7 @@ class PowerMaxCommon(object):
         """
         snap_name = session.get('snap_name')
         source = session.get('source_vol_id')
-        generation = session.get('generation')
+        snap_id = session.get('snapid')
         expired = session.get('expired')
 
         target, cm_enabled = None, False
@@ -2838,24 +3014,24 @@ class PowerMaxCommon(object):
             loop = True if cm_enabled else False
             LOG.debug(
                 "Unlinking source from target. Source: %(vol)s, Target: "
-                "%(tgt)s, Generation: %(gen)s.", {'vol': source, 'tgt': target,
-                                                  'gen': generation})
+                "%(tgt)s, Snap id: %(snapid)s.", {'vol': source, 'tgt': target,
+                                                  'snapid': snap_id})
             self.provision.unlink_snapvx_tgt_volume(
-                array, target, source, snap_name, extra_specs, generation,
+                array, target, source, snap_name, extra_specs, snap_id,
                 loop)
 
         # Candidates for deletion:
         # 1. If legacy snapshot with 'EMC_SMI' in snapshot name
         # 2. If snapVX snapshot with copy mode enabled
         # 3. If snapVX snapshot with copy mode disabled and not expired
-        if (snap_name and 'EMC_SMI' in snap_name or cm_enabled or (
+        if ('EMC_SMI' in snap_name or cm_enabled or (
                 not cm_enabled and not expired)):
             LOG.debug(
                 "Deleting temporary snapshot. Source: %(vol)s, snap name: "
-                "%(name)s, generation: %(gen)s.", {
-                    'vol': source, 'name': snap_name, 'gen': generation})
+                "%(name)s, snap id: %(snapid)s.", {
+                    'vol': source, 'name': snap_name, 'snapid': snap_id})
             self.provision.delete_temp_volume_snap(
-                array, snap_name, source, generation)
+                array, snap_name, source, snap_id)
 
     def _get_target_source_device(self, array, device_id):
         """Get the source device id of the target.
@@ -2901,8 +3077,6 @@ class PowerMaxCommon(object):
                         array, tgt_session, extra_specs, force_unlink)
                     count += 1
                 if src_sessions:
-                    src_sessions.sort(
-                        key=lambda k: k['generation'], reverse=True)
                     for session in src_sessions:
                         if count < self.snapvx_unlink_limit:
                             self._delete_valid_snapshot(
@@ -3280,26 +3454,15 @@ class PowerMaxCommon(object):
             LOG.error(exception_message)
             raise exception.VolumeBackendAPIException(
                 message=exception_message)
-
-        if not self.rest.get_volume_snap(array, device_id, snap_name):
-            exception_message = (
-                _("Snapshot %(snap_name)s is not associated with specified "
-                  "volume %(device_id)s, it is not possible to manage a "
-                  "snapshot that is not associated with the specified "
-                  "volume.")
-                % {'device_id': device_id, 'snap_name': snap_name})
-            LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(
-                message=exception_message)
-
+        snap_id = self.rest.get_snap_id(array, device_id, snap_name)
         snap_backend_name = self.utils.modify_snapshot_prefix(
             snap_name, manage=True)
 
         try:
             self.rest.modify_volume_snap(
                 array, device_id, device_id, snap_name,
-                extra_specs, rename=True, new_snap_name=snap_backend_name)
-
+                extra_specs, snap_id=snap_id, rename=True,
+                new_snap_name=snap_backend_name)
         except Exception as e:
             exception_message = (
                 _("There was an issue managing %(snap_name)s, it was not "
@@ -3313,15 +3476,19 @@ class PowerMaxCommon(object):
         model_update = {
             'display_name': snap_display_name,
             'provider_location': six.text_type(prov_loc)}
+        snapshot_metadata = self.get_snapshot_metadata(
+            array, device_id, snap_backend_name)
         model_update = self.update_metadata(
-            model_update, snapshot.metadata, self.get_snapshot_metadata(
-                array, device_id, snap_backend_name))
+            model_update, snapshot.metadata, snapshot_metadata)
 
         LOG.info("Managing SnapVX Snapshot %(snap_name)s of source "
                  "volume %(device_id)s, OpenStack Snapshot display name: "
                  "%(snap_display_name)s", {
                      'snap_name': snap_name, 'device_id': device_id,
                      'snap_display_name': snap_display_name})
+        snapshot_metadata.update({'snap_display_name': snap_display_name})
+        self.volume_metadata.capture_snapshot_info(
+            volume, extra_specs, 'manageSnapshot', snapshot_metadata)
 
         return model_update
 
@@ -3348,7 +3515,17 @@ class PowerMaxCommon(object):
         volume = snapshot.volume
         extra_specs = self._initial_setup(volume)
         array = extra_specs[utils.ARRAY]
-        device_id, snap_name = self._parse_snap_info(array, snapshot)
+        device_id, snap_name, snap_id_list = self._parse_snap_info(
+            array, snapshot)
+
+        if len(snap_id_list) != 1:
+            exception_message = (_(
+                "It is not possible to unmanage snapshot because there "
+                "are either multiple or no snapshots associated with "
+                "%(snap_name)s.") % {'snap_name': snap_name})
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         if self.utils.is_volume_failed_over(volume):
             exception_message = (
@@ -3367,7 +3544,8 @@ class PowerMaxCommon(object):
         try:
             self.rest.modify_volume_snap(
                 array, device_id, device_id, snap_name, extra_specs,
-                rename=True, new_snap_name=new_snap_backend_name)
+                snap_id=snap_id_list[0], rename=True,
+                new_snap_name=new_snap_backend_name)
         except Exception as e:
             exception_message = (
                 _("There was an issue unmanaging Snapshot, it "
@@ -3520,7 +3698,8 @@ class PowerMaxCommon(object):
         if not volumes:
             LOG.info("There were no volumes found on the backend "
                      "PowerMax/VMAX. You need to create some volumes "
-                     "before snashot can be created and managed into Cinder.")
+                     "before a snapshot can be created and managed into "
+                     "Cinder.")
             return manageable_snaps
 
         for device in volumes:
@@ -3631,8 +3810,9 @@ class PowerMaxCommon(object):
                     math.ceil(device['volumeHeader']['capGB'])),
                 'reason_not_safe': None, 'cinder_id': None,
                 'extra_info': {
-                    'generation': snap_info['generation'],
-                    'secured': snap_info['secured'],
+                    'generation': snap_info.get('generation'),
+                    'snap_id': snap_info.get('snapid'),
+                    'secured': snap_info.get('secured'),
                     'timeToLive': human_ttl_timestamp,
                     'timestamp': human_timestamp},
                 'source_reference': {'source-id': snap_info['device']}}
@@ -3653,6 +3833,11 @@ class PowerMaxCommon(object):
                  {'volume': volume_name})
 
         extra_specs = self._initial_setup(volume)
+        if self.utils.is_replication_enabled(extra_specs) and self.promotion:
+            rep_config = extra_specs.get('rep_config')
+            extra_specs = self._get_replication_extra_specs(
+                extra_specs, rep_config)
+
         if not self.utils.is_retype_supported(volume, extra_specs,
                                               new_type['extra_specs'],
                                               self.rep_configs):
@@ -3694,17 +3879,21 @@ class PowerMaxCommon(object):
         # Check if old type and new type have different compression types
         do_change_compression = (self.utils.change_compression_type(
             is_compression_disabled, new_type))
+        is_tgt_rep = self.utils.is_replication_enabled(
+            new_type[utils.EXTRA_SPECS])
         is_valid, target_slo, target_workload = (
             self._is_valid_for_storage_assisted_migration(
                 device_id, host, extra_specs[utils.ARRAY],
                 extra_specs[utils.SRP], volume_name,
-                do_change_compression, do_change_replication))
+                do_change_compression, do_change_replication,
+                extra_specs[utils.SLO], extra_specs[utils.WORKLOAD],
+                is_tgt_rep))
 
         if not is_valid:
             # Check if this is multiattach retype case
             do_change_multiattach = self.utils.change_multiattach(
                 extra_specs, new_type['extra_specs'])
-            if do_change_multiattach:
+            if do_change_multiattach and not self.promotion:
                 return True
             else:
                 LOG.error(
@@ -3789,7 +3978,7 @@ class PowerMaxCommon(object):
                 utils.BACKEND_ID_LEGACY_REP)
             backend_ids_differ = curr_backend_id != tgt_backend_id
 
-        if was_rep_enabled:
+        if was_rep_enabled and not self.promotion:
             self._validate_rdfg_status(array, extra_specs)
             orig_mgmt_sg_name = self.utils.get_rdf_management_group_name(
                 extra_specs[utils.REP_CONFIG])
@@ -3808,11 +3997,23 @@ class PowerMaxCommon(object):
             # Scenario 1: Rep -> Non-Rep
             # Scenario 2: Cleanup for Rep -> Diff Rep type
             if (was_rep_enabled and not is_rep_enabled) or backend_ids_differ:
-                rep_extra_specs, resume_original_sg = (
-                    self.break_rdf_device_pair_session(
-                        array, device_id, volume_name, extra_specs, volume))
+                if self.promotion:
+                    resume_original_sg = False
+                    rdf_group = extra_specs['rdf_group_no']
+                    is_partitioned = self._rdf_vols_partitioned(
+                        array, [volume], rdf_group)
+                    if not is_partitioned:
+                        self.break_rdf_device_pair_session_promotion(
+                            array, device_id, volume_name, extra_specs)
+                else:
+                    rep_extra_specs, resume_original_sg = (
+                        self.break_rdf_device_pair_session(
+                            array, device_id, volume_name, extra_specs,
+                            volume))
+                status = (REPLICATION_ERROR if self.promotion else
+                          REPLICATION_DISABLED)
                 model_update = {
-                    'replication_status': REPLICATION_DISABLED,
+                    'replication_status': status,
                     'replication_driver_data': None}
                 rdf_pair_broken = True
                 if resume_original_sg:
@@ -3869,7 +4070,8 @@ class PowerMaxCommon(object):
                 self.rest.srdf_resume_replication(
                     array, rep_extra_specs['mgmt_sg_name'],
                     rep_extra_specs['rdf_group_no'], rep_extra_specs)
-            if resume_original_sg and resume_original_sg_dict:
+            if (resume_original_sg and resume_original_sg_dict and
+                    not self.promotion):
                 self.rest.srdf_resume_replication(
                     resume_original_sg_dict[utils.ARRAY],
                     resume_original_sg_dict[utils.SG_NAME],
@@ -3880,6 +4082,14 @@ class PowerMaxCommon(object):
                 model_update = self.update_metadata(
                     model_update, volume.metadata,
                     self.get_volume_metadata(array, device_id))
+
+                if self.promotion:
+                    previous_host = volume.get('host')
+                    host_details = previous_host.split('+')
+                    array_index = len(host_details) - 1
+                    host_details[array_index] = array
+                    updated_host = '+'.join(host_details)
+                    model_update['host'] = updated_host
 
                 target_backend_id = None
                 if is_rep_enabled:
@@ -3909,6 +4119,19 @@ class PowerMaxCommon(object):
             self, rdf_pair_broken, rdf_pair_created, vol_retyped,
             remote_retyped, extra_specs, target_extra_specs, volume,
             volume_name, device_id, source_sg):
+        """Attempt rollback to previous volume state before migrate exception.
+
+        :param rdf_pair_broken: was the rdf pair broken during migration
+        :param rdf_pair_created: was a new rdf pair created during migration
+        :param vol_retyped: was the local volume retyped during migration
+        :param remote_retyped: was the remote volume retyped during migration
+        :param extra_specs: extra specs
+        :param target_extra_specs: target extra specs
+        :param volume: volume
+        :param volume_name: volume name
+        :param device_id: local device id
+        :param source_sg: local device pre-migrate storage group name
+        """
         array = extra_specs[utils.ARRAY]
         srp = extra_specs[utils.SRP]
         slo = extra_specs[utils.SLO]
@@ -3998,8 +4221,9 @@ class PowerMaxCommon(object):
         parent_sg = None
         if self.utils.is_replication_enabled(target_extra_specs):
             is_re, rep_mode = True, target_extra_specs['rep_mode']
+        if self.utils.is_replication_enabled(extra_specs):
             mgmt_sg_name = self.utils.get_rdf_management_group_name(
-                target_extra_specs[utils.REP_CONFIG])
+                extra_specs[utils.REP_CONFIG])
 
         device_info = self.rest.get_volume(array, device_id)
 
@@ -4097,6 +4321,21 @@ class PowerMaxCommon(object):
             self, created_child_sg, add_sg_to_parent, got_default_sg,
             moved_between_sgs, array, source_sg, parent_sg, target_sg_name,
             extra_specs, device_id, volume, volume_name):
+        """Attempt to rollback to previous volume state on retype exception.
+
+        :param created_child_sg: was a child sg created during retype
+        :param add_sg_to_parent: was a child sg added to parent during retype
+        :param got_default_sg: was a default sg possibly created during retype
+        :param moved_between_sgs: was the volume moved between storage groups
+        :param array: array
+        :param source_sg: volumes originating storage group name
+        :param parent_sg: parent storage group name
+        :param target_sg_name: storage group volume was to be moved to
+        :param extra_specs: extra specs
+        :param device_id: device id
+        :param volume: volume
+        :param volume_name: volume name
+        """
         if moved_between_sgs:
             LOG.debug('Volume retype cleanup - Attempt to revert move between '
                       'storage groups.')
@@ -4271,7 +4510,8 @@ class PowerMaxCommon(object):
 
     def _is_valid_for_storage_assisted_migration(
             self, device_id, host, source_array, source_srp, volume_name,
-            do_change_compression, do_change_replication):
+            do_change_compression, do_change_replication, source_slo,
+            source_workload, is_tgt_rep):
         """Check if volume is suitable for storage assisted (pool) migration.
 
         :param device_id: the volume device id
@@ -4281,6 +4521,9 @@ class PowerMaxCommon(object):
         :param volume_name: the name of the volume to be migrated
         :param do_change_compression: do change compression
         :param do_change_replication: flag indicating replication change
+        :param source_slo: slo setting for source volume type
+        :param source_workload: workload setting for source volume type
+        :param is_tgt_rep: is the target volume type replication enabled
         :returns: boolean -- True/False
         :returns: string -- targetSlo
         :returns: string -- targetWorkload
@@ -4315,24 +4558,53 @@ class PowerMaxCommon(object):
             LOG.error("Error parsing array, pool, SLO and workload.")
             return false_ret
 
-        if target_array_serial not in source_array:
-            LOG.error(
-                "The source array: %(source_array)s does not "
-                "match the target array: %(target_array)s - "
-                "skipping storage-assisted migration.",
-                {'source_array': source_array,
-                 'target_array': target_array_serial})
-            return false_ret
+        if self.promotion:
+            if do_change_compression:
+                LOG.error(
+                    "When retyping during array promotion, compression "
+                    "changes should not occur during the retype operation. "
+                    "Please ensure the same compression settings are defined "
+                    "in the source and target volume types.")
+                return false_ret
 
-        if target_srp not in source_srp:
-            LOG.error(
-                "Only SLO/workload migration within the same SRP Pool is "
-                "supported in this version. The source pool: "
-                "%(source_pool_name)s does not match the target array: "
-                "%(target_pool)s. Skipping storage-assisted migration.",
-                {'source_pool_name': source_srp,
-                 'target_pool': target_srp})
-            return false_ret
+            if source_slo != target_slo:
+                LOG.error(
+                    "When retyping during array promotion, the SLO setting "
+                    "for the source and target volume types should match. "
+                    "Found %s SLO for the source volume type and %s SLO for "
+                    "the target volume type.", source_slo, target_slo)
+                return false_ret
+
+            if source_workload != target_workload:
+                LOG.error(
+                    "When retyping during array promotion, the workload "
+                    "setting for the source and target volume types should "
+                    "match. Found %s workload for the source volume type "
+                    "and %s workload for the target volume type.",
+                    source_workload, target_workload)
+                return false_ret
+
+            if is_tgt_rep:
+                LOG.error(
+                    "When retyping during array promotion, the target volume "
+                    "type should not have replication enabled. Please ensure "
+                    "replication is disabled on the target volume type.")
+                return false_ret
+
+        if not self.promotion:
+            if target_array_serial not in source_array:
+                LOG.error("The source array: %s does not match the target "
+                          "array: %s - skipping storage-assisted "
+                          "migration.", source_array, target_array_serial)
+                return false_ret
+
+            if target_srp not in source_srp:
+                LOG.error(
+                    "Only SLO/workload migration within the same SRP Pool is "
+                    "supported in this version. The source pool: %s does not "
+                    "match the target array: %s. Skipping storage-assisted "
+                    "migration.", source_srp, target_srp)
+                return false_ret
 
         found_storage_group_list = self.rest.get_storage_groups_from_volume(
             source_array, device_id)
@@ -4463,6 +4735,23 @@ class PowerMaxCommon(object):
             add_to_mgmt_sg, r1_device_id, r2_device_id,
             mgmt_sg_name, array, remote_array, rdf_group_no, extra_specs,
             rep_extra_specs, volume, tgt_sg_name):
+        """Attempt rollback to previous volume state on setup rep exception.
+
+        :param resume_rdf: does the rdfg need to be resumed
+        :param rdf_pair_created: was an rdf pair created
+        :param remote_sg_get: was a remote storage group possibly created
+        :param add_to_mgmt_sg: was the volume added to a management group
+        :param r1_device_id: local device id
+        :param r2_device_id: remote device id
+        :param mgmt_sg_name: rdf management storage group name
+        :param array: array
+        :param remote_array: remote array
+        :param rdf_group_no: rdf group number
+        :param extra_specs: extra specs
+        :param rep_extra_specs: rep extra specs
+        :param volume: volume
+        :param tgt_sg_name: remote replication storage group name
+        """
         if resume_rdf and not rdf_pair_created:
             LOG.debug('Configure volume replication cleanup - Attempt to '
                       'resume replication.')
@@ -4603,7 +4892,7 @@ class PowerMaxCommon(object):
             sg_name = r1_sg_names[0]
             rdf_pair = self.rest.get_rdf_pair_volume(
                 array, rdfg_no, device_id)
-            rdf_pair_state = rdf_pair['rdfpairState']
+            rdf_pair_state = rdf_pair[utils.RDF_PAIR_STATE]
             if rdf_pair_state.lower() not in utils.RDF_SYNCED_STATES:
                 self.rest.wait_for_rdf_pair_sync(
                     array, rdfg_no, device_id, rep_extra_specs)
@@ -4659,6 +4948,23 @@ class PowerMaxCommon(object):
             management_sg, rdf_group_no, extra_specs, r2_sg_names, device_id,
             remote_array, remote_device_id, volume, volume_name,
             rep_extra_specs):
+        """Attempt rollback to previous volume state on remove rep exception.
+
+        :param rdfg_suspended: was the rdf group suspended
+        :param pair_deleted: was the rdf pair deleted
+        :param r2_sg_remove: was the remote volume removed from its sg
+        :param array: array
+        :param management_sg: rdf management storage group name
+        :param rdf_group_no: rdf group number
+        :param extra_specs: extra specs
+        :param r2_sg_names: remote volume storage group names
+        :param device_id: device id
+        :param remote_array: remote array sid
+        :param remote_device_id: remote device id
+        :param volume: volume
+        :param volume_name: volume name
+        :param rep_extra_specs: rep extra specs
+        """
         if rdfg_suspended and not pair_deleted:
             LOG.debug('Break RDF pair cleanup - Attempt to resume RDFG.')
             self.rest.srdf_resume_replication(
@@ -4698,6 +5004,54 @@ class PowerMaxCommon(object):
                     rep_extra_specs['rdf_group_no'], rep_extra_specs)
             LOG.debug('Break RDF pair cleanup - Revert to original rdf '
                       'pair successful.')
+
+    def break_rdf_device_pair_session_promotion(
+            self, array, device_id, volume_name, extra_specs):
+        """Delete RDF device pair deleting R2 volume but leaving R1 in place.
+
+        :param array: the array serial number
+        :param device_id: the device id
+        :param volume_name: the volume name
+        :param extra_specs: the volume extra specifications
+        """
+        LOG.debug('Starting promotion replication cleanup for RDF pair '
+                  'source device: %(d_id)s.', {'d_id': device_id})
+
+        mgmt_sg_name = None
+        rep_config = extra_specs[utils.REP_CONFIG]
+        rdfg_no = extra_specs['rdf_group_no']
+        extra_specs['force_vol_remove'] = True
+        if rep_config['mode'] in [utils.REP_ASYNC, utils.REP_METRO]:
+            mgmt_sg_name = self.utils.get_rdf_management_group_name(
+                rep_config)
+
+        if rep_config['mode'] == utils.REP_METRO:
+            group_states = self.rest.get_storage_group_rdf_group_state(
+                array, mgmt_sg_name, rdfg_no)
+            group_states = set([x.lower() for x in group_states])
+            metro_active_states = {
+                utils.RDF_ACTIVE, utils.RDF_ACTIVEACTIVE, utils.RDF_ACTIVEBIAS}
+            active_state_found = (
+                bool(group_states.intersection(metro_active_states)))
+            if active_state_found:
+                LOG.debug('Found Metro RDF in active state during promotion, '
+                          'attempting to suspend.')
+                try:
+                    self.rest.srdf_suspend_replication(
+                        array, mgmt_sg_name, rdfg_no, extra_specs)
+                except exception.VolumeBackendAPIException:
+                    LOG.error(
+                        'Found Metro rdf pair in active state during '
+                        'promotion. Attempt to suspend this group using '
+                        'storage group %s failed. Please move the rdf pairs '
+                        'in this storage group to a non-active state and '
+                        'retry the retype operation.', mgmt_sg_name)
+                    raise
+        self.rest.srdf_delete_device_pair(array, rdfg_no, device_id)
+        # Remove the volume from the R1 RDFG mgmt SG (R1)
+        if rep_config['mode'] in [utils.REP_ASYNC, utils.REP_METRO]:
+            self.masking.remove_volume_from_sg(
+                array, device_id, volume_name, mgmt_sg_name, extra_specs)
 
     @coordination.synchronized('emc-{rdf_group}-rdf')
     def _cleanup_remote_target(
@@ -4818,8 +5172,14 @@ class PowerMaxCommon(object):
         :returns: secondary_id, volume_update_list, group_update_list
         :raises: VolumeBackendAPIException
         """
+        volume_update_list = list()
+        group_update_list = list()
+        primary_array = self._get_configuration_value(
+            utils.VMAX_ARRAY, utils.POWERMAX_ARRAY)
+        array_list = self.rest.get_arrays_list()
         is_valid, msg = self.utils.validate_failover_request(
-            self.failover, secondary_id, self.rep_configs)
+            self.failover, secondary_id, self.rep_configs, primary_array,
+            array_list, self.promotion)
         if not is_valid:
             LOG.error(msg)
             raise exception.InvalidReplicationTarget(msg)
@@ -4828,13 +5188,21 @@ class PowerMaxCommon(object):
         if not self.failover:
             self.failover = True
             self.active_backend_id = secondary_id if secondary_id else None
-        else:
+        elif secondary_id == 'default':
             self.failover = False
             group_fo = 'default'
 
-        volume_update_list, group_update_list = (
-            self._populate_volume_and_group_update_lists(
-                volumes, groups, group_fo))
+        if secondary_id == utils.PMAX_FAILOVER_START_ARRAY_PROMOTION:
+            self.promotion = True
+            LOG.info("Enabled array promotion.")
+        else:
+            volume_update_list, group_update_list = (
+                self._populate_volume_and_group_update_lists(
+                    volumes, groups, group_fo))
+
+        if secondary_id == 'default' and self.promotion:
+            self.promotion = False
+            LOG.info("Disabled array promotion.")
 
         LOG.info("Failover host complete.")
         return secondary_id, volume_update_list, group_update_list
@@ -4872,9 +5240,6 @@ class PowerMaxCommon(object):
             extra_specs = self._initial_setup(volume)
             extra_specs[utils.ARRAY] = array
             if self.utils.is_replication_enabled(extra_specs):
-                device_id = self._find_device_on_array(volume, extra_specs)
-                self._sync_check(array, device_id, extra_specs)
-
                 rep_mode = extra_specs.get(utils.REP_MODE, utils.REP_SYNC)
                 backend_id = self._get_replicated_volume_backend_id(
                     volume)
@@ -4915,7 +5280,17 @@ class PowerMaxCommon(object):
             volume_update_list += vol_updates
 
         if len(non_rep_vol_list) > 0:
-            if self.failover:
+            if self.promotion:
+                # Volumes that were promoted will have a replication state
+                # of error with no other replication metadata. Use this to
+                # determine which volumes should updated to have a replication
+                # state of disabled.
+                for vol in non_rep_vol_list:
+                    volume_update_list.append({
+                        'volume_id': vol.id,
+                        'updates': {
+                            'replication_status': REPLICATION_DISABLED}})
+            elif self.failover:
                 # Since the array has been failed-over,
                 # volumes without replication should be in error.
                 for vol in non_rep_vol_list:
@@ -4933,21 +5308,23 @@ class PowerMaxCommon(object):
         :returns: vol_updates
         """
         extra_specs = self._initial_setup(sync_vol_list[0])
-        array = ast.literal_eval(
-            sync_vol_list[0].provider_location)['array']
-        extra_specs[utils.ARRAY] = array
+        replication_details = ast.literal_eval(
+            sync_vol_list[0].replication_driver_data)
+        remote_array = replication_details.get(utils.ARRAY)
+        extra_specs[utils.ARRAY] = remote_array
         temp_grp_name = self.utils.get_temp_failover_grp_name(
             extra_specs[utils.REP_CONFIG])
         self.provision.create_volume_group(
-            array, temp_grp_name, extra_specs)
-        device_ids = self._get_volume_device_ids(sync_vol_list, array)
+            remote_array, temp_grp_name, extra_specs)
+        device_ids = self._get_volume_device_ids(
+            sync_vol_list, remote_array, remote_volumes=True)
         self.masking.add_volumes_to_storage_group(
-            array, device_ids, temp_grp_name, extra_specs)
+            remote_array, device_ids, temp_grp_name, extra_specs)
         __, vol_updates = (
             self._failover_replication(
                 sync_vol_list, None, temp_grp_name,
                 secondary_backend_id=group_fo, host=True))
-        self.rest.delete_storage_group(array, temp_grp_name)
+        self.rest.delete_storage_group(remote_array, temp_grp_name)
         return vol_updates
 
     def _get_replication_extra_specs(self, extra_specs, rep_config):
@@ -5433,7 +5810,7 @@ class PowerMaxCommon(object):
         """
         src_dev_ids = []
         for snap in snapshots:
-            src_dev_id, snap_name = self._parse_snap_info(array, snap)
+            src_dev_id, snap_name, __ = self._parse_snap_info(array, snap)
             if snap_name:
                 src_dev_ids.append(src_dev_id)
         return src_dev_ids
@@ -5485,66 +5862,132 @@ class PowerMaxCommon(object):
                 and not group.is_replicated):
             raise NotImplementedError()
 
-        array, interval_retries_dict = self._get_volume_group_info(group)
         model_update = {'status': fields.GroupStatus.AVAILABLE}
-        add_vols = [vol for vol in add_volumes] if add_volumes else []
-        add_device_ids = self._get_volume_device_ids(add_vols, array)
-        remove_vols = [vol for vol in remove_volumes] if remove_volumes else []
-        remove_device_ids = self._get_volume_device_ids(remove_vols, array)
-        vol_grp_name = None
-        try:
-            volume_group = self._find_volume_group(array, group)
-            if volume_group:
-                if 'name' in volume_group:
-                    vol_grp_name = volume_group['name']
-            if vol_grp_name is None:
-                raise exception.GroupNotFound(group_id=group.id)
-            # Add volume(s) to the group
-            if add_device_ids:
-                self.utils.check_rep_status_enabled(group)
-                for vol in add_vols:
-                    extra_specs = self._initial_setup(vol)
-                    self.utils.check_replication_matched(vol, extra_specs)
-                self.masking.add_volumes_to_storage_group(
-                    array, add_device_ids, vol_grp_name, interval_retries_dict)
-                if group.is_replicated:
-                    # Add remote volumes to remote storage group
-                    self.masking.add_remote_vols_to_volume_group(
-                        add_vols, group, interval_retries_dict)
-            # Remove volume(s) from the group
-            if remove_device_ids:
-                if group.is_replicated:
-                    # Need force flag when manipulating RDF enabled SGs
-                    interval_retries_dict[utils.FORCE_VOL_REMOVE] = True
-                # Check if the volumes exist in the storage group
-                temp_list = deepcopy(remove_device_ids)
-                for device_id in temp_list:
-                    if not self.rest.is_volume_in_storagegroup(
-                            array, device_id, vol_grp_name):
-                        remove_device_ids.remove(device_id)
+        if self.promotion:
+            self._update_group_promotion(
+                group, add_volumes, remove_volumes)
+        elif self.failover:
+            msg = _('Cannot perform group updates during failover, please '
+                    'either failback or perform a promotion operation.')
+            raise exception.VolumeBackendAPIException(msg)
+        else:
+            array, interval_retries_dict = self._get_volume_group_info(group)
+            add_vols = [vol for vol in add_volumes] if add_volumes else []
+            add_device_ids = self._get_volume_device_ids(add_vols, array)
+            remove_vols = [
+                vol for vol in remove_volumes] if remove_volumes else []
+            remove_device_ids = self._get_volume_device_ids(remove_vols, array)
+            vol_grp_name = None
+            try:
+                volume_group = self._find_volume_group(array, group)
+                if volume_group:
+                    if 'name' in volume_group:
+                        vol_grp_name = volume_group['name']
+                if vol_grp_name is None:
+                    raise exception.GroupNotFound(group_id=group.id)
+                # Add volume(s) to the group
+                if add_device_ids:
+                    self.utils.check_rep_status_enabled(group)
+                    for vol in add_vols:
+                        extra_specs = self._initial_setup(vol)
+                        self.utils.check_replication_matched(vol, extra_specs)
+                    self.masking.add_volumes_to_storage_group(
+                        array, add_device_ids, vol_grp_name,
+                        interval_retries_dict)
+                    if group.is_replicated:
+                        # Add remote volumes to remote storage group
+                        self.masking.add_remote_vols_to_volume_group(
+                            add_vols, group, interval_retries_dict)
+                # Remove volume(s) from the group
                 if remove_device_ids:
-                    self.masking.remove_volumes_from_storage_group(
-                        array, remove_device_ids,
-                        vol_grp_name, interval_retries_dict)
-                if group.is_replicated:
-                    # Remove remote volumes from the remote storage group
-                    self._remove_remote_vols_from_volume_group(
-                        array, remove_vols, group, interval_retries_dict)
-        except exception.GroupNotFound:
-            raise
-        except Exception as ex:
-            exception_message = (_("Failed to update volume group:"
-                                   " %(volGrpName)s. Exception: %(ex)s.")
-                                 % {'volGrpName': group.id,
-                                    'ex': ex})
-            LOG.error(exception_message)
-            raise exception.VolumeBackendAPIException(
-                message=exception_message)
+                    if group.is_replicated:
+                        # Need force flag when manipulating RDF enabled SGs
+                        interval_retries_dict[utils.FORCE_VOL_REMOVE] = True
+                    # Check if the volumes exist in the storage group
+                    temp_list = deepcopy(remove_device_ids)
+                    for device_id in temp_list:
+                        if not self.rest.is_volume_in_storagegroup(
+                                array, device_id, vol_grp_name):
+                            remove_device_ids.remove(device_id)
+                    if remove_device_ids:
+                        self.masking.remove_volumes_from_storage_group(
+                            array, remove_device_ids,
+                            vol_grp_name, interval_retries_dict)
+                    if group.is_replicated:
+                        # Remove remote volumes from the remote storage group
+                        self._remove_remote_vols_from_volume_group(
+                            array, remove_vols, group, interval_retries_dict)
+            except exception.GroupNotFound:
+                raise
+            except Exception as ex:
+                exception_message = (_("Failed to update volume group:"
+                                       " %(volGrpName)s. Exception: %(ex)s.")
+                                     % {'volGrpName': group.id,
+                                        'ex': ex})
+                LOG.error(exception_message)
+                raise exception.VolumeBackendAPIException(
+                    message=exception_message)
 
-        self.volume_metadata.capture_modify_group(
-            vol_grp_name, group.id, add_vols, remove_volumes, array)
+            self.volume_metadata.capture_modify_group(
+                vol_grp_name, group.id, add_vols, remove_volumes, array)
 
         return model_update, None, None
+
+    def _update_group_promotion(self, group, add_volumes, remove_volumes):
+        """Updates LUNs in generic volume group during array promotion.
+
+        :param group: storage configuration service instance
+        :param add_volumes: the volumes uuids you want to add to the vol grp
+        :param remove_volumes: the volumes uuids you want to remove from
+                               the CG
+        :returns: model_update
+        :raises: VolumeBackendAPIException
+        """
+        if not group.is_replicated:
+            msg = _('Group updates are only supported on replicated volume '
+                    'groups during failover promotion.')
+            raise exception.VolumeBackendAPIException(msg)
+        if add_volumes:
+            msg = _('Unable to add to volumes to a group, only volume '
+                    'removal is supported during promotion.')
+            raise exception.VolumeBackendAPIException(msg)
+
+        # Either add_volumes or remove_volumes must be provided, if add_volumes
+        # then excep is raised, other there must be remove_volumes present
+        volume = remove_volumes[0]
+        extra_specs = self._initial_setup(volume, volume.volume_type_id)
+        rep_extra_specs = self._get_replication_extra_specs(
+            extra_specs, extra_specs[utils.REP_CONFIG])
+        remote_array = rep_extra_specs['array']
+
+        vol_grp_name = None
+        volume_group = self._find_volume_group(remote_array, group)
+        if volume_group:
+            if 'name' in volume_group:
+                vol_grp_name = volume_group['name']
+        if vol_grp_name is None:
+            raise exception.GroupNotFound(group_id=group.id)
+
+        interval_retries_dict = {
+            utils.INTERVAL: self.interval, utils.RETRIES: self.retries}
+        # Volumes have already failed over and had their provider_location
+        # updated, do not get remote device IDs here
+        remove_device_ids = self._get_volume_device_ids(
+            remove_volumes, remote_array)
+        if remove_device_ids:
+            interval_retries_dict[utils.FORCE_VOL_REMOVE] = True
+            # Check if the volumes exist in the storage group
+            temp_list = deepcopy(remove_device_ids)
+            for device_id in temp_list:
+                if not self.rest.is_volume_in_storagegroup(
+                        remote_array, device_id, vol_grp_name):
+                    remove_device_ids.remove(device_id)
+            if remove_device_ids:
+                self.masking.remove_volumes_from_storage_group(
+                    remote_array, remove_device_ids,
+                    vol_grp_name, interval_retries_dict)
+            self.volume_metadata.capture_modify_group(
+                vol_grp_name, group.id, list(), remove_volumes, remote_array)
 
     def _remove_remote_vols_from_volume_group(
             self, array, volumes, group, extra_specs):
@@ -5571,16 +6014,26 @@ class PowerMaxCommon(object):
             remote_array, remote_device_list, group_name, extra_specs)
         LOG.info("Removed volumes from remote volume group.")
 
-    def _get_volume_device_ids(self, volumes, array):
+    def _get_volume_device_ids(self, volumes, array, remote_volumes=False):
         """Get volume device ids from volume.
 
         :param volumes: volume objects
+        :param array: array id
+        :param remote_volumes: get the remote ids for replicated volumes
         :returns: device_ids
         """
         device_ids = []
         for volume in volumes:
-            specs = {utils.ARRAY: array}
-            device_id = self._find_device_on_array(volume, specs)
+            if remote_volumes:
+                replication_details = ast.literal_eval(
+                    volume.replication_driver_data)
+                remote_array = replication_details.get(utils.ARRAY)
+                specs = {utils.ARRAY: remote_array}
+                device_id = self._find_device_on_array(
+                    volume, specs, remote_volumes)
+            else:
+                specs = {utils.ARRAY: array}
+                device_id = self._find_device_on_array(volume, specs)
             if device_id is None:
                 LOG.error("Volume %(name)s not found on the array.",
                           {'name': volume['name']})
@@ -5782,7 +6235,7 @@ class PowerMaxCommon(object):
         if not source_vols:
             for snap in snapshots:
                 if snap.id == volume.snapshot_id:
-                    src_dev_id, __ = self._parse_snap_info(
+                    src_dev_id, __, __ = self._parse_snap_info(
                         extra_specs[utils.ARRAY], snap)
                     vol_size = snap.volume_size
         else:
@@ -5991,28 +6444,33 @@ class PowerMaxCommon(object):
             return model_update, vol_model_updates
 
         extra_specs = self._initial_setup(volumes[0])
-        array = ast.literal_eval(volumes[0].provider_location)['array']
-        extra_specs[utils.ARRAY] = array
+        replication_details = ast.literal_eval(
+            volumes[0].replication_driver_data)
+        remote_array = replication_details.get(utils.ARRAY)
+        extra_specs[utils.ARRAY] = remote_array
         failover = False if secondary_backend_id == 'default' else True
 
         try:
             rdf_group_no, __ = self.get_rdf_details(
-                array, extra_specs[utils.REP_CONFIG])
+                remote_array, extra_specs[utils.REP_CONFIG])
             if group:
-                volume_group = self._find_volume_group(array, group)
+                volume_group = self._find_volume_group(remote_array, group)
                 if volume_group:
                     if 'name' in volume_group:
                         vol_grp_name = volume_group['name']
                 if vol_grp_name is None:
                     raise exception.GroupNotFound(group_id=group.id)
 
-            if not is_metro:
+            is_partitioned = self._rdf_vols_partitioned(
+                remote_array, volumes, rdf_group_no)
+
+            if not is_metro and not is_partitioned:
                 if failover:
                     self.rest.srdf_failover_group(
-                        array, vol_grp_name, rdf_group_no, extra_specs)
+                        remote_array, vol_grp_name, rdf_group_no, extra_specs)
                 else:
                     self.rest.srdf_failback_group(
-                        array, vol_grp_name, rdf_group_no, extra_specs)
+                        remote_array, vol_grp_name, rdf_group_no, extra_specs)
 
             if failover:
                 model_update.update({
@@ -6043,7 +6501,8 @@ class PowerMaxCommon(object):
                 self.volume_metadata.capture_failover_volume(
                     vol, local['device_id'], local['array'], rdf_group_no,
                     remote['device_id'], remote['array'], extra_specs,
-                    failover, vol_grp_name, vol_rep_status, utils.REP_ASYNC)
+                    failover, vol_grp_name, vol_rep_status,
+                    extra_specs[utils.REP_MODE])
 
             update = {'id': vol.id,
                       'replication_status': vol_rep_status,
@@ -6055,6 +6514,29 @@ class PowerMaxCommon(object):
 
         LOG.debug("Volume model updates: %s", vol_model_updates)
         return model_update, vol_model_updates
+
+    def _rdf_vols_partitioned(self, array, volumes, rdfg):
+        """Check if rdf volumes have been failed over by powermax array
+
+        :param array: remote array
+        :param volumes: rdf volumes
+        :param rdfg: rdf group
+        :return: devices have partitioned states
+        """
+        is_partitioned = False
+        for volume in volumes:
+            if self.promotion:
+                vol_data = volume.provider_location
+            else:
+                vol_data = volume.replication_driver_data
+            vol_data = ast.literal_eval(vol_data)
+            device_id = vol_data.get(utils.DEVICE_ID)
+            vol_details = self.rest.get_rdf_pair_volume(array, rdfg, device_id)
+            rdf_pair_state = vol_details.get(utils.RDF_PAIR_STATE, '').lower()
+            if rdf_pair_state in utils.RDF_PARTITIONED_STATES:
+                is_partitioned = True
+                break
+        return is_partitioned
 
     def get_attributes_from_cinder_config(self):
         """Get all attributes from the configuration file
@@ -6078,9 +6560,6 @@ class PowerMaxCommon(object):
             workload = self.configuration.safe_get(utils.VMAX_WORKLOAD)
             port_groups = self._get_configuration_value(
                 utils.VMAX_PORT_GROUPS, utils.POWERMAX_PORT_GROUPS)
-            random_portgroup = None
-            if port_groups:
-                random_portgroup = random.choice(port_groups)
 
             kwargs = (
                 {'RestServerIp': self.configuration.safe_get(
@@ -6090,7 +6569,7 @@ class PowerMaxCommon(object):
                  'RestPassword': password,
                  'SerialNumber': serial_number,
                  'srpName': srp_name,
-                 'PortGroup': random_portgroup})
+                 'PortGroup': port_groups})
 
             if self.configuration.safe_get('driver_ssl_cert_verify'):
                 if self.configuration.safe_get('driver_ssl_cert_path'):
@@ -6188,30 +6667,41 @@ class PowerMaxCommon(object):
             LOG.error(exception_message)
             raise exception.VolumeDriverException(message=exception_message)
         array = extra_specs[utils.ARRAY]
-        sourcedevice_id, snap_name = self._parse_snap_info(
+        sourcedevice_id, snap_name, snap_id_list = self._parse_snap_info(
             array, snapshot)
         if not sourcedevice_id or not snap_name:
             LOG.error("No snapshot found on the array")
             exception_message = (_(
                 "Failed to revert the volume to the snapshot"))
             raise exception.VolumeDriverException(message=exception_message)
+        if len(snap_id_list) != 1:
+            exception_message = (_(
+                "It is not possible to revert snapshot because there are "
+                "either multiple or no snapshots associated with "
+                "%(snap_name)s.") % {'snap_name': snap_name})
+            LOG.error(exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
+        else:
+            snap_id = snap_id_list[0]
         self._clone_check(array, sourcedevice_id, extra_specs)
         try:
             LOG.info("Reverting device: %(deviceid)s "
                      "to snapshot: %(snapname)s.",
                      {'deviceid': sourcedevice_id, 'snapname': snap_name})
             self.provision.revert_volume_snapshot(
-                array, sourcedevice_id, snap_name, extra_specs)
+                array, sourcedevice_id, snap_name, snap_id, extra_specs)
             # Once the restore is done, we need to check if it is complete
             restore_complete = self.provision.is_restore_complete(
-                array, sourcedevice_id, snap_name, extra_specs)
+                array, sourcedevice_id, snap_name, snap_id, extra_specs)
             if not restore_complete:
                 LOG.debug("Restore couldn't complete in the specified "
                           "time interval. The terminate restore may fail")
             LOG.debug("Terminating restore session")
             # This may throw an exception if restore_complete is False
             self.provision.delete_volume_snap(
-                array, snap_name, sourcedevice_id, restored=True, generation=0)
+                array, snap_name, sourcedevice_id, snap_id,
+                restored=True)
             # Revert volume to snapshot is successful if termination was
             # successful - possible even if restore_complete was False
             # when we checked last.
@@ -6326,12 +6816,22 @@ class PowerMaxCommon(object):
         :param snap_name: the snapshot name
         :returns: dict -- volume metadata
         """
+        snap_id_list = list()
         snap_info = self.rest.get_volume_snap_info(array, device_id)
-        device_name = snap_info['deviceName']
+        device_name = snap_info.get('deviceName')
+        snapshot_src_list = snap_info.get('snapshotSrcs')
+        for snapshot_src in snapshot_src_list:
+            if snap_name == snapshot_src.get('snapshotName'):
+                snap_id_list.append(snapshot_src.get(
+                    'snap_id') if self.rest.is_snap_id else snapshot_src.get(
+                        'generation'))
         device_label = device_name.split(':')[1]
         metadata = {'SnapshotLabel': snap_name,
                     'SourceDeviceID': device_id,
-                    'SourceDeviceLabel': device_label}
+                    'SourceDeviceLabel': device_label,
+                    'SnapIdList': ', '.join(
+                        six.text_type(v) for v in snap_id_list),
+                    'is_snap_id': self.rest.is_snap_id}
 
         return metadata
 

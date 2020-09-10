@@ -107,6 +107,8 @@ global_opts = [
                      'default_availability_zone, then '
                      'storage_availability_zone, instead of failing.'),
     cfg.StrOpt('default_volume_type',
+               default='__DEFAULT__',
+               required=True,
                help='Default volume type to use'),
     cfg.StrOpt('default_group_type',
                help='Default group type to use'),
@@ -172,7 +174,7 @@ image_opts = [
                      'is not specified it defaults to http.'),
     cfg.IntOpt('glance_num_retries',
                min=0,
-               default=0,
+               default=3,
                help='Number retries when downloading an image from glance'),
     cfg.BoolOpt('glance_api_insecure',
                 default=False,

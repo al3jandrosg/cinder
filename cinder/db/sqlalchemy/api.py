@@ -584,55 +584,6 @@ def service_update(context, service_id, values):
         raise exception.ServiceNotFound(service_id=service_id)
 
 
-@enginefacade.writer
-def untyped_volumes_online_data_migration(context, max_count):
-    from cinder.volume import volume_types
-    default_type = volume_types.get_volume_type_by_name(context,
-                                                        '__DEFAULT__')
-    # get all volumes having volume_type=None
-    total = 0
-    updated = 0
-    session = get_session()
-    with session.begin():
-        total = model_query(context,
-                            models.Volume,
-                            session=session).filter_by(
-            volume_type_id=None).limit(max_count).count()
-        volumes = model_query(context,
-                              models.Volume,
-                              session=session).filter_by(
-            volume_type_id=None).limit(max_count).all()
-        for volume in volumes:
-            volume.volume_type_id = default_type.get('id')
-            updated += 1
-
-    return total, updated
-
-
-@enginefacade.writer
-def untyped_snapshots_online_data_migration(context, max_count):
-    from cinder.volume import volume_types
-    default_type = volume_types.get_volume_type_by_name(context,
-                                                        '__DEFAULT__')
-    # get all snapshots having volume_type=None
-    total = 0
-    updated = 0
-    session = get_session()
-    with session.begin():
-        total = model_query(context,
-                            models.Snapshot,
-                            session=session).filter_by(
-            volume_type_id=None).limit(max_count).count()
-        snapshots = model_query(context,
-                                models.Snapshot,
-                                session=session).filter_by(
-            volume_type_id=None).limit(max_count).all()
-        for snapshot in snapshots:
-            snapshot.volume_type_id = default_type.get('id')
-            updated += 1
-
-    return total, updated
-
 ###################
 
 
@@ -4157,6 +4108,9 @@ def volume_type_destroy(context, id):
     utcnow = timeutils.utcnow()
     session = get_session()
     with session.begin():
+        vol_types = volume_type_get_all(context)
+        if len(vol_types) <= 1:
+            raise exception.VolumeTypeDeletionError(volume_type_id=id)
         _volume_type_get(context, id, session)
         results = model_query(context, models.Volume, session=session). \
             filter_by(volume_type_id=id).all()
@@ -6129,15 +6083,18 @@ def group_create(context, values, group_snapshot_id=None,
             values.pop('group_type_id', None)
             values.pop('availability_zone', None)
             values.pop('host', None)
+            values.pop('cluster_name', None)
             # NOTE(xyang): Save volume_type_ids to update later.
             volume_type_ids = values.pop('volume_type_ids', [])
 
             sel = session.query(group_model.group_type_id,
                                 group_model.availability_zone,
                                 group_model.host,
+                                group_model.cluster_name,
                                 *(bindparam(k, v) for k, v in values.items())
                                 ).filter(*conditions)
-            names = ['group_type_id', 'availability_zone', 'host']
+            names = ['group_type_id', 'availability_zone', 'host',
+                     'cluster_name']
             names.extend(values.keys())
             insert_stmt = group_model.__table__.insert().from_select(
                 names, sel)

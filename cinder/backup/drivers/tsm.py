@@ -32,6 +32,7 @@ import stat
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_log import versionutils
 
 from cinder.backup import driver
 from cinder import exception
@@ -275,6 +276,11 @@ class TSMBackupDriver(driver.BackupDriver):
         return tsm_opts
 
     def check_for_setup_error(self):
+        versionutils.report_deprecated_feature(
+            LOG,
+            "Cinder TSM Backup Driver is deprecated and will be removed "
+            "in Wallaby release. Please, migrate you backups to a supported "
+            "backend.")
         required_flags = ['backup_share']
         for flag in required_flags:
             val = getattr(CONF, flag, None)
@@ -406,18 +412,6 @@ class TSMBackupDriver(driver.BackupDriver):
                       'err': exc.stderr})
             LOG.error(err)
             raise exception.InvalidBackup(reason=err)
-        except exception.Error as exc:
-            err = (_('backup: %(vol_id)s failed to run dsmc '
-                     'due to invalid arguments '
-                     'on %(bpath)s.\n'
-                     'stdout: %(out)s\n stderr: %(err)s')
-                   % {'vol_id': backup.volume_id,
-                      'bpath': backup_path,
-                      'out': exc.stdout,
-                      'err': exc.stderr})
-            LOG.error(err)
-            raise exception.InvalidBackup(reason=err)
-
         finally:
             _cleanup_device_hardlink(backup_path, volume_path,
                                      backup.volume_id)
@@ -466,18 +460,6 @@ class TSMBackupDriver(driver.BackupDriver):
                       'err': exc.stderr})
             LOG.error(err)
             raise exception.InvalidBackup(reason=err)
-        except exception.Error as exc:
-            err = (_('restore: %(vol_id)s failed to run dsmc '
-                     'due to invalid arguments '
-                     'on %(bpath)s.\n'
-                     'stdout: %(out)s\n stderr: %(err)s')
-                   % {'vol_id': volume_id,
-                      'bpath': restore_path,
-                      'out': exc.stdout,
-                      'err': exc.stderr})
-            LOG.error(err)
-            raise exception.InvalidBackup(reason=err)
-
         finally:
             _cleanup_device_hardlink(restore_path, volume_path, volume_id)
 
@@ -519,16 +501,6 @@ class TSMBackupDriver(driver.BackupDriver):
                       'err': exc.stderr})
             LOG.error(err)
             raise exception.InvalidBackup(reason=err)
-        except exception.Error as exc:
-            err = (_('delete: %(vol_id)s failed to run dsmc '
-                     'due to invalid arguments with '
-                     'stdout: %(out)s\n stderr: %(err)s')
-                   % {'vol_id': backup.volume_id,
-                      'out': exc.stdout,
-                      'err': exc.stderr})
-            LOG.error(err)
-            raise exception.InvalidBackup(reason=err)
-
         success = _check_dsmc_output(out, delete_attrs)
         if not success:
             # log error if tsm cannot delete the backup object

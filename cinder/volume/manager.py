@@ -177,8 +177,8 @@ MAPPING = {
     'cinder.volume.drivers.fujitsu.eternus_dx_iscsi.FJDXISCSIDriver':
         'cinder.volume.drivers.fujitsu.eternus_dx.eternus_dx_iscsi.'
         'FJDXISCSIDriver',
-    'cinder.volume.drivers.dell_emc.scaleio.driver.ScaleIODriver':
-        'cinder.volume.drivers.dell_emc.vxflexos.driver.VxFlexOSDriver',
+    'cinder.volume.drivers.dell_emc.vxflexos.driver.VxFlexOSDriver':
+        'cinder.volume.drivers.dell_emc.powerflex.driver.PowerFlexDriver',
 }
 
 
@@ -1760,6 +1760,18 @@ class VolumeManager(manager.CleanableManager,
             encrypted = bool(volume.encryption_key_id)
             conn_info['data']['encrypted'] = encrypted
 
+        # Add cacheable flag to connection_info if not set in the driver.
+        if typeid:
+            cacheable = volume_types.get_volume_type_extra_specs(
+                typeid, key='cacheable')
+            if conn_info['data'].get('cacheable') is not None:
+                driver_setting = bool(conn_info['data']['cacheable'])
+                # override a True driver_setting but respect False
+                conn_info['data']['cacheable'] = (driver_setting and
+                                                  (cacheable == '<is> True'))
+            else:
+                conn_info['data']['cacheable'] = (cacheable == '<is> True')
+
         # Add discard flag to connection_info if not set in the driver and
         # configured to be reported.
         if conn_info['data'].get('discard') is None:
@@ -2072,8 +2084,9 @@ class VolumeManager(manager.CleanableManager,
         else:
             conn = self.initialize_connection(ctxt, volume, properties)
 
-        attach_info = self._connect_device(conn)
+        attach_info = None
         try:
+            attach_info = self._connect_device(conn)
             if attach_encryptor and (
                     volume_types.is_encrypted(ctxt,
                                               volume.volume_type_id)):
@@ -2088,22 +2101,24 @@ class VolumeManager(manager.CleanableManager,
                 LOG.error("Failed to attach volume encryptor"
                           " %(vol)s.", {'vol': volume['id']})
                 self._detach_volume(ctxt, attach_info, volume, properties,
-                                    force=True)
+                                    force=True, remote=remote)
         return attach_info
 
     def _detach_volume(self, ctxt, attach_info, volume, properties,
                        force=False, remote=False,
                        attach_encryptor=False):
-        connector = attach_info['connector']
-        if attach_encryptor and (
-                volume_types.is_encrypted(ctxt,
-                                          volume.volume_type_id)):
-            encryption = self.db.volume_encryption_metadata_get(
-                ctxt.elevated(), volume.id)
-            if encryption:
-                utils.brick_detach_volume_encryptor(attach_info, encryption)
-        connector.disconnect_volume(attach_info['conn']['data'],
-                                    attach_info['device'], force=force)
+        if attach_info:
+            connector = attach_info['connector']
+            if attach_encryptor and (
+                    volume_types.is_encrypted(ctxt,
+                                              volume.volume_type_id)):
+                encryption = self.db.volume_encryption_metadata_get(
+                    ctxt.elevated(), volume.id)
+                if encryption:
+                    utils.brick_detach_volume_encryptor(attach_info,
+                                                        encryption)
+            connector.disconnect_volume(attach_info['conn']['data'],
+                                        attach_info['device'], force=force)
 
         if remote:
             rpcapi = volume_rpcapi.VolumeAPI()
@@ -2609,6 +2624,18 @@ class VolumeManager(manager.CleanableManager,
 
                 # Append volume stats with 'allocated_capacity_gb'
                 self._append_volume_stats(volume_stats)
+
+                # Append cacheable flag for iSCSI/FC/NVMe-oF and only when
+                # cacheable is not set in driver level
+                if volume_stats['storage_protocol'] in [
+                        'iSCSI', 'FC', 'NVMe-oF']:
+                    if volume_stats.get('pools'):
+                        for pool in volume_stats.get('pools'):
+                            if pool.get('cacheable') is None:
+                                pool['cacheable'] = True
+                    else:
+                        if volume_stats.get('cacheable') is None:
+                            volume_stats['cacheable'] = True
 
                 # Append filter and goodness function if needed
                 volume_stats = (

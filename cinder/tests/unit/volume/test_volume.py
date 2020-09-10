@@ -172,6 +172,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         myfilterfunction = "myFilterFunction"
         mygoodnessfunction = "myGoodnessFunction"
         expected = {'name': 'cinder-volumes',
+                    'storage_protocol': 'iSCSI',
+                    'cacheable': True,
                     'filter_function': myfilterfunction,
                     'goodness_function': mygoodnessfunction,
                     }
@@ -181,7 +183,9 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                    'get_goodness_function') as m_get_goodness:
                 with mock.patch.object(manager.driver,
                                        'get_filter_function') as m_get_filter:
-                    m_get_stats.return_value = {'name': 'cinder-volumes'}
+                    m_get_stats.return_value = {'name': 'cinder-volumes',
+                                                'storage_protocol': 'iSCSI',
+                                                }
                     m_get_filter.return_value = myfilterfunction
                     m_get_goodness.return_value = mygoodnessfunction
                     manager._report_driver_status(context.get_admin_context())
@@ -604,6 +608,17 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                                    'description',
                                    volume_type=self.vol_type)
         self.assertEqual('default-az', volume['availability_zone'])
+
+    def test_create_volume_with_default_type_misconfigured(self):
+        """Test volume creation with non-existent default volume type."""
+        volume_api = cinder.volume.api.API()
+
+        self.flags(default_volume_type='fake_type')
+        # Create volume with default volume type while default
+        # volume type doesn't exist
+        self.assertRaises(exception.VolumeTypeDefaultMisconfiguredError,
+                          volume_api.create, self.context, 1,
+                          'name', 'description')
 
     @mock.patch('cinder.quota.QUOTAS.rollback', new=mock.MagicMock())
     @mock.patch('cinder.quota.QUOTAS.commit', new=mock.MagicMock())

@@ -14,6 +14,7 @@
 #    under the License.
 
 from copy import deepcopy
+import random
 
 import six
 
@@ -92,15 +93,20 @@ class PowerMaxData(object):
     next_gen_ucode = 5978
     gvg_group_id = 'test-gvg'
     sg_tags = 'production,test'
+    snap_id = 118749976833
+    snap_id_2 = 118749976833
 
     # connector info
     wwpn1 = '123456789012345'
     wwpn2 = '123456789054321'
     wwnn1 = '223456789012345'
-    initiator = 'iqn.1993-08.org.debian: 01: 222'
-    ip, ip2 = u'123.456.7.8', u'123.456.7.9'
-    iqn = u'iqn.1992-04.com.emc:600009700bca30c01e3e012e00000001,t,0x0001'
-    iqn2 = u'iqn.1992-04.com.emc:600009700bca30c01e3e012e00000002,t,0x0001'
+    wwnn2 = '223456789012346'
+    initiator = 'iqn.1993-08.org.debian:01:222'
+    iscsi_dir = 'SE-4E'
+    iscsi_port = '1'
+    ip, ip2 = '123.456.7.8', '123.456.7.9'
+    iqn = 'iqn.1992-04.com.emc:600009700bca30c01e3e012e00000001'
+    iqn2 = 'iqn.1992-04.com.emc:600009700bca30c01e3e012e00000002'
     connector = {'ip': ip,
                  'initiator': initiator,
                  'wwpns': [wwpn1, wwpn2],
@@ -111,6 +117,7 @@ class PowerMaxData(object):
     end_point_map = {connector['wwpns'][0]: [wwnn1],
                      connector['wwpns'][1]: [wwnn1]}
     target_wwns = [wwnn1]
+    target_wwns_multi = [wwnn1, wwnn2]
     zoning_mappings = {
         'array': u'000197800123',
         'init_targ_map': end_point_map,
@@ -132,22 +139,33 @@ class PowerMaxData(object):
                       }
         device_map[fabric_name] = fabric_map
 
+    iscsi_dir_port = '%(dir)s:%(port)s' % {'dir': iscsi_dir,
+                                           'port': iscsi_port}
+    iscsi_dir_virtual_port = '%(dir)s:%(port)s' % {'dir': iscsi_dir,
+                                                   'port': '000'}
     iscsi_device_info = {'maskingview': masking_view_name_i,
                          'ip_and_iqn': [{'ip': ip,
-                                         'iqn': initiator}],
+                                         'iqn': initiator,
+                                         'physical_port': iscsi_dir_port}],
                          'is_multipath': True,
                          'array': array,
                          'controller': {'host': '10.00.00.00'},
                          'hostlunid': 3,
                          'device_id': device_id}
     iscsi_device_info_metro = deepcopy(iscsi_device_info)
-    iscsi_device_info_metro['metro_ip_and_iqn'] = [{'ip': ip2, 'iqn': iqn2}]
+    iscsi_device_info_metro['metro_ip_and_iqn'] = [{
+        'ip': ip2, 'iqn': iqn2, 'physical_port': iscsi_dir_port}]
     iscsi_device_info_metro['metro_hostlunid'] = 2
 
     fc_device_info = {'maskingview': masking_view_name_f,
                       'array': array,
                       'controller': {'host': '10.00.00.00'},
                       'hostlunid': 3}
+
+    director_port_keys_empty = {'symmetrixPortKey': []}
+    director_port_keys_multiple = {'symmetrixPortKey': [
+        {'directorId': 'SE-1E', 'portId': '1'},
+        {'directorId': 'SE-1E', 'portId': '2'}]}
 
     # snapshot info
     snapshot_id = '390eeb4d-0f56-4a02-ba14-167167967014'
@@ -211,6 +229,13 @@ class PowerMaxData(object):
         provider_location=six.text_type(provider_location),
         volume_type=test_volume_type, host=fake_host,
         replication_driver_data=six.text_type(provider_location3))
+
+    test_rep_volume = fake_volume.fake_volume_obj(
+        context=ctx, name='vol1', size=2, provider_auth=None,
+        provider_location=six.text_type(provider_location),
+        volume_type=test_volume_type, host=fake_host,
+        replication_driver_data=six.text_type(provider_location3),
+        replication_status=fields.ReplicationStatus.ENABLED)
 
     test_attached_volume = fake_volume.fake_volume_obj(
         id='4732de9b-98a4-4b6d-ae4b-3cafb3d34220', context=ctx, name='vol1',
@@ -442,6 +467,10 @@ class PowerMaxData(object):
 
     rep_extra_specs_rep_config = deepcopy(rep_extra_specs6)
     rep_extra_specs_rep_config[utils.REP_CONFIG] = rep_config_sync
+
+    rep_extra_specs_rep_config_metro = deepcopy(rep_extra_specs6)
+    rep_extra_specs_rep_config_metro[utils.REP_CONFIG] = rep_config_metro
+    rep_extra_specs_rep_config_metro[utils.REP_MODE] = utils.REP_METRO
 
     extra_specs_tags = deepcopy(extra_specs)
     extra_specs_tags.update({utils.STORAGE_GROUP_TAGS: sg_tags})
@@ -854,7 +883,7 @@ class PowerMaxData(object):
                             {'snapshotHeader': {
                                 'snapshotName': 'temp-1',
                                 'device': device_id,
-                                'generation': '0'},
+                                'snapid': snap_id},
                                 'lnkSnapshotGenInfo': [
                                     {'targetDevice': device_id2,
                                      'state': 'Copied'}]}]},
@@ -862,7 +891,7 @@ class PowerMaxData(object):
                             'snapshotName': 'temp-1',
                             'targetDevice': device_id2,
                             'sourceDevice': device_id,
-                            'generation': '0',
+                            'snapid': snap_id_2,
                             'state': 'Copied'}}],
                     'snapVXSrc': 'true',
                     'snapVXTgt': 'true'},
@@ -890,14 +919,15 @@ class PowerMaxData(object):
     # replication
     volume_snap_vx = {'snapshotLnks': [],
                       'snapshotSrcs': [
-                          {'generation': 0,
+                          {'snap_id': snap_id,
                            'linkedDevices': [
                                {'targetDevice': device_id2,
                                 'percentageCopied': 100,
                                 'state': 'Copied',
                                 'copy': True,
                                 'defined': True,
-                                'linked': True}],
+                                'linked': True,
+                                'snap_id': snap_id}],
                            'snapshotName': test_snapshot_snap_name,
                            'state': 'Established'}]}
     capabilities = {'symmetrixCapability': [{'rdfCapable': True,
@@ -1052,7 +1082,8 @@ class PowerMaxData(object):
                         {'snapshotHeader': {
                             'timestamp': 1512763278000, 'expired': False,
                             'secured': False, 'snapshotName': 'testSnap1',
-                            'device': '00001', 'generation': 0, 'timeToLive': 0
+                            'device': '00001', 'snapid': snap_id,
+                            'timeToLive': 0, 'generation': 0
                         }}]}]}}]
 
     priv_vol_func_response_multi = [
@@ -1078,7 +1109,8 @@ class PowerMaxData(object):
                         {'snapshotHeader': {
                             'timestamp': 1512763278000, 'expired': False,
                             'secured': False, 'snapshotName': 'testSnap1',
-                            'device': '00001', 'generation': 0, 'timeToLive': 0
+                            'device': '00001', 'snapid': snap_id,
+                            'timeToLive': 0, 'generation': 0
                         }}]}]}},
         {'volumeHeader': {
             'private': False, 'capGB': 200.0, 'capMB': 204800.0,
@@ -1102,7 +1134,8 @@ class PowerMaxData(object):
                         {'snapshotHeader': {
                             'timestamp': 1512763278000, 'expired': False,
                             'secured': False, 'snapshotName': 'testSnap2',
-                            'device': '00002', 'generation': 0, 'timeToLive': 0
+                            'device': '00002', 'snapid': snap_id,
+                            'timeToLive': 0, 'generation': 0
                         }}]}]}},
         {'volumeHeader': {
             'private': False, 'capGB': 300.0, 'capMB': 307200.0,
@@ -1126,7 +1159,8 @@ class PowerMaxData(object):
                         {'snapshotHeader': {
                             'timestamp': 1512763278000, 'expired': False,
                             'secured': False, 'snapshotName': 'testSnap3',
-                            'device': '00003', 'generation': 0, 'timeToLive': 0
+                            'device': '00003', 'snapid': snap_id,
+                            'timeToLive': 0, 'generation': 0
                         }}]}]}},
         {'volumeHeader': {
             'private': False, 'capGB': 400.0, 'capMB': 409600.0,
@@ -1150,7 +1184,8 @@ class PowerMaxData(object):
                         {'snapshotHeader': {
                             'timestamp': 1512763278000, 'expired': False,
                             'secured': False, 'snapshotName': 'testSnap4',
-                            'device': '00004', 'generation': 0, 'timeToLive': 0
+                            'device': '00004', 'snapid': snap_id,
+                            'timeToLive': 0, 'generation': 0
                         }}]}]}}]
 
     priv_vol_func_response_multi_invalid = [
@@ -1324,19 +1359,21 @@ class PowerMaxData(object):
         'RestServerPort': '8443',
         'RestUserName': 'test',
         'RestPassword': 'test',
-        'SSLVerify': '/path/to/cert'},
+        'SSLVerify': '/path/to/cert',
+        'SerialNumber': array},
         {'RestServerIp': '10.10.10.12',
          'RestServerPort': '8443',
          'RestUserName': 'test',
          'RestPassword': 'test',
-         'SSLVerify': 'True'}]
+         'SSLVerify': 'True',
+         'SerialNumber': array}]
 
     snapshot_src_details = {'snapshotSrcs': [{
         'snapshotName': 'temp-000AA-snapshot_for_clone',
-        'generation': 0, 'state': 'Established', 'expired': False,
+        'snap_id': snap_id, 'state': 'Established', 'expired': False,
         'linkedDevices': [{'targetDevice': device_id2, 'state': 'Copied',
                            'copy': True}]},
-        {'snapshotName': 'temp-000AA-snapshot_for_clone', 'generation': 1,
+        {'snapshotName': 'temp-000AA-snapshot_for_clone', 'snap_id': snap_id_2,
          'state': 'Established', 'expired': False,
          'linkedDevices': [{'targetDevice': device_id3, 'state': 'Copied',
                             'copy': True}]}],
@@ -1347,24 +1384,24 @@ class PowerMaxData(object):
 
     snap_tgt_vol_details = {"timeFinderInfo": {"snapVXSession": [{
         "tgtSrcSnapshotGenInfo": {
-            "generation": 6, "expired": True,
+            "snapid": snap_id, "expired": True,
             "snapshotName": "temp-000AA-snapshot_for_clone"}}]}}
 
     snap_tgt_session = {
-        'generation': 0, 'expired': False, 'copy_mode': False,
+        'snapid': snap_id, 'expired': False, 'copy_mode': False,
         'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
         'source_vol_id': device_id, 'target_vol_id': device_id2}
 
     snap_tgt_session_cm_enabled = {
-        'generation': 0, 'expired': False, 'copy_mode': True,
+        'snapid': snap_id, 'expired': False, 'copy_mode': True,
         'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
         'source_vol_id': device_id, 'target_vol_id': device_id2}
 
     snap_src_sessions = [
-        {'generation': 0, 'expired': False, 'copy_mode': False,
+        {'snapid': snap_id, 'expired': False, 'copy_mode': False,
          'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
          'source_vol_id': device_id, 'target_vol_id': device_id3},
-        {'generation': 1, 'expired': False, 'copy_mode': False,
+        {'snapid': snap_id_2, 'expired': False, 'copy_mode': False,
          'snap_name': 'temp-000AA-snapshot_for_clone', 'state': 'Copied',
          'source_vol_id': device_id, 'target_vol_id': device_id4}]
 
@@ -1433,7 +1470,7 @@ class PowerMaxData(object):
     priv_snap_response = {
         'deviceName': snap_device_label, 'snapshotLnks': [],
         'snapshotSrcs': [
-            {'generation': 0,
+            {'snap_id': snap_id,
              'linkedDevices': [
                  {'targetDevice': device_id2, 'percentageCopied': 100,
                   'state': 'Copied', 'copy': True, 'defined': True,
@@ -1531,3 +1568,80 @@ class PowerMaxData(object):
                         'description': vol_create_desc1},
                        {'execution_order': 2,
                         'description': vol_create_desc2}]
+
+    # performance
+    f_date_a = 1593432600000
+    f_date_b = 1594136400000
+    l_date = 1594730100000
+    perf_pb_metric = 'PercentBusy'
+    perf_df_avg = 'Average'
+    perf_port_groups = ['port_group_a', 'port_group_b', 'port_group_c']
+    perf_ports = ['SE-1E:1', 'SE-1E:2', 'SE-1E:3']
+
+    performance_config = {
+        'load_balance': True, 'load_balance_rt': True,
+        'perf_registered': True, 'rt_registered': True,
+        'collection_interval': 5, 'data_format': 'Average',
+        'look_back': 60, 'look_back_rt': 10,
+        'port_group_metric': 'PercentBusy', 'port_metric': 'PercentBusy'}
+
+    array_registration = {"registrationDetailsInfo": [
+        {"symmetrixId": array, "realtime": True, "message": "Success",
+         "collectionintervalmins": 5, "diagnostic": True}]}
+
+    array_keys = {"arrayInfo": [
+        {"symmetrixId": array,
+         "firstAvailableDate": f_date_a,
+         "lastAvailableDate": l_date},
+        {"symmetrixId": array_herc,
+         "firstAvailableDate": f_date_a,
+         "lastAvailableDate": l_date},
+        {"symmetrixId": remote_array,
+         "firstAvailableDate": f_date_b,
+         "lastAvailableDate": l_date}]}
+
+    dummy_performance_data = {
+        "expirationTime": 1594731525645,
+        "count": 10,
+        "maxPageSize": 1000,
+        "id": "3b757302-6e4a-4dbe-887d-e42aed7f5944_0",
+        "resultList": {
+            "result": [
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593432600000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593432900000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593433200000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593433500000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593433800000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593434100000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593434400000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593434700000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593435000000},
+                {"PercentBusy": random.uniform(0.0, 100.0),
+                 "timestamp": 1593435300000}],
+            "from": 1,
+            "to": 10
+        }
+    }
+    staging_sg = 'STG-myhostB-4732de9b-98a4-4b6d-ae4b-3cafb3d34220-SG'
+    staging_mv1 = 'STG-myhostA-4732de9b-98a4-4b6d-ae4b-3cafb3d34220-MV'
+    staging_mv2 = 'STG-myhostB-4732de9b-98a4-4b6d-ae4b-3cafb3d34220-MV'
+    staging_mvs = [staging_mv1, staging_mv2]
+    legacy_mv1 = 'OS-myhostA-No_SLO-e14f48b8-MV'
+    legacy_mv2 = 'OS-myhostB-No_SLO-e14f48b8-MV'
+    legacy_shared_sg = 'OS-myhostA-No_SLO-SG'
+    legacy_mvs = [legacy_mv1, legacy_mv2]
+    legacy_not_shared_mv = 'OS-myhostA-SRP_1-Diamond-NONE-MV'
+    legacy_not_shared_sg = 'OS-myhostA-SRP_1-Diamond-NONE-SG'
+    snapshot_metadata = {'SnapshotLabel': test_snapshot_snap_name,
+                         'SourceDeviceID': device_id,
+                         'SourceDeviceLabel': device_label,
+                         'SnapIdList': [snap_id]}

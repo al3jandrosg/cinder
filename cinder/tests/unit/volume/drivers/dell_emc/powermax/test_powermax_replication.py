@@ -171,6 +171,9 @@ class PowerMaxReplicationTest(test.TestCase):
                                                    mock_ip):
         metro_connector = deepcopy(self.data.connector)
         metro_connector['multipath'] = True
+        phys_port = '%(dir)s:%(port)s' % {
+            'dir': self.data.portgroup[0]['symmetrixPortKey'][0]['directorId'],
+            'port': '1'}
         info_dict = self.iscsi_common.initialize_connection(
             self.data.test_volume, metro_connector)
         ref_dict = {'array': self.data.array,
@@ -178,11 +181,13 @@ class PowerMaxReplicationTest(test.TestCase):
                     'hostlunid': 3,
                     'maskingview': self.data.masking_view_name_f,
                     'ip_and_iqn': [{'ip': self.data.ip,
-                                    'iqn': self.data.initiator}],
+                                    'iqn': self.data.initiator,
+                                    'physical_port': phys_port}],
                     'metro_hostlunid': 3,
                     'is_multipath': True,
                     'metro_ip_and_iqn': [{'ip': self.data.ip,
-                                          'iqn': self.data.initiator}]}
+                                          'iqn': self.data.initiator,
+                                         'physical_port': phys_port}]}
         self.assertEqual(ref_dict, info_dict)
 
     @mock.patch.object(utils.PowerMaxUtils, 'is_metro_device',
@@ -249,20 +254,219 @@ class PowerMaxReplicationTest(test.TestCase):
                               self.common.get_rdf_details, self.data.array,
                               self.data.rep_config_sync)
 
-    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
-    def test_failover_host(self, mck_sync):
+    @mock.patch.object(
+        common.PowerMaxCommon, '_populate_volume_and_group_update_lists',
+        return_value=('vol_list', 'group_list'))
+    @mock.patch.object(utils.PowerMaxUtils, 'validate_failover_request',
+                       return_value=(True, 'val'))
+    @mock.patch.object(rest.PowerMaxRest, 'get_arrays_list',
+                       return_value=['123'])
+    def test_failover_host(self, mck_arrays, mck_validate, mck_populate):
         volumes = [self.data.test_volume, self.data.test_clone_volume]
-        with mock.patch.object(self.common, '_failover_replication',
-                               return_value=(None, {})) as mock_fo:
-            self.common.failover_host(volumes)
-            mock_fo.assert_called_once()
+        groups = [self.data.test_group]
+        backend_id = self.data.rep_backend_id_sync
+        rep_configs = self.common.rep_configs
+        secondary_id, volume_update_list, group_update_list = (
+            self.common.failover_host(volumes, backend_id, groups))
+        mck_validate.assert_called_once_with(
+            False, backend_id, rep_configs, self.data.array, ['123'], False)
+        mck_populate.assert_called_once_with(volumes, groups, None)
+        self.assertEqual(backend_id, secondary_id)
+        self.assertEqual('vol_list', volume_update_list)
+        self.assertEqual('group_list', group_update_list)
 
+    @mock.patch.object(utils.PowerMaxUtils, 'validate_failover_request',
+                       return_value=(False, 'val'))
+    @mock.patch.object(rest.PowerMaxRest, 'get_arrays_list',
+                       return_value=['123'])
+    def test_failover_host_invalid(self, mck_arrays, mck_validate):
+        volumes = [self.data.test_volume, self.data.test_clone_volume]
+        backend_id = self.data.rep_backend_id_sync
+        rep_configs = self.common.rep_configs
+        self.assertRaises(exception.InvalidReplicationTarget,
+                          self.common.failover_host, volumes, backend_id)
+        mck_validate.assert_called_once_with(
+            False, backend_id, rep_configs, self.data.array, ['123'], False)
+
+    @mock.patch.object(
+        common.PowerMaxCommon, '_populate_volume_and_group_update_lists')
+    @mock.patch.object(utils.PowerMaxUtils, 'validate_failover_request',
+                       return_value=(True, 'val'))
+    @mock.patch.object(rest.PowerMaxRest, 'get_arrays_list',
+                       return_value=['123'])
+    def test_failover_host_start_promotion(
+            self, mck_arrays, mck_validate, mck_populate):
+        volumes = [self.data.test_volume, self.data.test_clone_volume]
+        groups = [self.data.test_group]
+        backend_id = utils.PMAX_FAILOVER_START_ARRAY_PROMOTION
+        rep_configs = self.common.rep_configs
+        secondary_id, volume_update_list, group_update_list = (
+            self.common.failover_host(volumes, backend_id, groups))
+        self.assertEqual(0, mck_populate.call_count)
+        self.assertEqual(backend_id, secondary_id)
+        self.assertEqual(list(), volume_update_list)
+        self.assertEqual(list(), group_update_list)
+        self.assertEqual(self.common.promotion, True)
+        self.common.promotion = False
+        mck_validate.assert_called_once_with(
+            False, backend_id, rep_configs, self.data.array, ['123'], False)
+
+    @mock.patch.object(
+        common.PowerMaxCommon, '_populate_volume_and_group_update_lists',
+        return_value=(list(), list()))
+    @mock.patch.object(utils.PowerMaxUtils, 'validate_failover_request',
+                       return_value=(True, 'val'))
+    @mock.patch.object(rest.PowerMaxRest, 'get_arrays_list',
+                       return_value=['123'])
+    def test_failover_host_complete_promotion(
+            self, mck_arrays, mck_validate, mck_populate):
+        volume = deepcopy(self.data.test_rep_volume)
+        volume.replication_status = fields.ReplicationStatus.ERROR
+        volumes = [volume]
+        groups = [self.data.test_group]
+        backend_id = 'default'
+        rep_configs = self.common.rep_configs
+        self.common.promotion = True
+        secondary_id, volume_update_list, group_update_list = (
+            self.common.failover_host(volumes, backend_id, groups))
+        mck_populate.assert_called_once_with(volumes, groups, None)
+        mck_validate.assert_called_once_with(
+            False, backend_id, rep_configs, self.data.array, ['123'], True)
+        self.assertEqual(backend_id, secondary_id)
+        self.assertEqual(list(), volume_update_list)
+        self.assertEqual(list(), group_update_list)
+        self.assertEqual(self.common.promotion, False)
+
+    @mock.patch.object(common.PowerMaxCommon,
+                       '_update_volume_list_from_sync_vol_list',
+                       return_value={'vol_updates'})
+    @mock.patch.object(common.PowerMaxCommon, '_initial_setup',
+                       return_value=tpd.PowerMaxData.ex_specs_rep_config_sync)
     @mock.patch.object(common.PowerMaxCommon, 'failover_replication',
-                       return_value=({}, {}))
-    def test_failover_host_groups(self, mock_fg):
+                       return_value=('grp_updates', {'grp_vol_updates'}))
+    def test_populate_volume_and_group_update_lists(
+            self, mck_failover_rep, mck_setup, mck_from_sync):
+        test_volume = deepcopy(self.data.test_volume)
+        test_volume.group_id = self.data.test_rep_group.id
+        volumes = [test_volume, self.data.test_rep_volume]
+        groups = [self.data.test_rep_group]
+        group_volumes = [test_volume]
+        volume_updates, group_updates = (
+            self.common._populate_volume_and_group_update_lists(
+                volumes, groups, None))
+        mck_failover_rep.assert_called_once_with(
+            None, groups[0], group_volumes, None, host=True)
+        mck_setup.assert_called_once_with(self.data.test_rep_volume)
+        mck_from_sync.assert_called_once_with(
+            [self.data.test_rep_volume], None)
+        vol_updates_ref = ['grp_vol_updates', 'vol_updates']
+        self.assertEqual(vol_updates_ref, volume_updates)
+        group_updates_ref = [{'group_id': test_volume.group_id,
+                              'updates': 'grp_updates'}]
+        self.assertEqual(group_updates_ref, group_updates)
+
+    @mock.patch.object(common.PowerMaxCommon, '_initial_setup',
+                       return_value=tpd.PowerMaxData.extra_specs)
+    def test_populate_volume_and_group_update_lists_promotion_non_rep(
+            self, mck_setup):
+        volumes = [self.data.test_volume]
+        groups = []
+        ref_model_update = {
+            'volume_id': volumes[0].id,
+            'updates': {
+                'replication_status': fields.ReplicationStatus.DISABLED}}
+        self.common.promotion = True
+        volume_updates, group_updates = (
+            self.common._populate_volume_and_group_update_lists(
+                volumes, groups, None))
+        self.common.promotion = False
+        self.assertEqual(ref_model_update, volume_updates[0])
+
+    def test_failover_replication_empty_group(self):
+        with mock.patch.object(volume_utils, 'is_group_a_type',
+                               return_value=True):
+            model_update, __ = self.common.failover_replication(
+                None, self.data.test_group, [])
+            self.assertEqual({}, model_update)
+
+    @mock.patch.object(rest.PowerMaxRest, 'srdf_failover_group',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
+                       return_value=tpd.PowerMaxData.test_group)
+    def test_failover_replication_failover(self, mck_find_vol_grp,
+                                           mck_get_rdf_grp, mck_failover):
         volumes = [self.data.test_volume_group_member]
-        group1 = self.data.test_group
-        self.common.failover_host(volumes, None, [group1])
+        vol_group = self.data.test_group
+        vol_grp_name = self.data.test_group.name
+        model_update, __ = self.common._failover_replication(
+            volumes, vol_group, vol_grp_name, host=True)
+        self.assertEqual(fields.ReplicationStatus.FAILED_OVER,
+                         model_update['replication_status'])
+
+    @mock.patch.object(rest.PowerMaxRest, 'srdf_failover_group',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
+                       return_value=tpd.PowerMaxData.test_group)
+    def test_failover_replication_failback(self, mck_find_vol_grp,
+                                           mck_get_rdf_grp, mck_failover):
+        volumes = [self.data.test_volume_group_member]
+        vol_group = self.data.test_group
+        vol_grp_name = self.data.test_group.name
+        model_update, __ = self.common._failover_replication(
+            volumes, vol_group, vol_grp_name, host=True,
+            secondary_backend_id='default')
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=None)
+    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
+                       return_value=tpd.PowerMaxData.test_group)
+    def test_failover_replication_exception(self, mck_find_vol_grp,
+                                            mck_get_rdf_grp):
+        volumes = [self.data.test_volume_group_member]
+        vol_group = self.data.test_group
+        vol_grp_name = self.data.test_group.name
+        model_update, __ = self.common._failover_replication(
+            volumes, vol_group, vol_grp_name)
+        self.assertEqual(fields.ReplicationStatus.ERROR,
+                         model_update['replication_status'])
+
+    @mock.patch.object(common.PowerMaxCommon, '_rdf_vols_partitioned',
+                       return_value=True)
+    @mock.patch.object(rest.PowerMaxRest, 'srdf_failover_group',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
+                       return_value=tpd.PowerMaxData.rdf_group_no_1)
+    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
+                       return_value=tpd.PowerMaxData.test_group)
+    def test_failover_replication_failover_partitioned(
+            self, mck_find_vol_grp, mck_get_rdf_grp, mck_failover, mck_part):
+        volumes = [self.data.test_volume_group_member]
+        vol_group = self.data.test_group
+        vol_grp_name = self.data.test_group.name
+        model_update, __ = self.common._failover_replication(
+            volumes, vol_group, vol_grp_name, host=True)
+        self.assertEqual(fields.ReplicationStatus.FAILED_OVER,
+                         model_update['replication_status'])
+        self.assertEqual(0, mck_failover.call_count)
+
+    @mock.patch.object(common.PowerMaxCommon, '_failover_replication',
+                       return_value=({}, {}))
+    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
+    @mock.patch.object(rest.PowerMaxRest, 'get_arrays_list',
+                       return_value=['123'])
+    def test_failover_host_async(self, mck_arrays, mck_sync, mock_fg):
+        volumes = [self.data.test_volume]
+        extra_specs = deepcopy(self.extra_specs)
+        extra_specs['rep_mode'] = utils.REP_ASYNC
+        with mock.patch.object(common.PowerMaxCommon, '_initial_setup',
+                               return_value=extra_specs):
+            self.async_driver.common.failover_host(volumes, None, [])
         mock_fg.assert_called_once()
 
     @mock.patch.object(rest.PowerMaxRest,
@@ -318,6 +522,60 @@ class PowerMaxReplicationTest(test.TestCase):
             rep_extra_specs = self.common._get_replication_extra_specs(
                 extra_specs, rep_config)
             self.assertEqual(rep_specs, rep_extra_specs)
+
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_rdf_pair_volume',
+        return_value={utils.RDF_PAIR_STATE: utils.RDF_PARTITIONED_STATE})
+    def test_rdf_vols_partitioned_true_partitioned(self, mck_pair):
+        array = self.data.array
+        volumes = [self.data.test_rep_volume]
+        rdfg = self.data.rdf_group_no_1
+        device_id = self.data.device_id2
+        is_partitioned = self.common._rdf_vols_partitioned(
+            array, volumes, rdfg)
+        self.assertTrue(is_partitioned)
+        mck_pair.assert_called_once_with(array, rdfg, device_id)
+
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_rdf_pair_volume',
+        return_value={utils.RDF_PAIR_STATE: utils.RDF_TRANSIDLE_STATE})
+    def test_rdf_vols_partitioned_true_transidle(self, mck_pair):
+        array = self.data.array
+        volumes = [self.data.test_rep_volume]
+        rdfg = self.data.rdf_group_no_1
+        device_id = self.data.device_id2
+        is_partitioned = self.common._rdf_vols_partitioned(
+            array, volumes, rdfg)
+        self.assertTrue(is_partitioned)
+        mck_pair.assert_called_once_with(array, rdfg, device_id)
+
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_rdf_pair_volume',
+        return_value={utils.RDF_PAIR_STATE: utils.RDF_SUSPENDED_STATE})
+    def test_rdf_vols_partitioned_false(self, mck_pair):
+        array = self.data.array
+        volumes = [self.data.test_rep_volume]
+        rdfg = self.data.rdf_group_no_1
+        device_id = self.data.device_id2
+        is_partitioned = self.common._rdf_vols_partitioned(
+            array, volumes, rdfg)
+        self.assertFalse(is_partitioned)
+        mck_pair.assert_called_once_with(array, rdfg, device_id)
+
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_rdf_pair_volume',
+        return_value={utils.RDF_PAIR_STATE: utils.RDF_PARTITIONED_STATE})
+    def test_rdf_vols_partitioned_true_promotion(self, mck_pair):
+        self.common.promotion = True
+        array = self.data.array
+        volumes = [self.data.test_rep_volume]
+        rdfg = self.data.rdf_group_no_1
+        device_id = self.data.device_id
+        is_partitioned = self.common._rdf_vols_partitioned(
+            array, volumes, rdfg)
+        self.assertTrue(is_partitioned)
+        self.common.promotion = False
+        mck_pair.assert_called_once_with(array, rdfg, device_id)
 
     def test_get_secondary_stats(self):
         rep_config = self.data.rep_config_sync
@@ -439,63 +697,6 @@ class PowerMaxReplicationTest(test.TestCase):
             self.assertEqual(fields.ReplicationStatus.ERROR,
                              model_update['replication_status'])
 
-    def test_failover_replication_empty_group(self):
-        with mock.patch.object(volume_utils, 'is_group_a_type',
-                               return_value=True):
-            model_update, __ = self.common.failover_replication(
-                None, self.data.test_group, [])
-            self.assertEqual({}, model_update)
-
-    @mock.patch.object(rest.PowerMaxRest, 'srdf_failover_group',
-                       return_value=tpd.PowerMaxData.rdf_group_no_1)
-    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
-                       return_value=tpd.PowerMaxData.rdf_group_no_1)
-    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
-                       return_value=tpd.PowerMaxData.test_group)
-    def test_failover_replication_failover(self, mck_find_vol_grp,
-                                           mck_get_rdf_grp, mck_failover):
-        volumes = [self.data.test_volume_group_member]
-        vol_group = self.data.test_group
-        vol_grp_name = self.data.test_group.name
-
-        model_update, __ = self.common._failover_replication(
-            volumes, vol_group, vol_grp_name, host=True)
-        self.assertEqual(fields.ReplicationStatus.FAILED_OVER,
-                         model_update['replication_status'])
-
-    @mock.patch.object(rest.PowerMaxRest, 'srdf_failover_group',
-                       return_value=tpd.PowerMaxData.rdf_group_no_1)
-    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
-                       return_value=tpd.PowerMaxData.rdf_group_no_1)
-    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
-                       return_value=tpd.PowerMaxData.test_group)
-    def test_failover_replication_failback(self, mck_find_vol_grp,
-                                           mck_get_rdf_grp, mck_failover):
-        volumes = [self.data.test_volume_group_member]
-        vol_group = self.data.test_group
-        vol_grp_name = self.data.test_group.name
-
-        model_update, __ = self.common._failover_replication(
-            volumes, vol_group, vol_grp_name, host=True,
-            secondary_backend_id='default')
-        self.assertEqual(fields.ReplicationStatus.ENABLED,
-                         model_update['replication_status'])
-
-    @mock.patch.object(common.PowerMaxCommon, 'get_rdf_details',
-                       return_value=None)
-    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
-                       return_value=tpd.PowerMaxData.test_group)
-    def test_failover_replication_exception(self, mck_find_vol_grp,
-                                            mck_get_rdf_grp):
-        volumes = [self.data.test_volume_group_member]
-        vol_group = self.data.test_group
-        vol_grp_name = self.data.test_group.name
-
-        model_update, __ = self.common._failover_replication(
-            volumes, vol_group, vol_grp_name)
-        self.assertEqual(fields.ReplicationStatus.ERROR,
-                         model_update['replication_status'])
-
     @mock.patch.object(utils.PowerMaxUtils, 'get_volumetype_extra_specs',
                        return_value={utils.REPLICATION_DEVICE_BACKEND_ID:
                                      tpd.PowerMaxData.rep_backend_id_sync})
@@ -546,18 +747,6 @@ class PowerMaxReplicationTest(test.TestCase):
             self.data.array, self.data.test_vol_grp_name,
             [self.data.device_id], self.extra_specs, self.data.rep_config_sync)
         mock_rm.assert_called_once()
-
-    @mock.patch.object(common.PowerMaxCommon, '_failover_replication',
-                       return_value=({}, {}))
-    @mock.patch.object(common.PowerMaxCommon, '_sync_check')
-    def test_failover_host_async(self, mck_sync, mock_fg):
-        volumes = [self.data.test_volume]
-        extra_specs = deepcopy(self.extra_specs)
-        extra_specs['rep_mode'] = utils.REP_ASYNC
-        with mock.patch.object(common.PowerMaxCommon, '_initial_setup',
-                               return_value=extra_specs):
-            self.async_driver.common.failover_host(volumes, None, [])
-        mock_fg.assert_called_once()
 
     @mock.patch.object(
         common.PowerMaxCommon, 'get_volume_metadata', return_value={})
@@ -950,6 +1139,86 @@ class PowerMaxReplicationTest(test.TestCase):
             extra_specs['rdf_group_no'], self.data.rep_extra_specs_mgmt)
         self.assertTrue(success)
         self.assertEqual(self.data.replication_model, model_update)
+
+    @mock.patch.object(
+        provision.PowerMaxProvision, 'verify_slo_workload',
+        return_value=(True, True))
+    @mock.patch.object(
+        common.PowerMaxCommon, 'break_rdf_device_pair_session_promotion')
+    @mock.patch.object(
+        common.PowerMaxCommon, 'get_volume_metadata', return_value='')
+    @mock.patch.object(
+        common.PowerMaxCommon, '_retype_volume',
+        return_value=(True, tpd.PowerMaxData.defaultstoragegroup_name))
+    def test_migrate_volume_success_rep_promotion(
+            self, mck_retype, mck_get, mck_break, mck_valid):
+        array_id = self.data.array
+        volume = self.data.test_rep_volume
+        device_id = self.data.device_id
+        srp = self.data.srp
+        target_slo = self.data.slo_silver
+        target_workload = self.data.workload
+        volume_name = volume.name
+        new_type = {'extra_specs': {}}
+        extra_specs = self.data.rep_extra_specs_rep_config
+        self.common.promotion = True
+        target_extra_specs = {
+            utils.SRP: srp, utils.ARRAY: array_id, utils.SLO: target_slo,
+            utils.WORKLOAD: target_workload,
+            utils.INTERVAL: extra_specs[utils.INTERVAL],
+            utils.RETRIES: extra_specs[utils.RETRIES],
+            utils.DISABLECOMPRESSION: False}
+        success, model_update = self.common._migrate_volume(
+            array_id, volume, device_id, srp, target_slo, target_workload,
+            volume_name, new_type, extra_specs)
+        mck_break.assert_called_once_with(
+            array_id, device_id, volume_name, extra_specs)
+        mck_retype.assert_called_once_with(
+            array_id, srp, device_id, volume, volume_name, extra_specs,
+            target_slo, target_workload, target_extra_specs)
+        self.assertTrue(success)
+        self.common.promotion = False
+
+    @mock.patch.object(
+        common.PowerMaxCommon, '_rdf_vols_partitioned',
+        return_value=True)
+    @mock.patch.object(
+        provision.PowerMaxProvision, 'verify_slo_workload',
+        return_value=(True, True))
+    @mock.patch.object(
+        common.PowerMaxCommon, 'break_rdf_device_pair_session_promotion')
+    @mock.patch.object(
+        common.PowerMaxCommon, 'get_volume_metadata', return_value='')
+    @mock.patch.object(
+        common.PowerMaxCommon, '_retype_volume',
+        return_value=(True, tpd.PowerMaxData.defaultstoragegroup_name))
+    def test_migrate_volume_success_rep_partitioned(
+            self, mck_retype, mck_get, mck_break, mck_valid, mck_partitioned):
+        array_id = self.data.array
+        volume = self.data.test_rep_volume
+        device_id = self.data.device_id
+        srp = self.data.srp
+        target_slo = self.data.slo_silver
+        target_workload = self.data.workload
+        volume_name = volume.name
+        new_type = {'extra_specs': {}}
+        extra_specs = self.data.rep_extra_specs_rep_config
+        self.common.promotion = True
+        target_extra_specs = {
+            utils.SRP: srp, utils.ARRAY: array_id, utils.SLO: target_slo,
+            utils.WORKLOAD: target_workload,
+            utils.INTERVAL: extra_specs[utils.INTERVAL],
+            utils.RETRIES: extra_specs[utils.RETRIES],
+            utils.DISABLECOMPRESSION: False}
+        success, model_update = self.common._migrate_volume(
+            array_id, volume, device_id, srp, target_slo, target_workload,
+            volume_name, new_type, extra_specs)
+        self.assertEqual(0, mck_break.call_count)
+        mck_retype.assert_called_once_with(
+            array_id, srp, device_id, volume, volume_name, extra_specs,
+            target_slo, target_workload, target_extra_specs)
+        self.assertTrue(success)
+        self.common.promotion = False
 
     @mock.patch.object(masking.PowerMaxMasking, 'add_volume_to_storage_group')
     @mock.patch.object(provision.PowerMaxProvision, 'get_or_create_group')
@@ -1363,6 +1632,26 @@ class PowerMaxReplicationTest(test.TestCase):
 
         self.assertEqual(extra_specs[utils.REP_CONFIG], rep_extra_specs)
         self.assertTrue(resume_rdf)
+
+    @mock.patch.object(masking.PowerMaxMasking, 'remove_volume_from_sg')
+    @mock.patch.object(rest.PowerMaxRest, 'srdf_delete_device_pair')
+    @mock.patch.object(utils.PowerMaxUtils, 'get_rdf_management_group_name',
+                       return_value=tpd.PowerMaxData.rdf_managed_async_grp)
+    def test_break_rdf_device_pair_session_promotion_metro(
+            self, mck_get, mck_del, mck_rem):
+        array = self.data.array
+        device_id = self.data.device_id
+        volume_name = self.data.test_rep_volume.name
+        extra_specs = self.data.ex_specs_rep_config
+        rep_config = extra_specs[utils.REP_CONFIG]
+        mgmt_group = self.data.rdf_managed_async_grp
+        rdfg_no = extra_specs['rdf_group_no']
+        self.common.break_rdf_device_pair_session_promotion(
+            array, device_id, volume_name, extra_specs)
+        mck_get.assert_called_once_with(rep_config)
+        mck_del.assert_called_once_with(array, rdfg_no, device_id)
+        mck_rem.assert_called_once_with(
+            array, device_id, volume_name, mgmt_group, extra_specs)
 
     @mock.patch.object(rest.PowerMaxRest, 'get_rdf_group',
                        return_value=tpd.PowerMaxData.rdf_group_details)
