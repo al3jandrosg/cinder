@@ -1,3 +1,9 @@
+cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu2) groovy; urgency=medium
+
+  * d/p/skip-victoria-failures.patch: Restored to skip failing unit tests.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 21 Sep 2020 16:16:06 -0400
+
 cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu1) groovy; urgency=medium
 
   * d/control: Remove Breaks/Replaces that are older than Focal (LP: #1878419).
