@@ -1,3 +1,9 @@
+cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu3) groovy; urgency=medium
+
+  * d/py3dist-overrides: Add python3-zstd to py3dist-overrides.
+
+ -- Chris MacNaughton <chris.macnaughton@canonical.com>  Wed, 23 Sep 2020 06:23:59 +0000
+
 cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu2) groovy; urgency=medium
 
   * d/p/skip-victoria-failures.patch: Restored to skip failing unit tests.
