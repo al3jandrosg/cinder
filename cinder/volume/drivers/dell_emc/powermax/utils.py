@@ -105,7 +105,7 @@ TAG_LIST = 'tag_list'
 USED_HOST_NAME = "used_host_name"
 RDF_SYNCED_STATES = [RDF_SYNC_STATE, RDF_CONSISTENT_STATE,
                      RDF_ACTIVEACTIVE, RDF_ACTIVEBIAS]
-FORCE_VOL_REMOVE = 'force_vol_remove'
+FORCE_VOL_EDIT = 'force_vol_edit'
 PMAX_FAILOVER_START_ARRAY_PROMOTION = 'pmax_failover_start_array_promotion'
 
 # Multiattach constants
@@ -122,12 +122,7 @@ VMAX_SERVER_IP = 'san_ip'
 VMAX_USER_NAME = 'san_login'
 VMAX_PASSWORD = 'san_password'
 U4P_SERVER_PORT = 'san_api_port'
-VMAX_ARRAY = 'vmax_array'
 VMAX_WORKLOAD = 'vmax_workload'
-VMAX_SRP = 'vmax_srp'
-VMAX_SERVICE_LEVEL = 'vmax_service_level'
-VMAX_PORT_GROUPS = 'vmax_port_groups'
-VMAX_SNAPVX_UNLINK_LIMIT = 'vmax_snapvx_unlink_limit'
 U4P_FAILOVER_TIMEOUT = 'u4p_failover_timeout'
 U4P_FAILOVER_RETRIES = 'u4p_failover_retries'
 U4P_FAILOVER_BACKOFF_FACTOR = 'u4p_failover_backoff_factor'
@@ -1927,25 +1922,6 @@ class PowerMaxUtils(object):
                         'state. If you meant to failover, please either omit '
                         'the --backend_id parameter or use the --backend_id '
                         'parameter with a valid backend id.')
-            elif failover_backend_id == PMAX_FAILOVER_START_ARRAY_PROMOTION:
-                is_valid = False
-                msg = _('Cannot start failover promotion. The backend must '
-                        'already be in a failover state to perform this'
-                        'action.')
-            elif len(rep_configs) > 1:
-                if failover_backend_id is None:
-                    is_valid = False
-                    msg = _('Cannot failover, no backend_id provided while '
-                            'multiple replication devices are defined in '
-                            'cinder.conf, please provide a backend_id '
-                            'which will act as new primary array by '
-                            'appending --backend_id <id> to your command.')
-                else:
-                    rc = self.get_rep_config(failover_backend_id, rep_configs)
-                    if rc is None:
-                        is_valid = False
-                        msg = _('Can not find replication device with '
-                                'backend_id of %s') % failover_backend_id
         return is_valid, msg
 
     def validate_replication_group_config(self, rep_configs, extra_specs_list):

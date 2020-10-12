@@ -6297,6 +6297,76 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=testutils.ZeroIntervalLoopingCall)
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_fc_consistgrp')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
+    def test_storwize_delete_consistgroup_snapshot(self,
+                                                   is_grp_a_cg_snapshot_type,
+                                                   delete_fc_consistgrp,
+                                                   delete_vdisk):
+        is_grp_a_cg_snapshot_type.side_effect = [True, True, True, False, True]
+        type_ref = volume_types.create(self.ctxt, 'testtype', None)
+        group = testutils.create_group(self.ctxt,
+                                       group_type_id=fake.GROUP_TYPE_ID,
+                                       volume_type_ids=[type_ref['id']])
+
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+
+        group_snapshot, snapshots = self._create_group_snapshot(group.id)
+        cgsnapshot_id = group_snapshot.id
+        cg_name = 'cg_snap-' + cgsnapshot_id
+
+        self.driver._helpers.delete_consistgrp_snapshots(cg_name, snapshots)
+
+        delete_fc_consistgrp.assert_has_calls([mock.call(cg_name)])
+        self.assertEqual(2, delete_fc_consistgrp.call_count)
+
+        calls = [mock.call(snapshots[0]['name'], force_delete=True,
+                           force_unmap=False),
+                 mock.call(snapshots[1]['name'], force_delete=True,
+                           force_unmap=False)]
+        delete_vdisk.assert_has_calls(calls, any_order=True)
+
+    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
+                new=testutils.ZeroIntervalLoopingCall)
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_fc_consistgrp')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
+    def test_storwize_delete_consistgroup_snapshot_1(self,
+                                                     is_grp_a_cg_snapshot_type,
+                                                     delete_fc_consistgrp,
+                                                     delete_vdisk):
+        is_grp_a_cg_snapshot_type.side_effect = [True, True, True, False, True]
+        type_ref = volume_types.create(self.ctxt, 'testtype', None)
+        group = testutils.create_group(self.ctxt,
+                                       group_type_id=fake.GROUP_TYPE_ID,
+                                       volume_type_ids=[type_ref['id']])
+
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+
+        group_snapshot, snapshots = self._create_group_snapshot(group.id)
+        cgsnapshot_id = group_snapshot.id
+        cg_name = 'cg_snap-' + cgsnapshot_id
+        delete_vdisk.side_effect = exception.VolumeBackendAPIException(data='')
+
+        (model_update,
+         snap_model_update) = self.driver._helpers.delete_consistgrp_snapshots(
+            cg_name, snapshots)
+        self.assertEqual(fields.GroupSnapshotStatus.ERROR_DELETING,
+                         model_update['status'])
+
+        for snapshot in snap_model_update:
+            self.assertEqual(fields.SnapshotStatus.ERROR_DELETING,
+                             snapshot['status'])
+
+    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
+                new=testutils.ZeroIntervalLoopingCall)
     def test_storwize_create_group_from_src_invalid(self):
         # Invalid input case for create group from src
         type_ref = volume_types.create(self.ctxt, 'testtype', None)
@@ -7181,6 +7251,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
         pool = 'openstack2'
         opts['iogrp'] = '0,1'
+        opts['volume_topology'] = 'hyperswap'
         state['available_iogrps'] = [0, 1, 2, 3]
         iog = self.driver._helpers.select_io_group(state, opts, pool)
         self.assertEqual(0, iog)
@@ -8276,6 +8347,66 @@ class StorwizeHelpersTestCase(test.TestCase):
         state = {}
 
         lsmdiskgrp.return_value = {}
+        fake_iog_vdc1 = {0: 10, 1: 50, 2: 50, 3: 300}
+        fake_iog_vdc2 = {0: 2, 1: 1, 2: 200}
+        fake_iog_vdc3 = {0: 2, 2: 200}
+        fake_iog_vdc4 = {0: 100, 1: 100, 2: 100, 3: 100}
+        fake_iog_vdc5 = {0: 10, 1: 1, 2: 200, 3: 300}
+
+        get_vdisk_count_by_io_group.side_effect = [fake_iog_vdc1,
+                                                   fake_iog_vdc2,
+                                                   fake_iog_vdc3,
+                                                   fake_iog_vdc4,
+                                                   fake_iog_vdc5]
+        pool = _get_test_pool(False)
+        opts['volume_topology'] = None
+        opts['iogrp'] = '0,2'
+        state['available_iogrps'] = [0, 1, 2, 3]
+
+        iog = self.storwize_svc_common.select_io_group(state, opts, pool)
+        self.assertTrue(iog in state['available_iogrps'])
+        self.assertEqual(0, iog)
+
+        opts['iogrp'] = '0'
+        state['available_iogrps'] = [0, 1, 2]
+
+        iog = self.storwize_svc_common.select_io_group(state, opts, pool)
+        self.assertTrue(iog in state['available_iogrps'])
+        self.assertEqual(0, iog)
+
+        opts['iogrp'] = '1,2'
+        state['available_iogrps'] = [0, 2]
+
+        iog = self.storwize_svc_common.select_io_group(state, opts, pool)
+        self.assertTrue(iog in state['available_iogrps'])
+        self.assertEqual(2, iog)
+
+        opts['iogrp'] = ' 0, 1, 2 '
+        state['available_iogrps'] = [0, 1, 2, 3]
+
+        iog = self.storwize_svc_common.select_io_group(state, opts, pool)
+        self.assertTrue(iog in state['available_iogrps'])
+        # since vdisk count in all iogroups is same, it will pick the first
+        self.assertEqual(0, iog)
+
+        opts['iogrp'] = '0,1,2, 3'
+        state['available_iogrps'] = [0, 1, 2, 3]
+
+        iog = self.storwize_svc_common.select_io_group(state, opts, pool)
+        self.assertTrue(iog in state['available_iogrps'])
+        self.assertEqual(1, iog)
+
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'lsmdiskgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_count_by_io_group')
+    def test_select_io_group_hyperswap(self, get_vdisk_count_by_io_group,
+                                       lsmdiskgrp):
+        # given io groups
+        opts = {}
+        # system io groups
+        state = {}
+
+        lsmdiskgrp.return_value = {}
         fake_iog_vdc1 = {0: 100, 1: 50, 2: 50, 3: 300}
         fake_iog_vdc2 = {0: 2, 1: 1, 2: 200}
         fake_iog_vdc3 = {0: 2, 2: 200}
@@ -8289,6 +8420,7 @@ class StorwizeHelpersTestCase(test.TestCase):
                                                    fake_iog_vdc5]
         pool = _get_test_pool(False)
         opts['iogrp'] = '0,2'
+        opts['volume_topology'] = 'hyperswap'
         state['available_iogrps'] = [0, 1, 2, 3]
 
         iog = self.storwize_svc_common.select_io_group(state, opts, pool)
@@ -8363,6 +8495,32 @@ class StorwizeHelpersTestCase(test.TestCase):
             'target_vdisk_name': 'testvol'}
         self.storwize_svc_common.pretreatment_before_revert(vol)
         stopfcmap.assert_called_once_with('4', split=True)
+
+    def test_storwize_check_flashcopy_rate_invalid1(self):
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 6, 0, 0),
+                                'topology': 'standard',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            flashcopy_rate = 120
+            self.assertRaises(exception.VolumeDriverException,
+                              self.storwize_svc_common.check_flashcopy_rate,
+                              flashcopy_rate)
+
+    def test_storwize_check_flashcopy_rate_invalid2(self):
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 8, 1, 2),
+                                'topology': 'standard',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            flashcopy_rate = 200
+            self.assertRaises(exception.InvalidInput,
+                              self.storwize_svc_common.check_flashcopy_rate,
+                              flashcopy_rate)
 
 
 @ddt.ddt
@@ -9568,6 +9726,134 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
                           fake_name)
         get_relationship_info.assert_called_once_with(fake_name)
         delete_relationship.assert_called_once_with(fake_name)
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_relationship_info')
+    def test_retain_target_volume(self, get_relationship_info,
+                                  delete_relationship,
+                                  delete_vdisk):
+        # Set replication target.
+
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        fake_name = 'volume-%s' % fake.VOLUME_ID
+        target_volume_fake_name = (
+            storwize_const.REPLICA_AUX_VOL_PREFIX + fake_name)
+        target_change_fake_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + target_volume_fake_name)
+        get_relationship_info.return_value = {'aux_vdisk_name':
+                                              fake_name}
+        self.driver._helpers.delete_rc_volume(fake_name,
+                                              target_vol=True,
+                                              retain_aux_volume=True)
+        get_relationship_info.assert_called_once_with(target_volume_fake_name)
+        delete_relationship.assert_called_once_with(target_volume_fake_name)
+
+        calls = [mock.call(target_change_fake_name, force_delete=False,
+                           force_unmap=True)]
+        delete_vdisk.assert_has_calls(calls, any_order=True)
+        self.assertEqual(1, delete_vdisk.call_count)
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_relationship_info')
+    def test_retain_target_volume_invalid_parameters_1(
+            self, get_relationship_info,
+            delete_relationship,
+            delete_vdisk):
+        # Set replication target.
+
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        fake_name = 'volume-%s' % fake.VOLUME_ID
+        master_change_fake_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + fake_name)
+        get_relationship_info.return_value = {'aux_vdisk_name':
+                                              fake_name}
+        self.driver._helpers.delete_rc_volume(fake_name,
+                                              target_vol=False,
+                                              retain_aux_volume=True)
+        get_relationship_info.assert_called_once_with(fake_name)
+        delete_relationship.assert_called_once_with(fake_name)
+        calls = [mock.call(master_change_fake_name, force_delete=False,
+                           force_unmap=True),
+                 mock.call(fake_name, force_delete=False, force_unmap=True)]
+        delete_vdisk.assert_has_calls(calls, any_order=True)
+        self.assertEqual(2, delete_vdisk.call_count)
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_relationship_info')
+    def test_retain_target_volume_invalid_parameters_2(
+            self, get_relationship_info,
+            delete_relationship,
+            delete_vdisk):
+        # Set replication target.
+
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        fake_name = 'volume-%s' % fake.VOLUME_ID
+        target_volume_fake_name = (
+            storwize_const.REPLICA_AUX_VOL_PREFIX + fake_name)
+        target_change_fake_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + target_volume_fake_name)
+        get_relationship_info.return_value = {'aux_vdisk_name':
+                                              fake_name}
+        self.driver._helpers.delete_rc_volume(fake_name,
+                                              target_vol=True,
+                                              retain_aux_volume=False)
+        get_relationship_info.assert_called_once_with(target_volume_fake_name)
+        delete_relationship.assert_called_once_with(target_volume_fake_name)
+        calls = [mock.call(target_change_fake_name, force_delete=False,
+                           force_unmap=True),
+                 mock.call(target_volume_fake_name, force_delete=False,
+                           force_unmap=True)]
+        delete_vdisk.assert_has_calls(calls, any_order=True)
+        self.assertEqual(2, delete_vdisk.call_count)
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_relationship_info')
+    def test_retain_target_volume_invalid_parameters_3(
+            self, get_relationship_info,
+            delete_relationship,
+            delete_vdisk):
+        # Set replication target.
+
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        fake_name = 'volume-%s' % fake.VOLUME_ID
+        master_change_fake_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + fake_name)
+        get_relationship_info.return_value = {'aux_vdisk_name':
+                                              fake_name}
+        self.driver._helpers.delete_rc_volume(fake_name,
+                                              target_vol=False,
+                                              retain_aux_volume=False)
+        get_relationship_info.assert_called_once_with(fake_name)
+        delete_relationship.assert_called_once_with(fake_name)
+        calls = [mock.call(master_change_fake_name, force_delete=False,
+                           force_unmap=True),
+                 mock.call(fake_name, force_delete=False, force_unmap=True)]
+        delete_vdisk.assert_has_calls(calls, any_order=True)
+        self.assertEqual(2, delete_vdisk.call_count)
 
     def test_storwize_failover_host_backend_error(self):
         self.driver.configuration.set_override('replication_device',

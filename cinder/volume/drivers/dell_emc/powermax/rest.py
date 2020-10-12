@@ -51,6 +51,7 @@ STATUS_201 = 201
 STATUS_202 = 202
 STATUS_204 = 204
 SERVER_ERROR_STATUS_CODES = [408, 501, 502, 503, 504]
+ITERATOR_EXPIRATION = 180
 # Job constants
 INCOMPLETE_LIST = ['created', 'unscheduled', 'scheduled', 'running',
                    'validating', 'validated']
@@ -270,7 +271,7 @@ class PowerMaxRest(object):
                     "SSL error. Please check your SSL config or supplied "
                     "SSL cert in Cinder configuration. SSL Exception "
                     "message: %(e)s")
-            raise r_exc.SSLError(msg, {'base_uri': self.base_uri, 'e': e})
+            raise r_exc.SSLError(msg % {'base_uri': self.base_uri, 'e': e})
 
         except (r_exc.Timeout, r_exc.ConnectionError,
                 r_exc.HTTPError) as e:
@@ -300,13 +301,10 @@ class PowerMaxRest(object):
         except Exception as e:
             if retry:
                 self.u4p_failover_lock = False
-            msg = _("The %(method)s request to URL %(url)s failed with "
-                    "exception %(e)s")
-            LOG.error(msg, {'method': method, 'url': url,
-                            'e': six.text_type(e)})
-            raise exception.VolumeBackendAPIException(
-                message=(msg, {'method': method, 'url': url,
-                               'e': six.text_type(e)}))
+            msg = _("The %s request to URL %s failed with exception "
+                    "%s" % (method, url, six.text_type(e)))
+            LOG.error(msg)
+            raise exception.VolumeBackendAPIException(message=msg)
 
         return status_code, message
 
@@ -1265,8 +1263,8 @@ class PowerMaxRest(object):
         :param extra_specs: the extra specifications
         """
 
-        force_vol_remove = (
-            "true" if utils.FORCE_VOL_REMOVE in extra_specs else "false")
+        force_vol_edit = (
+            "true" if utils.FORCE_VOL_EDIT in extra_specs else "false")
         if not isinstance(device_id, list):
             device_id = [device_id]
         payload = ({"executionOption": "ASYNCHRONOUS",
@@ -1274,7 +1272,7 @@ class PowerMaxRest(object):
                         "removeVolumeParam": {
                             "volumeId": device_id,
                             "remoteSymmSGInfoParam": {
-                                "force": force_vol_remove}}}})
+                                "force": force_vol_edit}}}})
         status_code, job = self.modify_storage_group(
             array, storagegroup_name, payload)
 
@@ -1475,6 +1473,14 @@ class PowerMaxRest(object):
         :param params: filter parameters
         :returns: list -- dicts with volume information
         """
+        if isinstance(params, dict):
+            params['expiration_time_mins'] = ITERATOR_EXPIRATION
+        elif isinstance(params, str):
+            params += '&expiration_time_mins=%(expire)s' % {
+                'expire': ITERATOR_EXPIRATION}
+        else:
+            params = {'expiration_time_mins': ITERATOR_EXPIRATION}
+
         return self.get_resource(
             array, SLOPROVISIONING, 'volume', params=params,
             private='/private')
@@ -3267,6 +3273,9 @@ class PowerMaxRest(object):
         :param max_page_size: the max page size
         :returns: list -- merged results from multiple pages
         """
+        LOG.debug('Iterator %(it)s contains %(cnt)s results.', {
+            'it': iterator_id, 'cnt': result_count})
+
         iterator_result = []
         has_more_entries = True
 
@@ -3276,6 +3285,9 @@ class PowerMaxRest(object):
                 has_more_entries = False
 
             params = {'to': end_position, 'from': start_position}
+            LOG.debug('Retrieving iterator %(it)s page %(st)s to %(fn)s', {
+                'it': iterator_id, 'st': start_position, 'fn': end_position})
+
             target_uri = ('/common/Iterator/%(iterator_id)s/page' % {
                 'iterator_id': iterator_id})
             iterator_response = self.get_request(target_uri, 'iterator',
@@ -3287,7 +3299,27 @@ class PowerMaxRest(object):
             except (KeyError, TypeError):
                 pass
 
+        LOG.info('All results extracted, deleting iterator %(it)s', {
+            'it': iterator_id})
+        self._delete_iterator(iterator_id)
+
         return iterator_result
+
+    def _delete_iterator(self, iterator_id):
+        """Delete an iterator containing full request result list.
+
+        Note: This should only be called once all required results have been
+        extracted from the iterator.
+
+        :param iterator_id: the iterator ID -- str
+        """
+        target_uri = self.build_uri(
+            category='common', resource_level='Iterator',
+            resource_level_id=iterator_id, no_version=True)
+        status_code, message = self.request(target_uri, DELETE)
+        operation = 'delete iterator'
+        self.check_status_code_success(operation, status_code, message)
+        LOG.info('Successfully deleted iterator %(it)s', {'it': iterator_id})
 
     def validate_unisphere_version(self):
         """Validate that the running Unisphere version meets min requirement

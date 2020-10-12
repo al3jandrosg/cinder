@@ -1,23 +1,83 @@
 CHANGES
 =======
 
+17.0.0.0rc2
+-----------
+
+* Critical fix for MSA 2060 and MSA 1060
+* Disallow extension of attached volumes for NFS & Quobyte drivers
+* doc: update Brocade FCZM documentation
+* Add release note about Brocade FCZM driver status
+* Add support for system and domain scoped tokens
+* Update TOX\_CONSTRAINTS\_FILE for stable/victoria
+* Update .gitreview for stable/victoria
+
+17.0.0.0rc1
+-----------
+
+* Imported Translations from Zanata
+* Add prelude to victoria release notes
+* RBD: cinderlib support for rbd\_keyring\_conf option
+* Make EM branch release notes static
+* Make EOL branch release notes static
+* Rollback volume status if backup service is unavailable
+* SPDK: Report info in top-level volume\_stats
+* Fix volume\_stats storage\_protocol usage in vol mgr
+* PowerMax Driver -  Exception when multipath not enabled for metro
+* [storwize]:Fixed select\_io\_group issues
+* [storwize]:Fixed check\_flashcopy\_rate issues
+* Update HPMSA driver doc to include new HPE MSA models
+* Doc: Update storwize cinder driver configuration
+* [Storwize] Option to retain the auxiliary volume
+* Nimble multi-attach bad format changes
+* Remove oslo.versionedobjects extra install
+* Follow Up: Default type overrides
+* [goal] Fixing lower constraints for Ubuntu Focal
+* Default type overrides
+* NEC driver: fix a snapshot detach error
+* PowerMax Driver - Migrate extra spec class fix
+* [Storwize]:Fix delete\_group\_snapshot cleanup issue
+* Imported Translations from Zanata
+* NetApp SolidFire: Enable driver IPv6 api request
+* [NetApp] Adding support for Adaptive QoS in NetApp driver
+* PowerMax Driver - Remove mandatory failover BID
+* Run l-c job on Bionic
+* Require os-brick >= 4.0.1
+* PowerMax Driver - Feedback for migrate exception handling
+* PowerMax Driver - Force array and srp configuration
+* PowerMax Driver - Remove deprecated config options
 * Add support volume local cache
+* PowerMax Driver - Feedback on snap\_id feature
+* NetApp SolidFire: Add storage assisted migration support
 * Add release note for zstd compression
+* Pylint: pin isort to 4.3.21
+* Fix volume retype with AZ
+* PowerMax Driver - Force add rep group volume
 * PowerMax Driver - Failover abilities promotion
+* PowerMax Driver - REST Iterator Expiration Fix
 * Handle oslo.messaging ping endpoint
+* Capacity based QoS doc
 * Add multiattach in Nimble driver
+* Fix: listing volumes with filters
 * Remove Train online data migrations
 * Deprecate TSM Backup driver
 * Show cluster\_name in volume details
 * Mark Active-Active mode as supported
 * Add cinder-plugin-ceph-tempest-mn-aa job
 * PowerMax Driver - Failover abilities legacy improvements
+* PowerMax Driver - Replica rdfg suspend fix
+* Stop sending notifications to nonstandard pub id
 * RBD: remove rbd\_keyring\_conf option
+* NEC driver: fix live-migration failure with FC
 * Remove unnecessary releasenote
+* bindep: Track qemu-img dependency
 * PowerMax Driver -  Replacing generations with snap\_ids
 * Modify default/delete volume type logic
+* PowerMax Driver - Prevent unmanage with snapvx
 * Normalize release note bug links
+* PowerMax Driver -  Allowing for an empty group on a clone volume
 * Use resource\_backend for volumes and groups
+* PowerMax Driver - Failover group vol update fix
 * Change default glance\_num\_retries to 3
 * Updating the release notes for PowerFlex Driver Rebrand
 * Brocade: Fix lookup UnboundLocalError
@@ -26,6 +86,7 @@ CHANGES
 * [vmware] ensure datastores exist while fetching stats
 * PowerMax Driver - Legacy volumes fail to live migrate
 * Uncomment psycopg2 in test-requirements.txt
+* Update to oslo.privsep 2.3.0
 * Fix lower-constraints conflicts
 * Fix: show volume transfer by name for non-admins
 * Add online extend support for Dell EMC PowerStore driver

@@ -39,8 +39,9 @@ class PowerMaxRestTest(test.TestCase):
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
         configuration = tpfo.FakeConfiguration(
             None, 'RestTests', 1, 1, san_ip='1.1.1.1', san_login='smc',
-            vmax_array=self.data.array, vmax_srp='SRP_1', san_password='smc',
-            san_api_port=8443, vmax_port_groups=[self.data.port_group_name_i])
+            powermax_array=self.data.array, powermax_srp='SRP_1',
+            san_password='smc', san_api_port=8443,
+            powermax_port_groups=[self.data.port_group_name_i])
         rest.PowerMaxRest._establish_rest_session = mock.Mock(
             return_value=tpfo.FakeRequestsSession())
         driver = fc.PowerMaxFCDriver(configuration=configuration)
@@ -549,7 +550,7 @@ class PowerMaxRestTest(test.TestCase):
     def test_remove_vol_from_sg_force_true(self, mck_wait):
         device_id = self.data.device_id
         extra_specs = deepcopy(self.data.extra_specs)
-        extra_specs[utils.FORCE_VOL_REMOVE] = True
+        extra_specs[utils.FORCE_VOL_EDIT] = True
         expected_payload = (
             {"executionOption": "ASYNCHRONOUS",
              "editStorageGroupActionParam": {
@@ -571,7 +572,7 @@ class PowerMaxRestTest(test.TestCase):
     def test_remove_vol_from_sg_force_false(self, mck_wait):
         device_id = self.data.device_id
         extra_specs = deepcopy(self.data.extra_specs)
-        extra_specs.pop(utils.FORCE_VOL_REMOVE, None)
+        extra_specs.pop(utils.FORCE_VOL_EDIT, None)
         expected_payload = (
             {"executionOption": "ASYNCHRONOUS",
              "editStorageGroupActionParam": {
@@ -1724,7 +1725,42 @@ class PowerMaxRestTest(test.TestCase):
             volume = self.rest.get_private_volume_list(array_id)
         self.assertEqual(response, volume)
 
-    def test_get_iterator_list(self):
+    @mock.patch.object(rest.PowerMaxRest, 'get_resource')
+    def test_get_private_volume_list_params_dict_input(self, mck_get):
+        array_id = self.data.array
+        input_param = {'unit-test': True}
+        ref = {'unit-test': True,
+               'expiration_time_mins': rest.ITERATOR_EXPIRATION}
+
+        self.rest.get_private_volume_list(array_id, input_param)
+        mck_get.assert_called_once_with(
+            self.data.array, rest.SLOPROVISIONING, 'volume', params=ref,
+            private='/private')
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_resource')
+    def test_get_private_volume_list_params_str_input(self, mck_get):
+        array_id = self.data.array
+        input_param = '&unit-test=True'
+        ref = '&unit-test=True&expiration_time_mins=%(expire)s' % {
+            'expire': rest.ITERATOR_EXPIRATION}
+
+        self.rest.get_private_volume_list(array_id, input_param)
+        mck_get.assert_called_once_with(
+            self.data.array, rest.SLOPROVISIONING, 'volume', params=ref,
+            private='/private')
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_resource')
+    def test_get_private_volume_list_params_no_input(self, mck_get):
+        array_id = self.data.array
+        ref = {'expiration_time_mins': rest.ITERATOR_EXPIRATION}
+
+        self.rest.get_private_volume_list(array_id)
+        mck_get.assert_called_once_with(
+            self.data.array, rest.SLOPROVISIONING, 'volume', params=ref,
+            private='/private')
+
+    @mock.patch.object(rest.PowerMaxRest, '_delete_iterator')
+    def test_get_iterator_list(self, mck_del):
         with mock.patch.object(
                 self.rest, 'get_request', side_effect=[
                     self.data.rest_iterator_resonse_one,
@@ -1745,7 +1781,17 @@ class PowerMaxRestTest(test.TestCase):
             actual_response = self.rest.get_iterator_page_list(
                 iterator_id, result_count, start_position, end_position,
                 max_page_size)
+            mck_del.assert_called_once_with(iterator_id)
             self.assertEqual(expected_response, actual_response)
+
+    @mock.patch.object(rest.PowerMaxRest, 'request',
+                       return_value=(204, 'Deleted Iterator'))
+    def test_delete_iterator(self, mck_del):
+        iterator_id = 'test_iterator_id'
+        self.rest._delete_iterator(iterator_id)
+        mck_del.assert_called_once_with(
+            '/common/Iterator/%(iter)s' % {'iter': iterator_id},
+            rest.DELETE)
 
     def test_set_rest_credentials(self):
         array_info = {

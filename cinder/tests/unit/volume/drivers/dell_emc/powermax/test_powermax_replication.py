@@ -45,18 +45,18 @@ class PowerMaxReplicationTest(test.TestCase):
         volume_utils.get_max_over_subscription_ratio = mock.Mock()
         configuration = tpfo.FakeConfiguration(
             None, 'CommonReplicationTests', interval=1, retries=1,
-            san_ip='1.1.1.1', san_login='smc', vmax_array=self.data.array,
-            vmax_srp='SRP_1', san_password='smc', san_api_port=8443,
-            vmax_port_groups=[self.data.port_group_name_f],
+            san_ip='1.1.1.1', san_login='smc', powermax_array=self.data.array,
+            powermax_srp='SRP_1', san_password='smc', san_api_port=8443,
+            powermax_port_groups=[self.data.port_group_name_f],
             replication_device=self.replication_device)
         rest.PowerMaxRest._establish_rest_session = mock.Mock(
             return_value=tpfo.FakeRequestsSession())
         driver = fc.PowerMaxFCDriver(configuration=configuration)
         iscsi_config = tpfo.FakeConfiguration(
             None, 'CommonReplicationTests', interval=1, retries=1,
-            san_ip='1.1.1.1', san_login='smc', vmax_array=self.data.array,
-            vmax_srp='SRP_1', san_password='smc', san_api_port=8443,
-            vmax_port_groups=[self.data.port_group_name_i],
+            san_ip='1.1.1.1', san_login='smc', powermax_array=self.data.array,
+            powermax_srp='SRP_1', san_password='smc', san_api_port=8443,
+            powermax_port_groups=[self.data.port_group_name_i],
             replication_device=self.replication_device)
         iscsi_driver = iscsi.PowerMaxISCSIDriver(configuration=iscsi_config)
         self.iscsi_common = iscsi_driver.common
@@ -76,18 +76,18 @@ class PowerMaxReplicationTest(test.TestCase):
         self.async_rep_device = self.data.async_rep_device
         async_configuration = tpfo.FakeConfiguration(
             None, 'CommonReplicationTests', interval=1, retries=1,
-            san_ip='1.1.1.1', san_login='smc', vmax_array=self.data.array,
-            vmax_srp='SRP_1', san_password='smc', san_api_port=8443,
-            vmax_port_groups=[self.data.port_group_name_f],
+            san_ip='1.1.1.1', san_login='smc', powermax_array=self.data.array,
+            powermax_srp='SRP_1', san_password='smc', san_api_port=8443,
+            powermax_port_groups=[self.data.port_group_name_f],
             replication_device=self.async_rep_device)
         self.async_driver = fc.PowerMaxFCDriver(
             configuration=async_configuration)
         self.metro_rep_device = self.data.metro_rep_device
         metro_configuration = tpfo.FakeConfiguration(
             None, 'CommonReplicationTests', interval=1, retries=1,
-            san_ip='1.1.1.1', san_login='smc', vmax_array=self.data.array,
-            vmax_srp='SRP_1', san_password='smc', san_api_port=8443,
-            vmax_port_groups=[self.data.port_group_name_f],
+            san_ip='1.1.1.1', san_login='smc', powermax_array=self.data.array,
+            powermax_srp='SRP_1', san_password='smc', san_api_port=8443,
+            powermax_port_groups=[self.data.port_group_name_f],
             replication_device=self.metro_rep_device)
         self.metro_driver = fc.PowerMaxFCDriver(
             configuration=metro_configuration)
@@ -106,8 +106,9 @@ class PowerMaxReplicationTest(test.TestCase):
         extra_specs = deepcopy(self.extra_specs)
         extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
         extra_specs[utils.IS_RE] = True
-        extra_specs[utils.FORCE_VOL_REMOVE] = True
+        extra_specs[utils.FORCE_VOL_EDIT] = True
         rep_config = self.data.rep_config_sync
+        rep_config = deepcopy(self.data.rep_config_sync)
         rep_config[utils.RDF_CONS_EXEMPT] = False
         extra_specs[utils.REP_CONFIG] = rep_config
         self.common._unmap_lun(self.data.test_volume, self.data.connector)
@@ -134,7 +135,7 @@ class PowerMaxReplicationTest(test.TestCase):
         rep_extra_specs = deepcopy(tpd.PowerMaxData.rep_extra_specs)
         rep_extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
 
-        rep_config = self.data.rep_config_sync
+        rep_config = deepcopy(self.data.rep_config_sync)
         extra_specs[utils.REP_CONFIG] = rep_config
         rep_config[utils.RDF_CONS_EXEMPT] = False
 
@@ -193,9 +194,9 @@ class PowerMaxReplicationTest(test.TestCase):
     @mock.patch.object(utils.PowerMaxUtils, 'is_metro_device',
                        return_value=True)
     def test_initialize_connection_no_multipath_iscsi(self, mock_md):
-        info_dict = self.iscsi_common.initialize_connection(
-            self.data.test_volume, self.data.connector)
-        self.assertIsNone(info_dict)
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.iscsi_common.initialize_connection,
+                          self.data.test_volume, self.data.connector)
 
     @mock.patch.object(
         masking.PowerMaxMasking, 'pre_multiattach',
@@ -618,6 +619,19 @@ class PowerMaxReplicationTest(test.TestCase):
 
         self.assertEqual(ref_vol_update, vols_model_update[0])
 
+    @mock.patch.object(common.PowerMaxCommon, '_initial_setup',
+                       return_value=tpd.PowerMaxData.extra_specs)
+    def test_populate_volume_and_group_update_lists_group_update_vol_list(
+            self, mck_setup):
+        volume = deepcopy(self.data.test_volume)
+        volume.group_id = self.data.test_group.id
+        volumes = [volume]
+        groups = [self.data.test_group]
+        volume_updates, group_updates = (
+            self.common._populate_volume_and_group_update_lists(
+                volumes, groups, None))
+        self.assertEqual([volume], volumes)
+
     @mock.patch.object(
         utils.PowerMaxUtils, 'validate_non_replication_group_config')
     @mock.patch.object(volume_utils, 'is_group_a_cg_snapshot_type',
@@ -711,6 +725,9 @@ class PowerMaxReplicationTest(test.TestCase):
         self.common._delete_group(group, [])
         mock_cleanup.assert_called_once()
 
+    @mock.patch.object(rest.PowerMaxRest, 'is_volume_in_storagegroup',
+                       return_value=True)
+    @mock.patch.object(masking.PowerMaxMasking, 'add_volumes_to_storage_group')
     @mock.patch.object(masking.PowerMaxMasking,
                        'remove_volumes_from_storage_group')
     @mock.patch.object(utils.PowerMaxUtils, 'check_rep_status_enabled')
@@ -721,15 +738,27 @@ class PowerMaxReplicationTest(test.TestCase):
     @mock.patch.object(volume_utils, 'is_group_a_type', return_value=True)
     @mock.patch.object(volume_utils, 'is_group_a_cg_snapshot_type',
                        return_value=True)
-    def test_update_replicated_group(self, mock_cg_type, mock_type_check,
-                                     mock_add, mock_remove, mock_check,
-                                     mock_rm):
+    def test_update_replicated_group(
+            self, mock_cg_type, mock_type_check, mock_add_remote,
+            mock_remove_remote, mock_check, mock_remove_local, mock_add_local,
+            mock_vol_in_sg):
+        array = self.data.array
         add_vols = [self.data.test_volume]
+        add_vols_id = [self.data.device_id]
         remove_vols = [self.data.test_clone_volume]
-        self.common.update_group(
-            self.data.test_group_1, add_vols, remove_vols)
-        mock_add.assert_called_once()
-        mock_remove.assert_called_once()
+        remove_vols_id = [self.data.device_id2]
+        group = self.data.test_group_1
+        group_sg = self.data.storagegroup_name_source
+        extra_specs = {
+            utils.INTERVAL: 1, utils.RETRIES: 1, utils.FORCE_VOL_EDIT: True}
+        self.common.update_group(group, add_vols, remove_vols)
+        mock_add_local.assert_called_once_with(
+            array, add_vols_id, group_sg, extra_specs)
+        mock_add_remote.assert_called_once_with(add_vols, group, extra_specs)
+        mock_remove_local.assert_called_once_with(
+            array, remove_vols_id, group_sg, extra_specs)
+        mock_remove_remote.assert_called_once_with(
+            array, remove_vols, group, extra_specs)
 
     @mock.patch.object(masking.PowerMaxMasking,
                        'remove_volumes_from_storage_group')
@@ -1057,7 +1086,7 @@ class PowerMaxReplicationTest(test.TestCase):
         target_storage_group = self.data.defaultstoragegroup_name
         extra_specs = deepcopy(self.data.extra_specs)
         rep_config_sync = deepcopy(self.data.rep_config_sync)
-        rep_config_sync[utils.RDF_CONS_EXEMPT] = False
+        rep_config_sync['exempt'] = False
         new_type = {'extra_specs': self.data.rep_extra_specs}
 
         target_extra_specs = deepcopy(new_type['extra_specs'])
@@ -1079,9 +1108,11 @@ class PowerMaxReplicationTest(test.TestCase):
             target_slo, target_workload, target_extra_specs)
         mck_protect.assert_called_once_with(
             array_id, target_storage_group, device_id, updated_volume_name,
-            target_extra_specs, volume)
+            self.data.rep_extra_specs, volume)
         self.assertTrue(success)
 
+    @mock.patch.object(utils.PowerMaxUtils, 'get_rep_config',
+                       return_value=tpd.PowerMaxData.rep_config_async)
     @mock.patch.object(common.PowerMaxCommon, 'get_volume_metadata',
                        return_value='')
     @mock.patch.object(common.PowerMaxCommon, 'update_metadata',
@@ -1103,7 +1134,7 @@ class PowerMaxReplicationTest(test.TestCase):
     @mock.patch.object(common.PowerMaxCommon, '_validate_rdfg_status')
     def test_migrate_volume_success_rep_to_rep(
             self, mck_valid, mck_break, mck_sync, mck_rep, mck_retype,
-            mck_resume, mck_slo, mck_upd_meta, mck_get_meta):
+            mck_resume, mck_slo, mck_upd_meta, mck_get_meta, mck_rep_conf):
         array = self.data.array
         volume = self.data.test_volume
         device_id = self.data.device_id
@@ -1116,17 +1147,20 @@ class PowerMaxReplicationTest(test.TestCase):
         extra_specs[utils.REPLICATION_DEVICE_BACKEND_ID] = (
             self.data.rep_config_sync[utils.BACKEND_ID])
         target_extra_specs = deepcopy(self.data.rep_extra_specs)
-        target_extra_specs['rep_extra_specs'] = utils.REP_ASYNC
+        target_extra_specs['array'] = self.data.array
+        target_extra_specs['slo'] = target_slo
+        target_extra_specs['rep_mode'] = utils.REP_ASYNC
         target_extra_specs['rdf_group_no'] = self.data.rdf_group_name_2
         target_extra_specs[utils.REP_CONFIG] = self.data.rep_config_async
         target_extra_specs[utils.REPLICATION_DEVICE_BACKEND_ID] = (
             self.data.rep_config_async[utils.BACKEND_ID])
+        target_extra_specs['storagetype:disablecompression'] = False
         new_type = {'extra_specs': target_extra_specs}
         success, model_update = self.common._migrate_volume(
             array, volume, device_id, srp, target_slo, target_workload,
             volume_name, new_type, extra_specs)
         self.assertEqual(2, mck_valid.call_count)
-        mck_valid.assert_called_with(array, target_extra_specs)
+        mck_valid.assert_any_call(array, extra_specs)
         mck_break.assert_called_once_with(
             array, device_id, volume_name, extra_specs, volume)
         mck_sync.assert_called_once_with(array, device_id, extra_specs)
@@ -1580,7 +1614,7 @@ class PowerMaxReplicationTest(test.TestCase):
             self.common.break_rdf_device_pair_session(
                 array, device_id, volume_name, extra_specs, volume))
 
-        extra_specs[utils.REP_CONFIG]['force_vol_remove'] = True
+        extra_specs[utils.REP_CONFIG][utils.FORCE_VOL_EDIT] = True
         self.assertEqual(extra_specs[utils.REP_CONFIG], rep_extra_specs)
         self.assertFalse(resume_rdf)
 
@@ -1626,7 +1660,7 @@ class PowerMaxReplicationTest(test.TestCase):
             self.common.break_rdf_device_pair_session(
                 array, device_id, volume_name, extra_specs, volume))
 
-        extra_specs[utils.REP_CONFIG]['force_vol_remove'] = True
+        extra_specs[utils.REP_CONFIG][utils.FORCE_VOL_EDIT] = True
         extra_specs[utils.REP_CONFIG]['mgmt_sg_name'] = (
             self.data.default_sg_no_slo_re_enabled)
 

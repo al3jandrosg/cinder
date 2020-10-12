@@ -1,3 +1,12 @@
+cinder (2:17.0.0~rc2-0ubuntu1) groovy; urgency=medium
+
+  * d/control: Update VCS paths for move to lp:~ubuntu-openstack-dev.
+  * d/watch: Track 17.x series.
+  * New upstream release candidate for OpenStack Victoria.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Chris MacNaughton <chris.macnaughton@ubuntu.com>  Mon, 12 Oct 2020 13:38:52 +0000
+
 cinder (2:17.0.0~b3~git2020091007.afcaf0b9d-0ubuntu3) groovy; urgency=medium
 
   * d/py3dist-overrides: Add python3-zstd to py3dist-overrides.

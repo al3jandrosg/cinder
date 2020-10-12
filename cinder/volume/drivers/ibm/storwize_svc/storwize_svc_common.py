@@ -53,6 +53,7 @@ from cinder.volume import volume_utils
 
 INTERVAL_1_SEC = 1
 DEFAULT_TIMEOUT = 15
+CMMVC5753E = "CMMVC5753E"
 LOG = logging.getLogger(__name__)
 
 storwize_svc_opts = [
@@ -147,6 +148,13 @@ storwize_svc_opts = [
                'performs a complete cycle at most once each period. '
                'The default is 300 seconds, and the valid seconds '
                'are 60-86400.'),
+    cfg.BoolOpt('storwize_svc_retain_aux_volume',
+                default=False,
+                help='Enable or disable retaining of aux volume on secondary '
+                     'storage during delete of the volume on primary storage '
+                     'or moving the primary volume from mirror to non-mirror '
+                     'with replication enabled. This option is valid for '
+                     'SVC.'),
 ]
 
 CONF = cfg.CONF
@@ -747,6 +755,7 @@ class StorwizeHelpers(object):
     def __init__(self, run_ssh):
         self.ssh = StorwizeSSH(run_ssh)
         self.check_fcmapping_interval = 3
+        self.code_level = None
 
     @staticmethod
     def handle_keyerror(cmd, out):
@@ -871,12 +880,14 @@ class StorwizeHelpers(object):
                    'avail': state['available_iogrps']})
 
         site_iogrp = []
-        pool_data = self.get_pool_attrs(pool)
-        if pool_data is None:
-            msg = (_('Failed getting details for pool %s.') % pool)
-            LOG.error(msg)
-            raise exception.InvalidConfigurationValue(message=msg)
-        if 'site_id' in pool_data and pool_data['site_id']:
+        hyperswap = opts['volume_topology'] == 'hyperswap'
+        if hyperswap:
+            pool_data = self.get_pool_attrs(pool)
+            if pool_data is None:
+                msg = (_('Failed getting details for pool %s.') % pool)
+                LOG.error(msg)
+                raise exception.InvalidConfigurationValue(message=msg)
+        if hyperswap and pool_data.get('site_id'):
             for node in state['storage_nodes'].values():
                 if pool_data['site_id'] == node['site_id']:
                     site_iogrp.append(node['IO_group'])
@@ -1851,21 +1862,30 @@ class StorwizeHelpers(object):
         snapshots_model_update = []
 
         try:
-            for snapshot in snapshots:
+            self.delete_fc_consistgrp(fc_consistgrp)
+        except exception.VolumeBackendAPIException as err:
+            if CMMVC5753E in err.msg:
+                LOG.warning('Failed to delete as flash copy consistency '
+                            'group %s does not exist,ignoring err: %s',
+                            fc_consistgrp, err)
+
+        for snapshot in snapshots:
+            try:
                 self.delete_vdisk(snapshot['name'],
                                   force_unmap=False,
                                   force_delete=True)
-        except exception.VolumeBackendAPIException as err:
-            model_update['status'] = (
-                fields.GroupSnapshotStatus.ERROR_DELETING)
-            LOG.error("Failed to delete the snapshot %(snap)s of "
-                      "CGSnapshot. Exception: %(exception)s.",
-                      {'snap': snapshot['name'], 'exception': err})
-
-        for snapshot in snapshots:
-            snapshots_model_update.append(
-                {'id': snapshot['id'],
-                 'status': model_update['status']})
+                snapshots_model_update.append(
+                    {'id': snapshot['id'],
+                     'status': fields.GroupSnapshotStatus.DELETED})
+            except exception.VolumeBackendAPIException as err:
+                model_update['status'] = (
+                    fields.GroupSnapshotStatus.ERROR_DELETING)
+                snapshots_model_update.append(
+                    {'id': snapshot['id'],
+                     'status': fields.GroupSnapshotStatus.ERROR_DELETING})
+                LOG.error("Failed to delete the snapshot %(snap)s of "
+                          "CGSnapshot. Exception: %(exception)s.",
+                          {'snap': snapshot['name'], 'exception': err})
 
         return model_update, snapshots_model_update
 
@@ -1951,18 +1971,20 @@ class StorwizeHelpers(object):
         return volume_model_updates
 
     def check_flashcopy_rate(self, flashcopy_rate):
-        sys_info = self.get_system_info()
-        code_level = sys_info['code_level']
+        if not self.code_level:
+            sys_info = self.get_system_info()
+            self.code_level = sys_info['code_level']
+
         if flashcopy_rate not in range(1, 151):
             raise exception.InvalidInput(
                 reason=_('The configured flashcopy rate should be '
                          'between 1 and 150.'))
-        elif code_level < (7, 8, 1, 0) and flashcopy_rate > 100:
+        elif self.code_level < (7, 8, 1, 0) and flashcopy_rate > 100:
             msg = (_('The configured flashcopy rate is %(fc_rate)s, The '
                      'storage code level is %(code_level)s, the flashcopy_rate'
                      ' range is 1-100 if the storwize code level '
                      'below 7.8.1.') % {'fc_rate': flashcopy_rate,
-                                        'code_level': code_level})
+                                        'code_level': self.code_level})
             LOG.error(msg)
             raise exception.VolumeDriverException(message=msg)
 
@@ -2196,7 +2218,7 @@ class StorwizeHelpers(object):
         return relationship[0] if len(relationship) > 0 else None
 
     def delete_rc_volume(self, volume_name, target_vol=False,
-                         force_unmap=True):
+                         force_unmap=True, retain_aux_volume=False):
         vol_name = volume_name
         if target_vol:
             vol_name = storwize_const.REPLICA_AUX_VOL_PREFIX + volume_name
@@ -2210,9 +2232,15 @@ class StorwizeHelpers(object):
                 storwize_const.REPLICA_CHG_VOL_PREFIX + vol_name,
                 force_unmap=force_unmap,
                 force_delete=False)
-            self.delete_vdisk(vol_name,
-                              force_unmap=force_unmap,
-                              force_delete=False)
+            # We want to retain the aux volume after retyping
+            # from mirror to non mirror storage template or
+            # on delete of the primary volume based on user's
+            # choice of config value for storwize_svc_retain_aux_volume.
+            # Default value is False.
+            if (retain_aux_volume is False and target_vol) or not target_vol:
+                self.delete_vdisk(vol_name,
+                                  force_unmap=force_unmap,
+                                  force_delete=False)
         except Exception as e:
             msg = (_('Unable to delete the volume for '
                      'volume %(vol)s. Exception: %(err)s.'),
@@ -3132,7 +3160,11 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if rep_type:
             if self._aux_backend_helpers:
                 self._aux_backend_helpers.delete_rc_volume(
-                    volume['name'], target_vol=True, force_unmap=force_unmap)
+                    volume['name'],
+                    target_vol=True,
+                    force_unmap=force_unmap,
+                    retain_aux_volume=self.configuration.safe_get(
+                        'storwize_svc_retain_aux_volume'))
             if not self._active_backend_id:
                 self._master_backend_helpers.delete_rc_volume(
                     volume['name'], force_unmap=force_unmap)
@@ -4890,9 +4922,12 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             force_unmap = True
 
         if old_rep_type and not new_rep_type:
-            self._aux_backend_helpers.delete_rc_volume(volume['name'],
-                                                       target_vol=True,
-                                                       force_unmap=force_unmap)
+            self._aux_backend_helpers.delete_rc_volume(
+                volume['name'],
+                target_vol=True,
+                force_unmap=force_unmap,
+                retain_aux_volume=self.configuration.safe_get(
+                    'storwize_svc_retain_aux_volume'))
             if storwize_const.GMCV == old_rep_type:
                 self._helpers.delete_vdisk(
                     storwize_const.REPLICA_CHG_VOL_PREFIX + volume['name'],
