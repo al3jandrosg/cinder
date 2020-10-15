@@ -1,8 +1,8 @@
 CHANGES
 =======
 
-17.0.0.0rc2
------------
+17.0.0
+------
 
 * Critical fix for MSA 2060 and MSA 1060
 * Disallow extension of attached volumes for NFS & Quobyte drivers

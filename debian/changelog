@@ -1,3 +1,9 @@
+cinder (2:17.0.0-0ubuntu1) groovy; urgency=medium
+
+  * New upstream release for OpenStack Victoria.
+
+ -- Chris MacNaughton <chris.macnaughton@ubuntu.com>  Thu, 15 Oct 2020 09:42:29 +0000
+
 cinder (2:17.0.0~rc2-0ubuntu1) groovy; urgency=medium
 
   * d/control: Update VCS paths for move to lp:~ubuntu-openstack-dev.
