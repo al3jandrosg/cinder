@@ -17,14 +17,13 @@ Common Auth Middleware.
 
 """
 
-
+from http import HTTPStatus
 import os
 
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_middleware import request_id
 from oslo_serialization import jsonutils
-from six.moves import http_client
 import webob.dec
 import webob.exc
 
@@ -142,7 +141,7 @@ class NoAuthMiddleware(base_wsgi.Middleware):
             res.headers['X-Auth-Token'] = '%s:%s' % (user_id, project_id)
             res.headers['X-Server-Management-Url'] = os_url
             res.content_type = 'text/plain'
-            res.status_int = http_client.NO_CONTENT
+            res.status_int = HTTPStatus.NO_CONTENT
             return res
 
         token = req.headers['X-Auth-Token']

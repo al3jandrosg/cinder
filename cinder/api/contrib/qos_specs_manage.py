@@ -14,11 +14,10 @@
 #    under the License.
 
 """The QoS specs extension"""
+from http import HTTPStatus
 
 from oslo_log import log as logging
 from oslo_utils import timeutils
-import six
-from six.moves import http_client
 import webob
 
 from cinder.api import api_utils
@@ -98,20 +97,20 @@ class QoSSpecsController(wsgi.Controller):
             self._notify_qos_specs_error(context,
                                          'qos_specs.create',
                                          notifier_err)
-            raise webob.exc.HTTPBadRequest(explanation=six.text_type(err))
+            raise webob.exc.HTTPBadRequest(explanation=str(err))
         except exception.QoSSpecsExists as err:
             notifier_err = dict(name=name, error_message=err)
             self._notify_qos_specs_error(context,
                                          'qos_specs.create',
                                          notifier_err)
-            raise webob.exc.HTTPConflict(explanation=six.text_type(err))
+            raise webob.exc.HTTPConflict(explanation=str(err))
         except exception.QoSSpecsCreateFailed as err:
             notifier_err = dict(name=name, error_message=err)
             self._notify_qos_specs_error(context,
                                          'qos_specs.create',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
         return self._view_builder.detail(req, spec)
 
@@ -145,7 +144,7 @@ class QoSSpecsController(wsgi.Controller):
                                          'qos_specs.update',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
         return body
 
@@ -196,7 +195,7 @@ class QoSSpecsController(wsgi.Controller):
             msg = _('Qos specs still in use.')
             raise webob.exc.HTTPBadRequest(explanation=msg)
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     @validation.schema(qos_specs_schema.unset)
     def delete_keys(self, req, id, body):
@@ -224,7 +223,7 @@ class QoSSpecsController(wsgi.Controller):
             # Not found exception will be handled at the wsgi level
             raise
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     def associations(self, req, id):
         """List all associations of given qos specs."""
@@ -255,7 +254,7 @@ class QoSSpecsController(wsgi.Controller):
                                          'qos_specs.associations',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
         return self._view_builder.associations(req, associates)
 
@@ -300,16 +299,16 @@ class QoSSpecsController(wsgi.Controller):
             self._notify_qos_specs_error(context,
                                          'qos_specs.associate',
                                          notifier_err)
-            raise webob.exc.HTTPBadRequest(explanation=six.text_type(err))
+            raise webob.exc.HTTPBadRequest(explanation=str(err))
         except exception.QoSSpecsAssociateFailed as err:
             notifier_err = dict(id=id, error_message=err)
             self._notify_qos_specs_error(context,
                                          'qos_specs.associate',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     def disassociate(self, req, id):
         """Disassociate a qos specs from a volume type."""
@@ -350,9 +349,9 @@ class QoSSpecsController(wsgi.Controller):
                                          'qos_specs.disassociate',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     def disassociate_all(self, req, id):
         """Disassociate a qos specs from all volume types."""
@@ -383,9 +382,9 @@ class QoSSpecsController(wsgi.Controller):
                                          'qos_specs.disassociate_all',
                                          notifier_err)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
 
 class Qos_specs_manage(extensions.ExtensionDescriptor):

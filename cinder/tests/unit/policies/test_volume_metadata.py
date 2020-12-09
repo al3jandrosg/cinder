@@ -11,9 +11,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from http import HTTPStatus
 from unittest import mock
-
-from six.moves import http_client
 
 from cinder.tests.unit.policies import test_base
 from cinder.volume import api as volume_api
@@ -32,7 +31,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         }
 
         response = self._get_request_response(admin_context, path, 'GET')
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
         res_meta = response.json_body['metadata']
         self.assertIn('k', res_meta)
         self.assertEqual('v', res_meta['k'])
@@ -46,7 +45,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         }
 
         response = self._get_request_response(user_context, path, 'GET')
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
         res_meta = response.json_body['metadata']
         self.assertIn('k', res_meta)
         self.assertEqual('v', res_meta['k'])
@@ -63,7 +62,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         }
 
         response = self._get_request_response(non_owner_context, path, 'GET')
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_create_metadata(self):
         admin_context = self.admin_context
@@ -76,7 +75,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k1": "v1"}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_owner_can_create_metadata(self):
         user_context = self.user_context
@@ -89,7 +88,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k1": "v1"}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_create_metadata_for_others(self, mock_volume):
@@ -105,7 +104,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k1": "v1"}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_delete_metadata(self):
         admin_context = self.admin_context
@@ -117,7 +116,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
             'key': 'k'
         }
         response = self._get_request_response(admin_context, path, 'DELETE')
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_owner_can_delete_metadata(self):
         user_context = self.user_context
@@ -129,7 +128,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
             'key': 'k'
         }
         response = self._get_request_response(user_context, path, 'DELETE')
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_delete_metadata_for_others(self, mock_volume):
@@ -145,7 +144,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         }
         response = self._get_request_response(non_owner_context, path,
                                               'DELETE')
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_update_metadata(self):
         admin_context = self.admin_context
@@ -158,7 +157,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k": "v2"}}
         response = self._get_request_response(admin_context, path, 'PUT',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
         res_meta = response.json_body['metadata']
         self.assertIn('k', res_meta)
         self.assertEqual('v2', res_meta['k'])
@@ -174,7 +173,7 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k": "v2"}}
         response = self._get_request_response(user_context, path, 'PUT',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
         res_meta = response.json_body['metadata']
         self.assertIn('k', res_meta)
         self.assertEqual('v2', res_meta['k'])
@@ -193,4 +192,4 @@ class VolumePolicyTests(test_base.CinderPolicyTests):
         body = {"metadata": {"k": "v2"}}
         response = self._get_request_response(non_owner_context, path, 'PUT',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)

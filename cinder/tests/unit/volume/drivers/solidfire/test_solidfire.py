@@ -221,7 +221,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                               'volumeID': 6}]
 
     def fake_issue_api_request(self, method, params, version='1.0',
-                               endpoint=None):
+                               endpoint=None, timeout=None):
         if method == 'GetClusterCapacity':
             data = {}
             if version == '1.0':
@@ -370,11 +370,14 @@ class SolidFireVolumeTestCase(test.TestCase):
                              'attributes': {'uuid': f_uuid[1]},
                              'qos': None,
                              'iqn': test_name}]}}
-            if params and params['startVolumeID']:
+            if params and params.get('startVolumeID', None):
                 volumes = result['result']['volumes']
-                selected_volumes = [v for v in volumes if v.get('volumeID')
-                                    != params['startVolumeID']]
+                selected_volumes = [v for v in volumes if v.get('volumeID') !=
+                                    params['startVolumeID']]
                 result['result']['volumes'] = selected_volumes
+            else:
+                result = {'result': {'volumes': []}}
+
             return result
         elif method == 'DeleteSnapshot':
             return {'result': {}}
@@ -638,6 +641,12 @@ class SolidFireVolumeTestCase(test.TestCase):
                          'volume_type_id': None,
                          'created_at': timeutils.utcnow()}
 
+        fake_model_info = {
+            'provider_id': '%s %s cluster-id-01' % (
+                self.fake_sfvol['volumeID'],
+                self.fake_sfaccount['accountID'])
+        }
+
         ctx = context.get_admin_context()
         testvol = fake_volume.fake_volume_obj(ctx, **updates_vol_a)
         testvol_b = fake_volume.fake_volume_obj(ctx, **updates_vol_b)
@@ -657,7 +666,7 @@ class SolidFireVolumeTestCase(test.TestCase):
                                   return_value=[]), \
                 mock.patch.object(sfv,
                                   '_get_model_info',
-                                  return_value={}):
+                                  return_value=fake_model_info):
             sfv.create_cloned_volume(testvol_b, testvol)
 
     def test_initialize_connector_with_blocksizes(self):
@@ -3041,6 +3050,7 @@ class SolidFireVolumeTestCase(test.TestCase):
             'mvip': self.mvip,
             'svip': self.svip}
 
+        self.configuration.sf_volume_clone_timeout = 1
         sfv = solidfire.SolidFireDriver(configuration=self.configuration)
         sfv.replication_enabled = False
 
@@ -3085,7 +3095,7 @@ class SolidFireVolumeTestCase(test.TestCase):
         mock_issue_api_request.assert_has_calls(calls)
         mock_test_set_cluster_pairs.assert_not_called()
         mock_update_attributes.assert_not_called()
-        mock_get_model_info.assert_called_once()
+        mock_get_model_info.assert_called()
         mock_snapshot_discovery.assert_not_called()
 
         reset_mocks()
@@ -4092,7 +4102,7 @@ class SolidFireVolumeTestCase(test.TestCase):
         mock_get_sf_volume.assert_called_with(vol.id, vol_params)
 
         mock_do_intercluster_volume_migration_complete_data_sync\
-            .asert_called_with(fake_dst_sf_volid, fake_dst_cluster_ref)
+            .assert_called_with(fake_dst_sf_volid, fake_dst_cluster_ref)
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalWithTimeoutLoopingCall')
     @mock.patch.object(solidfire.SolidFireDriver, '_get_sf_volume')

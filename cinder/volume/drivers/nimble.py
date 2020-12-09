@@ -737,6 +737,28 @@ class NimbleBaseVolumeDriver(san.SanDriver):
                 return True
         return False
 
+    def revert_to_snapshot(self, context, volume, snapshot):
+        vol_info = self.APIExecutor.get_vol_info(volume['name'])
+        snap_id = vol_info['last_snap']['snap_id']
+        volume_id = vol_info['id']
+        LOG.debug("Reverting volume %(vol)s with snapshot id %(snap_id)s",
+                  {'vol': volume['name'], 'snap_id': snap_id})
+        data = {'data': {"base_snap_id": snap_id, "id": volume_id}}
+        try:
+            self.APIExecutor.online_vol(volume['name'], False)
+            self.APIExecutor.volume_restore(volume['name'], data)
+            LOG.info("Volume %(vol)s is successfully restored with "
+                     "snap_id %(snap_id)s",
+                     {'vol': volume['name'], 'snap_id': snap_id})
+            self.APIExecutor.online_vol(volume['name'], True)
+        except NimbleAPIException as ex:
+            raise NimbleAPIException(_("Unable to restore %(vol)s to "
+                                       "%(snap_id)s: %(err)s") %
+                                     {'vol': volume['name'],
+                                      'snap_id': snap_id,
+                                      'err': ex.message})
+        return self._get_model_info(volume['name'])
+
 
 @interface.volumedriver
 class NimbleISCSIDriver(NimbleBaseVolumeDriver, san.SanISCSIDriver):
@@ -1539,7 +1561,7 @@ class NimbleRestAPIExecutor(object):
         r = self.get_query(api, filter)
         LOG.info("ACL record is %(result)s", {'result': r.json()})
         if not r.json()['data']:
-            LOG.warning('ACL is not available for this volume %(vol_id)', {
+            LOG.warning('ACL is not available for this volume %(vol_id)s', {
                         'vol_id': volume_id})
             return
         return r.json()['data'][0]
@@ -1845,6 +1867,11 @@ class NimbleRestAPIExecutor(object):
                              'state': SM_OBJ_HAS_CLONE})
             else:
                 raise
+
+    def volume_restore(self, volume_name, data):
+        volume_id = self.get_volume_id_by_name(volume_name)
+        api = 'volumes/%s/actions/restore' % volume_id
+        self.post(api, data)
 
     @_connection_checker
     def get(self, api):

@@ -20,7 +20,6 @@ import cryptography
 import ddt
 from oslo_concurrency import processutils
 from oslo_utils import units
-from six.moves import builtins
 
 from cinder import exception
 from cinder.image import image_utils
@@ -90,6 +89,13 @@ class TestQemuImgInfo(test.TestCase):
         mock_exec.assert_called_once_with('qemu-img', '--version',
                                           check_exit_code=False)
         self.assertEqual(expected_version, version)
+        self.assertEqual(1, mock_exec.call_count)
+
+        version = image_utils.get_qemu_img_version()
+
+        # verify that cached value was used instead of calling execute
+        self.assertEqual(expected_version, version)
+        self.assertEqual(1, mock_exec.call_count)
 
     @mock.patch.object(image_utils, 'get_qemu_img_version')
     def test_validate_qemu_img_version(self, mock_get_qemu_img_version):
@@ -448,10 +454,11 @@ class BadVerifier(object):
 
 class TestVerifyImageSignature(test.TestCase):
 
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cursive.signature_utils.get_verifier')
     @mock.patch('oslo_utils.fileutils.remove_path_on_error')
-    def test_image_signature_verify_failed(self, mock_remove, mock_get):
-        self.mock_object(builtins, 'open', mock.mock_open())
+    def test_image_signature_verify_failed(self,
+                                           mock_remove, mock_get, mock_open):
         ctxt = mock.sentinel.context
         metadata = {'name': 'test image',
                     'is_public': False,
@@ -522,7 +529,7 @@ class TestVerifyImageSignature(test.TestCase):
                           FakeImageService(), 'fake_id', 'fake_path')
         mock_get.assert_not_called()
 
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('eventlet.tpool.execute')
     @mock.patch('cursive.signature_utils.get_verifier')
     @mock.patch('oslo_utils.fileutils.remove_path_on_error')
@@ -727,7 +734,7 @@ class TestUploadVolume(test.TestCase):
               ('ploop', 'parallels', False))
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -768,7 +775,7 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -804,7 +811,7 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -858,7 +865,7 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -894,7 +901,7 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -947,13 +954,12 @@ class TestUploadVolume(test.TestCase):
         mock_engine.compress_img.assert_called()
 
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
     @mock.patch('cinder.image.image_utils.os')
     def test_convert_error(self, mock_os, mock_temp, mock_convert, mock_info,
-                           mock_open, mock_conf):
+                           mock_conf):
         ctxt = mock.sentinel.context
         image_service = mock.Mock()
         image_meta = {'id': 'test_id',
@@ -981,7 +987,7 @@ class TestUploadVolume(test.TestCase):
     @mock.patch('eventlet.tpool.Proxy')
     @mock.patch('cinder.image.image_utils.utils.temporary_chown')
     @mock.patch('cinder.image.image_utils.CONF')
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('cinder.image.image_utils.open', new_callable=mock.mock_open)
     @mock.patch('cinder.image.image_utils.qemu_img_info')
     @mock.patch('cinder.image.image_utils.convert_image')
     @mock.patch('cinder.image.image_utils.temporary_file')
@@ -1000,6 +1006,7 @@ class TestUploadVolume(test.TestCase):
         image_utils.upload_volume(ctxt, image_service, image_meta,
                                   volume_path, base_image_ref='xyz')
 
+        mock_open.assert_called_once_with(volume_path, 'rb')
         image_service.update.assert_called_once_with(
             ctxt, image_meta['id'], {}, mock_proxy.return_value,
             store_id=None, base_image_ref='xyz')

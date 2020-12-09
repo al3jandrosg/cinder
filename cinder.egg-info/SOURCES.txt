@@ -11,6 +11,7 @@ README.rst
 bindep.txt
 driver-requirements.txt
 lower-constraints.txt
+mypy-files.txt
 reno.yaml
 requirements.txt
 setup.cfg
@@ -603,7 +604,6 @@ cinder/backup/drivers/glusterfs.py
 cinder/backup/drivers/nfs.py
 cinder/backup/drivers/posix.py
 cinder/backup/drivers/swift.py
-cinder/backup/drivers/tsm.py
 cinder/brick/README.txt
 cinder/brick/__init__.py
 cinder/brick/local_dev/__init__.py
@@ -909,6 +909,16 @@ cinder/tests/functional/api_sample_tests/samples/volumes/volumes-list-detailed-r
 cinder/tests/functional/api_sample_tests/samples/volumes/volumes-list-response.json.tpl
 cinder/tests/hacking/__init__.py
 cinder/tests/hacking/checks.py
+cinder/tests/stubs/oslo_i18n/__init__.pyi
+cinder/tests/stubs/oslo_i18n/_factory.pyi
+cinder/tests/stubs/oslo_i18n/_gettextutils.pyi
+cinder/tests/stubs/oslo_i18n/_i18n.pyi
+cinder/tests/stubs/oslo_i18n/_lazy.pyi
+cinder/tests/stubs/oslo_i18n/_locale.pyi
+cinder/tests/stubs/oslo_i18n/_message.pyi
+cinder/tests/stubs/oslo_i18n/_translate.pyi
+cinder/tests/stubs/oslo_i18n/fixture.pyi
+cinder/tests/stubs/oslo_i18n/log.pyi
 cinder/tests/unit/__init__.py
 cinder/tests/unit/cast_as_call.py
 cinder/tests/unit/conf_fixture.py
@@ -1060,7 +1070,6 @@ cinder/tests/unit/backup/drivers/test_backup_google.py
 cinder/tests/unit/backup/drivers/test_backup_nfs.py
 cinder/tests/unit/backup/drivers/test_backup_posix.py
 cinder/tests/unit/backup/drivers/test_backup_swift.py
-cinder/tests/unit/backup/drivers/test_backup_tsm.py
 cinder/tests/unit/brick/__init__.py
 cinder/tests/unit/brick/fake_lvm.py
 cinder/tests/unit/brick/test_brick_lvm.py
@@ -1347,6 +1356,9 @@ cinder/tests/unit/volume/drivers/nexenta/test_nexenta.py
 cinder/tests/unit/volume/drivers/nexenta/test_nexenta5_iscsi.py
 cinder/tests/unit/volume/drivers/nexenta/test_nexenta5_jsonrpc.py
 cinder/tests/unit/volume/drivers/nexenta/test_nexenta5_nfs.py
+cinder/tests/unit/volume/drivers/open_e/__init__.py
+cinder/tests/unit/volume/drivers/open_e/test_iscsi.py
+cinder/tests/unit/volume/drivers/open_e/test_rest.py
 cinder/tests/unit/volume/drivers/sandstone/__init__.py
 cinder/tests/unit/volume/drivers/sandstone/test_sds_client.py
 cinder/tests/unit/volume/drivers/sandstone/test_sds_driver.py
@@ -1604,6 +1616,14 @@ cinder/volume/drivers/nexenta/ns5/__init__.py
 cinder/volume/drivers/nexenta/ns5/iscsi.py
 cinder/volume/drivers/nexenta/ns5/jsonrpc.py
 cinder/volume/drivers/nexenta/ns5/nfs.py
+cinder/volume/drivers/open_e/__init__.py
+cinder/volume/drivers/open_e/iscsi.py
+cinder/volume/drivers/open_e/options.py
+cinder/volume/drivers/open_e/jovian_common/__init__.py
+cinder/volume/drivers/open_e/jovian_common/exception.py
+cinder/volume/drivers/open_e/jovian_common/jdss_common.py
+cinder/volume/drivers/open_e/jovian_common/rest.py
+cinder/volume/drivers/open_e/jovian_common/rest_proxy.py
 cinder/volume/drivers/prophetstor/__init__.py
 cinder/volume/drivers/prophetstor/dpl_fc.py
 cinder/volume/drivers/prophetstor/dpl_iscsi.py
@@ -1794,7 +1814,6 @@ doc/source/configuration/block-storage/backup/glusterfs-backup-driver.rst
 doc/source/configuration/block-storage/backup/nfs-backup-driver.rst
 doc/source/configuration/block-storage/backup/posix-backup-driver.rst
 doc/source/configuration/block-storage/backup/swift-backup-driver.rst
-doc/source/configuration/block-storage/backup/tsm-backup-driver.rst
 doc/source/configuration/block-storage/drivers/ceph-rbd-volume-driver.rst
 doc/source/configuration/block-storage/drivers/datera-volume-driver.rst
 doc/source/configuration/block-storage/drivers/dell-emc-powerflex-driver.rst
@@ -1829,6 +1848,7 @@ doc/source/configuration/block-storage/drivers/nexentastor4-driver.rst
 doc/source/configuration/block-storage/drivers/nexentastor5-driver.rst
 doc/source/configuration/block-storage/drivers/nfs-volume-driver.rst
 doc/source/configuration/block-storage/drivers/nimble-volume-driver.rst
+doc/source/configuration/block-storage/drivers/open-e-joviandss-driver.rst
 doc/source/configuration/block-storage/drivers/prophetstor-dpl-driver.rst
 doc/source/configuration/block-storage/drivers/pure-storage-driver.rst
 doc/source/configuration/block-storage/drivers/quobyte-driver.rst
@@ -1955,12 +1975,14 @@ releasenotes/README.rst
 releasenotes/notes/1220b8a67602b8e7-update_rootwrap_volume_filters.yaml
 releasenotes/notes/1884495-173f375dc5274fe6.yaml
 releasenotes/notes/1885946-17bc5c3dc0535044.yaml
+releasenotes/notes/1899512-7a872a2c19e53536.yaml
 releasenotes/notes/3par-create-cg-from-source-cg-5634dcf9feb813f6.yaml
 releasenotes/notes/3par-create-fc-vlun-match-set-type-babcf2cbce1ce317.yaml
 releasenotes/notes/3par-get-capability-de60c9bc7ae51c14.yaml
 releasenotes/notes/3par-license-check-51a16b5247675760.yaml
 releasenotes/notes/3par-manage-unmanage-snapshot-eb4e504e8782ba43.yaml
 releasenotes/notes/84-to-90-endpoints-831c28423d32cac5.yaml
+releasenotes/notes/Code-changes-to-handle-groups-with-replication_enabled-or-snapshot_enabled-72f669fe2719ce3d.yaml
 releasenotes/notes/Dell-SC-Driver-to-dell_emc-folder-e5d6fb1f1cf84149.yaml
 releasenotes/notes/Dell-SC-New-Extra-Specs-1de0d3f1ebc62881.yaml
 releasenotes/notes/Dell-SC-Retype-Limitations-74f4b5f6a94ffe4f.yaml
@@ -2024,6 +2046,7 @@ releasenotes/notes/allow-deleting-__DEFAULT__-type-d35dfb5d89760b9b.yaml
 releasenotes/notes/allow-encrypted-rbd-volumes-35d3536505e6309b.yaml
 releasenotes/notes/allow-huawei-driver-lun-copy-speed-configurable-361a480e7b7e361d.yaml
 releasenotes/notes/allow-remove-name-and-description-for-consisgroup-408257a0a18bd530.yaml
+releasenotes/notes/announce-ceph-min-version-4eddb0def1c39928.yaml
 releasenotes/notes/apply-limits-to-qemu-img-29f722a1bf4b91f8.yaml
 releasenotes/notes/backend-options-ed19e6c63b2b9090.yaml
 releasenotes/notes/backup-ceph-driver-journaling-exculsive-lock-features-6b6044138a288a83.yaml
@@ -2050,7 +2073,6 @@ releasenotes/notes/bp-provisioning-improvements-bb7e28896e2a2539.yaml
 releasenotes/notes/bp-remove-netapp-7mode-drivers-c38398e54662f2d4.yaml
 releasenotes/notes/bp-vmware-fcd-fbe19ee577d2e9e4.yaml
 releasenotes/notes/brcd_lookupservice_http_support-f6485b38a1feaa15.yaml
-releasenotes/notes/brocade-fczm-driver-victoria-2b80055ca328f31c.yaml
 releasenotes/notes/brocade_http_connector-0021e41dfa56e671.yaml
 releasenotes/notes/brocade_looup_fail_get_client-179151d449a34aa4.yaml
 releasenotes/notes/brocade_py3-15647dbe3981d44b.yaml
@@ -2105,6 +2127,7 @@ releasenotes/notes/bug-1813851-60a4f0ffe386d9b6.yaml
 releasenotes/notes/bug-1823200-victoria-ecd2d99c9223d84b.yaml
 releasenotes/notes/bug-1828386-fix-retype-rbd-backend.yaml
 releasenotes/notes/bug-1833115-fix-netapp-ontap-python3-failures-dd869e602f9539e1.yaml
+releasenotes/notes/bug-1837524-strowize-create_consistency_group_failures-bb2a976dfe9454a4.yaml
 releasenotes/notes/bug-1859652-netapp-fix-retype-attached-volume-to-solidfire-1933f03673ff078d.yaml
 releasenotes/notes/bug-1859653-solidfire-fix-failover-after-service-restart-77e5e4da45c9c1aa.yaml
 releasenotes/notes/bug-1860100-8c542363def7d408.yaml
@@ -2114,12 +2137,23 @@ releasenotes/notes/bug-1874134-netapp-ONTAP-fix-max-resize-size-ad2d88da8721560e
 releasenotes/notes/bug-1874541-netapp-fix-update-cluster-status-8331655904fb4fed.yaml
 releasenotes/notes/bug-1875570-nfs-image-volume-cache-c45e840a6ec2a702.yaml
 releasenotes/notes/bug-1879578-volume_type-regression-de82f4152c7b2f77.yaml
+releasenotes/notes/bug-1884030-ds8k_support_volume_name_template-91e1b70ece172ef8.yaml
+releasenotes/notes/bug-1887859-backup-manager-fb8dbf289eedc4b0.yaml
 releasenotes/notes/bug-1887885-nec-fix-snapshot-detach-error-fff3012e0e9a2d2b.yaml
 releasenotes/notes/bug-1887908-nec-live-migration-failure-withfc-3128fff7c48e739f.yaml
+releasenotes/notes/bug-1887962-643379faf20f01cf.yaml
+releasenotes/notes/bug-1888951-backup-from-nfs-snapshot-2e06235eb318b852.yaml
 releasenotes/notes/bug-1890241-strowize-delete_group_snapshot_fix-2e491e74e1f73ba7.yaml
 releasenotes/notes/bug-1890586-storwize-check_flashcopy_rate-fix-571e6e182b604725.yaml
 releasenotes/notes/bug-1890588-storwize-select_io_group-fix-7200f2e00140ab34.yaml
+releasenotes/notes/bug-1890589-create_flashcopy_to_consistgrp_fix-9eeea4aaceb8a191.yaml
+releasenotes/notes/bug-1890591-Pool-information-is-not-saved-in-stats-22f302d941cd9fe2.yaml
+releasenotes/notes/bug-1894381-fix-cinder-manage-cluster-remove-raising-nosuchopterror.yaml
+releasenotes/notes/bug-1895510-REST-API-issue-to-get-bundle-198a3b89255759bb.yaml
 releasenotes/notes/bug-1896087-rollback-volume-status-bd04951f929bb88d.yaml
+releasenotes/notes/bug-1898918-b24a93d7d5aff238.yaml
+releasenotes/notes/bug-1901241-361b1b361bfa5152.yaml
+releasenotes/notes/bug-1904440-clone-rekey-fd57a2b5f6224e0f.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
@@ -2172,6 +2206,7 @@ releasenotes/notes/db-schema-from-ocata-e1d7dd1dc4d3a0d9.yaml
 releasenotes/notes/db-schema-from-queens-de5025a780ff1d30.yaml
 releasenotes/notes/default-apiv1-disabled-9f6bb0c67b38e670.yaml
 releasenotes/notes/del_volume_with_fc-f024b9f2d6eaca0f.yaml
+releasenotes/notes/delete-tsm-backup-driver-725e33f7c213fd50.yaml
 releasenotes/notes/delete-volume-metadata-keys-3e19694401e13d00.yaml
 releasenotes/notes/delete-volume-with-snapshots-0b104e212d5d36b1.yaml
 releasenotes/notes/delete_parameters-6f44fece22a7787d.yaml
@@ -2337,6 +2372,7 @@ releasenotes/notes/infinidat-qos-50d743591543db98.yaml
 releasenotes/notes/inspur-as13000-cinder-driver-bfa5cc17683d87a9.yaml
 releasenotes/notes/inspur-instorage-fc-cinder-driver-70c13e4a64d785d5.yaml
 releasenotes/notes/itri-disco-driver-removal-11e14fbf431ea876.yaml
+releasenotes/notes/joviandss-iscsi-driver-0becc6ee6a0b3c0a.yaml
 releasenotes/notes/json-schema-validation-0d22576bd556f4e0.yaml
 releasenotes/notes/k2-disable-discovery-bca0d65b5672ec7b.yaml
 releasenotes/notes/k2-non-unique-fqdns-b62a269a26fd53d5.yaml
@@ -2612,6 +2648,9 @@ releasenotes/notes/scaling-backup-service-7e5058802d2fb3dc.yaml
 releasenotes/notes/seagate-new-driver-d420fad549e9045f.yaml
 releasenotes/notes/service_dynamic_log_change-55147d288be903f1.yaml
 releasenotes/notes/sf-add-migration-support-691ace064d7576e9.yaml
+releasenotes/notes/sf-fix-clone-and-request-timeout-issues-56f7a7659c7ec775.yaml
+releasenotes/notes/sf-fix-duplicate-volume-request-lost-adefacda1298dc62.yaml
+releasenotes/notes/sf-fix-error-on-cluster-rebalancing-515bf41104cd181a.yaml
 releasenotes/notes/shared-backend-config-d841b806354ad5be.yaml
 releasenotes/notes/sheepdog-driver-removal-b63d12460e886c33.yaml
 releasenotes/notes/sheepdog-mark-unsupported-648b2458d4a198de.yaml
@@ -2661,6 +2700,7 @@ releasenotes/notes/support-metadata-based-snapshot-list-filtering-6e6df68a7ce981
 releasenotes/notes/support-metadata-for-backup-3d8753f67e2934fa.yaml
 releasenotes/notes/support-modern-compression-9984f77bb12e97e0.yaml
 releasenotes/notes/support-project-id-filter-for-limit-bc5d49e239baee2a.yaml
+releasenotes/notes/support-retype-operation-for-global-mirror-volumes-e7091ac130e41cbd.yaml
 releasenotes/notes/support-tenants-project-in-attachment-list-3edd8g138a28s4r8.yaml
 releasenotes/notes/support-to-query-cinder-resources-filter-by-update-at-and-created-at-32ae9aaea131d598.yaml
 releasenotes/notes/support-volume-glance-metadata-query-866b9e3beda2cd55.yaml
@@ -2828,6 +2868,7 @@ releasenotes/source/stein.rst
 releasenotes/source/train.rst
 releasenotes/source/unreleased.rst
 releasenotes/source/ussuri.rst
+releasenotes/source/victoria.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
 releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po
@@ -2836,6 +2877,7 @@ tools/check_exec.py
 tools/coding-checks.sh
 tools/fast8.sh
 tools/generate_driver_list.py
+tools/mypywrap.sh
 tools/test-setup.sh
 tools/config/__init__.py
 tools/config/check_uptodate.sh

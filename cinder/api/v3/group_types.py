@@ -13,10 +13,9 @@
 #    under the License.
 
 """The group type & group type specs controller."""
+from http import HTTPStatus
 
 from oslo_utils import strutils
-import six
-from six.moves import http_client
 import webob
 from webob import exc
 
@@ -53,7 +52,7 @@ class GroupTypesController(wsgi.Controller):
         rpc.get_notifier('groupType').info(context, method, payload)
 
     @wsgi.Controller.api_version(mv.GROUP_TYPE)
-    @wsgi.response(http_client.ACCEPTED)
+    @wsgi.response(HTTPStatus.ACCEPTED)
     @validation.schema(group_type.create)
     def create(self, req, body):
         """Creates a new group type."""
@@ -81,7 +80,7 @@ class GroupTypesController(wsgi.Controller):
         except exception.GroupTypeExists as err:
             self._notify_group_type_error(
                 context, 'group_type.create', err, group_type=grp_type)
-            raise webob.exc.HTTPConflict(explanation=six.text_type(err))
+            raise webob.exc.HTTPConflict(explanation=str(err))
         except exception.GroupTypeNotFoundByName as err:
             self._notify_group_type_error(
                 context, 'group_type.create', err, name=name)
@@ -126,16 +125,16 @@ class GroupTypesController(wsgi.Controller):
         except exception.GroupTypeNotFound as err:
             self._notify_group_type_error(
                 context, 'group_type.update', err, id=id)
-            raise webob.exc.HTTPNotFound(explanation=six.text_type(err))
+            raise webob.exc.HTTPNotFound(explanation=str(err))
         except exception.GroupTypeExists as err:
             self._notify_group_type_error(
                 context, 'group_type.update', err, group_type=grp_type)
-            raise webob.exc.HTTPConflict(explanation=six.text_type(err))
+            raise webob.exc.HTTPConflict(explanation=str(err))
         except exception.GroupTypeUpdateFailed as err:
             self._notify_group_type_error(
                 context, 'group_type.update', err, group_type=grp_type)
             raise webob.exc.HTTPInternalServerError(
-                explanation=six.text_type(err))
+                explanation=str(err))
 
         return self._view_builder.show(req, grp_type)
 
@@ -160,7 +159,7 @@ class GroupTypesController(wsgi.Controller):
                 context, 'group_type.delete', err, id=id)
             raise webob.exc.HTTPNotFound(explanation=err.msg)
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     @wsgi.Controller.api_version(mv.GROUP_TYPE)
     def index(self, req):

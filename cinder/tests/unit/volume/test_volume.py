@@ -17,9 +17,11 @@
 
 import datetime
 import enum
+import io
 import time
 from unittest import mock
 
+import castellan
 from castellan.common import exception as castellan_exception
 from castellan import key_manager
 import ddt
@@ -28,7 +30,6 @@ import os_brick.initiator.connectors.iscsi
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_utils import imageutils
-import six
 from taskflow.engines.action_engine import engine
 
 from cinder.api import common
@@ -86,6 +87,16 @@ def create_snapshot(volume_id, size=1, metadata=None, ctxt=None,
 
     snap.create()
     return snap
+
+
+class KeyObject(object):
+    def get_encoded(arg):
+        return "asdf".encode('utf-8')
+
+
+class KeyObject2(object):
+    def get_encoded(arg):
+        return "qwert".encode('utf-8')
 
 
 @ddt.ddt
@@ -1766,6 +1777,40 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         mock_at.assert_called()
         mock_det.assert_called()
 
+    @mock.patch('cinder.db.sqlalchemy.api.volume_encryption_metadata_get')
+    def test_setup_encryption_keys(self, mock_enc_metadata_get):
+        key_mgr = fake_keymgr.fake_api()
+        self.mock_object(castellan.key_manager, 'API', return_value=key_mgr)
+        key_id = key_mgr.store(self.context, KeyObject())
+        key2_id = key_mgr.store(self.context, KeyObject2())
+
+        params = {'status': 'creating',
+                  'size': 1,
+                  'host': CONF.host,
+                  'encryption_key_id': key_id}
+        vol = tests_utils.create_volume(self.context, **params)
+
+        self.volume.create_volume(self.context, vol)
+        db.volume_update(self.context,
+                         vol['id'],
+                         {'encryption_key_id': key_id})
+
+        mock_enc_metadata_get.return_value = {'cipher': 'aes-xts-plain64',
+                                              'key_size': 256,
+                                              'provider': 'luks'}
+        ctxt = context.get_admin_context()
+
+        enc_info = {'encryption_key_id': key_id}
+        with mock.patch('cinder.volume.volume_utils.create_encryption_key',
+                        return_value=key2_id):
+            r = cinder.volume.flows.manager.create_volume.\
+                CreateVolumeFromSpecTask._setup_encryption_keys(ctxt,
+                                                                vol,
+                                                                enc_info)
+        (source_pass, new_pass, new_key_id) = r
+        self.assertNotEqual(source_pass, new_pass)
+        self.assertEqual(new_key_id, key2_id)
+
     @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
     def test_create_volume_from_snapshot_with_encryption(self):
         """Test volume can be created from a snapshot of an encrypted volume"""
@@ -2011,8 +2056,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ex = self.assertRaises(exception.InvalidVolume,
                                self.volume_api._attachment_reserve,
                                self.context, volume, fake.UUID2)
-        self.assertIn("status must be available or downloading",
-                      six.text_type(ex))
+        self.assertIn("status must be available or downloading", str(ex))
 
     def test_attachment_reserve_with_instance_uuid_error_volume(self):
         # Tests that trying to create an attachment (with an instance_uuid
@@ -2029,8 +2073,7 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         ex = self.assertRaises(exception.InvalidVolume,
                                self.volume_api._attachment_reserve,
                                self.context, volume, fake.UUID1)
-        self.assertIn("status must be available or downloading",
-                      six.text_type(ex))
+        self.assertIn("status must be available or downloading", str(ex))
 
     def test_unreserve_volume_success_in_use(self):
         volume = tests_utils.create_volume(self.context, status='attaching')
@@ -3354,7 +3397,7 @@ class VolumeTestCaseLocks(base.BaseVolumeTestCase):
         # source volume was deleted while the create was locked. Note that the
         # volume is still in the db since it was created by the test prior to
         # calling manager.create_volume.
-        with mock.patch('sys.stderr', new=six.StringIO()):
+        with mock.patch('sys.stderr', new=io.StringIO()):
             self.assertRaises(exception.VolumeNotFound, gthreads[0].wait)
 
     def test_create_volume_from_snapshot_delete_lock_taken(self):
@@ -3404,7 +3447,7 @@ class VolumeTestCaseLocks(base.BaseVolumeTestCase):
         # snapshot was deleted while the create was locked. Note that the
         # volume is still in the db since it was created by the test prior to
         #  calling manager.create_volume.
-        with mock.patch('sys.stderr', new=six.StringIO()):
+        with mock.patch('sys.stderr', new=io.StringIO()):
             self.assertRaises(exception.SnapshotNotFound, gthreads[0].wait)
         # locked
         self.volume.delete_volume(self.context, src_vol)

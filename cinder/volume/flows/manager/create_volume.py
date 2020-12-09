@@ -21,7 +21,6 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import fileutils
 from oslo_utils import timeutils
-import six
 import taskflow.engines
 from taskflow.patterns import linear_flow
 from taskflow.types import failure as ft
@@ -497,7 +496,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         new_key_id = volume_utils.create_encryption_key(context,
                                                         keymgr,
                                                         volume.volume_type_id)
-        new_key = keymgr.get(context, encryption['encryption_key_id'])
+        new_key = keymgr.get(context, new_key_id)
         new_pass = binascii.hexlify(new_key.get_encoded()).decode('utf-8')
 
         return (source_pass, new_pass, new_key_id)
@@ -531,7 +530,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
             LOG.debug("attempting attach for rekey, attach_info: %s",
                       attach_info)
 
-            if (isinstance(attach_info['device']['path'], six.string_types)):
+            if (isinstance(attach_info['device']['path'], str)):
                 image_info = image_utils.qemu_img_info(
                     attach_info['device']['path'])
             else:

@@ -15,7 +15,8 @@
 
 """The volume types extra specs extension"""
 
-from six.moves import http_client
+from http import HTTPStatus
+
 import webob
 
 from cinder.api import extensions
@@ -152,7 +153,7 @@ class VolumeTypeExtraSpecsController(wsgi.Controller):
             raise exception.VolumeTypeExtraSpecsNotFound(
                 volume_type_id=type_id, extra_specs_key=id)
 
-    @wsgi.response(http_client.ACCEPTED)
+    @wsgi.response(HTTPStatus.ACCEPTED)
     def delete(self, req, type_id, id):
         """Deletes an existing extra spec."""
         context = req.environ['cinder.context']

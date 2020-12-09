@@ -11,9 +11,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from http import HTTPStatus
 from unittest import mock
-
-from six.moves import http_client
 
 from cinder.api import microversions as mv
 from cinder.tests.unit import fake_constants
@@ -41,7 +40,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-extend": {"new_size": "2"}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_extend_volume(self):
         user_context = self.user_context
@@ -54,7 +53,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-extend": {"new_size": "2"}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_extend_volume_for_others(self, mock_volume):
@@ -70,7 +69,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-extend": {"new_size": "2"}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_extend_attached_volume(self):
         admin_context = self.admin_context
@@ -84,7 +83,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         response = self._get_request_response(
             admin_context, path, 'POST', body=body,
             microversion=mv.VOLUME_EXTEND_INUSE)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_extend_attached_volume(self):
         user_context = self.user_context
@@ -98,7 +97,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         response = self._get_request_response(
             user_context, path, 'POST', body=body,
             microversion=mv.VOLUME_EXTEND_INUSE)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_extend_attached_volume_for_others(self, mock_volume):
@@ -115,7 +114,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         response = self._get_request_response(
             non_owner_context, path, 'POST', body=body,
             microversion=mv.VOLUME_EXTEND_INUSE)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_retype_volume(self):
         admin_context = self.admin_context
@@ -130,7 +129,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "migration_policy": "never"}}
         response = self._get_request_response(
             admin_context, path, 'POST', body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_retype_volume(self):
         user_context = self.user_context
@@ -145,7 +144,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "migration_policy": "never"}}
         response = self._get_request_response(
             user_context, path, 'POST', body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_retype_volume_for_others(self, mock_volume):
@@ -163,7 +162,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "migration_policy": "never"}}
         response = self._get_request_response(
             non_owner_context, path, 'POST', body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_update_readonly(self):
         admin_context = self.admin_context
@@ -178,7 +177,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-update_readonly_flag": {"readonly": "True"}}
         response = self._get_request_response(
             admin_context, path, 'POST', body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_update_readonly(self):
         user_context = self.user_context
@@ -193,7 +192,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-update_readonly_flag": {"readonly": "True"}}
         response = self._get_request_response(
             user_context, path, 'POST', body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_update_readonly_for_others(self, mock_volume):
@@ -210,7 +209,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-update_readonly_flag": {"readonly": "True"}}
         response = self._get_request_response(
             non_owner_context, path, 'POST', body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get_volume')
     def test_admin_can_force_delete_volumes(self, mock_volume):
@@ -226,7 +225,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
 
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get_volume')
     def test_nonadmin_cannot_force_delete_volumes(self, mock_volume):
@@ -242,7 +241,7 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
 
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'attach_volume')
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'detach_volume')
@@ -258,12 +257,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "mountpoint": "/dev/vdc"}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-detach": {}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'attach_volume')
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'detach_volume')
@@ -279,12 +278,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "mountpoint": "/dev/vdc"}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-detach": {}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'attach_volume')
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI, 'detach_volume')
@@ -305,12 +304,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "mountpoint": "/dev/vdc"}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
         body = {"os-detach": {}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_reserve_unreserve_volume(self):
         admin_context = self.admin_context
@@ -323,12 +322,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-reserve": {}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-unreserve": {}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_reserve_unreserve_volume(self):
         user_context = self.user_context
@@ -341,12 +340,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-reserve": {}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-unreserve": {}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_reserve_unreserve_volume_for_others(self,
@@ -364,12 +363,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
                               "mountpoint": "/dev/vdc"}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
         body = {"os-detach": {}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI,
                        'initialize_connection')
@@ -386,12 +385,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-initialize_connection": {'connector': {}}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
         body = {"os-terminate_connection": {'connector': {}}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI,
                        'initialize_connection')
@@ -408,12 +407,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-initialize_connection": {'connector': {}}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
         body = {"os-terminate_connection": {'connector': {}}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.volume_rpcapi.VolumeAPI,
                        'initialize_connection')
@@ -436,12 +435,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-initialize_connection": {'connector': {}}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
         body = {"os-terminate_connection": {'connector': {}}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_admin_can_begin_roll_detaching(self):
         admin_context = self.admin_context
@@ -455,12 +454,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-begin_detaching": {}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-roll_detaching": {}}
         response = self._get_request_response(admin_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     def test_owner_can_begin_roll_detaching(self):
         user_context = self.user_context
@@ -474,12 +473,12 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-begin_detaching": {}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
         body = {"os-roll_detaching": {}}
         response = self._get_request_response(user_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.ACCEPTED, response.status_int)
+        self.assertEqual(HTTPStatus.ACCEPTED, response.status_int)
 
     @mock.patch.object(volume_api.API, 'get')
     def test_owner_cannot_begin_roll_detaching_for_others(self, mock_volume):
@@ -496,9 +495,9 @@ class VolumeProtectionTests(test_base.CinderPolicyTests):
         body = {"os-begin_detaching": {}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
         body = {"os-roll_detaching": {}}
         response = self._get_request_response(non_owner_context, path, 'POST',
                                               body=body)
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)

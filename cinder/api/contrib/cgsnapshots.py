@@ -14,11 +14,10 @@
 #    under the License.
 
 """The cgsnapshots api."""
+from http import HTTPStatus
 
 from oslo_log import log as logging
 from oslo_log import versionutils
-import six
-from six.moves import http_client
 import webob
 from webob import exc
 
@@ -66,7 +65,7 @@ class CgsnapshotsController(wsgi.Controller):
             cgsnapshot = self._get_cgsnapshot(context, id)
             self.group_snapshot_api.delete_group_snapshot(context, cgsnapshot)
         except exception.InvalidGroupSnapshot as e:
-            raise exc.HTTPBadRequest(explanation=six.text_type(e))
+            raise exc.HTTPBadRequest(explanation=str(e))
         except (exception.GroupSnapshotNotFound,
                 exception.PolicyNotAuthorized):
             # Exceptions will be handled at the wsgi level
@@ -75,7 +74,7 @@ class CgsnapshotsController(wsgi.Controller):
             msg = _('Failed to delete the cgsnapshot')
             raise exc.HTTPBadRequest(explanation=msg)
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     def index(self, req):
         """Returns a summary list of cgsnapshots."""
@@ -116,7 +115,7 @@ class CgsnapshotsController(wsgi.Controller):
 
         return grp_snapshots
 
-    @wsgi.response(http_client.ACCEPTED)
+    @wsgi.response(HTTPStatus.ACCEPTED)
     def create(self, req, body):
         """Create a new cgsnapshot."""
         versionutils.report_deprecated_feature(LOG, DEPRECATE_CGSNAP_API_MSG)

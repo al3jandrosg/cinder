@@ -535,7 +535,7 @@ FAKE_GET_SYSTEM_RESPONSE_1 = {
                 "name": "",
                 "state": "online",
                 "release": "7.5.1",
-                "bundle": "87.51.9.0",
+                "bundle": "87.51.63.0",
                 "MTM": "2421-961",
                 "sn": "1300741",
                 "wwnn": TEST_SOURCE_WWNN,
@@ -563,7 +563,7 @@ FAKE_GET_SYSTEM_RESPONSE_2 = {
                 "name": "",
                 "state": "online",
                 "release": "7.5.1",
-                "bundle": "87.51.9.0",
+                "bundle": "87.51.63.0",
                 "MTM": "2421-962",
                 "sn": "1300742",
                 "wwnn": TEST_TARGET_WWNN,
@@ -989,7 +989,7 @@ class FakeDS8KCommonHelper(helper.DS8KCommonHelper):
                                          self._get_value('san_login'),
                                          self._get_value('san_password'),
                                          None, True)
-        self.backend['rest_version'] = self._get_version()['bundle_version']
+        self.backend['rest_version'] = self._get_version()['bundle']
 
 
 class FakeDS8KECKDHelper(FakeDS8KCommonHelper, helper.DS8KECKDHelper):
@@ -1167,7 +1167,7 @@ class DS8KProxyTest(test.TestCase):
     def test_verify_rest_version_for_5_7_fb(self, mock_get_version):
         """test the min version of REST for fb volume in 7.x."""
         mock_get_version.return_value = {
-            "bundle_version": "5.7.50.0"
+            "bundle": "87.50.38.0"
         }
         self.assertRaises(exception.VolumeDriverException,
                           FakeDS8KCommonHelper, self.configuration, None)
@@ -1176,7 +1176,7 @@ class DS8KProxyTest(test.TestCase):
     def test_verify_rest_version_for_5_8_fb(self, mock_get_version):
         """test the min version of REST for fb volume in 8.1."""
         mock_get_version.return_value = {
-            "bundle_version": "5.8.10.0"
+            "bundle": "88.10.112.0"
         }
         FakeDS8KCommonHelper(self.configuration, None)
 
@@ -1189,7 +1189,7 @@ class DS8KProxyTest(test.TestCase):
         self.configuration.ds8k_ssid_prefix = 'FF'
         self.configuration.san_clustername = TEST_ECKD_POOL_ID
         mock_get_version.return_value = {
-            "bundle_version": "5.7.50.0"
+            "bundle": "87.50.22.0"
         }
         self.assertRaises(exception.VolumeDriverException,
                           FakeDS8KECKDHelper, self.configuration, None)
@@ -1203,7 +1203,7 @@ class DS8KProxyTest(test.TestCase):
         self.configuration.ds8k_ssid_prefix = 'FF'
         self.configuration.san_clustername = TEST_ECKD_POOL_ID
         mock_get_version.return_value = {
-            "bundle_version": "5.8.10.0"
+            "bundle": "88.10.112.0"
         }
         self.assertRaises(exception.VolumeDriverException,
                           FakeDS8KECKDHelper, self.configuration, None)
@@ -1217,7 +1217,7 @@ class DS8KProxyTest(test.TestCase):
         self.configuration.ds8k_ssid_prefix = 'FF'
         self.configuration.san_clustername = TEST_ECKD_POOL_ID
         mock_get_version.return_value = {
-            "bundle_version": "5.8.20.0"
+            "bundle": "88.20.40.0"
         }
         self.assertRaises(exception.VolumeDriverException,
                           FakeDS8KECKDHelper, self.configuration, None)
@@ -3214,8 +3214,8 @@ class DS8KProxyTest(test.TestCase):
                           self.driver.create_group,
                           self.ctxt, group)
 
-    @ddt.data({'bundle_version': "5.7.51.1067"},
-              {'bundle_version': "5.8.20.1058"})
+    @ddt.data({'bundle': "87.51.60.0"},
+              {'bundle': "88.20.47.0"})
     @mock.patch.object(helper.DS8KCommonHelper, '_get_version')
     def test_create_replication_consisgroup_should_verify_rest_version(
             self, rest_version, mock_get_version):
@@ -4464,3 +4464,52 @@ class DS8KProxyTest(test.TestCase):
                                            pprc_pairs_3]
         self.driver.failover_replication(self.ctxt, group, [volume], 'default')
         self.assertTrue(mock_get_pprc_pairs.called)
+
+    @mock.patch('cinder.volume.volume_utils.CONF')
+    def test_create_volume_with_template(self, mock_conf):
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+        mock_conf.volume_name_template = 'volume-%s'
+        vol_id = 'd403b4d9-473a-42d0-94c5-be45a1268928'
+        vol_name = mock_conf.volume_name_template % vol_id
+        volume = self._create_volume(id=vol_id)
+        lun = ds8kproxy.Lun(volume)
+        exp_vol_name = helper.filter_alnum(vol_name)[:16]
+        self.assertEqual(lun.ds_name, exp_vol_name)
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_create_snapshot_with_tmpt(self, mock_get_flashcopy, mock_sleep):
+        """test a successful creation of snapshot."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': '0002'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        snapshot = self._create_snapshot(volume_id=volume.id)
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+        snapshot_update = self.driver.create_snapshot(snapshot)
+        location = ast.literal_eval(snapshot_update['provider_location'])
+        self.assertEqual(TEST_VOLUME_ID, location['vol_hex_id'])
+        lun = ds8kproxy.Lun(snapshot, is_snapshot=True)
+        exp_snap_name = helper.filter_alnum(snapshot.name)[:16]
+        self.assertIn(lun.ds_name, exp_snap_name)
+
+    @mock.patch.object(eventlet, 'sleep')
+    def test_create_fb_replicated_volume_with_tmpt(self, mock_sleep):
+        """create FB volume when enable replication."""
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        extra_spec = {'replication_enabled': '<is> True'}
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', extra_spec)
+        volume = self._create_volume(volume_type_id=vol_type.id)
+        lun = ds8kproxy.Lun(volume)
+        exp_repl_name = helper.filter_alnum(volume.name)[:16]
+        self.assertEqual(lun.replica_ds_name, exp_repl_name)

@@ -15,11 +15,10 @@
 
 """The volume metadata V3 api."""
 
-import hashlib
+from http import HTTPStatus
 
 from oslo_serialization import jsonutils
-import six
-from six.moves import http_client
+from oslo_utils.secretutils import md5
 import webob
 
 from cinder.api import microversions as mv
@@ -37,9 +36,8 @@ class Controller(volume_meta_v2.Controller):
         context = req.environ['cinder.context']
         metadata = self._get_metadata(context, volume_id)
         data = jsonutils.dumps({"metadata": metadata})
-        if six.PY3:
-            data = data.encode('utf-8')
-        checksum = hashlib.md5(data).hexdigest()
+        data = data.encode('utf-8')
+        checksum = md5(data, usedforsecurity=False).hexdigest()
         return checksum in req.if_match.etags
 
     @wsgi.extends
@@ -48,10 +46,9 @@ class Controller(volume_meta_v2.Controller):
         metadata = super(Controller, self).index(req, volume_id)
         if req_version.matches(mv.ETAGS):
             data = jsonutils.dumps(metadata)
-            if six.PY3:
-                data = data.encode('utf-8')
+            data = data.encode('utf-8')
             resp = webob.Response()
-            resp.headers['Etag'] = hashlib.md5(data).hexdigest()
+            resp.headers['Etag'] = md5(data, usedforsecurity=False).hexdigest()
             resp.body = data
             return resp
         return metadata
@@ -63,7 +60,7 @@ class Controller(volume_meta_v2.Controller):
         if req_version.matches(mv.ETAGS):
             if not self._validate_etag(req, volume_id):
                 return webob.Response(
-                    status_int=http_client.PRECONDITION_FAILED)
+                    status_int=HTTPStatus.PRECONDITION_FAILED)
         return super(Controller, self).update(req, volume_id,
                                               id, body=body)
 
@@ -74,7 +71,7 @@ class Controller(volume_meta_v2.Controller):
         if req_version.matches(mv.ETAGS):
             if not self._validate_etag(req, volume_id):
                 return webob.Response(
-                    status_int=http_client.PRECONDITION_FAILED)
+                    status_int=HTTPStatus.PRECONDITION_FAILED)
         return super(Controller, self).update_all(req, volume_id,
                                                   body=body)
 

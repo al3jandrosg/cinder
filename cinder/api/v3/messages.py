@@ -12,8 +12,8 @@
 
 """The messages API."""
 
+from http import HTTPStatus
 
-from six.moves import http_client
 import webob
 
 from cinder.api import common
@@ -72,7 +72,7 @@ class MessagesController(wsgi.Controller):
         context.authorize(policy.DELETE_POLICY, target_obj=message)
         self.message_api.delete(context, message)
 
-        return webob.Response(status_int=http_client.NO_CONTENT)
+        return webob.Response(status_int=HTTPStatus.NO_CONTENT)
 
     @wsgi.Controller.api_version(mv.MESSAGES)
     def index(self, req):

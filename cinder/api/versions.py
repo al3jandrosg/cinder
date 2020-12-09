@@ -16,9 +16,9 @@
 
 
 import copy
+from http import HTTPStatus
 
 from oslo_config import cfg
-from six.moves import http_client
 
 from cinder.api import extensions
 from cinder.api import openstack
@@ -113,7 +113,7 @@ class VersionsController(wsgi.Controller):
     # /v2 or /v3 in the URL will lead to this unversioned
     # method, which should always return info about all
     # available versions.
-    @wsgi.response(http_client.MULTIPLE_CHOICES)
+    @wsgi.response(HTTPStatus.MULTIPLE_CHOICES)
     def all(self, req):
         """Return all known and enabled versions."""
         builder = views_versions.get_view_builder(req)

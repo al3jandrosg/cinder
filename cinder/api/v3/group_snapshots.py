@@ -14,10 +14,9 @@
 #    under the License.
 
 """The group_snapshots API."""
+from http import HTTPStatus
 
 from oslo_log import log as logging
-import six
-from six.moves import http_client
 import webob
 from webob import exc
 
@@ -83,7 +82,7 @@ class GroupSnapshotsController(wsgi.Controller):
             self.group_snapshot_api.delete_group_snapshot(context,
                                                           group_snapshot)
         except exception.InvalidGroupSnapshot as e:
-            raise exc.HTTPBadRequest(explanation=six.text_type(e))
+            raise exc.HTTPBadRequest(explanation=str(e))
         except (exception.GroupSnapshotNotFound,
                 exception.PolicyNotAuthorized):
             # Not found exception will be handled at the wsgi level
@@ -93,7 +92,7 @@ class GroupSnapshotsController(wsgi.Controller):
             LOG.exception(msg)
             raise exc.HTTPBadRequest(explanation=msg)
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     @wsgi.Controller.api_version(mv.GROUP_SNAPSHOTS)
     def index(self, req):
@@ -148,7 +147,7 @@ class GroupSnapshotsController(wsgi.Controller):
         return group_snapshots
 
     @wsgi.Controller.api_version(mv.GROUP_SNAPSHOTS)
-    @wsgi.response(http_client.ACCEPTED)
+    @wsgi.response(HTTPStatus.ACCEPTED)
     @validation.schema(snapshot.create)
     def create(self, req, body):
         """Create a new group_snapshot."""
@@ -219,7 +218,7 @@ class GroupSnapshotsController(wsgi.Controller):
                            {'error_message': error.msg,
                             'id': id})
             raise exc.HTTPBadRequest(explanation=error.msg)
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
 
 def create_resource():

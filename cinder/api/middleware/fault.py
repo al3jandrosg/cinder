@@ -13,10 +13,9 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+from http import HTTPStatus
 
 from oslo_log import log as logging
-import six
-from six.moves import http_client
 import webob.dec
 import webob.exc
 
@@ -55,9 +54,9 @@ class FaultWrapper(base_wsgi.Middleware):
                            'error': inner})
         safe = getattr(inner, 'safe', False)
         headers = getattr(inner, 'headers', None)
-        status = getattr(inner, 'code', http_client.INTERNAL_SERVER_ERROR)
+        status = getattr(inner, 'code', HTTPStatus.INTERNAL_SERVER_ERROR)
         if status is None:
-            status = http_client.INTERNAL_SERVER_ERROR
+            status = HTTPStatus.INTERNAL_SERVER_ERROR
 
         msg_dict = dict(url=req.url, status=status)
         LOG.info("%(url)s returned with HTTP %(status)s", msg_dict)
@@ -73,7 +72,7 @@ class FaultWrapper(base_wsgi.Middleware):
         # including those that are safe to expose, see bug 1021373
         if safe:
             msg = (inner.msg if isinstance(inner, exception.CinderException)
-                   else six.text_type(inner))
+                   else str(inner))
             params = {'exception': inner.__class__.__name__,
                       'explanation': msg}
             outer.explanation = _('%(exception)s: %(explanation)s') % params

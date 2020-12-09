@@ -11,6 +11,7 @@
 #    under the License.
 
 import datetime
+import io
 import re
 import sys
 import time
@@ -22,8 +23,6 @@ import iso8601
 from oslo_config import cfg
 from oslo_db import exception as oslo_exception
 from oslo_utils import timeutils
-import six
-from six.moves import StringIO
 
 # Prevent load failures on macOS
 if sys.platform == 'darwin':
@@ -382,7 +381,7 @@ class TestCinderManageCmd(test.TestCase):
     @mock.patch('oslo_db.sqlalchemy.migration.db_version')
     def test_db_commands_version(self, db_version):
         db_cmds = cinder_manage.DbCommands()
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             db_cmds.version()
             self.assertEqual(1, db_version.call_count)
 
@@ -423,7 +422,7 @@ class TestCinderManageCmd(test.TestCase):
 
     @mock.patch('cinder.context.get_admin_context')
     def test_online_migrations(self, mock_get_context):
-        self.useFixture(fixtures.MonkeyPatch('sys.stdout', StringIO()))
+        self.useFixture(fixtures.MonkeyPatch('sys.stdout', io.StringIO()))
         ctxt = mock_get_context.return_value
         db_cmds = self._fake_db_command()
         command = db_cmds()
@@ -455,7 +454,7 @@ class TestCinderManageCmd(test.TestCase):
 
     @mock.patch('cinder.context.get_admin_context')
     def test_online_migrations_no_max_count(self, mock_get_context):
-        self.useFixture(fixtures.MonkeyPatch('sys.stdout', StringIO()))
+        self.useFixture(fixtures.MonkeyPatch('sys.stdout', io.StringIO()))
         fake_remaining = [120]
 
         def fake_migration(context, count):
@@ -492,7 +491,7 @@ class TestCinderManageCmd(test.TestCase):
 
     @mock.patch('cinder.context.get_admin_context')
     def test_online_migrations_error(self, mock_get_context):
-        self.useFixture(fixtures.MonkeyPatch('sys.stdout', StringIO()))
+        self.useFixture(fixtures.MonkeyPatch('sys.stdout', io.StringIO()))
         good_remaining = [50]
 
         def good_migration(context, count):
@@ -562,14 +561,14 @@ class TestCinderManageCmd(test.TestCase):
     @mock.patch('cinder.version.version_string')
     def test_versions_commands_list(self, version_string):
         version_cmds = cinder_manage.VersionCommands()
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             version_cmds.list()
             version_string.assert_called_once_with()
 
     @mock.patch('cinder.version.version_string')
     def test_versions_commands_call(self, version_string):
         version_cmds = cinder_manage.VersionCommands()
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             version_cmds.__call__()
             version_string.assert_called_once_with()
 
@@ -608,7 +607,7 @@ class TestCinderManageCmd(test.TestCase):
              'availability_zone': 'fake-az',
              'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}]
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             expected_out = ("%(host)-25s\t%(zone)-15s\n" %
                             {'host': 'host', 'zone': 'zone'})
             expected_out += ("%(host)-25s\t%(availability_zone)-15s\n" %
@@ -634,7 +633,7 @@ class TestCinderManageCmd(test.TestCase):
              'availability_zone': 'fake-az2',
              'uuid': '4200b32b-0bf9-436c-86b2-0675f6ac218e'}]
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             expected_out = ("%(host)-25s\t%(zone)-15s\n" %
                             {'host': 'host', 'zone': 'zone'})
             expected_out += ("%(host)-25s\t%(availability_zone)-15s\n" %
@@ -695,7 +694,7 @@ class TestCinderManageCmd(test.TestCase):
         volume_id = volume['id']
         volume_get.return_value = volume
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             expected_out = ('Volume not yet assigned to host.\n'
                             'Deleting volume from database and skipping'
                             ' rpc.\n')
@@ -723,7 +722,7 @@ class TestCinderManageCmd(test.TestCase):
         volume_id = volume['id']
         volume_get.return_value = volume
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             expected_out = ('Volume is in-use.\n'
                             'Detach volume from instance and then try'
                             ' again.\n')
@@ -734,7 +733,7 @@ class TestCinderManageCmd(test.TestCase):
             self.assertEqual(expected_out, fake_out.getvalue())
 
     def test_config_commands_list(self):
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             expected_out = ''
             for key, value in CONF.items():
                 expected_out += '%s = %s' % (key, value) + '\n'
@@ -745,7 +744,7 @@ class TestCinderManageCmd(test.TestCase):
             self.assertEqual(expected_out, fake_out.getvalue())
 
     def test_config_commands_list_param(self):
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             CONF.set_override('host', 'fake')
             expected_out = 'host = fake\n'
 
@@ -772,7 +771,7 @@ class TestCinderManageCmd(test.TestCase):
                   'backup_metadata': {},
                   }
         backup_get_all.return_value = [backup]
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             hdr = ('%-32s\t%-32s\t%-32s\t%-24s\t%-24s\t%-12s\t%-12s\t%-12s'
                    '\t%-12s')
             header = hdr % ('ID',
@@ -869,7 +868,7 @@ class TestCinderManageCmd(test.TestCase):
         get_admin_context.return_value = ctxt
         service_get_all.return_value = [service]
         service_is_up.return_value = True
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             format = "%-16s %-36s %-16s %-10s %-5s %-20s %-12s %-15s %-36s"
             print_format = format % ('Binary',
                                      'Host',
@@ -951,6 +950,19 @@ class TestCinderManageCmd(test.TestCase):
             self.assertDictEqual(expected,
                                  cinder_manage.fetch_func_args(my_func))
 
+    def test_args_decorator(self):
+        @cinder_manage.args('host-name')
+        @cinder_manage.args('cluster-name', metavar='cluster')
+        @cinder_manage.args('--debug')
+        def my_func():
+            pass
+
+        expected = [
+            (['host_name'], {'metavar': 'host-name'}),
+            (['cluster_name'], {'metavar': 'cluster'}),
+            (['--debug'], {})]
+        self.assertEqual(expected, my_func.args)
+
     @mock.patch('cinder.context.get_admin_context')
     @mock.patch('cinder.db.cluster_get_all')
     def tests_cluster_commands_list(self, get_all_mock, get_admin_mock,
@@ -964,7 +976,7 @@ class TestCinderManageCmd(test.TestCase):
         ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID)
         get_admin_mock.return_value = ctxt
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             format_ = "%-36s %-16s %-10s %-5s %-20s %-7s %-12s %-20s"
             print_format = format_ % ('Name',
                                       'Binary',
@@ -1108,13 +1120,37 @@ class TestCinderManageCmd(test.TestCase):
         exit = cluster_commands.rename(False, 'cluster', 'new_cluster')
         self.assertEqual(2, exit)
 
+    @mock.patch('cinder.objects.Cluster.get_by_id')
+    @mock.patch('cinder.context.get_admin_context')
+    def test_main_remove_cluster(self, get_admin_mock, get_cluster_mock):
+        script_name = 'cinder-manage'
+        sys.argv = [script_name, 'cluster', 'remove', 'abinary', 'acluster']
+
+        cinder_manage.CONF = cfg.ConfigOpts()
+        cinder_manage.main()
+
+        expected_argument = (['cluster_name'],
+                             {'type': str,
+                              'help': 'Cluster to delete.',
+                              'metavar': 'cluster-name'})
+        self.assertTrue(expected_argument in
+                        cinder_manage.CONF.category.action_fn.args)
+        self.assertTrue(hasattr(cinder_manage.CONF.category, 'cluster_name'))
+        get_admin_mock.assert_called_with()
+        get_cluster_mock.assert_called_with(get_admin_mock.return_value,
+                                            None, name='acluster',
+                                            binary='abinary',
+                                            get_services=False)
+        cluster = get_cluster_mock.return_value
+        cluster.destroy.assert_called()
+
     @mock.patch('oslo_config.cfg.ConfigOpts.register_cli_opt')
     def test_main_argv_lt_2(self, register_cli_opt):
         script_name = 'cinder-manage'
         sys.argv = [script_name]
         CONF(sys.argv[1:], project='cinder', version=version.version_string())
 
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             exit = self.assertRaises(SystemExit, cinder_manage.main)
             self.assertTrue(register_cli_opt.called)
             self.assertEqual(2, exit.code)
@@ -1129,7 +1165,7 @@ class TestCinderManageCmd(test.TestCase):
         config_opts_call.side_effect = cfg.ConfigFilesNotFoundError(
             mock.sentinel._namespace)
 
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             exit = self.assertRaises(SystemExit, cinder_manage.main)
 
             self.assertTrue(register_cli_opt.called)
@@ -1165,7 +1201,7 @@ class TestCinderManageCmd(test.TestCase):
         sys.argv = [script_name, '--config-dir', fake_dir]
         config_opts_call.side_effect = cfg.ConfigDirNotFoundError(fake_dir)
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             exit = self.assertRaises(SystemExit, cinder_manage.main)
             self.assertTrue(register_cli_opt.called)
             config_opts_call.assert_called_once_with(
@@ -1208,7 +1244,7 @@ class TestCinderRtstoolCmd(test.TestCase):
     def test_create_rtslib_error(self, rtsroot):
         rtsroot.side_effect = rtslib_fb.utils.RTSLibError()
 
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             self.assertRaises(rtslib_fb.utils.RTSLibError,
                               cinder_rtstool.create,
                               mock.sentinel.backing_device,
@@ -1270,11 +1306,11 @@ class TestCinderRtstoolCmd(test.TestCase):
             network_portal.assert_any_call(tpg_new, ip, 3260, mode='any')
 
     def test_create_rtslib_error_network_portal_ipv4(self):
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             self._test_create_rtslib_error_network_portal('0.0.0.0')
 
     def test_create_rtslib_error_network_portal_ipv6(self):
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             self._test_create_rtslib_error_network_portal('::0')
 
     def _test_create(self, ip):
@@ -1371,7 +1407,7 @@ class TestCinderRtstoolCmd(test.TestCase):
     def test_add_initiator_rtslib_error(self, rtsroot):
         rtsroot.side_effect = rtslib_fb.utils.RTSLibError()
 
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             self.assertRaises(rtslib_fb.utils.RTSLibError,
                               cinder_rtstool.add_initiator,
                               mock.sentinel.target_iqn,
@@ -1490,7 +1526,7 @@ class TestCinderRtstoolCmd(test.TestCase):
         target.dump.return_value = {'wwn': 'fake-wwn'}
         rtsroot.return_value = mock.MagicMock(targets=[target])
 
-        with mock.patch('sys.stdout', new=six.StringIO()) as fake_out:
+        with mock.patch('sys.stdout', new=io.StringIO()) as fake_out:
             cinder_rtstool.get_targets()
 
             self.assertEqual(str(target.wwn), fake_out.getvalue().strip())
@@ -1635,7 +1671,7 @@ class TestCinderRtstoolCmd(test.TestCase):
                           mock.sentinel.filename)
 
     def test_usage(self):
-        with mock.patch('sys.stdout', new=six.StringIO()):
+        with mock.patch('sys.stdout', new=io.StringIO()):
             exit = self.assertRaises(SystemExit, cinder_rtstool.usage)
             self.assertEqual(1, exit.code)
 

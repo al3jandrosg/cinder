@@ -1860,6 +1860,8 @@ port_speed!N/A
                      'type', 'se_copy', 'easy_tier', 'easy_tier_status',
                      'compressed_copy'])
         for copy in vol['copies'].values():
+            if 'compressed_copy' not in copy:
+                copy['compressed_copy'] = 'False'
             rows.append([vol['id'], vol['name'], copy['id'],
                         copy['status'], copy['sync'], copy['primary'],
                         copy['mdisk_grp_id'], copy['mdisk_grp_name'],
@@ -4556,7 +4558,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
             self.driver.set_fake_storage(self.sim)
             self.ctxt = context.get_admin_context()
-
         else:
             self._reset_flags()
         self.ctxt = context.get_admin_context()
@@ -4723,7 +4724,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         mock_ssh_pool.side_effect = [
             paramiko.SSHException,
             mock.MagicMock(
-                ip = self._driver.configuration.storwize_san_secondary_ip),
+                ip=self._driver.configuration.storwize_san_secondary_ip),
             mock.MagicMock()]
         mock_ssh_execute.side_effect = [processutils.ProcessExecutionError,
                                         mock.MagicMock()]
@@ -5537,7 +5538,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self._set_flag('reserved_percentage', 25)
         self._set_flag('storwize_svc_multihostmap_enabled', True)
         self._set_flag('storwize_svc_vol_rsize', rsize)
-        stats = self.driver.get_volume_stats()
+        stats = self.driver.get_volume_stats(True)
         for each_pool in stats['pools']:
             self.assertIn(each_pool['pool_name'],
                           self._def_flags['storwize_svc_volpool_name'])
@@ -6129,16 +6130,11 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
     # Test groups operation ####
     @ddt.data(({'group_replication_enabled': '<is> True'}, {}),
               ({'group_replication_enabled': '<is> True',
-               'consistent_group_snapshot_enabled': '<is> True'}, {}),
+                'consistent_group_snapshot_enabled': '<is> True'}, {}),
               ({'group_snapshot_enabled': '<is> True'}, {}),
               ({'consistent_group_snapshot_enabled': '<is> True'},
                {'replication_enabled': '<is> True',
-                'replication_type': '<in> metro'}),
-              ({'consistent_group_replication_enabled': '<is> True'},
-               {'replication_enabled': '<is> Fasle'}),
-              ({'consistent_group_replication_enabled': '<is> True'},
-               {'replication_enabled': '<is> True',
-                'replication_type': '<in> gmcv'}))
+                'replication_type': '<in> metro'}))
     @ddt.unpack
     def test_storwize_group_create_with_replication(self, grp_sepc, vol_spec):
         """Test group create."""
@@ -6148,7 +6144,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         group = testutils.create_group(self.ctxt,
                                        group_type_id=gr_type.id,
                                        volume_type_ids=[vol_type_ref['id']])
-
         if 'group_snapshot_enabled' in grp_sepc:
             self.assertRaises(NotImplementedError,
                               self.driver.create_group, self.ctxt, group)
@@ -6388,7 +6383,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                          group_type_id=rccg_type_ref.id)
         vol1 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
                                        group_id=group.id)
-        self.assertRaises(exception.VolumeBackendAPIException,
+        self.assertRaises(exception.InvalidInput,
                           self.driver.create_group_from_src,
                           self.ctxt, group, [vol1])
 
@@ -6401,8 +6396,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                        group_id=group.id)
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.create_group_from_src,
-                          self.ctxt, group, vol1, None, None,
-                          None, None)
+                          self.ctxt, group, [vol1])
 
         group = self._create_group_in_db(volume_type_id=type_ref.id,
                                          group_type_id=cg_type_ref.id)
@@ -6478,6 +6472,173 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                          model_update[0]['status'])
         for volume in model_update[1]:
             self.assertEqual('deleted', volume['status'])
+
+    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
+                new=testutils.ZeroIntervalLoopingCall)
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_attributes')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'create_vdisk')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'mkfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_pool')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'add_vdisk_qos')
+    def test_storwize_create_flashcopy_to_consistgrp(self, add_vdisk_qos,
+                                                     _get_pool,
+                                                     mkfcmap,
+                                                     create_vdisk,
+                                                     get_vdisk_attributes):
+        source = "volume-36cd5a6f-a13c-456c-8129-c3e8874fb15c"
+        target = "volume-55eb6c7e-a13c-456c-8129-c3e8874kl34f"
+        consistgrp = "cg_snap-9021b016-ce1e-4145-a1f0-0bd4007a3a78"
+        config = self.driver.configuration
+        pool = "openstack2"
+        opts = {'rsize': 2, 'iogrp': 0, 'qos': None, 'flashcopy_rate': 50}
+        self.driver._helpers.create_flashcopy_to_consistgrp(source,
+                                                            target, consistgrp,
+                                                            config, opts,
+                                                            full_copy=False,
+                                                            pool=pool)
+        _get_pool.assert_not_called()
+        add_vdisk_qos.assert_not_called()
+
+        opts = {'rsize': 2, 'iogrp': 0, 'qos': 'abc', 'flashcopy_rate': 50}
+        self.driver._helpers.create_flashcopy_to_consistgrp(source,
+                                                            target, consistgrp,
+                                                            config, opts,
+                                                            full_copy=False,
+                                                            pool=pool)
+        add_vdisk_qos.assert_called_with(target, opts['qos'])
+        pool = None
+        self.driver._helpers.create_flashcopy_to_consistgrp(source,
+                                                            target, consistgrp,
+                                                            config, opts,
+                                                            full_copy=False,
+                                                            pool=pool)
+        _get_pool.assert_called_with(get_vdisk_attributes())
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_copies')
+    def test_storwize_get_pool(self, get_vdisk_copies):
+        vol_attrs = {'mdisk_grp_name': 'openstack', 'IO_group_id': 0,
+                     'capacity': 1, 'name': 'vol1'}
+        self.driver._helpers._get_pool(vol_attrs)
+        get_vdisk_copies.assert_not_called()
+        vol_attrs['mdisk_grp_name'] = 'many'
+        self.driver._helpers._get_pool(vol_attrs)
+        get_vdisk_copies.assert_called_once()
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'create_flashcopy_to_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_params')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'start_fc_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'prepare_fc_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_fc_consistgrp')
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_pool')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_attributes')
+    def test_run_consistgrp_snapshots_forhost(
+            self,
+            get_vdisk_attributes,
+            _get_pool,
+            is_grp_a_cg_snapshot_type,
+            delete_fc_consistgrp,
+            prepare_fc_consistgrp,
+            start_fc_consistgrp,
+            get_vdisk_params,
+            create_flashcopy_to_consistgrp):
+        fake_opts = self._get_default_opts()
+        get_vdisk_params.return_value = fake_opts
+        is_grp_a_cg_snapshot_type.side_effect = [True, True, True, False, True]
+        type_ref = volume_types.create(self.ctxt, 'testtype', None)
+        group = testutils.create_group(self.ctxt,
+                                       group_type_id=fake.GROUP_TYPE_ID,
+                                       volume_type_ids=[type_ref['id']])
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+        self._create_volume(volume_type_id=type_ref['id'], group_id=group.id)
+        group_snapshot, snapshots = self._create_group_snapshot(group.id)
+        cgsnapshot_id = group_snapshot.id
+        fc_consistgrp = 'cg_snap-' + cgsnapshot_id
+        config = None
+        state = self.driver._state
+        timeout = 20
+        self.driver._helpers.run_consistgrp_snapshots(fc_consistgrp, snapshots,
+                                                      state, config, timeout)
+        start_fc_consistgrp.assert_called_with(fc_consistgrp)
+        _get_pool.assert_not_called()
+        get_vdisk_attributes.assert_not_called()
+
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'create_flashcopy_to_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_params')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'start_fc_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'prepare_fc_consistgrp')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'delete_fc_consistgrp')
+    @mock.patch('cinder.volume.volume_utils.extract_host')
+    def test_create_cg_from_source_forhost(
+            self,
+            extract_host,
+            delete_fc_consistgrp,
+            prepare_fc_consistgrp,
+            start_fc_consistgrp,
+            get_vdisk_params,
+            create_flashcopy_to_consistgrp):
+        fake_opts = self._get_default_opts()
+        get_vdisk_params.return_value = fake_opts
+        extract_host.return_value = 'openstack'
+        # Valid case for create cg from src
+        type_ref = volume_types.create(self.ctxt, 'testtype', None)
+        spec = {'consistent_group_snapshot_enabled': '<is> True'}
+        cg_type_ref = group_types.create(self.ctxt, 'cg_type', spec)
+        pool = _get_test_pool()
+        # Create cg in db
+        tgt_group = self._create_group_in_db(volume_type_ids=[type_ref.id],
+                                             group_type_id=cg_type_ref.id)
+        # Create volumes in db without hash
+        testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
+                                group_id=tgt_group.id,
+                                host='openstack@svc%s' % pool)
+        testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
+                                consistencygroup_id=tgt_group.id,
+                                host='openstack@svc%s' % pool)
+        tgt_volumes = self.db.volume_get_all_by_generic_group(
+            self.ctxt.elevated(), tgt_group.id)
+
+        # Create source CG
+        source_cg = self._create_group_in_db(volume_type_ids=[type_ref.id],
+                                             group_type_id=cg_type_ref.id)
+        # Add volumes to source CG
+        self._create_volume(volume_type_id=type_ref.id,
+                            group_id=source_cg['id'])
+        self._create_volume(volume_type_id=type_ref.id,
+                            group_id=source_cg['id'])
+        source_vols = self.db.volume_get_all_by_generic_group(
+            self.ctxt.elevated(), source_cg['id'])
+
+        fc_consistgrp = 'cg_snap-' + source_cg.id
+
+        config = None
+        state = self.driver._state
+        timeout = 20
+
+        # test create_cg_from_source from volume group
+        self.driver._helpers.create_cg_from_source(tgt_group, fc_consistgrp,
+                                                   source_vols, tgt_volumes,
+                                                   state, config, timeout)
+        start_fc_consistgrp.assert_called_with(fc_consistgrp)
+        self.assertEqual(2, extract_host.call_count)
 
     @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=testutils.ZeroIntervalLoopingCall)
@@ -7194,26 +7355,25 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         group2 = self._create_group_in_db(volume_type_ids=[type_ref.id],
                                           group_type_id=cg_type_ref.id)
 
-        # Create volume with replication group id will be failed
+        # Create volume with replication group id will be success
         vol1 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
+                                       host='openstack@svc#openstack',
                                        group_id=group1.id)
-        self.assertRaises(exception.VolumeDriverException,
-                          self.driver.create_volume,
-                          vol1)
+        self.driver.create_volume(vol1)
         # Create volume with cg_snapshot group id will success.
         vol2 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
                                        host='openstack@svc#openstack',
                                        group_id=group2.id)
         self.driver.create_volume(vol2)
 
-        # Create cloned volume with replication group id will be failed
+        # Create cloned volume with replication group id will be success
         vol3 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
+                                       host='openstack@svc#openstack',
                                        group_id=group1.id,
                                        source_volid=vol2.id)
-        self.assertRaises(exception.VolumeDriverException,
-                          self.driver.create_cloned_volume,
-                          vol3, vol2)
-        # Create cloned volume with cg_snapshot group id will success.
+
+        self.driver.create_cloned_volume(vol3, vol2)
+        # Create cloned volume with cg_snapshot group id will be success.
         vol4 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
                                        group_id=group2.id,
                                        host='openstack@svc#openstack',
@@ -7222,13 +7382,12 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
         snapshot = self._generate_snap_info(vol2.id)
         self.driver.create_snapshot(snapshot)
-        # Create volume from snapshot with replication group id will be failed
+        # Create volume from snapshot with replication group id will be success
         vol5 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
+                                       host='openstack@svc#openstack',
                                        group_id=group1.id,
                                        snapshot_id=snapshot.id)
-        self.assertRaises(exception.VolumeDriverException,
-                          self.driver.create_volume_from_snapshot,
-                          vol5, snapshot)
+        self.driver.create_volume_from_snapshot(vol5, snapshot)
         # Create volume from snapshot with cg_snapshot group id will success.
         vol6 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
                                        group_id=group2.id,
@@ -7427,8 +7586,8 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self._assert_vol_exists(vol.name, True)
 
         vol2 = testutils.create_volume(self.ctxt,
-                                       host = 'openstack@svc#hyperswap1',
-                                       volume_type_id = vol.volume_type_id)
+                                       host='openstack@svc#hyperswap1',
+                                       volume_type_id=vol.volume_type_id)
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
                                'get_vdisk_attributes') as vdisk_attr:
             vdisk_attr.return_value = None
@@ -8269,6 +8428,7 @@ port_speed!8Gb
                          list(resp.select('port_id', 'port_status')))
 
 
+@ddt.ddt
 class StorwizeHelpersTestCase(test.TestCase):
     def setUp(self):
         super(StorwizeHelpersTestCase, self).setUp()
@@ -8521,6 +8681,35 @@ class StorwizeHelpersTestCase(test.TestCase):
             self.assertRaises(exception.InvalidInput,
                               self.storwize_svc_common.check_flashcopy_rate,
                               flashcopy_rate)
+
+    @ddt.data(({'mirror_pool': 'openstack2',
+                'volume_topology': None,
+                'peer_pool': None}, True, 1),
+              ({'mirror_pool': 'openstack2',
+                'volume_topology': None,
+                'peer_pool': None}, False, 2),
+              ({'mirror_pool': None,
+                'volume_topology': 'hyperswap',
+                'peer_pool': 'openstack1'}, True, 1),
+              ({'mirror_pool': None,
+                'volume_topology': 'hyperswap',
+                'peer_pool': 'openstack1'}, False, 2))
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'is_data_reduction_pool')
+    @ddt.unpack
+    def test_is_volume_type_dr_pools_dr_pool(self, opts, is_drp, call_count,
+                                             is_data_reduction_pool):
+        is_data_reduction_pool.return_value = is_drp
+        pool = 'openstack'
+        rep_type = None
+        rep_target_pool = None
+
+        isdrpool = (self.storwize_svc_common.
+                    is_volume_type_dr_pools(pool, opts, rep_type,
+                                            rep_target_pool))
+        self.assertEqual(is_drp, isdrpool)
+        is_data_reduction_pool.assert_called()
+        self.assertEqual(call_count, is_data_reduction_pool.call_count)
 
 
 @ddt.ddt
@@ -9174,18 +9363,7 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
               ({'replication_enabled': '<is> True',
                 'replication_type': '<in> metro'},
                {'replication_enabled': '<is> True',
-                'replication_type': '<in> global'}),
-              ({'replication_enabled': '<is> True',
-                'replication_type': '<in> metro'},
-               {'mirror_pool': 'openstack1'}),
-              ({'mirror_pool': 'openstack1'},
-               {'mirror_pool': 'openstack1',
-                'replication_enabled': '<is> True',
-                'replication_type': '<in> metro'}),
-              ({'replication_enabled': '<is> False'},
-               {'mirror_pool': 'openstack1',
-                'replication_enabled': '<is> True',
-                'replication_type': '<in> metro'}))
+                'replication_type': '<in> global'}))
     @ddt.unpack
     def test_storwize_retype_invalid_replication(self, old_opts, new_opts):
         # Set replication target
@@ -9201,8 +9379,124 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
             False, opts=new_opts, vol_type_name='test_new_type')
         diff, _equal = volume_types.volume_types_diff(
             self.ctxt, new_type['id'], old_type['id'])
-        self.assertRaises(exception.VolumeDriverException, self.driver.retype,
-                          self.ctxt, volume, new_type, diff, host)
+        self.assertRaises(exception.VolumeDriverException,
+                          self.driver.retype, self.ctxt,
+                          volume, new_type, diff, host)
+
+    @ddt.data(({'replication_enabled': '<is> True',
+                'replication_type': '<in> metro'},
+               {'mirror_pool': 'openstack1'}),
+              ({'mirror_pool': 'openstack1'},
+               {'mirror_pool': 'openstack1',
+                'replication_enabled': '<is> True',
+                'replication_type': '<in> metro'}),
+              ({'replication_enabled': '<is> False'},
+               {'mirror_pool': 'openstack1',
+                'replication_enabled': '<is> True',
+                'replication_type': '<in> metro'}))
+    @ddt.unpack
+    def test_storwize_retype_valid_replication(self, old_opts, new_opts):
+        # Set replication target
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        host = {'host': 'openstack@svc#openstack'}
+        old_type = self._create_replica_volume_type(
+            False, opts=old_opts, vol_type_name='test_old_type')
+
+        volume, model_update = self._create_test_volume(old_type)
+        new_type = self._create_replica_volume_type(
+            False, opts=new_opts, vol_type_name='test_new_type')
+        diff, _equal = volume_types.volume_types_diff(
+            self.ctxt, new_type['id'], old_type['id'])
+        self.driver.retype(self.ctxt, volume,
+                           new_type, diff, host)
+
+    def test_storwize_svc_retype_global_mirror_volume_to_thin(self):
+        self.driver.do_setup(self.ctxt)
+        loc = ('StorwizeSVCDriver:' + self.driver._state['system_id'] +
+               ':openstack')
+        cap = {'location_info': loc, 'extent_size': '128'}
+        self.driver._stats = {'location_info': loc}
+        host = {'host': 'openstack@svc#openstack',
+                'capabilities': cap}
+        ctxt = context.get_admin_context()
+
+        type_name = 'rep_global_none'
+        spec = {'replication_enabled': '<is> True',
+                'replication_type': '<in> global',
+                'drivers:rsize': '-1',
+                'compression': 'False'}
+        type_ref = volume_types.create(self.ctxt, type_name, spec)
+        vol_type1 = objects.VolumeType.get_by_id(self.ctxt, type_ref['id'])
+
+        type_name = 'rep_global_thin'
+        spec = {'replication_enabled': '<is> True',
+                'replication_type': '<in> global',
+                'drivers:rsize': '2',
+                'compression': 'False'}
+        type_ref = volume_types.create(self.ctxt, type_name, spec)
+        vol_type2 = objects.VolumeType.get_by_id(self.ctxt,
+                                                 type_ref['id'])
+
+        diff, _equal = volume_types.volume_types_diff(ctxt, vol_type1.id,
+                                                      vol_type2.id)
+
+        # Create test volume with volume type with rsize as -1
+        vol1, model_update = self._create_test_volume(vol_type1)
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+        vol1['status'] = 'available'
+
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(1, len(copies))
+        self.driver.retype(self.ctxt, vol1, vol_type2, diff, host)
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(2, len(copies))
+        self.driver.delete_volume(vol1)
+
+    def test_storwize_svc_retype_global_mirror_volume_to_none(self):
+        self.driver.do_setup(self.ctxt)
+        loc = ('StorwizeSVCDriver:' + self.driver._state['system_id'] +
+               ':openstack')
+        cap = {'location_info': loc, 'extent_size': '128'}
+        self.driver._stats = {'location_info': loc}
+        host = {'host': 'openstack@svc#openstack',
+                'capabilities': cap}
+        ctxt = context.get_admin_context()
+
+        type_name = 'rep_global_thin'
+        spec = {'replication_enabled': '<is> True',
+                'replication_type': '<in> global',
+                'drivers:rsize': '2',
+                'compression': 'False'}
+        type_ref = volume_types.create(self.ctxt, type_name, spec)
+        vol_type1 = objects.VolumeType.get_by_id(self.ctxt, type_ref['id'])
+
+        type_name = 'rep_global_none'
+        spec = {'replication_enabled': '<is> True',
+                'replication_type': '<in> global',
+                'drivers:rsize': '-1',
+                'compression': 'False'}
+        type_ref = volume_types.create(self.ctxt, type_name, spec)
+        vol_type2 = objects.VolumeType.get_by_id(self.ctxt,
+                                                 type_ref['id'])
+
+        diff, _equal = volume_types.volume_types_diff(ctxt, vol_type1.id,
+                                                      vol_type2.id)
+
+        # Create test volume with volume type with rsize as 2
+        vol1, model_update = self._create_test_volume(vol_type1)
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+        vol1['status'] = 'available'
+
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(1, len(copies))
+        self.driver.retype(self.ctxt, vol1, vol_type2, diff, host)
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(2, len(copies))
+        self.driver.delete_volume(vol1)
 
     def test_storwize_retype_from_mirror_to_none_replication(self):
         # Set replication target
@@ -11320,3 +11614,23 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
                          storwize_const.REPLICA_AUX_VOL_PREFIX + mm_vol.name)
         self.assertEqual(self.driver._aux_backend_helpers, backend_helper)
         self.assertEqual(self.driver._aux_state, node_state)
+
+    @ddt.data(({'consistent_group_replication_enabled': '<is> True'},
+               {'replication_enabled': '<is> False'}),
+              ({'consistent_group_replication_enabled': '<is> True'},
+               {'replication_enabled': '<is> True',
+                'replication_type': '<in> gmcv'}))
+    @ddt.unpack
+    def test_storwize_group_create_with_replication(self, grp_spec, vol_spec):
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        """Test group create."""
+        gr_type_ref = group_types.create(self.ctxt, 'gr_type', grp_spec)
+        gr_type = objects.GroupType.get_by_id(self.ctxt, gr_type_ref['id'])
+        vol_type_ref = volume_types.create(self.ctxt, 'vol_type', vol_spec)
+        group = testutils.create_group(self.ctxt,
+                                       group_type_id=gr_type.id,
+                                       volume_type_ids=[vol_type_ref['id']])
+        model_update = self.driver.create_group(self.ctxt, group)
+        self.assertEqual(fields.GroupStatus.ERROR, model_update['status'])

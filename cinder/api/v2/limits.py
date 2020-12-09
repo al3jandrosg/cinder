@@ -19,13 +19,13 @@ Module dedicated functions/classes dealing with rate limiting requests.
 
 import collections
 import copy
+from http import client as http_client
 import math
 import re
 import time
 
 from oslo_serialization import jsonutils
 from oslo_utils import importutils
-from six.moves import http_client
 import webob.dec
 import webob.exc
 
@@ -416,7 +416,7 @@ class WsgiLimiterProxy(object):
 
         resp = conn.getresponse()
 
-        if http_client.OK >= resp.status < http_client.MULTIPLE_CHOICES:
+        if (resp.status >= 200) and (resp.status < 300):
             return None, None
 
         return resp.getheader("X-Wait-Seconds"), resp.read() or None

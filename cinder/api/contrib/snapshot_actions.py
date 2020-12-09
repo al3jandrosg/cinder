@@ -11,9 +11,9 @@
 #   WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #   License for the specific language governing permissions and limitations
 #   under the License.
+from http import HTTPStatus
 
 from oslo_log import log as logging
-from six.moves import http_client
 import webob
 
 from cinder.api import extensions
@@ -85,7 +85,7 @@ class SnapshotActionsController(wsgi.Controller):
 
         current_snapshot.update(update_dict)
         current_snapshot.save()
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
 
 class Snapshot_actions(extensions.ExtensionDescriptor):

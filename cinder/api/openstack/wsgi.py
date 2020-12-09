@@ -16,6 +16,7 @@
 
 from collections import abc
 import functools
+from http import HTTPStatus
 import inspect
 import math
 import time
@@ -25,8 +26,6 @@ from oslo_serialization import jsonutils
 from oslo_utils import encodeutils
 from oslo_utils import excutils
 from oslo_utils import strutils
-import six
-from six.moves import http_client
 import webob
 import webob.exc
 
@@ -328,7 +327,7 @@ class ActionDispatcher(object):
     def dispatch(self, *args, **kwargs):
         """Find and call local method."""
         action = kwargs.pop('action', 'default')
-        action_method = getattr(self, six.text_type(action), self.default)
+        action_method = getattr(self, str(action), self.default)
         return action_method(*args, **kwargs)
 
     def default(self, data):
@@ -440,7 +439,7 @@ class ResponseObject(object):
 
         self.obj = obj
         self.serializers = serializers
-        self._default_code = http_client.OK
+        self._default_code = HTTPStatus.OK
         self._code = code
         self._headers = headers or {}
         self.serializer = None
@@ -535,11 +534,11 @@ class ResponseObject(object):
         response = webob.Response()
         response.status_int = self.code
         for hdr, value in self._headers.items():
-            response.headers[hdr] = six.text_type(value)
-        response.headers['Content-Type'] = six.text_type(content_type)
+            response.headers[hdr] = str(value)
+        response.headers['Content-Type'] = str(content_type)
         if self.obj is not None:
             body = serializer.serialize(self.obj)
-            if isinstance(body, six.text_type):
+            if isinstance(body, str):
                 body = body.encode('utf-8')
             response.body = body
 
@@ -592,13 +591,13 @@ class ResourceExceptionHandler(object):
             return True
 
         if isinstance(ex_value, exception.NotAuthorized):
-            msg = six.text_type(ex_value)
+            msg = str(ex_value)
             raise Fault(webob.exc.HTTPForbidden(explanation=msg))
         elif isinstance(ex_value, exception.VersionNotFoundForAPIMethod):
             raise
         elif isinstance(ex_value, (exception.Invalid, exception.NotFound)):
             raise Fault(exception.ConvertedException(
-                code=ex_value.code, explanation=six.text_type(ex_value)))
+                code=ex_value.code, explanation=str(ex_value)))
         elif isinstance(ex_value, TypeError):
             LOG.exception('Exception handling resource:')
             raise Fault(webob.exc.HTTPBadRequest())
@@ -813,10 +812,10 @@ class Resource(wsgi.Application):
                 request.set_api_version_request(request.url)
             except exception.InvalidAPIVersionString as e:
                 return Fault(webob.exc.HTTPBadRequest(
-                    explanation=six.text_type(e)))
+                    explanation=str(e)))
             except exception.InvalidGlobalAPIVersion as e:
                 return Fault(webob.exc.HTTPNotAcceptable(
-                    explanation=six.text_type(e)))
+                    explanation=str(e)))
 
         # Identify the action, its arguments, and the requested
         # content type
@@ -1114,8 +1113,7 @@ class ControllerMetaclass(type):
         return result
 
 
-@six.add_metaclass(ControllerMetaclass)
-class Controller(object):
+class Controller(object, metaclass=ControllerMetaclass):
     """Default controller."""
 
     _view_builder_class = None
@@ -1252,7 +1250,7 @@ class Controller(object):
                           'display_name', 'display_description']:
             value = body.get(attribute)
             if value is not None:
-                if isinstance(value, six.string_types):
+                if isinstance(value, str):
                     body[attribute] = value.strip()
                 if check_length:
                     try:
@@ -1273,7 +1271,7 @@ class Controller(object):
         :param remove_whitespaces: True if trimming whitespaces is needed
                                    else False
         """
-        if isinstance(value, six.string_types) and remove_whitespaces:
+        if isinstance(value, str) and remove_whitespaces:
             value = value.strip()
         try:
             utils.check_string_length(value, entity_name,
@@ -1286,16 +1284,16 @@ class Controller(object):
 class Fault(webob.exc.HTTPException):
     """Wrap webob.exc.HTTPException to provide API friendly response."""
 
-    _fault_names = {http_client.BAD_REQUEST: "badRequest",
-                    http_client.UNAUTHORIZED: "unauthorized",
-                    http_client.FORBIDDEN: "forbidden",
-                    http_client.NOT_FOUND: "itemNotFound",
-                    http_client.METHOD_NOT_ALLOWED: "badMethod",
-                    http_client.CONFLICT: "conflictingRequest",
-                    http_client.REQUEST_ENTITY_TOO_LARGE: "overLimit",
-                    http_client.UNSUPPORTED_MEDIA_TYPE: "badMediaType",
-                    http_client.NOT_IMPLEMENTED: "notImplemented",
-                    http_client.SERVICE_UNAVAILABLE: "serviceUnavailable"}
+    _fault_names = {HTTPStatus.BAD_REQUEST: "badRequest",
+                    HTTPStatus.UNAUTHORIZED: "unauthorized",
+                    HTTPStatus.FORBIDDEN: "forbidden",
+                    HTTPStatus.NOT_FOUND: "itemNotFound",
+                    HTTPStatus.METHOD_NOT_ALLOWED: "badMethod",
+                    HTTPStatus.CONFLICT: "conflictingRequest",
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE: "overLimit",
+                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE: "badMediaType",
+                    HTTPStatus.NOT_IMPLEMENTED: "notImplemented",
+                    HTTPStatus.SERVICE_UNAVAILABLE: "serviceUnavailable"}
 
     def __init__(self, exception):
         """Create a Fault for the given webob.exc.exception."""
@@ -1314,7 +1312,7 @@ class Fault(webob.exc.HTTPException):
             fault_name: {
                 'code': code,
                 'message': i18n.translate(explanation, locale)}}
-        if code == http_client.REQUEST_ENTITY_TOO_LARGE:
+        if code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
             retry = self.wrapped_exc.headers.get('Retry-After', None)
             if retry:
                 fault_data[fault_name]['retryAfter'] = retry
@@ -1330,7 +1328,7 @@ class Fault(webob.exc.HTTPException):
         }[content_type]
 
         body = serializer.serialize(fault_data)
-        if isinstance(body, six.text_type):
+        if isinstance(body, str):
             body = body.encode('utf-8')
         self.wrapped_exc.body = body
         self.wrapped_exc.content_type = content_type

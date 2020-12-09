@@ -13,8 +13,9 @@
 #   under the License.
 
 """The Volume Image Metadata API extension."""
+from http import HTTPStatus
+
 from oslo_log import log as logging
-from six.moves import http_client
 import webob
 
 from cinder.api import common
@@ -141,7 +142,7 @@ class VolumeImageMetadataController(wsgi.Controller):
                 context, vol, key,
                 meta_type=common.METADATA_TYPES.image)
 
-            return webob.Response(status_int=http_client.OK)
+            return webob.Response(status_int=HTTPStatus.OK)
 
 
 class Volume_image_metadata(extensions.ExtensionDescriptor):

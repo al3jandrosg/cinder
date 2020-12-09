@@ -13,9 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from http import HTTPStatus
 from unittest import mock
-
-from six.moves import http_client
 
 from cinder.api import microversions as mv
 from cinder import db
@@ -70,7 +69,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_project_admin_can_set_default(self):
         admin_context = self.admin_context
@@ -85,7 +84,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_project_admin_cannot_set_default_for_other_project(self):
         admin_context = self.admin_context
@@ -100,7 +99,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     @mock.patch.object(db, 'project_default_volume_type_get',
                        return_value=FakeDefaultType())
@@ -113,7 +112,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_project_admin_can_get_default(self):
         admin_context = self.admin_context
@@ -134,7 +133,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_project_admin_cannot_get_default_for_other_project(self):
         admin_context = self.admin_context
@@ -145,7 +144,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_system_admin_can_get_all_default(self):
         system_admin_context = self.system_admin_context
@@ -156,7 +155,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.OK, response.status_int)
+        self.assertEqual(HTTPStatus.OK, response.status_int)
 
     def test_project_admin_cannot_get_all_default(self):
         admin_context = self.admin_context
@@ -167,7 +166,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)
 
     def test_system_admin_can_unset_default(self):
         system_admin_context = self.system_admin_context
@@ -178,7 +177,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.NO_CONTENT, response.status_int)
+        self.assertEqual(HTTPStatus.NO_CONTENT, response.status_int)
 
     def test_project_admin_can_unset_default(self):
         admin_context = self.admin_context
@@ -189,7 +188,7 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.NO_CONTENT, response.status_int)
+        self.assertEqual(HTTPStatus.NO_CONTENT, response.status_int)
 
     def test_project_admin_cannot_unset_default_for_other_project(self):
         admin_context = self.admin_context
@@ -200,4 +199,4 @@ class DefaultVolumeTypesPolicyTests(test_base.CinderPolicyTests):
                                               microversion=
                                               mv.DEFAULT_TYPE_OVERRIDES)
 
-        self.assertEqual(http_client.FORBIDDEN, response.status_int)
+        self.assertEqual(HTTPStatus.FORBIDDEN, response.status_int)

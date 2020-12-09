@@ -14,10 +14,10 @@
 #    under the License.
 
 """The volumes snapshots api."""
+from http import HTTPStatus
 
 from oslo_log import log as logging
 from oslo_utils import strutils
-from six.moves import http_client
 import webob
 
 from cinder.api import api_utils
@@ -63,7 +63,7 @@ class SnapshotsController(wsgi.Controller):
         snapshot = self.volume_api.get_snapshot(context, id)
         self.volume_api.delete_snapshot(context, snapshot)
 
-        return webob.Response(status_int=http_client.ACCEPTED)
+        return webob.Response(status_int=HTTPStatus.ACCEPTED)
 
     def index(self, req):
         """Returns a summary list of snapshots."""
@@ -107,7 +107,7 @@ class SnapshotsController(wsgi.Controller):
             snapshots = self._view_builder.summary_list(req, snapshots.objects)
         return snapshots
 
-    @wsgi.response(http_client.ACCEPTED)
+    @wsgi.response(HTTPStatus.ACCEPTED)
     @validation.schema(snapshot.create)
     def create(self, req, body):
         """Creates a new snapshot."""

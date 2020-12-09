@@ -1,27 +1,90 @@
 CHANGES
 =======
 
-17.0.0
-------
-
+* Update requirements and lower-constraints
+* Imported Translations from Zanata
+* Imported Translations from Zanata
+* Fix volume rekey during clone
+* Clarify 'supported' reinstatement policy
+* [IBM DS8000] Support volume name template
+* Imported Translations from Zanata
+* Add Python3 wallaby unit tests
+* Replace md5 with oslo version
+* doc: restrict supported Ceph versions
+* Tests: Improve get\_qemu\_img\_version coverage
+* NetApp SolidFire: Fix duplicate volume when API response is lost
+* NetApp SolidFire: Fix error on cluster workload rebalancing
+* Add common RBAC personas to cinder/policies/base.py
+* Imported Translations from Zanata
+* Delete TSM Backup driver
+* Update Development Environment documentation for Ubuntu
+* Doc:Storwize to Spectrum Virtualize Family
+* PowerMax Docs -  Victoria new features and supported software
+* Imported Translations from Zanata
+* [Trivial]Fix unncessary "import xx as xx" renaming
+* Fix invalid asert\_called\_with statement
+* [doc]Fix an invalid url link in docs
+* Do not fail when depth is greater than rbd\_max\_clone\_depth
+* Imported Translations from Zanata
+* Bump minimum version of oslo.log
+* Make docs build parallel
+* [Trivial] Fix missing print format and missing white spaces
+* NetApp SolidFire: Fix clone and request timeout issues
+* Remove collections.abc backwards compatibility
+* Imported Translations from Zanata
+* Fix cinder-manage cluster remove raising NoSuchOptError
+* Add mypy tox env
+* Refactor some unit tests
+* Remove six of files under cinder/test/unit
+* Remove six of dir cinder/volume/\*
+* RBD: Run flatten in a different thread when cloning a volume
+* Import HTTPStatus instead of http\_client (policy tests)
+* Preparing for removal of six.reraise()
+* Remove six of dir cinder/image/\*
+* Nimble: Add support for revert to snapshot
+* Add Cinder driver for Open-E JovianDSS data storage
+* Remove six of dir cinder/tests/unit/api/\*
+* Remove six of dir cinder/tests/unit/backup/\*
+* Import HTTPStatus instead of http\_client
+* Remove six in files under cinder/\*
+* Remove six of dir cinder/tests/unit/volume&zonemanager/\*
+* Remove six of dir cinder/tests/unit/policies&scheduler&targets/\*
+* Remove six of dir cinder/tests/functional&hacking/\*
+* Remove six of dir cinder/backup/\*
+* Remove six of dir cinder/scheduler/\*
+* [IBM DS8K]: Fixed rest API issue to get bundle
+* Remove six of dir cinder/brick,cinder/common,cinder/interface,cinder/objects
+* Remove six of dir cinder/db/\*
+* Remove six of dir cinder/api/\*
+* Backup: Fix formatting errors
 * Critical fix for MSA 2060 and MSA 1060
-* Disallow extension of attached volumes for NFS & Quobyte drivers
+* Fix service\_get\_log tests
+* Imported Translations from Zanata
 * doc: update Brocade FCZM documentation
-* Add release note about Brocade FCZM driver status
-* Add support for system and domain scoped tokens
-* Update TOX\_CONSTRAINTS\_FILE for stable/victoria
-* Update .gitreview for stable/victoria
+* Update new contributor doc
+* [SVF]:changes in create\_group\_from\_src for replicated groups
+* [Trivial]Add missing print format in log message
+* [SVF]:Reduce slowness by caching pool information
+* Imported Translations from Zanata
+* doc: update new driver merge deadline
+* Update master for stable/victoria
+* [SVF]:Fixed create\_flashcopy\_to\_consistgrp
 
 17.0.0.0rc1
 -----------
 
 * Imported Translations from Zanata
 * Add prelude to victoria release notes
+* PowerMax Driver - Feedback on review 746486
+* Add support for system and domain scoped tokens
 * RBD: cinderlib support for rbd\_keyring\_conf option
+* [SVF]: Support for retype operation on GM volumes
 * Make EM branch release notes static
 * Make EOL branch release notes static
 * Rollback volume status if backup service is unavailable
+* PowerMax Driver - Fix non-temporary snapshot delete
 * SPDK: Report info in top-level volume\_stats
+* Disallow extension of attached volumes for NFS & Quobyte drivers
 * Fix volume\_stats storage\_protocol usage in vol mgr
 * PowerMax Driver -  Exception when multipath not enabled for metro
 * [storwize]:Fixed select\_io\_group issues
@@ -30,6 +93,7 @@ CHANGES
 * Doc: Update storwize cinder driver configuration
 * [Storwize] Option to retain the auxiliary volume
 * Nimble multi-attach bad format changes
+* Don't create LOG if not logging
 * Remove oslo.versionedobjects extra install
 * Follow Up: Default type overrides
 * [goal] Fixing lower constraints for Ubuntu Focal
@@ -37,6 +101,7 @@ CHANGES
 * NEC driver: fix a snapshot detach error
 * PowerMax Driver - Migrate extra spec class fix
 * [Storwize]:Fix delete\_group\_snapshot cleanup issue
+* Fix a typo in the explanatory note
 * Imported Translations from Zanata
 * NetApp SolidFire: Enable driver IPv6 api request
 * [NetApp] Adding support for Adaptive QoS in NetApp driver
@@ -46,6 +111,7 @@ CHANGES
 * PowerMax Driver - Feedback for migrate exception handling
 * PowerMax Driver - Force array and srp configuration
 * PowerMax Driver - Remove deprecated config options
+* Stop configuring install\_command in tox
 * Add support volume local cache
 * PowerMax Driver - Feedback on snap\_id feature
 * NetApp SolidFire: Add storage assisted migration support
@@ -59,6 +125,7 @@ CHANGES
 * Capacity based QoS doc
 * Add multiattach in Nimble driver
 * Fix: listing volumes with filters
+* Correcting the response status range in WsgiLimiterProxy
 * Remove Train online data migrations
 * Deprecate TSM Backup driver
 * Show cluster\_name in volume details
@@ -100,6 +167,8 @@ CHANGES
 * Rebranding of VxFlex OS driver to PowerFlex
 * Remove "cinder-manage shell" commands
 * drop use of pkg\_resources
+* Fixed an issue with creating a backup from snapshot with NFS volume driver
+* Race in Cinder backup manager
 * Add Cinder driver for Dell EMC PowerStore
 * Set cluster name for volume groups
 * Remove exception.Error class
@@ -125,7 +194,9 @@ CHANGES
 * Default volume\_type set too early
 * Add cinder discard in nimble driver
 * NFS encrypted volume support
+* Add links to package metadata
 * RBD: Cleanup temporary file during exception
+* tox: remove bash from whitelist\_externals
 * Make test-setup.sh compatible with mysql8
 * PowerMax Driver - Create vol suspend fix & DeviceID check
 * Imported Translations from Zanata
@@ -142,6 +213,7 @@ CHANGES
 * 3PAR: Fix live migration
 * bump pycodestyle to 2.6.0
 * Bump taskflow requirement to 3.8.0
+* Synology: Improve session expired error handling
 * Dell EMC Sc: Add support for whitelisting fault domains
 * NetApp ONTAP: Fix extend volume for iSCSI/FCP
 * Remove VxFlex OS credentials from connection\_properties
@@ -170,6 +242,7 @@ CHANGES
 * 3PAR - Fix renaming volume after migration
 * Imported Translations from Zanata
 * Fix nfs\_mount\_options description
+* Doc: Add notes on create\_cloned\_volume locking
 * Remove translation sections from setup.cfg
 * Raise lower constraints to meet our minimums
 * Fix hacking min version to 3.0.1
@@ -196,6 +269,7 @@ CHANGES
 * Make releasenotes build parallel
 * PowerMax Driver - U4P failover lock not released on exception
 * NetApp ONTAP NFS driver fail to flexclone glance image
+* Doc: Add max MV update step to cycle tasks
 * Reserve migrations for DB backports
 * Imported Translations from Zanata
 * NetApp SolidFire: Fix pylint issues
