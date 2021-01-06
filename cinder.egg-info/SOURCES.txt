@@ -932,7 +932,7 @@ cinder/tests/unit/fake_service.py
 cinder/tests/unit/fake_snapshot.py
 cinder/tests/unit/fake_utils.py
 cinder/tests/unit/fake_volume.py
-cinder/tests/unit/policy.json
+cinder/tests/unit/policy.yaml
 cinder/tests/unit/test.py
 cinder/tests/unit/test_api.py
 cinder/tests/unit/test_api_urlmap.py
@@ -1825,6 +1825,7 @@ doc/source/configuration/block-storage/drivers/dell-emc-xtremio-driver.rst
 doc/source/configuration/block-storage/drivers/dell-storagecenter-driver.rst
 doc/source/configuration/block-storage/drivers/fujitsu-eternus-dx-driver.rst
 doc/source/configuration/block-storage/drivers/hedvig-volume-driver.rst
+doc/source/configuration/block-storage/drivers/hitachi-vsp-driver.rst
 doc/source/configuration/block-storage/drivers/hp-msa-driver.rst
 doc/source/configuration/block-storage/drivers/hpe-3par-driver.rst
 doc/source/configuration/block-storage/drivers/huawei-storage-driver.rst
@@ -2144,6 +2145,7 @@ releasenotes/notes/bug-1887908-nec-live-migration-failure-withfc-3128fff7c48e739
 releasenotes/notes/bug-1887962-643379faf20f01cf.yaml
 releasenotes/notes/bug-1888951-backup-from-nfs-snapshot-2e06235eb318b852.yaml
 releasenotes/notes/bug-1890241-strowize-delete_group_snapshot_fix-2e491e74e1f73ba7.yaml
+releasenotes/notes/bug-1890254-clone-fcmap-is-not-deleting-in-cleanup-f5bbb467be1b889d.yaml
 releasenotes/notes/bug-1890586-storwize-check_flashcopy_rate-fix-571e6e182b604725.yaml
 releasenotes/notes/bug-1890588-storwize-select_io_group-fix-7200f2e00140ab34.yaml
 releasenotes/notes/bug-1890589-create_flashcopy_to_consistgrp_fix-9eeea4aaceb8a191.yaml
@@ -2151,9 +2153,13 @@ releasenotes/notes/bug-1890591-Pool-information-is-not-saved-in-stats-22f302d941
 releasenotes/notes/bug-1894381-fix-cinder-manage-cluster-remove-raising-nosuchopterror.yaml
 releasenotes/notes/bug-1895510-REST-API-issue-to-get-bundle-198a3b89255759bb.yaml
 releasenotes/notes/bug-1896087-rollback-volume-status-bd04951f929bb88d.yaml
+releasenotes/notes/bug-1896214-Fix-in-change_vdisk_iogrp-during-retype-ef83ccf27d8829f5.yaml
+releasenotes/notes/bug-1898746-ibm-svf-fix-host-failover-switch-relationship-9d3c58822a8c918c.yaml
 releasenotes/notes/bug-1898918-b24a93d7d5aff238.yaml
+releasenotes/notes/bug-1900979-powerstore-chap-support.yaml
 releasenotes/notes/bug-1901241-361b1b361bfa5152.yaml
 releasenotes/notes/bug-1904440-clone-rekey-fd57a2b5f6224e0f.yaml
+releasenotes/notes/bug-1908315-020fea3e244d49bb.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
@@ -2221,6 +2227,7 @@ releasenotes/notes/deprecate-backup-service-to-driver-mapping-a3afabd4f55eca01.y
 releasenotes/notes/deprecate-block-device-driver-d30232547a31fe1e.yaml
 releasenotes/notes/deprecate-cinder-linux-smb-driver-4aec58f15a963c54.yaml
 releasenotes/notes/deprecate-consistency-group-apis-0d9120d16f090781.yaml
+releasenotes/notes/deprecate-json-formatted-policy-file-dc3441a7b1dbfb47.yaml
 releasenotes/notes/deprecate-linbit-drbdmanagedrv-75c41ce8e81cac80.yaml
 releasenotes/notes/deprecate-nested-quota-d1ad7e8f54492a87.yaml
 releasenotes/notes/deprecate-rbd_keyring_conf-432efbcd47e52c8a.yaml
@@ -2276,6 +2283,7 @@ releasenotes/notes/fix-import-backup-quota-issue-8yh69hd19u7tuu23.yaml
 releasenotes/notes/fix-kaminario-unique_fqdn_network-ecde36f614c30733.yaml
 releasenotes/notes/fix-leave-mapped-volume-ef0bd683d415f7b1.yaml
 releasenotes/notes/fix-list-volume-filtering-3f2bf93ab9b98974.yaml
+releasenotes/notes/fix-manage-no-action-46b023476e8cd938.yaml
 releasenotes/notes/fix-multiattach-deletion-b3990acf1f5fd378.yaml
 releasenotes/notes/fix-netapp-cg-da4fd6c396e5bedb.yaml
 releasenotes/notes/fix-netapp-force_detach-36bdf75dd2c9a030.yaml
@@ -2710,6 +2718,7 @@ releasenotes/notes/support_deferred_deletion_in_RBD-0c5d96f8eac5b50a.yaml
 releasenotes/notes/support_sort_backup_by_name-0b080bcb60c0eaa0.yaml
 releasenotes/notes/support_sort_snapshot_with_name-7b66a2d8e587275d.yaml
 releasenotes/notes/supported-drivers-9c95dd2378cd308d.yaml
+releasenotes/notes/svf-revert-to-snapshot-globalmirror-volume-e70fdb9115020283.yaml
 releasenotes/notes/sync-bump-versions-a1e6f6359173892e.yaml
 releasenotes/notes/synology-support-uc-model-9cda442828c2eb32.yaml
 releasenotes/notes/synology-volume-driver-c5e0f655b04390ce.yaml

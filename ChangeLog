@@ -1,12 +1,27 @@
 CHANGES
 =======
 
+* pylint: run coding-checks.sh with bash
+* Basic volume QoS doc
+* Add docs and update support matrix for Hitachi driver
+* Imported Translations from Zanata
+* Correct group:reset\_group\_snapshot\_status policy
+* Imported Translations from Zanata
+* [goal] Deprecate the JSON formatted policy file
+* Imported Translations from Zanata
+* RBD: Retry delete if VolumeIsBusy in \_copy\_image\_to\_volume
 * Update requirements and lower-constraints
+* Add CHAP support to Dell EMC PowerStore driver
+* [SVF]:Fix in change\_vdisk\_iogrp during retype
 * Imported Translations from Zanata
 * Imported Translations from Zanata
+* [SVF]: Fixed host and group failover issues
+* [SVF]:Fix clone fcmap not being deleted in cleanup
 * Fix volume rekey during clone
+* Pure Storage - bump version numbers for Wallaby
 * Clarify 'supported' reinstatement policy
 * [IBM DS8000] Support volume name template
+* Update doc contributor doc
 * Imported Translations from Zanata
 * Add Python3 wallaby unit tests
 * Replace md5 with oslo version
@@ -15,6 +30,7 @@ CHANGES
 * NetApp SolidFire: Fix duplicate volume when API response is lost
 * NetApp SolidFire: Fix error on cluster workload rebalancing
 * Add common RBAC personas to cinder/policies/base.py
+* Fix cinder-manage <category> traceback
 * Imported Translations from Zanata
 * Delete TSM Backup driver
 * Update Development Environment documentation for Ubuntu
@@ -27,6 +43,7 @@ CHANGES
 * Do not fail when depth is greater than rbd\_max\_clone\_depth
 * Imported Translations from Zanata
 * Bump minimum version of oslo.log
+* [SVF] RevertToSnapshot support for GM volumes
 * Make docs build parallel
 * [Trivial] Fix missing print format and missing white spaces
 * NetApp SolidFire: Fix clone and request timeout issues
@@ -99,6 +116,7 @@ CHANGES
 * [goal] Fixing lower constraints for Ubuntu Focal
 * Default type overrides
 * NEC driver: fix a snapshot detach error
+* [api-ref]Add replication\_status(optional) to List groups with details response
 * PowerMax Driver - Migrate extra spec class fix
 * [Storwize]:Fix delete\_group\_snapshot cleanup issue
 * Fix a typo in the explanatory note
@@ -184,6 +202,7 @@ CHANGES
 * Correct a typo of the hpe driver
 * Imported Translations from Zanata
 * smbfs: pick up remotefs method signature change
+* Switch from unittest2 compat methods to py3 methods
 * Fix rekeying volume with legacy encryption provider
 * cinder:api-ref replace mention of "policy.json"
 * Kaminario: Fix unique\_fqdn\_network option
@@ -195,6 +214,7 @@ CHANGES
 * Add cinder discard in nimble driver
 * NFS encrypted volume support
 * Add links to package metadata
+* Remove lxml deprecated methods
 * RBD: Cleanup temporary file during exception
 * tox: remove bash from whitelist\_externals
 * Make test-setup.sh compatible with mysql8
@@ -219,6 +239,7 @@ CHANGES
 * Remove VxFlex OS credentials from connection\_properties
 * Add revert to snapshot support for Pure Storage drivers
 * Google backup support client 1.8.2
+* 3PAR: Workaround SSH logging issue
 * Improve tenacity retry sleep mocking
 * PowerMax Driver - Array capabilities extend fix
 * Correct formatting in release note

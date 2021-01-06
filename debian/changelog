@@ -1,3 +1,10 @@
+cinder (2:17.0.1+git2021010614.a9c922ab7-0ubuntu1) hirsute; urgency=medium
+
+  * New upstream snapshot for OpenStack Wallaby.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 06 Jan 2021 14:08:38 -0500
+
 cinder (2:17.0.1+git2020120911.d3ffa90ba-0ubuntu1) hirsute; urgency=medium
 
   * New upstream snapshot for OpenStack Wallaby.

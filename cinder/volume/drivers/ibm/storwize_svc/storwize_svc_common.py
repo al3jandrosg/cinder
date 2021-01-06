@@ -154,7 +154,7 @@ storwize_svc_opts = [
                      'storage during delete of the volume on primary storage '
                      'or moving the primary volume from mirror to non-mirror '
                      'with replication enabled. This option is valid for '
-                     'SVC.'),
+                     'Spectrum Virtualize Family.'),
 ]
 
 CONF = cfg.CONF
@@ -2100,10 +2100,10 @@ class StorwizeHelpers(object):
             return None
         return resp[0]
 
-    def _check_vdisk_fc_mappings(self, name,
-                                 allow_snaps=True, allow_fctgt=False):
+    @cinder_utils.trace
+    def _check_delete_vdisk_fc_mappings(self, name, allow_snaps=True,
+                                        allow_fctgt=False):
         """FlashCopy mapping check helper."""
-        LOG.debug('Loopcall: _check_vdisk_fc_mappings(), vdisk %s.', name)
         mapping_ids = self._get_vdisk_fc_mappings(name)
         wait_for_copy = False
         for map_id in mapping_ids:
@@ -2116,10 +2116,23 @@ class StorwizeHelpers(object):
             target = attrs['target_vdisk_name']
             copy_rate = attrs['copy_rate']
             status = attrs['status']
+            progress = attrs['progress']
 
+            LOG.debug('Loopcall: source: %s, target: %s, copy_rate: %s, '
+                      'status: %s, progress: %s, mapid: %s', source, target,
+                      copy_rate, status, progress, map_id)
             if allow_fctgt and target == name and status == 'copying':
-                self.ssh.stopfcmap(map_id)
-                attrs = self._get_flashcopy_mapping_attributes(map_id)
+                try:
+                    self.ssh.stopfcmap(map_id)
+                except exception.VolumeBackendAPIException as ex:
+                    LOG.warning(ex)
+                    wait_for_copy = True
+                try:
+                    attrs = self._get_flashcopy_mapping_attributes(map_id)
+                except exception.VolumeBackendAPIException as ex:
+                    LOG.warning(ex)
+                    wait_for_copy = True
+                    continue
                 if attrs:
                     status = attrs['status']
                 else:
@@ -2141,27 +2154,79 @@ class StorwizeHelpers(object):
                                {'name': name, 'src': source, 'tgt': target})
                         LOG.error(msg)
                         raise exception.VolumeDriverException(message=msg)
-                    if status in ['copying', 'prepared']:
-                        self.ssh.stopfcmap(map_id)
-                        # Need to wait for the fcmap to change to
-                        # stopped state before remove fcmap
+                    try:
+                        if status in ['copying', 'prepared']:
+                            self.ssh.stopfcmap(map_id)
+                            # Need to wait for the fcmap to change to
+                            # stopped state before remove fcmap
+                            wait_for_copy = True
+                        elif status in ['stopping', 'preparing']:
+                            wait_for_copy = True
+                        else:
+                            self.ssh.rmfcmap(map_id)
+                    except exception.VolumeBackendAPIException as ex:
+                        LOG.warning(ex)
                         wait_for_copy = True
-                    elif status in ['stopping', 'preparing']:
-                        wait_for_copy = True
-                    else:
-                        self.ssh.rmfcmap(map_id)
             # Case 4: Copy in progress - wait and will autodelete
             else:
-                if status == 'prepared':
-                    self.ssh.stopfcmap(map_id)
-                    self.ssh.rmfcmap(map_id)
-                elif status in ['idle_or_copied', 'stopped']:
-                    # Prepare failed or stopped
-                    self.ssh.rmfcmap(map_id)
-                else:
+                try:
+                    if status == 'prepared':
+                        self.ssh.stopfcmap(map_id)
+                        self.ssh.rmfcmap(map_id)
+                    elif status in ['idle_or_copied', 'stopped']:
+                        # Prepare failed or stopped
+                        self.ssh.rmfcmap(map_id)
+                    elif (status in ['copying', 'prepared'] and
+                          progress == '100'):
+                        self.ssh.stopfcmap(map_id)
+                    else:
+                        wait_for_copy = True
+                except exception.VolumeBackendAPIException as ex:
+                    LOG.warning(ex)
                     wait_for_copy = True
+
         if not wait_for_copy or not len(mapping_ids):
             raise loopingcall.LoopingCallDone(retvalue=True)
+
+    @cinder_utils.trace
+    def _check_vdisk_fc_mappings(self, name, allow_snaps=True,
+                                 allow_fctgt=False):
+        """FlashCopy mapping check helper."""
+        # if this is a remove disk we need to be down to one fc clone
+        mapping_ids = self._get_vdisk_fc_mappings(name)
+        if len(mapping_ids) > 1 and allow_fctgt:
+            LOG.debug('Loopcall: vdisk %s has '
+                      'more than one fc map. Waiting.', name)
+            for map_id in mapping_ids:
+                attrs = self._get_flashcopy_mapping_attributes(map_id)
+                if not attrs:
+                    continue
+                source = attrs['source_vdisk_name']
+                target = attrs['target_vdisk_name']
+                copy_rate = attrs['copy_rate']
+                status = attrs['status']
+                progress = attrs['progress']
+                LOG.debug('Loopcall: source: %s, target: %s, copy_rate: %s, '
+                          'status: %s, progress: %s, mapid: %s',
+                          source, target, copy_rate, status, progress, map_id)
+
+                if copy_rate != '0' and source == name:
+                    try:
+                        if status in ['copying'] and progress == '100':
+                            self.ssh.stopfcmap(map_id)
+                        elif status == 'idle_or_copied' and progress == '100':
+                            # wait for auto-delete of fcmap.
+                            continue
+                        elif status in ['idle_or_copied', 'stopped']:
+                            # Prepare failed or stopped
+                            self.ssh.rmfcmap(map_id)
+                    # handle VolumeBackendAPIException to let it go through
+                    # next attempts in case of any cli exception.
+                    except exception.VolumeBackendAPIException as ex:
+                        LOG.warning(ex)
+            return
+        return self._check_delete_vdisk_fc_mappings(
+            name, allow_snaps=allow_snaps, allow_fctgt=allow_fctgt)
 
     def ensure_vdisk_no_fc_mappings(self, name, allow_snaps=True,
                                     allow_fctgt=False):
@@ -2263,12 +2328,12 @@ class StorwizeHelpers(object):
                 storwize_const.REPLICA_CHG_VOL_PREFIX + vol_name,
                 force_unmap=force_unmap,
                 force_delete=False)
-            # We want to retain the aux volume after retyping
-            # from mirror to non mirror storage template or
-            # on delete of the primary volume based on user's
+            # We want to retain/remove the aux volume after retyping of
+            # primary volume from mirror to non-mirror storage template
+            # or on the delete of the primary volume based on user's
             # choice of config value for storwize_svc_retain_aux_volume.
-            # Default value is False.
-            if (retain_aux_volume is False and target_vol) or not target_vol:
+            # The default value is False.
+            if (not retain_aux_volume and target_vol) or not target_vol:
                 self.delete_vdisk(vol_name,
                                   force_unmap=force_unmap,
                                   force_delete=False)
@@ -2511,8 +2576,17 @@ class StorwizeHelpers(object):
                       '%(code_level)s, below the required 6.4.0.0.',
                       {'code_level': state['code_level']})
         else:
-            self.ssh.movevdisk(vdisk, str(iogrp[0]))
             self.ssh.addvdiskaccess(vdisk, str(iogrp[0]))
+            try:
+                self.ssh.movevdisk(vdisk, str(iogrp[0]))
+            except exception.VolumeBackendAPIException as e:
+                self.ssh.rmvdiskaccess(vdisk, str(iogrp[0]))
+                msg = (_('movevdisk command failed for %(vdisk),'
+                         'performing rmdiskaccess for %(iogrp)s.'
+                         'Exception: %(err)s.'),
+                       {'vdisk': vdisk, 'iogrp': iogrp[0], 'err': e})
+                LOG.exception(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
             self.ssh.rmvdiskaccess(vdisk, str(iogrp[1]))
 
     def vdisk_by_uid(self, vdisk_uid):
@@ -2615,7 +2689,7 @@ class StorwizeHelpers(object):
                 elif copy_rate != '0' and progress == '100':
                     LOG.debug('Split completed clone map_id=%(map_id)s fcmap',
                               {'map_id': map_id})
-                    self.ssh.stopfcmap(map_id, split=True)
+                    self.ssh.stopfcmap(map_id)
 
 
 class CLIResponse(object):
@@ -3573,8 +3647,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             # In this case the administrator would like to fail back.
             secondary_id, volumes_update, groups_update = self._host_failback(
                 context, volumes, groups)
-        elif (secondary_id == self._replica_target['backend_id']
-                or secondary_id is None):
+        elif (secondary_id == self._replica_target['backend_id'] or
+                secondary_id is None):
             # In this case the administrator would like to fail over.
             secondary_id, volumes_update, groups_update = self._host_failover(
                 context, volumes, groups)
@@ -4205,8 +4279,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         if storwize_const.FAILBACK_VALUE == secondary_backend_id:
             # In this case the administrator would like to group fail back.
             model_update = self._rep_grp_failback(context, group)
-        elif (secondary_backend_id == self._replica_target['backend_id']
-                or secondary_backend_id is None):
+        elif (secondary_backend_id == self._replica_target['backend_id'] or
+                secondary_backend_id is None):
             # In this case the administrator would like to group fail over.
             model_update = self._rep_grp_failover(context, group)
         else:
@@ -4282,74 +4356,23 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 raise exception.UnableToFailOver(reason=msg)
         return model_update
 
+    @cinder_utils.trace
     def _rep_grp_failover(self, ctxt, group):
         """Fail over all the volume in the replication group."""
         model_update = {
             'replication_status': fields.ReplicationStatus.FAILED_OVER}
         rccg_name = self._get_rccg_name(group)
+
         try:
-            self._aux_backend_helpers.get_system_info()
-        except Exception as ex:
-            msg = (_("Unable to failover group %(rccg)s due to replication "
-                     "target is not reachable. error=%(error)s"),
-                   {'rccg': rccg_name, 'error': ex})
-            LOG.error(msg)
-            raise exception.UnableToFailOver(reason=msg)
-
-        rccg = self._aux_backend_helpers.get_rccg(rccg_name)
-        if not rccg:
-            msg = (_("Unable to failover group %(rccg)s due to replication "
-                     "group does not exist on backend."),
-                   {'rccg': rccg_name})
-            LOG.error(msg)
-            raise exception.UnableToFailOver(reason=msg)
-
-        if rccg['relationship_count'] == '0':
-            msg = (_("Unable to failover group %(rccg)s due to it is an "
-                     "empty group."), {'rccg': rccg['name']})
-            LOG.error(msg)
-            raise exception.UnableToFailOver(reason=msg)
-
-        if rccg['primary'] == 'aux':
-            LOG.info("Do not need to fail over group %(rccg)s again due to "
-                     "primary is already aux.", {'rccg': rccg['name']})
+            self._aux_backend_helpers.stop_rccg(rccg_name, access=True)
+            self._helpers.start_rccg(rccg_name, primary='aux')
             return model_update
-
-        if rccg['cycling_mode'] == 'multi':
-            # This is a gmcv replication group
-            try:
-                self._aux_backend_helpers.stop_rccg(rccg['name'], access=True)
-                self._sync_with_aux_grp(ctxt, rccg['name'])
-                return model_update
-            except exception.VolumeBackendAPIException as e:
-                msg = (_('Unable to fail over the group %(rccg)s to the aux '
-                         'back-end, error: %(error)s') %
-                       {"rccg": rccg['name'], "error": e})
-                LOG.exception(msg)
-                raise exception.UnableToFailOver(reason=msg)
-        else:
-            try:
-                # Reverse the role of the primary and secondary volumes
-                self._helpers.switch_rccg(rccg['name'], aux=True)
-                return model_update
-            except exception.VolumeBackendAPIException as e:
-                LOG.exception('Unable to fail over the group %(rccg)s to the '
-                              'aux back-end by switchrcconsistgrp command, '
-                              'error: %(error)s',
-                              {"rccg": rccg['name'], "error": e})
-                # If the switch command fail, try to make the aux group
-                # writeable again.
-                try:
-                    self._aux_backend_helpers.stop_rccg(rccg['name'],
-                                                        access=True)
-                    self._sync_with_aux_grp(ctxt, rccg['name'])
-                    return model_update
-                except exception.VolumeBackendAPIException as e:
-                    msg = (_('Unable to fail over the group %(rccg)s to the '
-                             'aux back-end, error: %(error)s') %
-                           {"rccg": rccg['name'], "error": e})
-                    LOG.exception(msg)
-                    raise exception.UnableToFailOver(reason=msg)
+        except exception.VolumeBackendAPIException as e:
+            msg = (_('Unable to fail over the group %(rccg)s to the aux '
+                     'back-end, error: %(error)s') %
+                   {"rccg": rccg_name, "error": e})
+            LOG.exception(msg)
+            raise exception.UnableToFailOver(reason=msg)
 
     @cinder_utils.trace
     def _sync_with_aux_grp(self, ctxt, rccg_name):
@@ -5610,9 +5633,16 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                          'size is not equal to the snapshot size.'))
 
         rep_type = self._get_volume_replicated_type(context, volume)
+
         if rep_type:
-            raise exception.InvalidInput(
-                reason=_('Reverting replication volume is not supported.'))
+            try:
+                self._helpers.stop_relationship(volume.name, access=False)
+            except Exception as err:
+                msg = (_("Stop RC relationship has failed for %(vol)s"
+                         "due to: %(err)s.")
+                       % {"vol": volume.name, "err": err})
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
         try:
             self._helpers.pretreatment_before_revert(volume.name)
         except Exception as err:
@@ -5627,6 +5657,8 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                 snapshot.name, volume.name,
                 self.configuration.storwize_svc_flashcopy_timeout,
                 opts['flashcopy_rate'], True, True)
+            if rep_type:
+                self._helpers.start_relationship(volume.name, primary=None)
         except Exception as err:
             msg = (_("Reverting volume %(vol)s to snapshot %(snap)s failed "
                      "due to: %(err)s.")

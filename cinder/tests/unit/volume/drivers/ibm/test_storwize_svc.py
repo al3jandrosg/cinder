@@ -25,6 +25,7 @@ from unittest import mock
 import ddt
 from oslo_concurrency import processutils
 from oslo_config import cfg
+from oslo_service import loopingcall
 from oslo_utils import importutils
 from oslo_utils import units
 import paramiko
@@ -2515,7 +2516,7 @@ port_speed!N/A
         except KeyError:
             return self._errors['CMMVC5753E']
 
-        function = 'stop_access' if force_access else 'stop'
+        function = 'stop'
         self._rccg_state_transition(function, rccg)
         for rcrel_info in self._rcrelationship_list.values():
             if rcrel_info['consistency_group_name'] == rccg['name']:
@@ -3496,7 +3497,6 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
                                        'target_lun': 0,
                                        'auth_method': 'CHAP',
                                        'discovery_auth_method': 'CHAP'}}}
-
         volume1['volume_type_id'] = types[protocol]['id']
         volume2['volume_type_id'] = types[protocol]['id']
 
@@ -4263,7 +4263,7 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                               }
                      }
 
-        self.assertItemsEqual(term_data, term_ret)
+        self.assertCountEqual(term_data, term_ret)
 
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'get_conn_fc_wwpns')
@@ -4292,7 +4292,7 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                                '5005076801A96CFE',
                                '5005076801996CFE',
                                '5005076801991806']
-        self.assertItemsEqual(expected_target_wwn, conn_info[
+        self.assertCountEqual(expected_target_wwn, conn_info[
             'data']['target_wwn'])
 
         # Terminate connection
@@ -4311,8 +4311,8 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
                               '5005076801996CFE',
                               '5005076801206CFE',
                               '5005076801106CFE']
-        self.assertItemsEqual(expected_term_data, target_wwn1)
-        self.assertItemsEqual(expected_term_data, target_wwn2)
+        self.assertCountEqual(expected_term_data, target_wwn1)
+        self.assertCountEqual(expected_term_data, target_wwn2)
 
     def test_storwize_svc_fc_host_maps(self):
         # Create two volumes to be used in mappings
@@ -7312,33 +7312,62 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                        '_prepare_fc_map')
     @mock.patch.object(storwize_svc_common.StorwizeSSH,
                        'startfcmap')
-    def test_revert_to_snapshot(self, startfcmap, prepare_fc_map, mkfcmap):
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'stop_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'start_relationship')
+    def test_revert_to_snapshot(self, start_relationship,
+                                stop_relationship, startfcmap,
+                                prepare_fc_map, mkfcmap):
         mkfcmap.side_effect = ['1']
         vol1 = self._generate_vol_info()
         snap1 = self._generate_snap_info(vol1.id)
         vol1.size = '11'
-
         self.assertRaises(exception.InvalidInput,
                           self.driver.revert_to_snapshot, self.ctxt,
                           vol1, snap1)
-
         vol2 = self._generate_vol_info()
         snap2 = self._generate_snap_info(vol2.id)
-
         with mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
                                '_get_volume_replicated_type') as vol_rep_type:
-            vol_rep_type.side_effect = [True, False]
-            self.assertRaises(exception.InvalidInput,
-                              self.driver.revert_to_snapshot, self.ctxt,
-                              vol2, snap2)
+            vol_rep_type.side_effect = [False]
             self.driver.revert_to_snapshot(self.ctxt, vol2, snap2)
-            mkfcmap.assert_called_once_with(
-                snap2.name, vol2.name, True,
-                self.driver.configuration.storwize_svc_flashcopy_rate)
+            mkfcmap.assert_called_once_with(snap2.name, vol2.name, True,
+                                            self.driver.configuration.
+                                            storwize_svc_flashcopy_rate)
             prepare_fc_map.assert_called_once_with(
                 '1', self.driver.configuration.storwize_svc_flashcopy_timeout,
-                True,)
+                True)
             startfcmap.assert_called_once_with('1', True)
+
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'mkfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_prepare_fc_map')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'startfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'start_relationship')
+    def test_revert_to_snapshot_replication_type(self, start_relationship,
+                                                 startfcmap,
+                                                 prepare_fc_map, mkfcmap):
+        vol1 = self._generate_vol_info()
+        snap1 = self._generate_snap_info(vol1.id)
+        vol1.size = '11'
+        self.assertRaises(exception.InvalidInput,
+                          self.driver.revert_to_snapshot, self.ctxt,
+                          vol1, snap1)
+        vol2 = self._generate_vol_info()
+        snap2 = self._generate_snap_info(vol2.id)
+        with mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
+                               '_get_volume_replicated_type') as vol_rep_type:
+            vol_rep_type.side_effect = [True]
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.driver.revert_to_snapshot, self.ctxt,
+                              vol2, snap2)
+            mkfcmap.assert_not_called()
+            prepare_fc_map.assert_not_called()
+            startfcmap.assert_not_called()
 
     def test_storwize_create_volume_with_group_id(self):
         """Tests creating volume with gorup_id."""
@@ -8360,6 +8389,92 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
         delete_vdisk.assert_has_calls(calls, any_order=True)
 
+    def test_storwize_svc_retype_between_iogrps(self):
+        self.driver.do_setup(None)
+        ctxt = context.get_admin_context()
+
+        key_specs_old = {'iogrp': 0}
+        key_specs_new = {'iogrp': 1}
+        old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
+        new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
+
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
+
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
+        volume = self._generate_vol_info(old_type)
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
+
+        self.driver.create_volume(volume)
+        conn = {'initiator': u'iqn.1993-08.org.debian:01:eac5ccc1aaa',
+                'ip': '10.10.10.12',
+                'host': u'openstack@svc#openstack'}
+        self.driver.initialize_connection(volume, conn)
+        loc = ('StorwizeSVCDriver:' + self.driver._state['system_id'] +
+               ':openstack2')
+        cap = {'location_info': loc, 'extent_size': '128'}
+        host_name = self.driver._helpers.get_host_from_connector(
+            conn, iscsi=True)
+        self.assertIsNotNone(host_name)
+        host = {'host': host_name, 'capabilities': cap}
+        volume['host'] = host['host']
+
+        self.driver.retype(ctxt, volume, new_type, diff, host)
+        attrs = self.driver._helpers.get_vdisk_attributes(volume['name'])
+        self.assertEqual('1', attrs['IO_group_id'], 'Volume retype '
+                         'failed')
+
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'addvdiskaccess')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'rmvdiskaccess')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'movevdisk')
+    def test_storwize_svc_retype_between_iogrps_invalid(
+            self, movevdisk, rmvdiskaccess, addvdiskaccess):
+        self.driver.do_setup(None)
+        ctxt = context.get_admin_context()
+
+        key_specs_old = {'iogrp': 0}
+        key_specs_new = {'iogrp': 1}
+        old_type_ref = volume_types.create(ctxt, 'old', key_specs_old)
+        new_type_ref = volume_types.create(ctxt, 'new', key_specs_new)
+
+        diff, _equal = volume_types.volume_types_diff(ctxt, old_type_ref['id'],
+                                                      new_type_ref['id'])
+
+        old_type = objects.VolumeType.get_by_id(ctxt,
+                                                old_type_ref['id'])
+        volume = self._generate_vol_info(old_type)
+        new_type = objects.VolumeType.get_by_id(ctxt,
+                                                new_type_ref['id'])
+
+        self.driver.create_volume(volume)
+        conn = {'initiator': u'iqn.1993-08.org.debian:01:eac5ccc1aaa',
+                'ip': '10.10.10.12',
+                'host': u'openstack@svc#openstack'}
+        self.driver.initialize_connection(volume, conn)
+        loc = ('StorwizeSVCDriver:' + self.driver._state['system_id'] +
+               ':openstack2')
+        cap = {'location_info': loc, 'extent_size': '128'}
+        host_name = self.driver._helpers.get_host_from_connector(
+            conn, iscsi=True)
+        self.assertIsNotNone(host_name)
+        host = {'host': host_name, 'capabilities': cap}
+        volume['host'] = host['host']
+        ex = exception.VolumeBackendAPIException(data='CMMVC5879E')
+        movevdisk.side_effect = ex
+
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.retype, ctxt,
+                          volume, new_type, diff, host)
+        attrs = self.driver._helpers.get_vdisk_attributes(volume['name'])
+        self.assertEqual(int(key_specs_old['iogrp']),
+                         int(attrs['IO_group_id']), 'Volume retype failed')
+        addvdiskaccess.assert_called()
+        movevdisk.assert_called()
+        rmvdiskaccess.assert_called_with(
+            volume['name'], str(key_specs_new['iogrp']))
+
 
 class CLIResponseTestCase(test.TestCase):
     def test_empty(self):
@@ -8654,7 +8769,168 @@ class StorwizeHelpersTestCase(test.TestCase):
             'status': 'copying',
             'target_vdisk_name': 'testvol'}
         self.storwize_svc_common.pretreatment_before_revert(vol)
-        stopfcmap.assert_called_once_with('4', split=True)
+        stopfcmap.assert_called_once_with('4')
+
+    @ddt.data({'copy_rate': '50', 'progress': '3', 'status': 'copying'},
+              {'copy_rate': '50', 'progress': '100', 'status': 'copying'},
+              {'copy_rate': '0', 'progress': '0', 'status': 'copying'},
+              {'copy_rate': '50', 'progress': '0', 'status': 'copying'},
+              {'copy_rate': '0', 'progress': '0', 'status': 'idle_or_copied'})
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'chfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'stopfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'rmfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_flashcopy_mapping_attributes')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_vdisk_fc_mappings')
+    def test_check_vdisk_fc_mappings(self,
+                                     fc_data,
+                                     get_vdisk_fc_mappings,
+                                     get_fc_mapping_attributes,
+                                     rmfcmap, stopfcmap, chfcmap):
+        vol = 'testvol'
+        get_vdisk_fc_mappings.return_value = ['4']
+        get_fc_mapping_attributes.return_value = {
+            'copy_rate': fc_data['copy_rate'],
+            'progress': fc_data['progress'],
+            'status': fc_data['status'],
+            'target_vdisk_name': 'tar-testvol',
+            'rc_controlled': 'no',
+            'source_vdisk_name': 'testvol'}
+
+        if(fc_data['copy_rate'] != '0' and fc_data['progress'] == '100'
+           and fc_data['status'] == 'copying'):
+            (self.assertRaises(loopingcall.LoopingCallDone,
+             self.storwize_svc_common._check_vdisk_fc_mappings, vol, True,
+             False))
+            stopfcmap.assert_called_with('4')
+            self.assertEqual(1, stopfcmap.call_count)
+        else:
+            self.storwize_svc_common._check_vdisk_fc_mappings(vol, True,
+                                                              False)
+            stopfcmap.assert_not_called()
+            self.assertEqual(0, stopfcmap.call_count)
+
+        get_vdisk_fc_mappings.assert_called()
+        get_fc_mapping_attributes.assert_called_with('4')
+        rmfcmap.assert_not_called()
+        self.assertEqual(1, get_fc_mapping_attributes.call_count)
+        self.assertEqual(0, rmfcmap.call_count)
+
+        if(fc_data['copy_rate'] == '0' and fc_data['progress'] == '0'
+           and fc_data['status'] in ['copying', 'idle_or_copied']):
+            chfcmap.assert_called_with('4', copyrate='50', autodel='on')
+            self.assertEqual(1, chfcmap.call_count)
+        else:
+            chfcmap.assert_not_called()
+            self.assertEqual(0, chfcmap.call_count)
+
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'chfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'stopfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'rmfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_flashcopy_mapping_attributes')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_vdisk_fc_mappings')
+    def test_check_vdisk_fc_mappings_tarisvol(self,
+                                              get_vdisk_fc_mappings,
+                                              get_fc_mapping_attributes,
+                                              rmfcmap, stopfcmap, chfcmap):
+        vol = 'tar-testvol'
+        get_vdisk_fc_mappings.return_value = ['4']
+        get_fc_mapping_attributes.return_value = {
+            'copy_rate': '0',
+            'progress': '0',
+            'status': 'idle_or_copied',
+            'target_vdisk_name': 'tar-testvol',
+            'rc_controlled': 'no',
+            'source_vdisk_name': 'testvol'}
+
+        self.assertRaises(loopingcall.LoopingCallDone,
+                          self.storwize_svc_common._check_vdisk_fc_mappings,
+                          vol, True, False)
+
+        get_vdisk_fc_mappings.assert_called()
+        get_fc_mapping_attributes.assert_called_with('4')
+        stopfcmap.assert_not_called()
+        rmfcmap.assert_called_with('4')
+        chfcmap.assert_not_called()
+        self.assertEqual(1, get_fc_mapping_attributes.call_count)
+        self.assertEqual(0, stopfcmap.call_count)
+        self.assertEqual(1, rmfcmap.call_count)
+        self.assertEqual(0, chfcmap.call_count)
+
+    @ddt.data(([{'cp_rate': '0', 'prgs': '0', 'status': 'idle_or_copied',
+                 'trg_vdisk': 'testvol', 'src_vdisk': 'tar_testvol'},
+                {'cp_rate': '50', 'prgs': '100', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol', 'src_vdisk': 'testvol'},
+                {'cp_rate': '50', 'prgs': '3', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol', 'src_vdisk': 'testvol'}], 1),
+              ([{'cp_rate': '50', 'prgs': '100', 'status': 'idle_or_copied',
+                 'trg_vdisk': 'testvol', 'src_vdisk': 'tar_testvol'},
+                {'cp_rate': '50', 'prgs': '100', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol', 'src_vdisk': 'testvol'},
+                {'cp_rate': '50', 'prgs': '100', 'status': 'copying',
+                 'trg_vdisk': 'testvol', 'src_vdisk': 'tar_testvol'}], 1),
+              ([{'cp_rate': '50', 'prgs': '100', 'status': 'idle_or_copied',
+                 'trg_vdisk': 'testvol', 'src_vdisk': 'tar_testvol'},
+                {'cp_rate': '50', 'prgs': '100', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol', 'src_vdisk': 'testvol'},
+                {'cp_rate': '50', 'prgs': '100', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol_1', 'src_vdisk': 'testvol'}], 2),
+              ([{'cp_rate': '0', 'prgs': '0', 'status': 'copying',
+                 'trg_vdisk': 'testvol', 'src_vdisk': 'snap_testvol'},
+                {'cp_rate': '50', 'prgs': '0', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol', 'src_vdisk': 'testvol'},
+                {'cp_rate': '50', 'prgs': '0', 'status': 'copying',
+                 'trg_vdisk': 'tar_testvol_1', 'src_vdisk': 'testvol'}], 0))
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'chfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'stopfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH, 'rmfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_flashcopy_mapping_attributes')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_get_vdisk_fc_mappings')
+    @ddt.unpack
+    def test_check_vdisk_fc_mappings_mul_fcs(self,
+                                             fc_data, stopfc_count,
+                                             get_vdisk_fc_mappings,
+                                             get_fc_mapping_attributes,
+                                             rmfcmap, stopfcmap, chfcmap):
+        vol = 'testvol'
+        get_vdisk_fc_mappings.return_value = ['4', '5', '7']
+        get_fc_mapping_attributes.side_effect = [
+            {
+                'copy_rate': fc_data[0]['cp_rate'],
+                'progress': fc_data[0]['prgs'],
+                'status': fc_data[0]['status'],
+                'target_vdisk_name': fc_data[0]['trg_vdisk'],
+                'rc_controlled': 'no',
+                'source_vdisk_name': fc_data[0]['src_vdisk']},
+            {
+                'copy_rate': fc_data[1]['cp_rate'],
+                'progress': fc_data[1]['prgs'],
+                'status': fc_data[1]['status'],
+                'target_vdisk_name': fc_data[1]['trg_vdisk'],
+                'rc_controlled': 'no',
+                'source_vdisk_name': fc_data[1]['src_vdisk']},
+            {
+                'copy_rate': fc_data[2]['cp_rate'],
+                'progress': fc_data[2]['prgs'],
+                'status': fc_data[2]['status'],
+                'target_vdisk_name': fc_data[2]['trg_vdisk'],
+                'rc_controlled': 'no',
+                'source_vdisk_name': fc_data[2]['src_vdisk']}]
+
+        self.storwize_svc_common._check_vdisk_fc_mappings(vol, True, True)
+        get_vdisk_fc_mappings.assert_called()
+        get_fc_mapping_attributes.assert_called()
+        rmfcmap.assert_not_called()
+        chfcmap.assert_not_called()
+        self.assertEqual(3, get_fc_mapping_attributes.call_count)
+        self.assertEqual(stopfc_count, stopfcmap.call_count)
+        self.assertEqual(0, rmfcmap.call_count)
+        self.assertEqual(0, chfcmap.call_count)
 
     def test_storwize_check_flashcopy_rate_invalid1(self):
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
@@ -8710,6 +8986,34 @@ class StorwizeHelpersTestCase(test.TestCase):
         self.assertEqual(is_drp, isdrpool)
         is_data_reduction_pool.assert_called()
         self.assertEqual(call_count, is_data_reduction_pool.call_count)
+
+    @ddt.data(({'RC_name': None,
+                'name': 'volume-12d-5'}, True),
+              ({'RC_name': 'fake_rcrel',
+                'name': 'rep_volume-12d-6'}, False))
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'startrcrelationship')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'stoprcrelationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_attributes')
+    @ddt.unpack
+    def test_stop_and_start_rc_relationship(self, opts, access,
+                                            get_vdisk_attributes,
+                                            stoprcrelationship,
+                                            startrcrelationship):
+        get_vdisk_attributes.side_effect = [{'RC_name': opts['RC_name']},
+                                            {'RC_name': opts['RC_name']}]
+        self.storwize_svc_common.stop_relationship(opts['name'])
+        self.storwize_svc_common.start_relationship(opts['name'])
+        get_vdisk_attributes.assert_called_with(opts['name'])
+        if not opts['RC_name']:
+            stoprcrelationship.assert_not_called()
+            startrcrelationship.assert_not_called()
+        else:
+            stoprcrelationship.assert_called_once_with(opts['RC_name'],
+                                                       access=access)
+            startrcrelationship.assert_called_once_with(opts['RC_name'], None)
 
 
 @ddt.ddt
@@ -9670,6 +9974,41 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         self.driver.delete_volume(volume)
         self._validate_replic_vol_deletion(volume, True)
 
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'mkfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       '_prepare_fc_map')
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'startfcmap')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'stop_relationship')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'start_relationship')
+    def test_revert_to_snapshot_mirror_vol(self, start_relationship,
+                                           stop_relationship, startfcmap,
+                                           prepare_fc_map, mkfcmap):
+        mkfcmap.side_effect = ['1']
+        vol1 = self._generate_vol_info(self.gm_type,
+                                       replication_status='enabled')
+        snap1 = self._generate_snap_info(vol1.id)
+        with mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
+                               '_get_volume_replicated_type') as vol_rep_type:
+            vol_rep_type.side_effect = [True, False]
+            self.driver.revert_to_snapshot(self.ctxt, vol1, snap1)
+            mkfcmap.assert_called_once_with(
+                snap1.name, vol1.name, True,
+                self.driver.configuration.storwize_svc_flashcopy_rate)
+            prepare_fc_map.assert_called_once_with(
+                '1', self.driver.configuration.storwize_svc_flashcopy_timeout,
+                True)
+            startfcmap.assert_called_once_with('1', True)
+            self.assertEqual(fields.ReplicationStatus.ENABLED,
+                             vol1.replication_status)
+            stop_relationship.assert_called_once_with("volume-" + vol1.id,
+                                                      access=False)
+            start_relationship.assert_called_once_with("volume-" + vol1.id,
+                                                       primary=None)
+
     def test_storwize_extend_volume_replication(self):
         # Set replication target.
         self.driver.configuration.set_override('replication_device',
@@ -10021,133 +10360,46 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         get_relationship_info.assert_called_once_with(fake_name)
         delete_relationship.assert_called_once_with(fake_name)
 
+    @ddt.data((True, True, 1), (False, True, 2),
+              (True, False, 2), (False, False, 2))
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'delete_vdisk')
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'delete_relationship')
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'get_relationship_info')
-    def test_retain_target_volume(self, get_relationship_info,
-                                  delete_relationship,
-                                  delete_vdisk):
+    @ddt.unpack
+    def test_retain_target_volume(self, target_volume, retain_aux_vol,
+                                  call_count, get_relationship_info,
+                                  delete_relationship, delete_vdisk):
         # Set replication target.
-
         self.driver.configuration.set_override('replication_device',
                                                [self.rep_target])
         self.driver.do_setup(self.ctxt)
         fake_name = 'volume-%s' % fake.VOLUME_ID
-        target_volume_fake_name = (
-            storwize_const.REPLICA_AUX_VOL_PREFIX + fake_name)
-        target_change_fake_name = (
-            storwize_const.REPLICA_CHG_VOL_PREFIX + target_volume_fake_name)
         get_relationship_info.return_value = {'aux_vdisk_name':
                                               fake_name}
         self.driver._helpers.delete_rc_volume(fake_name,
-                                              target_vol=True,
-                                              retain_aux_volume=True)
-        get_relationship_info.assert_called_once_with(target_volume_fake_name)
-        delete_relationship.assert_called_once_with(target_volume_fake_name)
+                                              target_vol=target_volume,
+                                              retain_aux_volume=retain_aux_vol)
 
-        calls = [mock.call(target_change_fake_name, force_delete=False,
+        vol_name = fake_name
+        change_vol_name = (storwize_const.REPLICA_CHG_VOL_PREFIX + vol_name)
+        if target_volume:
+            vol_name = (storwize_const.REPLICA_AUX_VOL_PREFIX + fake_name)
+            change_vol_name = (
+                storwize_const.REPLICA_CHG_VOL_PREFIX + vol_name)
+
+        get_relationship_info.assert_called_once_with(vol_name)
+        delete_relationship.assert_called_once_with(vol_name)
+
+        calls = [mock.call(change_vol_name, force_delete=False,
                            force_unmap=True)]
+        if (target_volume and not retain_aux_vol) or not target_volume:
+            calls.extend([mock.call(vol_name, force_delete=False,
+                                    force_unmap=True)])
         delete_vdisk.assert_has_calls(calls, any_order=True)
-        self.assertEqual(1, delete_vdisk.call_count)
-
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_vdisk')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_relationship')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'get_relationship_info')
-    def test_retain_target_volume_invalid_parameters_1(
-            self, get_relationship_info,
-            delete_relationship,
-            delete_vdisk):
-        # Set replication target.
-
-        self.driver.configuration.set_override('replication_device',
-                                               [self.rep_target])
-        self.driver.do_setup(self.ctxt)
-        fake_name = 'volume-%s' % fake.VOLUME_ID
-        master_change_fake_name = (
-            storwize_const.REPLICA_CHG_VOL_PREFIX + fake_name)
-        get_relationship_info.return_value = {'aux_vdisk_name':
-                                              fake_name}
-        self.driver._helpers.delete_rc_volume(fake_name,
-                                              target_vol=False,
-                                              retain_aux_volume=True)
-        get_relationship_info.assert_called_once_with(fake_name)
-        delete_relationship.assert_called_once_with(fake_name)
-        calls = [mock.call(master_change_fake_name, force_delete=False,
-                           force_unmap=True),
-                 mock.call(fake_name, force_delete=False, force_unmap=True)]
-        delete_vdisk.assert_has_calls(calls, any_order=True)
-        self.assertEqual(2, delete_vdisk.call_count)
-
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_vdisk')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_relationship')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'get_relationship_info')
-    def test_retain_target_volume_invalid_parameters_2(
-            self, get_relationship_info,
-            delete_relationship,
-            delete_vdisk):
-        # Set replication target.
-
-        self.driver.configuration.set_override('replication_device',
-                                               [self.rep_target])
-        self.driver.do_setup(self.ctxt)
-        fake_name = 'volume-%s' % fake.VOLUME_ID
-        target_volume_fake_name = (
-            storwize_const.REPLICA_AUX_VOL_PREFIX + fake_name)
-        target_change_fake_name = (
-            storwize_const.REPLICA_CHG_VOL_PREFIX + target_volume_fake_name)
-        get_relationship_info.return_value = {'aux_vdisk_name':
-                                              fake_name}
-        self.driver._helpers.delete_rc_volume(fake_name,
-                                              target_vol=True,
-                                              retain_aux_volume=False)
-        get_relationship_info.assert_called_once_with(target_volume_fake_name)
-        delete_relationship.assert_called_once_with(target_volume_fake_name)
-        calls = [mock.call(target_change_fake_name, force_delete=False,
-                           force_unmap=True),
-                 mock.call(target_volume_fake_name, force_delete=False,
-                           force_unmap=True)]
-        delete_vdisk.assert_has_calls(calls, any_order=True)
-        self.assertEqual(2, delete_vdisk.call_count)
-
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_vdisk')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'delete_relationship')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'get_relationship_info')
-    def test_retain_target_volume_invalid_parameters_3(
-            self, get_relationship_info,
-            delete_relationship,
-            delete_vdisk):
-        # Set replication target.
-
-        self.driver.configuration.set_override('replication_device',
-                                               [self.rep_target])
-        self.driver.do_setup(self.ctxt)
-        fake_name = 'volume-%s' % fake.VOLUME_ID
-        master_change_fake_name = (
-            storwize_const.REPLICA_CHG_VOL_PREFIX + fake_name)
-        get_relationship_info.return_value = {'aux_vdisk_name':
-                                              fake_name}
-        self.driver._helpers.delete_rc_volume(fake_name,
-                                              target_vol=False,
-                                              retain_aux_volume=False)
-        get_relationship_info.assert_called_once_with(fake_name)
-        delete_relationship.assert_called_once_with(fake_name)
-        calls = [mock.call(master_change_fake_name, force_delete=False,
-                           force_unmap=True),
-                 mock.call(fake_name, force_delete=False, force_unmap=True)]
-        delete_vdisk.assert_has_calls(calls, any_order=True)
-        self.assertEqual(2, delete_vdisk.call_count)
+        self.assertEqual(call_count, delete_vdisk.call_count)
 
     def test_storwize_failover_host_backend_error(self):
         self.driver.configuration.set_override('replication_device',
@@ -10445,26 +10697,20 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         self.driver.delete_volume(non_replica_vol)
 
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'switch_relationship')
+                       'start_relationship')
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'stop_relationship')
-    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                       'get_relationship_info')
-    def test_failover_host_by_force_access(self, get_relationship_info,
-                                           stop_relationship,
-                                           switch_relationship):
+    def test_failover_host_by_force_access(self, stop_relationship,
+                                           start_relationship):
         replica_obj = self.driver._get_replica_obj(storwize_const.METRO)
         mm_vol, model_update = self._create_test_volume(self.mm_type)
         target_vol = storwize_const.REPLICA_AUX_VOL_PREFIX + mm_vol.name
         context = mock.Mock
-        get_relationship_info.side_effect = [{
-            'aux_vdisk_name': 'replica-12345678-1234-5678-1234-567812345678',
-            'name': 'RC_name'}]
-        switch_relationship.side_effect = exception.VolumeDriverException
         replica_obj.failover_volume_host(context, mm_vol)
-        get_relationship_info.assert_called_once_with(target_vol)
-        switch_relationship.assert_called_once_with('RC_name')
         stop_relationship.assert_called_once_with(target_vol, access=True)
+        calls = [mock.call(mm_vol.name), mock.call(target_vol, 'aux')]
+        start_relationship.assert_has_calls(calls, any_order=True)
+        self.assertEqual(2, start_relationship.call_count)
 
     @mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
                        '_update_volume_stats')
@@ -11261,30 +11507,16 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
 
         self.assertRaises(exception.UnableToFailOver,
                           self.driver.failover_replication, self.ctxt, group,
-                          vols, self.rep_target['backend_id'])
-
-        self.assertRaises(exception.UnableToFailOver,
-                          self.driver.failover_replication, self.ctxt, group,
                           vols, storwize_const.FAILBACK_VALUE)
 
-        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                               'get_system_info') as get_sys_info:
-            get_sys_info.side_effect = [
-                exception.VolumeBackendAPIException(data='CMMVC6071E'),
-                exception.VolumeBackendAPIException(data='CMMVC6071E')]
+        with mock.patch.object(storwize_svc_common.StorwizeSSH,
+                               'stoprcconsistgrp') as stoprccg:
+            stoprccg.side_effect = exception.VolumeBackendAPIException(
+                data='CMMVC6071E')
             self.assertRaises(exception.UnableToFailOver,
                               self.driver.failover_replication, self.ctxt,
                               group, vols, self.rep_target['backend_id'])
 
-            self.driver._active_backend_id = self.rep_target['backend_id']
-            self.assertRaises(exception.UnableToFailOver,
-                              self.driver.failover_replication, self.ctxt,
-                              group, vols, 'default')
-        with mock.patch.object(storwize_svc_common.StorwizeSSH,
-                               'lsrcconsistgrp', side_effect=[None]):
-            self.assertRaises(exception.UnableToFailOver,
-                              self.driver.failover_replication, self.ctxt,
-                              group, vols, self.rep_target['backend_id'])
         self.driver.delete_group(self.ctxt, group, vols)
 
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
@@ -11376,9 +11608,7 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
 
         self.driver.delete_group(self.ctxt, group, vols)
 
-    @mock.patch.object(storwize_svc_common.StorwizeSSH,
-                       'switchrcconsistgrp')
-    def test_failover_replica_group_by_force_access(self, switchrcconsistgrp):
+    def test_failover_replica_group_by_force_access(self):
         self.driver.do_setup(self.ctxt)
         group = self._create_test_rccg(self.rccg_type, [self.mm_type.id])
         mm_vol1, model_update = self._create_test_volume(self.mm_type)
@@ -11386,13 +11616,9 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         rccg_name = self.driver._get_rccg_name(group)
         self.sim._rccg_state_transition('wait',
                                         self.sim._rcconsistgrp_list[rccg_name])
-        switchrcconsistgrp.side_effect = [
-            exception.VolumeBackendAPIException(data='CMMVC6071E'),
-            exception.VolumeBackendAPIException(data='CMMVC6071E')]
         with mock.patch.object(storwize_svc_common.StorwizeSSH,
                                'startrcconsistgrp') as startrcconsistgrp:
             self.driver.failover_replication(self.ctxt, group, [mm_vol1], None)
-            switchrcconsistgrp.assert_called_once_with(rccg_name, True)
             startrcconsistgrp.assert_called_once_with(rccg_name, 'aux')
 
         with mock.patch.object(storwize_svc_common.StorwizeSSH,
