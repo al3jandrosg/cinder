@@ -77,6 +77,8 @@ from cinder.volume.drivers.dell_emc.powermax import common as \
     cinder_volume_drivers_dell_emc_powermax_common
 from cinder.volume.drivers.dell_emc.powerstore import driver as \
     cinder_volume_drivers_dell_emc_powerstore_driver
+from cinder.volume.drivers.dell_emc.powervault import common as \
+    cinder_volume_drivers_dell_emc_powervault_common
 from cinder.volume.drivers.dell_emc.sc import storagecenter_common as \
     cinder_volume_drivers_dell_emc_sc_storagecentercommon
 from cinder.volume.drivers.dell_emc.unity import driver as \
@@ -158,6 +160,10 @@ from cinder.volume.drivers.stx import common as \
     cinder_volume_drivers_stx_common
 from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
+from cinder.volume.drivers.toyou.acs5000 import acs5000_common as \
+    cinder_volume_drivers_toyou_acs5000_acs5000common
+from cinder.volume.drivers.toyou.acs5000 import acs5000_iscsi as \
+    cinder_volume_drivers_toyou_acs5000_acs5000iscsi
 from cinder.volume.drivers.veritas_access import veritas_iscsi as \
     cinder_volume_drivers_veritas_access_veritasiscsi
 from cinder.volume.drivers.vmware import vmdk as \
@@ -272,6 +278,10 @@ def list_opts():
                 cinder_volume_drivers_open_e_options.jdss_iscsi_opts,
                 cinder_volume_drivers_open_e_options.jdss_volume_opts,
                 cinder_volume_drivers_sandstone_sdsdriver.sds_opts,
+                cinder_volume_drivers_toyou_acs5000_acs5000common.
+                acs5000c_opts,
+                cinder_volume_drivers_toyou_acs5000_acs5000iscsi.
+                acs5000_iscsi_opts,
                 cinder_volume_drivers_veritas_access_veritasiscsi.VA_VOL_OPTS,
                 cinder_volume_manager.volume_manager_opts,
                 cinder_wsgi_eventletserver.socket_opts,
@@ -305,6 +315,8 @@ def list_opts():
                 cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
                 cinder_volume_drivers_dell_emc_powerstore_driver.
                 POWERSTORE_OPTS,
+                cinder_volume_drivers_dell_emc_powervault_common.common_opts,
+                cinder_volume_drivers_dell_emc_powervault_common.iscsi_opts,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
                 common_opts,
                 cinder_volume_drivers_dell_emc_unity_driver.UNITY_OPTS,

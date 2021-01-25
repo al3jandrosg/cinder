@@ -33,6 +33,8 @@ from cinder import utils
 
 LOG = logging.getLogger(__name__)
 
+MINIMUM_LVM_VERSION = (2, 2, 107)
+
 
 class LVM(executor.Executor):
     """LVM object to enable various LVM related operations."""
@@ -92,6 +94,13 @@ class LVM(executor.Executor):
         if suppress_fd_warn:
             _lvm_cmd_prefix.append('LVM_SUPPRESS_FD_WARNINGS=1')
         LVM.LVM_CMD_PREFIX = _lvm_cmd_prefix
+
+        lvm_version = LVM.get_lvm_version(root_helper)
+        if LVM.get_lvm_version(root_helper) < MINIMUM_LVM_VERSION:
+            LOG.warning("LVM version %(current)s is lower than the minimum "
+                        "supported version: %(supported)s",
+                        {'current': lvm_version,
+                         'supported': MINIMUM_LVM_VERSION})
 
         if create_vg and physical_volumes is not None:
             try:
@@ -288,7 +297,8 @@ class LVM(executor.Executor):
         """
 
         cmd = LVM.LVM_CMD_PREFIX + ['lvs', '--noheadings', '--unit=g',
-                                    '-o', 'vg_name,name,size', '--nosuffix']
+                                    '-o', 'vg_name,name,size', '--nosuffix',
+                                    '--readonly']
         if lv_name is not None and vg_name is not None:
             cmd.append("%s/%s" % (vg_name, lv_name))
         elif vg_name is not None:

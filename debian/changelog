@@ -1,3 +1,9 @@
+cinder (2:17.0.1+git2021012507.d26092348-0ubuntu1) hirsute; urgency=medium
+
+  * New upstream snapshot for OpenStack Wallaby.
+
+ -- Chris MacNaughton <chris.macnaughton@ubuntu.com>  Mon, 25 Jan 2021 08:04:55 +0000
+
 cinder (2:17.0.1+git2021010614.a9c922ab7-0ubuntu1) hirsute; urgency=medium
 
   * New upstream snapshot for OpenStack Wallaby.

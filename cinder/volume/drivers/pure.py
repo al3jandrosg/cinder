@@ -59,8 +59,9 @@ PURE_OPTS = [
                      "this calculated value will override the "
                      "max_over_subscription_ratio config option."),
     cfg.StrOpt("pure_host_personality",
+               default=None,
                choices=['aix', 'esxi', 'hitachi-vsp', 'hpux',
-                        'oracle-vm-server', 'solaris', 'vms'],
+                        'oracle-vm-server', 'solaris', 'vms', None],
                help="Determines how the Purity system tunes the protocol used "
                     "between the array and the initiator."),
     # These are used as default settings.  In future these can be overridden
@@ -185,6 +186,8 @@ class PureBaseVolumeDriver(san.SanDriver):
     """Performs volume management on Pure Storage FlashArray."""
 
     SUPPORTED_REST_API_VERSIONS = ['1.2', '1.3', '1.4', '1.5', '1.13', '1.14']
+
+    SUPPORTS_ACTIVE_ACTIVE = True
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Pure_Storage_CI"

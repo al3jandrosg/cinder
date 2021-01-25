@@ -1,6 +1,13 @@
 CHANGES
 =======
 
+* Add Cinder driver for TOYOU ACS5000
+* Pure: Add default value to pure\_host\_personality
+* Add driver for Dell EMC PowerVault ME Series
+* Imported Translations from Zanata
+* LVM: Support only LVM 2.02.107+
+* LVM: Use --readonly for lvs
+* Tests: Fix rbd unit test failure due to ceph keyring file
 * pylint: run coding-checks.sh with bash
 * Basic volume QoS doc
 * Add docs and update support matrix for Hitachi driver
@@ -15,6 +22,7 @@ CHANGES
 * [SVF]:Fix in change\_vdisk\_iogrp during retype
 * Imported Translations from Zanata
 * Imported Translations from Zanata
+* Pure Storage FlashArray: Add active/active support
 * [SVF]: Fixed host and group failover issues
 * [SVF]:Fix clone fcmap not being deleted in cleanup
 * Fix volume rekey during clone
@@ -73,6 +81,7 @@ CHANGES
 * Remove six of dir cinder/brick,cinder/common,cinder/interface,cinder/objects
 * Remove six of dir cinder/db/\*
 * Remove six of dir cinder/api/\*
+* Reno: Use customized template
 * Backup: Fix formatting errors
 * Critical fix for MSA 2060 and MSA 1060
 * Fix service\_get\_log tests
@@ -207,6 +216,7 @@ CHANGES
 * cinder:api-ref replace mention of "policy.json"
 * Kaminario: Fix unique\_fqdn\_network option
 * Don't show host\_name to non-admins
+* Remove unneeded arg from \_clean\_db (vol manager)
 * Move get\_volume\_stats impl to the base volume driver
 * Add non-voting code coverage job
 * Disable siblings for the cindelib functional tests
