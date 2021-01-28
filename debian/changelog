@@ -1,3 +1,10 @@
+cinder (2:17.0.1+git2021012507.d26092348-0ubuntu2) hirsute; urgency=medium
+
+  * d/p/add-mock-psutil-in-quobyte-tests.patch: Add a mock of psutil
+    disk_partitions to fix failing unit test (LP: #1913607).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 28 Jan 2021 12:03:20 -0500
+
 cinder (2:17.0.1+git2021012507.d26092348-0ubuntu1) hirsute; urgency=medium
 
   * New upstream snapshot for OpenStack Wallaby.
