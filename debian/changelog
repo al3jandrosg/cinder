@@ -1,3 +1,9 @@
+cinder (2:17.0.1+git2021012507.d26092348-0ubuntu3) hirsute; urgency=medium
+
+  * d/*: Remove tgt in favor of targetcli-fb.
+
+ -- Chris MacNaughton <chris.macnaughton@ubuntu.com>  Tue, 23 Feb 2021 14:50:18 +0000
+
 cinder (2:17.0.1+git2021012507.d26092348-0ubuntu2) hirsute; urgency=medium
 
   * d/p/add-mock-psutil-in-quobyte-tests.patch: Add a mock of psutil
