@@ -1,3 +1,15 @@
+cinder (2:18.0.0~b1-0ubuntu1) hirsute; urgency=medium
+
+  * d/watch: Track 18.x series.
+  * New upstream milestone for OpenStack Wallaby.
+  * d/control: Align (Build-)Depends with upstream.
+  * d/p/skip-moto-tests.patch: Skip test dependency that is not yet
+    packaged in Ubuntu and was added late in cycle.
+  * d/p/patch-botocore-exceptions.patch: Account for changes to botocore
+    vendored exceptions.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 24 Mar 2021 10:07:03 -0400
+
 cinder (2:17.0.1+git2021012507.d26092348-0ubuntu3) hirsute; urgency=medium
 
   * d/*: Remove tgt in favor of targetcli-fb.

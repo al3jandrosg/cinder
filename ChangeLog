@@ -1,13 +1,40 @@
 CHANGES
 =======
 
+18.0.0.0b1
+----------
+
+* HPE: Add Peer Persistence support for Primera backend
+* Use os-brick 4.2.0
+* Move trace methods from utils to volume\_utils
+* Imported Translations from Zanata
+* Move brick calls from cinder.utils to volume\_utils
+* Add KIOXIA KumoScale NVMeOF driver
+* Fix irrelevant-files for two devstack jobs
+* doc: add rbd-iscsi-client info
+* Fix RBD\_OPERATION\_FEATURE\_CLONE\_PARENT in unittest
+* Require oslo.serialization 4.1.0
+* Update ceph driver docs, mentioning Hyper-V support
+* RBD: Pass bytes type for mon\_command inbuf
+* Change the CLI document for the extend-attached-volume
+* 3PAR: Allow iSCSI driver to be enabled for Primera 4.2 onwards
+* Imported Translations from Zanata
+* Log information about the Ceph v2 clone API
+* created s3 cinder backup driver
+* Add ceph iscsi volume driver
 * Add Cinder driver for TOYOU ACS5000
+* Remove NestedQuotaDriver
+* Update SolidFire Storage assisted migration in support-matrix
 * Pure: Add default value to pure\_host\_personality
 * Add driver for Dell EMC PowerVault ME Series
 * Imported Translations from Zanata
+* Introduces MV to add volume type ID in volumes details
 * LVM: Support only LVM 2.02.107+
 * LVM: Use --readonly for lvs
+* NetApp SolidFire: Refactor DuplicateSfVolumeNames exception
 * Tests: Fix rbd unit test failure due to ceph keyring file
+* Remove \_\_unicode\_\_() from CinderException
+* doc: update release cycle tasks
 * pylint: run coding-checks.sh with bash
 * Basic volume QoS doc
 * Add docs and update support matrix for Hitachi driver
@@ -30,6 +57,7 @@ CHANGES
 * Clarify 'supported' reinstatement policy
 * [IBM DS8000] Support volume name template
 * Update doc contributor doc
+* [Trivial]Add missing white space in the log message
 * Imported Translations from Zanata
 * Add Python3 wallaby unit tests
 * Replace md5 with oslo version

@@ -13,11 +13,9 @@
 #    under the License.
 
 import datetime
-import functools
 import json
 import os
 import sys
-import time
 from unittest import mock
 
 import ddt
@@ -723,13 +721,13 @@ class AuditPeriodTest(test.TestCase):
 class BrickUtils(test.TestCase):
     """Unit test to test the brick utility wrapper functions."""
 
-    @mock.patch('cinder.utils.CONF')
+    @mock.patch('cinder.volume.volume_utils.CONF')
     @mock.patch('os_brick.initiator.connector.get_connector_properties')
     @mock.patch('cinder.utils.get_root_helper')
     def test_brick_get_connector_properties(self, mock_helper, mock_get,
                                             mock_conf):
         mock_conf.my_ip = '1.2.3.4'
-        output = utils.brick_get_connector_properties()
+        output = volume_utils.brick_get_connector_properties()
         mock_helper.assert_called_once_with()
         mock_get.assert_called_once_with(mock_helper.return_value, '1.2.3.4',
                                          False, False)
@@ -738,7 +736,7 @@ class BrickUtils(test.TestCase):
     @mock.patch('os_brick.initiator.connector.InitiatorConnector.factory')
     @mock.patch('cinder.utils.get_root_helper')
     def test_brick_get_connector(self, mock_helper, mock_factory):
-        output = utils.brick_get_connector('protocol')
+        output = volume_utils.brick_get_connector('protocol')
         mock_helper.assert_called_once_with()
         self.assertEqual(mock_factory.return_value, output)
         mock_factory.assert_called_once_with(
@@ -756,7 +754,9 @@ class BrickUtils(test.TestCase):
         ctxt = mock.Mock(name='context')
         mock_encryptor = mock.Mock()
         mock_get_encryptor.return_value = mock_encryptor
-        utils.brick_attach_volume_encryptor(ctxt, attach_info, encryption)
+        volume_utils.brick_attach_volume_encryptor(ctxt,
+                                                   attach_info,
+                                                   encryption)
 
         connection_info = attach_info['conn']
         connection_info['data']['device_path'] = attach_info['device']['path']
@@ -779,7 +779,7 @@ class BrickUtils(test.TestCase):
         encryption = {'encryption_key_id': fake.ENCRYPTION_KEY_ID}
         mock_encryptor = mock.Mock()
         mock_get_encryptor.return_value = mock_encryptor
-        utils.brick_detach_volume_encryptor(attach_info, encryption)
+        volume_utils.brick_detach_volume_encryptor(attach_info, encryption)
 
         mock_helper.assert_called_once_with()
         connection_info = attach_info['conn']
@@ -1058,328 +1058,7 @@ class TestRetryDecorator(test.TestCase):
 
 
 @ddt.ddt
-class LogTracingTestCase(test.TestCase):
-
-    def test_utils_setup_tracing(self):
-        self.mock_object(utils, 'LOG')
-
-        utils.setup_tracing(None)
-        self.assertFalse(utils.TRACE_API)
-        self.assertFalse(utils.TRACE_METHOD)
-        self.assertEqual(0, utils.LOG.warning.call_count)
-
-        utils.setup_tracing(['method'])
-        self.assertFalse(utils.TRACE_API)
-        self.assertTrue(utils.TRACE_METHOD)
-        self.assertEqual(0, utils.LOG.warning.call_count)
-
-        utils.setup_tracing(['method', 'api'])
-        self.assertTrue(utils.TRACE_API)
-        self.assertTrue(utils.TRACE_METHOD)
-        self.assertEqual(0, utils.LOG.warning.call_count)
-
-    def test_utils_setup_tracing_invalid_key(self):
-        self.mock_object(utils, 'LOG')
-
-        utils.setup_tracing(['fake'])
-
-        self.assertFalse(utils.TRACE_API)
-        self.assertFalse(utils.TRACE_METHOD)
-        self.assertEqual(1, utils.LOG.warning.call_count)
-
-    def test_utils_setup_tracing_valid_and_invalid_key(self):
-        self.mock_object(utils, 'LOG')
-
-        utils.setup_tracing(['method', 'fake'])
-
-        self.assertFalse(utils.TRACE_API)
-        self.assertTrue(utils.TRACE_METHOD)
-        self.assertEqual(1, utils.LOG.warning.call_count)
-
-    def test_trace_no_tracing(self):
-        self.mock_object(utils, 'LOG')
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(None)
-
-        result = _trace_test_method()
-
-        self.assertEqual('OK', result)
-        self.assertEqual(0, utils.LOG.debug.call_count)
-
-    def test_utils_trace_method(self):
-        self.mock_object(utils, 'LOG')
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method()
-        self.assertEqual('OK', result)
-        self.assertEqual(2, utils.LOG.debug.call_count)
-
-    def test_utils_trace_api(self):
-        self.mock_object(utils, 'LOG')
-
-        @utils.trace_api
-        def _trace_test_api(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['api'])
-
-        result = _trace_test_api()
-        self.assertEqual('OK', result)
-        self.assertEqual(2, utils.LOG.debug.call_count)
-
-    def test_utils_trace_api_filtered(self):
-        self.mock_object(utils, 'LOG')
-
-        def filter_func(all_args):
-            return False
-
-        @utils.trace_api(filter_function=filter_func)
-        def _trace_test_api(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['api'])
-
-        result = _trace_test_api()
-        self.assertEqual('OK', result)
-        self.assertEqual(0, utils.LOG.debug.call_count)
-
-    def test_utils_trace_filtered(self):
-        self.mock_object(utils, 'LOG')
-
-        def filter_func(all_args):
-            return False
-
-        @utils.trace(filter_function=filter_func)
-        def _trace_test(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['api'])
-
-        result = _trace_test()
-        self.assertEqual('OK', result)
-        self.assertEqual(0, utils.LOG.debug.call_count)
-
-    def test_utils_trace_method_default_logger(self):
-        mock_log = self.mock_object(utils, 'LOG')
-
-        @utils.trace_method
-        def _trace_test_method_custom_logger(*args, **kwargs):
-            return 'OK'
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method_custom_logger()
-
-        self.assertEqual('OK', result)
-        self.assertEqual(2, mock_log.debug.call_count)
-
-    def test_utils_trace_method_inner_decorator(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        def _test_decorator(f):
-            def blah(*args, **kwargs):
-                return f(*args, **kwargs)
-            return blah
-
-        @_test_decorator
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method(self)
-
-        self.assertEqual('OK', result)
-        self.assertEqual(2, mock_log.debug.call_count)
-        # Ensure the correct function name was logged
-        for call in mock_log.debug.call_args_list:
-            self.assertIn('_trace_test_method', str(call))
-            self.assertNotIn('blah', str(call))
-
-    def test_utils_trace_method_outer_decorator(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        def _test_decorator(f):
-            def blah(*args, **kwargs):
-                return f(*args, **kwargs)
-            return blah
-
-        @utils.trace_method
-        @_test_decorator
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method(self)
-
-        self.assertEqual('OK', result)
-        self.assertEqual(2, mock_log.debug.call_count)
-        # Ensure the incorrect function name was logged
-        for call in mock_log.debug.call_args_list:
-            self.assertNotIn('_trace_test_method', str(call))
-            self.assertIn('blah', str(call))
-
-    def test_utils_trace_method_outer_decorator_with_functools(self):
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        self.mock_object(utils.logging, 'getLogger', mock_log)
-        mock_log = self.mock_object(utils, 'LOG')
-
-        def _test_decorator(f):
-            @functools.wraps(f)
-            def wraps(*args, **kwargs):
-                return f(*args, **kwargs)
-            return wraps
-
-        @utils.trace_method
-        @_test_decorator
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method()
-
-        self.assertEqual('OK', result)
-        self.assertEqual(2, mock_log.debug.call_count)
-        # Ensure the incorrect function name was logged
-        for call in mock_log.debug.call_args_list:
-            self.assertIn('_trace_test_method', str(call))
-            self.assertNotIn('wraps', str(call))
-
-    def test_utils_trace_method_with_exception(self):
-        self.LOG = self.mock_object(utils, 'LOG')
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            raise exception.APITimeout('test message')
-
-        utils.setup_tracing(['method'])
-
-        self.assertRaises(exception.APITimeout, _trace_test_method)
-
-        exception_log = self.LOG.debug.call_args_list[1]
-        self.assertIn('exception', str(exception_log))
-        self.assertIn('test message', str(exception_log))
-
-    def test_utils_trace_method_with_time(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        mock_time = mock.Mock(side_effect=[3.1, 6])
-        self.mock_object(time, 'time', mock_time)
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return 'OK'
-
-        utils.setup_tracing(['method'])
-
-        result = _trace_test_method(self)
-
-        self.assertEqual('OK', result)
-        return_log = mock_log.debug.call_args_list[1]
-        self.assertIn('2900', str(return_log))
-
-    def test_utils_trace_wrapper_class(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        utils.setup_tracing(['method'])
-
-        class MyClass(object, metaclass=utils.TraceWrapperMetaclass):
-            def trace_test_method(self):
-                return 'OK'
-
-        test_class = MyClass()
-        result = test_class.trace_test_method()
-
-        self.assertEqual('OK', result)
-        self.assertEqual(2, mock_log.debug.call_count)
-
-    def test_utils_trace_method_with_password_dict(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return {'something': 'test',
-                    'password': 'Now you see me'}
-
-        utils.setup_tracing(['method'])
-        result = _trace_test_method(self)
-        expected_unmasked_dict = {'something': 'test',
-                                  'password': 'Now you see me'}
-
-        self.assertEqual(expected_unmasked_dict, result)
-        self.assertEqual(2, mock_log.debug.call_count)
-        self.assertIn("'password': '***'",
-                      str(mock_log.debug.call_args_list[1]))
-
-    def test_utils_trace_method_with_password_str(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        @utils.trace_method
-        def _trace_test_method(*args, **kwargs):
-            return "'adminPass': 'Now you see me'"
-
-        utils.setup_tracing(['method'])
-        result = _trace_test_method(self)
-        expected_unmasked_str = "'adminPass': 'Now you see me'"
-
-        self.assertEqual(expected_unmasked_str, result)
-        self.assertEqual(2, mock_log.debug.call_count)
-        self.assertIn("'adminPass': '***'",
-                      str(mock_log.debug.call_args_list[1]))
-
-    def test_utils_trace_method_with_password_in_formal_params(self):
-        mock_logging = self.mock_object(utils, 'logging')
-        mock_log = mock.Mock()
-        mock_log.isEnabledFor = lambda x: True
-        mock_logging.getLogger = mock.Mock(return_value=mock_log)
-
-        @utils.trace
-        def _trace_test_method(*args, **kwargs):
-            self.assertEqual('verybadpass',
-                             kwargs['test_args']['data']['password'])
-            pass
-
-        test_args = {
-            'data': {
-                'password': 'verybadpass'
-            }
-        }
-        _trace_test_method(self, test_args=test_args)
-
-        self.assertEqual(2, mock_log.debug.call_count)
-        self.assertIn("'password': '***'",
-                      str(mock_log.debug.call_args_list[0]))
-
+class TestCalculateVirtualFree(test.TestCase):
     @ddt.data(
         {'total': 30.01, 'free': 28.01, 'provisioned': 2.0, 'max_ratio': 1.0,
          'thin_support': False, 'thick_support': True,

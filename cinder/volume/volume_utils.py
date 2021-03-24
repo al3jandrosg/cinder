@@ -14,9 +14,12 @@
 
 """Volume-related Utilities and helpers."""
 
+import abc
 import ast
 import functools
+import inspect
 import json
+import logging as py_logging
 import math
 import operator
 import os
@@ -26,6 +29,7 @@ import re
 import socket
 import tempfile
 import time
+import types
 import uuid
 
 from castellan.common.credentials import keystone_password
@@ -35,6 +39,7 @@ import eventlet
 from eventlet import tpool
 from keystoneauth1 import loading as ks_loading
 from os_brick import encryptors
+from os_brick.initiator import connector
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -75,6 +80,9 @@ IMAGE_ATTRIBUTES = (
     'min_ram',
     'size',
 )
+VALID_TRACE_FLAGS = {'method', 'api'}
+TRACE_API = False
+TRACE_METHOD = False
 
 
 def null_safe_str(s):
@@ -1295,3 +1303,230 @@ def get_backend_configuration(backend_name, backend_opts=None):
         config.append_config_values(backend_opts)
 
     return config
+
+
+def brick_get_connector_properties(multipath=False, enforce_multipath=False):
+    """Wrapper to automatically set root_helper in brick calls.
+
+    :param multipath: A boolean indicating whether the connector can
+                      support multipath.
+    :param enforce_multipath: If True, it raises exception when multipath=True
+                              is specified but multipathd is not running.
+                              If False, it falls back to multipath=False
+                              when multipathd is not running.
+    """
+
+    root_helper = utils.get_root_helper()
+    return connector.get_connector_properties(root_helper,
+                                              CONF.my_ip,
+                                              multipath,
+                                              enforce_multipath)
+
+
+def brick_get_connector(protocol, driver=None,
+                        use_multipath=False,
+                        device_scan_attempts=3,
+                        *args, **kwargs):
+    """Wrapper to get a brick connector object.
+
+    This automatically populates the required protocol as well
+    as the root_helper needed to execute commands.
+    """
+
+    root_helper = utils.get_root_helper()
+    return connector.InitiatorConnector.factory(protocol, root_helper,
+                                                driver=driver,
+                                                use_multipath=use_multipath,
+                                                device_scan_attempts=
+                                                device_scan_attempts,
+                                                *args, **kwargs)
+
+
+def brick_get_encryptor(connection_info, *args, **kwargs):
+    """Wrapper to get a brick encryptor object."""
+
+    root_helper = utils.get_root_helper()
+    km = castellan_key_manager.API(CONF)
+    return encryptors.get_volume_encryptor(root_helper=root_helper,
+                                           connection_info=connection_info,
+                                           keymgr=km,
+                                           *args, **kwargs)
+
+
+def brick_attach_volume_encryptor(context, attach_info, encryption):
+    """Attach encryption layer."""
+    connection_info = attach_info['conn']
+    connection_info['data']['device_path'] = attach_info['device']['path']
+    encryptor = brick_get_encryptor(connection_info,
+                                    **encryption)
+    encryptor.attach_volume(context, **encryption)
+
+
+def brick_detach_volume_encryptor(attach_info, encryption):
+    """Detach encryption layer."""
+    connection_info = attach_info['conn']
+    connection_info['data']['device_path'] = attach_info['device']['path']
+
+    encryptor = brick_get_encryptor(connection_info,
+                                    **encryption)
+    encryptor.detach_volume(**encryption)
+
+
+# NOTE: the trace methods are included in volume_utils because
+# they are currently only called by code in the volume area
+# of Cinder.  These can be moved to a different file if they
+# are needed elsewhere.
+def trace(*dec_args, **dec_kwargs):
+    """Trace calls to the decorated function.
+
+    This decorator should always be defined as the outermost decorator so it
+    is defined last. This is important so it does not interfere
+    with other decorators.
+
+    Using this decorator on a function will cause its execution to be logged at
+    `DEBUG` level with arguments, return values, and exceptions.
+
+    :returns: a function decorator
+    """
+
+    def _decorator(f):
+
+        func_name = f.__name__
+
+        @functools.wraps(f)
+        def trace_logging_wrapper(*args, **kwargs):
+            filter_function = dec_kwargs.get('filter_function')
+
+            if len(args) > 0:
+                maybe_self = args[0]
+            else:
+                maybe_self = kwargs.get('self', None)
+
+            if maybe_self and hasattr(maybe_self, '__module__'):
+                logger = logging.getLogger(maybe_self.__module__)
+            else:
+                logger = LOG
+
+            # NOTE(ameade): Don't bother going any further if DEBUG log level
+            # is not enabled for the logger.
+            if not logger.isEnabledFor(py_logging.DEBUG):
+                return f(*args, **kwargs)
+
+            all_args = inspect.getcallargs(f, *args, **kwargs)
+
+            pass_filter = filter_function is None or filter_function(all_args)
+
+            if pass_filter:
+                logger.debug('==> %(func)s: call %(all_args)r',
+                             {'func': func_name,
+                              'all_args': strutils.mask_password(
+                                  str(all_args))})
+
+            start_time = time.time() * 1000
+            try:
+                result = f(*args, **kwargs)
+            except Exception as exc:
+                total_time = int(round(time.time() * 1000)) - start_time
+                logger.debug('<== %(func)s: exception (%(time)dms) %(exc)r',
+                             {'func': func_name,
+                              'time': total_time,
+                              'exc': exc})
+                raise
+            total_time = int(round(time.time() * 1000)) - start_time
+
+            if isinstance(result, dict):
+                mask_result = strutils.mask_dict_password(result)
+            elif isinstance(result, str):
+                mask_result = strutils.mask_password(result)
+            else:
+                mask_result = result
+
+            if pass_filter:
+                logger.debug('<== %(func)s: return (%(time)dms) %(result)r',
+                             {'func': func_name,
+                              'time': total_time,
+                              'result': mask_result})
+            return result
+        return trace_logging_wrapper
+
+    if len(dec_args) == 0:
+        # filter_function is passed and args does not contain f
+        return _decorator
+    else:
+        # filter_function is not passed
+        return _decorator(dec_args[0])
+
+
+def trace_api(*dec_args, **dec_kwargs):
+    """Decorates a function if TRACE_API is true."""
+
+    def _decorator(f):
+        @functools.wraps(f)
+        def trace_api_logging_wrapper(*args, **kwargs):
+            if TRACE_API:
+                return trace(f, *dec_args, **dec_kwargs)(*args, **kwargs)
+            return f(*args, **kwargs)
+        return trace_api_logging_wrapper
+
+    if len(dec_args) == 0:
+        # filter_function is passed and args does not contain f
+        return _decorator
+    else:
+        # filter_function is not passed
+        return _decorator(dec_args[0])
+
+
+def trace_method(f):
+    """Decorates a function if TRACE_METHOD is true."""
+    @functools.wraps(f)
+    def trace_method_logging_wrapper(*args, **kwargs):
+        if TRACE_METHOD:
+            return trace(f)(*args, **kwargs)
+        return f(*args, **kwargs)
+    return trace_method_logging_wrapper
+
+
+class TraceWrapperMetaclass(type):
+    """Metaclass that wraps all methods of a class with trace_method.
+
+    This metaclass will cause every function inside of the class to be
+    decorated with the trace_method decorator.
+
+    To use the metaclass you define a class like so:
+    class MyClass(object, metaclass=utils.TraceWrapperMetaclass):
+    """
+    def __new__(meta, classname, bases, classDict):
+        newClassDict = {}
+        for attributeName, attribute in classDict.items():
+            if isinstance(attribute, types.FunctionType):
+                # replace it with a wrapped version
+                attribute = functools.update_wrapper(trace_method(attribute),
+                                                     attribute)
+            newClassDict[attributeName] = attribute
+
+        return type.__new__(meta, classname, bases, newClassDict)
+
+
+class TraceWrapperWithABCMetaclass(abc.ABCMeta, TraceWrapperMetaclass):
+    """Metaclass that wraps all methods of a class with trace."""
+    pass
+
+
+def setup_tracing(trace_flags):
+    """Set global variables for each trace flag.
+
+    Sets variables TRACE_METHOD and TRACE_API, which represent
+    whether to log methods or api traces.
+
+    :param trace_flags: a list of strings
+    """
+    global TRACE_METHOD
+    global TRACE_API
+    try:
+        trace_flags = [flag.strip() for flag in trace_flags]
+    except TypeError:  # Handle when trace_flags is None or a test mock
+        trace_flags = []
+    for invalid_flag in (set(trace_flags) - VALID_TRACE_FLAGS):
+        LOG.warning('Invalid trace flag: %s', invalid_flag)
+    TRACE_METHOD = 'method' in trace_flags
+    TRACE_API = 'api' in trace_flags

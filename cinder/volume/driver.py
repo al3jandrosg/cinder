@@ -414,7 +414,8 @@ class BaseVD(object, metaclass=abc.ABCMeta):
             self.configuration.append_config_values(backup_opts)
             self.configuration.append_config_values(image_opts)
             self.configuration.append_config_values(fqdn_opts)
-            utils.setup_tracing(self.configuration.safe_get('trace_flags'))
+            volume_utils.setup_tracing(
+                self.configuration.safe_get('trace_flags'))
 
             # NOTE(geguileo): Don't allow to start if we are enabling
             # replication on a cluster service with a backend that doesn't
@@ -870,16 +871,17 @@ class BaseVD(object, metaclass=abc.ABCMeta):
 
         use_multipath = self.configuration.use_multipath_for_image_xfer
         enforce_multipath = self.configuration.enforce_multipath_for_image_xfer
-        properties = utils.brick_get_connector_properties(use_multipath,
-                                                          enforce_multipath)
+        properties = volume_utils.brick_get_connector_properties(
+            use_multipath,
+            enforce_multipath)
         attach_info, volume = self._attach_volume(context, volume, properties)
         try:
             if encrypted:
                 encryption = self.db.volume_encryption_metadata_get(context,
                                                                     volume.id)
-                utils.brick_attach_volume_encryptor(context,
-                                                    attach_info,
-                                                    encryption)
+                volume_utils.brick_attach_volume_encryptor(context,
+                                                           attach_info,
+                                                           encryption)
             try:
                 image_utils.fetch_to_raw(
                     context,
@@ -897,8 +899,8 @@ class BaseVD(object, metaclass=abc.ABCMeta):
 
             finally:
                 if encrypted:
-                    utils.brick_detach_volume_encryptor(attach_info,
-                                                        encryption)
+                    volume_utils.brick_detach_volume_encryptor(attach_info,
+                                                               encryption)
         finally:
             self._detach_volume(context, attach_info, volume, properties,
                                 force=True)
@@ -909,8 +911,9 @@ class BaseVD(object, metaclass=abc.ABCMeta):
 
         use_multipath = self.configuration.use_multipath_for_image_xfer
         enforce_multipath = self.configuration.enforce_multipath_for_image_xfer
-        properties = utils.brick_get_connector_properties(use_multipath,
-                                                          enforce_multipath)
+        properties = volume_utils.brick_get_connector_properties(
+            use_multipath,
+            enforce_multipath)
         attach_info, volume = self._attach_volume(context, volume, properties)
 
         try:
@@ -1125,7 +1128,7 @@ class BaseVD(object, metaclass=abc.ABCMeta):
         use_multipath = self.configuration.use_multipath_for_image_xfer
         device_scan_attempts = self.configuration.num_volume_device_scan_tries
         protocol = conn['driver_volume_type']
-        connector = utils.brick_get_connector(
+        connector = volume_utils.brick_get_connector(
             protocol,
             use_multipath=use_multipath,
             device_scan_attempts=device_scan_attempts,

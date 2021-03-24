@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: cinder
-Version: 17.1.0.dev189
+Version: 18.0.0.0b1
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -68,6 +68,7 @@ Provides-Extra: infinidat
 Provides-Extra: kaminario
 Provides-Extra: powermax
 Provides-Extra: pure
+Provides-Extra: rbd_iscsi
 Provides-Extra: rsd
 Provides-Extra: storpool
 Provides-Extra: test

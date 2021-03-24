@@ -42,7 +42,6 @@ from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 from cinder import interface
-from cinder import utils
 from cinder.volume.drivers.hpe import hpe_3par_base as hpebasedriver
 from cinder.volume import volume_utils
 
@@ -128,10 +127,11 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
                 failover. bug #1773069
         4.0.4 - Added Peer Persistence feature
         4.0.5 - Added Primera array check. bug #1849525
+        4.0.6 - Allow iSCSI support for Primera 4.2 onwards
 
     """
 
-    VERSION = "4.0.5"
+    VERSION = "4.0.6"
 
     # The name of the CI wiki page.
     CI_WIKI_NAME = "HPE_Storage_CI"
@@ -144,9 +144,17 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
         client_obj = common.client
         is_primera = client_obj.is_primera_array()
         if is_primera:
-            LOG.error("For Primera, only FC is supported. "
-                      "iSCSI cannot be used")
-            raise NotImplementedError()
+            api_version = client_obj.getWsApiVersion()
+            array_version = api_version['build']
+            LOG.debug("array version: %(version)s",
+                      {'version': array_version})
+            if array_version < 40200000:
+                err_msg = (_('The iSCSI driver is not supported for '
+                             'Primera %(version)s. It is supported '
+                             'for Primera 4.2 or higher versions.')
+                           % {'version': array_version})
+                LOG.error(err_msg)
+                raise NotImplementedError()
 
         self.iscsi_ips = {}
         common.client_login()
@@ -275,7 +283,7 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
                             "hpe3par_iscsi_ips list defined in "
                             "cinder.conf.", iscsi_ip)
 
-    @utils.trace
+    @volume_utils.trace
     @coordination.synchronized('3par-{volume.id}')
     def initialize_connection(self, volume, connector):
         """Assigns the volume to a server.
@@ -451,7 +459,7 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
         finally:
             self._logout(common)
 
-    @utils.trace
+    @volume_utils.trace
     @coordination.synchronized('3par-{volume.id}')
     def terminate_connection(self, volume, connector, **kwargs):
         """Driver entry point to detach a volume from an instance."""
@@ -734,7 +742,7 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
 
         return model_update
 
-    @utils.trace
+    @volume_utils.trace
     def create_export(self, context, volume, connector):
         common = self._login()
         try:
@@ -742,7 +750,7 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
         finally:
             self._logout(common)
 
-    @utils.trace
+    @volume_utils.trace
     def ensure_export(self, context, volume):
         """Ensure the volume still exists on the 3PAR.
 

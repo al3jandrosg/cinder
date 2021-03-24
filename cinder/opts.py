@@ -38,6 +38,7 @@ from cinder.backup.drivers import gcs as cinder_backup_drivers_gcs
 from cinder.backup.drivers import glusterfs as cinder_backup_drivers_glusterfs
 from cinder.backup.drivers import nfs as cinder_backup_drivers_nfs
 from cinder.backup.drivers import posix as cinder_backup_drivers_posix
+from cinder.backup.drivers import s3 as cinder_backup_drivers_s3
 from cinder.backup.drivers import swift as cinder_backup_drivers_swift
 from cinder.backup import manager as cinder_backup_manager
 from cinder.cmd import backup as cinder_cmd_backup
@@ -69,6 +70,8 @@ from cinder import ssh_utils as cinder_sshutils
 from cinder.transfer import api as cinder_transfer_api
 from cinder.volume import api as cinder_volume_api
 from cinder.volume import driver as cinder_volume_driver
+from cinder.volume.drivers.ceph import rbd_iscsi as \
+    cinder_volume_drivers_ceph_rbdiscsi
 from cinder.volume.drivers.datera import datera_iscsi as \
     cinder_volume_drivers_datera_dateraiscsi
 from cinder.volume.drivers.dell_emc.powerflex import driver as \
@@ -127,6 +130,8 @@ from cinder.volume.drivers.inspur.instorage import instorage_iscsi as \
     cinder_volume_drivers_inspur_instorage_instorageiscsi
 from cinder.volume.drivers.kaminario import kaminario_common as \
     cinder_volume_drivers_kaminario_kaminariocommon
+from cinder.volume.drivers.kioxia import kumoscale as \
+    cinder_volume_drivers_kioxia_kumoscale
 from cinder.volume.drivers.lenovo import lenovo_common as \
     cinder_volume_drivers_lenovo_lenovocommon
 from cinder.volume.drivers import linstordrv as \
@@ -222,6 +227,7 @@ def list_opts():
                 cinder_backup_drivers_glusterfs.glusterfsbackup_service_opts,
                 cinder_backup_drivers_nfs.nfsbackup_service_opts,
                 cinder_backup_drivers_posix.posixbackup_service_opts,
+                cinder_backup_drivers_s3.s3backup_service_opts,
                 cinder_backup_drivers_swift.swiftbackup_service_opts,
                 cinder_backup_manager.backup_manager_opts,
                 cinder_cmd_backup.backup_cmd_opts,
@@ -274,6 +280,7 @@ def list_opts():
                 instorage_mcs_opts,
                 cinder_volume_drivers_inspur_instorage_instorageiscsi.
                 instorage_mcs_iscsi_opts,
+                cinder_volume_drivers_kioxia_kumoscale.KUMOSCALE_OPTS,
                 cinder_volume_drivers_open_e_options.jdss_connection_opts,
                 cinder_volume_drivers_open_e_options.jdss_iscsi_opts,
                 cinder_volume_drivers_open_e_options.jdss_volume_opts,
@@ -310,6 +317,7 @@ def list_opts():
                 cinder_volume_driver.scst_opts,
                 cinder_volume_driver.image_opts,
                 cinder_volume_driver.fqdn_opts,
+                cinder_volume_drivers_ceph_rbdiscsi.RBD_ISCSI_OPTS,
                 cinder_volume_drivers_dell_emc_powerflex_driver.
                 powerflex_opts,
                 cinder_volume_drivers_dell_emc_powermax_common.powermax_opts,
