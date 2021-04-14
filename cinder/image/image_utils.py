@@ -163,7 +163,7 @@ def get_qemu_img_version():
 
 
 def qemu_img_supports_force_share():
-    return get_qemu_img_version() >= [2, 10, 0]
+    return get_qemu_img_version() >= QEMU_IMG_MIN_FORCE_SHARE_VERSION
 
 
 def _get_qemu_convert_luks_cmd(src, dest, out_format, src_format=None,
@@ -406,9 +406,12 @@ def convert_image(source, dest, out_format, out_subformat=None,
                        src_passphrase_file=src_passphrase_file)
 
 
-def resize_image(source, size, run_as_root=False):
+def resize_image(source, size, run_as_root=False, file_format=None):
     """Changes the virtual size of the image."""
-    cmd = ('qemu-img', 'resize', source, '%sG' % size)
+    if file_format:
+        cmd = ('qemu-img', 'resize', '-f', file_format, source, '%sG' % size)
+    else:
+        cmd = ('qemu-img', 'resize', source, '%sG' % size)
     utils.execute(*cmd, run_as_root=run_as_root)
 
 
@@ -643,7 +646,7 @@ def fetch_to_volume_format(context, image_service,
     # large and cause disk full errors which would confuse users.
     # Unfortunately it seems that you can't pipe to 'qemu-img convert' because
     # it seeks. Maybe we can think of something for a future version.
-    with temporary_file() as tmp:
+    with temporary_file(prefix='image_download_%s_' % image_id) as tmp:
         has_meta = False if not image_meta else True
         try:
             format_raw = True if image_meta['disk_format'] == 'raw' else False
@@ -761,7 +764,7 @@ def upload_volume(context, image_service, image_meta, volume_path,
                                              base_image_ref=base_image_ref)
             return
 
-    with temporary_file() as tmp:
+    with temporary_file(prefix='vol_upload_') as tmp:
         LOG.debug("%s was %s, converting to %s",
                   image_id, volume_format, image_meta['disk_format'])
 
@@ -995,7 +998,8 @@ class TemporaryImages(object):
     @contextlib.contextmanager
     def fetch(cls, image_service, context, image_id, suffix=''):
         tmp_images = cls.for_image_service(image_service).temporary_images
-        with temporary_file(suffix=suffix) as tmp:
+        with temporary_file(prefix='image_fetch_%s_' % image_id,
+                            suffix=suffix) as tmp:
             fetch_verify_image(context, image_service, image_id, tmp)
             user = context.user_id
             if not tmp_images.get(user):

@@ -186,20 +186,16 @@ class DbQuotaDriver(object):
                          default value, if there is no value from the
                          quota class) will be reported if there is no
                          specific value for the resource.
-        :param usages: If True, the current in_use, reserved and allocated
-                       counts will also be returned.
+        :param usages: If True, the current in_use and reserved counts will
+                       also be returned.
         """
 
         quotas = {}
         project_quotas = db.quota_get_all_by_project(context, project_id)
-        allocated_quotas = None
         default_quotas = None
         if usages:
             project_usages = db.quota_usage_get_all_by_project(context,
                                                                project_id)
-            allocated_quotas = db.quota_allocated_get_all_by_project(
-                context, project_id)
-            allocated_quotas.pop('project_id')
 
         # Get the quotas for the appropriate class.  If the project ID
         # matches the one in the context, we use the quota_class from
@@ -237,9 +233,6 @@ class DbQuotaDriver(object):
                 quotas[resource.name].update(
                     in_use=usage.get('in_use', 0),
                     reserved=usage.get('reserved', 0), )
-            if allocated_quotas:
-                quotas[resource.name].update(
-                    allocated=allocated_quotas.get(resource.name, 0), )
         return quotas
 
     def _get_quotas(self, context, resources, keys, has_sync, project_id=None):
@@ -560,48 +553,6 @@ class ReservableResource(BaseResource):
             self.sync = sync
 
 
-class AbsoluteResource(BaseResource):
-    """Describe a non-reservable resource."""
-
-    pass
-
-
-class CountableResource(AbsoluteResource):
-    """Describe a resource where counts aren't based only on the project ID."""
-
-    def __init__(self, name, count, flag=None):
-        """Initializes a CountableResource.
-
-        Countable resources are those resources which directly
-        correspond to objects in the database, i.e., volumes, gigabytes,
-        etc., but for which a count by project ID is inappropriate.  A
-        CountableResource must be constructed with a counting
-        function, which will be called to determine the current counts
-        of the resource.
-
-        The counting function will be passed the context, along with
-        the extra positional and keyword arguments that are passed to
-        Quota.count().  It should return an integer specifying the
-        count.
-
-        Note that this counting is not performed in a transaction-safe
-        manner.  This resource class is a temporary measure to provide
-        required functionality, until a better approach to solving
-        this problem can be evolved.
-
-        :param name: The name of the resource, i.e., "volumes".
-        :param count: A callable which returns the count of the
-                      resource.  The arguments passed are as described
-                      above.
-        :param flag: The name of the flag or configuration option
-                     which specifies the default value of the quota
-                     for this resource.
-        """
-
-        super(CountableResource, self).__init__(name, flag=flag)
-        self.count = count
-
-
 class VolumeTypeResource(ReservableResource):
     """ReservableResource for a specific volume type."""
 
@@ -726,33 +677,14 @@ class QuotaEngine(object):
                          default value, if there is no value from the
                          quota class) will be reported if there is no
                          specific value for the resource.
-        :param usages: If True, the current in_use, reserved and
-                       allocated counts will also be returned.
+        :param usages: If True, the current in_use and reserved counts will
+                       also be returned.
         """
         return self._driver.get_project_quotas(context, self.resources,
                                                project_id,
                                                quota_class=quota_class,
                                                defaults=defaults,
                                                usages=usages)
-
-    def count(self, context, resource, *args, **kwargs):
-        """Count a resource.
-
-        For countable resources, invokes the count() function and
-        returns its result.  Arguments following the context and
-        resource are passed directly to the count function declared by
-        the resource.
-
-        :param context: The request context, for access checks.
-        :param resource: The name of the resource, as a string.
-        """
-
-        # Get the resource
-        res = self.resources.get(resource)
-        if not res or not hasattr(res, 'count'):
-            raise exception.QuotaResourceUnknown(unknown=[resource])
-
-        return res.count(context, *args, **kwargs)
 
     def limit_check(self, context, project_id=None, **values):
         """Check simple quota limits.

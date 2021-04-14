@@ -179,7 +179,7 @@ class AS13000Driver(san.SanISCSIDriver):
     PROTOCOL = 'iSCSI'
 
     # ThirdPartySystems wiki page
-    CI_WIKI_NAME = 'INSPUR_CI'
+    CI_WIKI_NAME = 'Inspur_CI'
 
     def __init__(self, *args, **kwargs):
         super(AS13000Driver, self).__init__(*args, **kwargs)
@@ -704,7 +704,7 @@ class AS13000Driver(san.SanISCSIDriver):
                                  request_type=request_type)
 
     @volume_utils.trace
-    @utils.retry(exceptions=exception.VolumeDriverException,
+    @utils.retry(retry_param=exception.VolumeDriverException,
                  interval=1,
                  retries=3)
     def _add_lun_to_target(self, target_name, volume):

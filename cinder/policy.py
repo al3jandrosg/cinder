@@ -76,12 +76,15 @@ def enforce(context, action, target):
     """
     init()
 
-    return _ENFORCER.enforce(action,
-                             target,
-                             context.to_policy_values(),
-                             do_raise=True,
-                             exc=exception.PolicyNotAuthorized,
-                             action=action)
+    try:
+        return _ENFORCER.enforce(action,
+                                 target,
+                                 context,
+                                 do_raise=True,
+                                 exc=exception.PolicyNotAuthorized,
+                                 action=action)
+    except policy.InvalidScope:
+        raise exception.PolicyNotAuthorized(action=action)
 
 
 def set_rules(rules, overwrite=True, use_conf=False):
@@ -166,7 +169,7 @@ def authorize(context, action, target, do_raise=True, exc=None):
             LOG.exception('Policy not registered')
     except Exception:
         with excutils.save_and_reraise_exception():
-            LOG.error('Policy check for %(action)s failed with context '
+            LOG.debug('Policy check for %(action)s failed with context '
                       '%(credentials)s',
                       {'action': action,
                        'credentials': context.to_policy_values()})

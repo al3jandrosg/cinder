@@ -30,6 +30,8 @@ from cinder.tests.unit import fake_group_snapshot
 from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.tests.unit import test
+from cinder.volume import qos_specs
+from cinder.volume import volume_types
 from cinder.volume import volume_utils
 
 
@@ -52,6 +54,7 @@ BASE_DRIVER_OBJ = DRIVER_PATH + ".PureBaseVolumeDriver"
 ISCSI_DRIVER_OBJ = DRIVER_PATH + ".PureISCSIDriver"
 FC_DRIVER_OBJ = DRIVER_PATH + ".PureFCDriver"
 ARRAY_OBJ = DRIVER_PATH + ".FlashArray"
+UNMANAGED_SUFFIX = "-unmanaged"
 
 GET_ARRAY_PRIMARY = {"version": "99.9.9",
                      "revision": "201411230504+8a400f7",
@@ -495,6 +498,15 @@ MANAGEABLE_PURE_SNAP_REFS = [
         'source_reference': {'name': MANAGEABLE_PURE_SNAPS[2]['source']},
     }
 ]
+MAX_SNAP_LENGTH = 96
+
+# unit for maxBWS is MB
+QOS_IOPS_BWS = {"maxIOPS": "100", "maxBWS": "1"}
+QOS_IOPS_BWS_2 = {"maxIOPS": "1000", "maxBWS": "10"}
+QOS_INVALID = {"maxIOPS": "100", "maxBWS": str(512 * 1024 + 1)}
+QOS_ZEROS = {"maxIOPS": "0", "maxBWS": "0"}
+QOS_IOPS = {"maxIOPS": "100"}
+QOS_BWS = {"maxBWS": "1"}
 
 
 class FakePureStorageHTTPError(Exception):
@@ -579,7 +591,8 @@ class PureBaseSharedDriverTestCase(PureDriverTestCase):
         self.async_array2.get_rest_version.return_value = '1.4'
 
     def new_fake_vol(self, set_provider_id=True, fake_context=None,
-                     spec=None, type_extra_specs=None):
+                     spec=None, type_extra_specs=None, type_qos_specs_id=None,
+                     type_qos_specs=None):
         if fake_context is None:
             fake_context = mock.MagicMock()
         if type_extra_specs is None:
@@ -589,6 +602,8 @@ class PureBaseSharedDriverTestCase(PureDriverTestCase):
 
         voltype = fake_volume.fake_volume_type_obj(fake_context)
         voltype.extra_specs = type_extra_specs
+        voltype.qos_specs_id = type_qos_specs_id
+        voltype.qos_specs = type_qos_specs
 
         vol = fake_volume.fake_volume_obj(fake_context, **spec)
 
@@ -643,7 +658,7 @@ class PureBaseSharedDriverTestCase(PureDriverTestCase):
         return group_snap, group_snap_name
 
 
-@ddt.ddt
+@ddt.ddt(testNameFormat=ddt.TestNameFormat.INDEX_ONLY)
 class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
     def _setup_mocks_for_replication(self):
         # Mock config values
@@ -977,7 +992,9 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
     @mock.patch(BASE_DRIVER_OBJ + "._add_to_group_if_needed")
     @mock.patch(BASE_DRIVER_OBJ + "._get_replication_type_from_vol_type")
-    def test_create_volume_from_snapshot(self, mock_get_replicated_type,
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_from_snapshot(self, mock_get_volume_type,
+                                         mock_get_replicated_type,
                                          mock_add_to_group):
         srcvol, _ = self.new_fake_vol()
         snap = fake_snapshot.fake_snapshot_obj(mock.MagicMock(), volume=srcvol)
@@ -985,7 +1002,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         mock_get_replicated_type.return_value = None
 
         vol, vol_name = self.new_fake_vol(set_provider_id=False)
-
+        mock_get_volume_type.return_value = vol.volume_type
         # Branch where extend unneeded
         self.driver.create_volume_from_snapshot(vol, snap)
         self.array.copy_volume.assert_called_with(snap_name, vol_name)
@@ -998,7 +1015,9 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
     @mock.patch(BASE_DRIVER_OBJ + "._add_to_group_if_needed")
     @mock.patch(BASE_DRIVER_OBJ + "._get_replication_type_from_vol_type")
+    @mock.patch.object(volume_types, 'get_volume_type')
     def test_create_volume_from_snapshot_with_extend(self,
+                                                     mock_get_volume_type,
                                                      mock_get_replicated_type,
                                                      mock_add_to_group):
         srcvol, srcvol_name = self.new_fake_vol(spec={"size": 1})
@@ -1008,6 +1027,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
         vol, vol_name = self.new_fake_vol(set_provider_id=False,
                                           spec={"size": 2})
+        mock_get_volume_type.return_value = vol.volume_type
 
         self.driver.create_volume_from_snapshot(vol, snap)
         expected = [mock.call.copy_volume(snap_name, vol_name),
@@ -1015,7 +1035,8 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         self.array.assert_has_calls(expected)
         mock_add_to_group.assert_called_once_with(vol, vol_name)
 
-    def test_create_volume_from_snapshot_sync(self):
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_from_snapshot_sync(self, mock_get_volume_type):
         repl_extra_specs = {
             'replication_type': '<in> async',
             'replication_enabled': '<is> true',
@@ -1025,6 +1046,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
         vol, vol_name = self.new_fake_vol(set_provider_id=False,
                                           type_extra_specs=repl_extra_specs)
+        mock_get_volume_type.return_value = vol.volume_type
         self.driver.create_volume_from_snapshot(vol, snap)
         self.array.copy_volume.assert_called_with(snap_name, vol_name)
 
@@ -1032,7 +1054,9 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
     @mock.patch(BASE_DRIVER_OBJ + "._extend_if_needed", autospec=True)
     @mock.patch(BASE_DRIVER_OBJ + "._get_pgroup_snap_name_from_snapshot")
     @mock.patch(BASE_DRIVER_OBJ + "._get_replication_type_from_vol_type")
-    def test_create_volume_from_cgsnapshot(self, mock_get_replicated_type,
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_from_cgsnapshot(self, mock_get_volume_type,
+                                           mock_get_replicated_type,
                                            mock_get_snap_name,
                                            mock_extend_if_needed,
                                            mock_add_to_group):
@@ -1040,6 +1064,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         cgsnap = fake_group_snapshot.fake_group_snapshot_obj(mock.MagicMock(),
                                                              group=cgroup)
         vol, vol_name = self.new_fake_vol(spec={"group": cgroup})
+        mock_get_volume_type.return_value = vol.volume_type
         snap = fake_snapshot.fake_snapshot_obj(mock.MagicMock(), volume=vol)
         snap.group_snapshot_id = cgsnap.id
         snap.group_snapshot = cgsnap
@@ -1635,34 +1660,6 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         self.assertEqual((None, None), result)
         mock_create_cg.assert_called_with(mock_context, mock_group)
         self.assertTrue(self.array.create_pgroup_snapshot.called)
-        self.assertEqual(num_volumes, self.array.copy_volume.call_count)
-        self.assertEqual(num_volumes, self.array.set_pgroup.call_count)
-        self.assertTrue(self.array.destroy_pgroup.called)
-
-    @mock.patch(BASE_DRIVER_OBJ + ".create_consistencygroup")
-    def test_create_consistencygroup_from_cg_with_error(self, mock_create_cg):
-        num_volumes = 5
-        mock_context = mock.MagicMock()
-        mock_group = mock.MagicMock()
-        mock_source_cg = mock.MagicMock()
-        mock_volumes = [mock.MagicMock() for i in range(num_volumes)]
-        mock_source_vols = [mock.MagicMock() for i in range(num_volumes)]
-
-        self.array.copy_volume.side_effect = FakePureStorageHTTPError()
-
-        self.assertRaises(
-            FakePureStorageHTTPError,
-            self.driver.create_consistencygroup_from_src,
-            mock_context,
-            mock_group,
-            mock_volumes,
-            source_cg=mock_source_cg,
-            source_vols=mock_source_vols
-        )
-        mock_create_cg.assert_called_with(mock_context, mock_group)
-        self.assertTrue(self.array.create_pgroup_snapshot.called)
-        # Make sure that the temp snapshot is cleaned up even when copying
-        # the volume fails!
         self.assertTrue(self.array.destroy_pgroup.called)
 
     @mock.patch(BASE_DRIVER_OBJ + ".delete_volume", autospec=True)
@@ -2042,7 +2039,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
     def test_unmanage(self):
         vol, vol_name = self.new_fake_vol()
-        unmanaged_vol_name = vol_name + "-unmanaged"
+        unmanaged_vol_name = vol_name + UNMANAGED_SUFFIX
 
         self.driver.unmanage(vol)
 
@@ -2057,7 +2054,7 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
     def test_unmanage_with_deleted_volume(self):
         vol, vol_name = self.new_fake_vol()
-        unmanaged_vol_name = vol_name + "-unmanaged"
+        unmanaged_vol_name = vol_name + UNMANAGED_SUFFIX
         self.array.rename_volume.side_effect = \
             self.purestorage_module.PureHTTPError(
                 text="Volume does not exist.",
@@ -2206,12 +2203,23 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
                           self.driver.manage_existing_snapshot_get_size,
                           snap, {'name': PURE_SNAPSHOT['name']})
 
-    def test_unmanage_snapshot(self):
-        snap, snap_name = self.new_fake_snap()
-        unmanaged_snap_name = snap_name + "-unmanaged"
+    @ddt.data(
+        # 96 chars, will exceed allowable length
+        'volume-1e5177e7-95e5-4a0f-b170-e45f4b469f6a-cinder.'
+        'snapshot-253b2878-ec60-4793-ad19-e65496ec7aab',
+        # short_name that will require no adjustment
+        'volume-1e5177e7-cinder.snapshot-e65496ec7aab')
+    @mock.patch(BASE_DRIVER_OBJ + "._get_snap_name")
+    def test_unmanage_snapshot(self, fake_name, mock_get_snap_name):
+        snap, _ = self.new_fake_snap()
+        mock_get_snap_name.return_value = fake_name
         self.driver.unmanage_snapshot(snap)
-        self.array.rename_volume.assert_called_with(snap_name,
-                                                    unmanaged_snap_name)
+        self.array.rename_volume.assert_called_once()
+        old_name = self.array.rename_volume.call_args[0][0]
+        new_name = self.array.rename_volume.call_args[0][1]
+        self.assertEqual(fake_name, old_name)
+        self.assertLessEqual(len(new_name), MAX_SNAP_LENGTH)
+        self.assertTrue(new_name.endswith(UNMANAGED_SUFFIX))
 
     def test_unmanage_snapshot_error_propagates(self):
         snap, _ = self.new_fake_snap()
@@ -2221,7 +2229,11 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
 
     def test_unmanage_snapshot_with_deleted_snapshot(self):
         snap, snap_name = self.new_fake_snap()
-        unmanaged_snap_name = snap_name + "-unmanaged"
+        if len(snap_name + UNMANAGED_SUFFIX) > MAX_SNAP_LENGTH:
+            unmanaged_snap_name = snap_name[:-len(UNMANAGED_SUFFIX)] + \
+                UNMANAGED_SUFFIX
+        else:
+            unmanaged_snap_name = snap_name
         self.array.rename_volume.side_effect = \
             self.purestorage_module.PureHTTPError(
                 text="Snapshot does not exist.",
@@ -2661,13 +2673,15 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
             "some_pgroup",
         )
 
-    def test_create_volume_replicated_async(self):
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_replicated_async(self, mock_get_volume_type):
         repl_extra_specs = {
             'replication_type': '<in> async',
             'replication_enabled': '<is> true',
         }
         vol, vol_name = self.new_fake_vol(spec={"size": 2},
                                           type_extra_specs=repl_extra_specs)
+        mock_get_volume_type.return_value = vol.volume_type
 
         self.driver.create_volume(vol)
 
@@ -2677,13 +2691,16 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
             REPLICATION_PROTECTION_GROUP,
             addvollist=[vol["name"] + "-cinder"])
 
-    def test_create_volume_replicated_sync(self):
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_replicated_sync(self, mock_get_volume_type):
         repl_extra_specs = {
             'replication_type': '<in> sync',
             'replication_enabled': '<is> true',
         }
         vol, vol_name = self.new_fake_vol(spec={"size": 2},
                                           type_extra_specs=repl_extra_specs)
+
+        mock_get_volume_type.return_value = vol.volume_type
 
         self.driver.create_volume(vol)
 
@@ -3093,6 +3110,191 @@ class PureBaseVolumeDriverTestCase(PureBaseSharedDriverTestCase):
         returned_wwn = self.driver._get_wwn(vol['name'])
         expected_wwn = '3624a93709714b5cb91634c470002b2c8'
         self.assertEqual(expected_wwn, returned_wwn)
+
+    @mock.patch.object(qos_specs, "get_qos_specs")
+    def test_get_qos_settings_from_specs_id(self, mock_get_qos_specs):
+        qos = qos_specs.create(mock.MagicMock(), "qos-iops-bws", QOS_IOPS_BWS)
+        mock_get_qos_specs.return_value = qos
+
+        voltype = fake_volume.fake_volume_type_obj(mock.MagicMock())
+        voltype.qos_specs_id = qos.id
+        voltype.extra_specs = QOS_IOPS_BWS_2  # test override extra_specs
+
+        specs = self.driver._get_qos_settings(voltype)
+        self.assertEqual(specs["maxIOPS"],
+                         int(QOS_IOPS_BWS["maxIOPS"]))
+        self.assertEqual(specs["maxBWS"],
+                         int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+
+    def test_get_qos_settings_from_extra_specs(self):
+        voltype = fake_volume.fake_volume_type_obj(mock.MagicMock())
+        voltype.extra_specs = QOS_IOPS_BWS
+
+        specs = self.driver._get_qos_settings(voltype)
+        self.assertEqual(specs["maxIOPS"],
+                         int(QOS_IOPS_BWS["maxIOPS"]))
+        self.assertEqual(specs["maxBWS"],
+                         int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+
+    def test_get_qos_settings_set_zeros(self):
+        voltype = fake_volume.fake_volume_type_obj(mock.MagicMock())
+        voltype.extra_specs = QOS_ZEROS
+        specs = self.driver._get_qos_settings(voltype)
+        self.assertEqual(specs["maxIOPS"], 0)
+        self.assertEqual(specs["maxBWS"], 0)
+
+    def test_get_qos_settings_set_one(self):
+        voltype = fake_volume.fake_volume_type_obj(mock.MagicMock())
+        voltype.extra_specs = QOS_IOPS
+        specs = self.driver._get_qos_settings(voltype)
+        self.assertEqual(specs["maxIOPS"], int(QOS_IOPS["maxIOPS"]))
+        self.assertEqual(specs["maxBWS"], 0)
+
+        voltype.extra_specs = QOS_BWS
+        specs = self.driver._get_qos_settings(voltype)
+        self.assertEqual(specs["maxIOPS"], 0)
+        self.assertEqual(specs["maxBWS"],
+                         int(QOS_BWS["maxBWS"]) * 1024 * 1024)
+
+    def test_get_qos_settings_invalid(self):
+        voltype = fake_volume.fake_volume_type_obj(mock.MagicMock())
+        voltype.extra_specs = QOS_INVALID
+        self.assertRaises(exception.InvalidQoSSpecs,
+                          self.driver._get_qos_settings,
+                          voltype)
+
+    @mock.patch(BASE_DRIVER_OBJ + "._add_to_group_if_needed")
+    @mock.patch(BASE_DRIVER_OBJ + "._get_replication_type_from_vol_type")
+    @mock.patch.object(qos_specs, "get_qos_specs")
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_with_qos(self, mock_get_volume_type,
+                                    mock_get_qos_specs,
+                                    mock_get_repl_type,
+                                    mock_add_to_group):
+        qos = qos_specs.create(mock.MagicMock(), "qos-iops-bws", QOS_IOPS_BWS)
+        vol, vol_name = self.new_fake_vol(spec={"size": 1},
+                                          type_qos_specs_id=qos.id)
+
+        mock_get_volume_type.return_value = vol.volume_type
+        self.array.get_rest_version.return_value = '1.17'
+        mock_get_qos_specs.return_value = qos
+        mock_get_repl_type.return_value = None
+
+        self.driver.create_volume(vol)
+        self.array.create_volume.assert_called_with(
+            vol_name, 1 * units.Gi,
+            iops_limit=int(QOS_IOPS_BWS["maxIOPS"]),
+            bandwidth_limit=int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+        mock_add_to_group.assert_called_once_with(vol,
+                                                  vol_name)
+        self.assert_error_propagates([self.array.create_volume],
+                                     self.driver.create_volume, vol)
+
+    @mock.patch(BASE_DRIVER_OBJ + "._add_to_group_if_needed")
+    @mock.patch(BASE_DRIVER_OBJ + "._get_replication_type_from_vol_type")
+    @mock.patch.object(qos_specs, "get_qos_specs")
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_create_volume_from_snapshot_with_qos(self, mock_get_volume_type,
+                                                  mock_get_qos_specs,
+                                                  mock_get_repl_type,
+                                                  mock_add_to_group):
+        srcvol, _ = self.new_fake_vol()
+        snap = fake_snapshot.fake_snapshot_obj(mock.MagicMock(), volume=srcvol)
+        snap_name = snap["volume_name"] + "-cinder." + snap["name"]
+        qos = qos_specs.create(mock.MagicMock(), "qos-iops-bws", QOS_IOPS_BWS)
+        vol, vol_name = self.new_fake_vol(set_provider_id=False,
+                                          type_qos_specs_id=qos.id)
+
+        mock_get_volume_type.return_value = vol.volume_type
+        self.array.get_rest_version.return_value = '1.17'
+        mock_get_qos_specs.return_value = qos
+        mock_get_repl_type.return_value = None
+
+        self.driver.create_volume_from_snapshot(vol, snap)
+        self.array.copy_volume.assert_called_with(snap_name, vol_name)
+        self.array.set_volume.assert_called_with(
+            vol_name,
+            iops_limit=int(QOS_IOPS_BWS["maxIOPS"]),
+            bandwidth_limit=int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+        self.assertFalse(self.array.extend_volume.called)
+        mock_add_to_group.assert_called_once_with(vol, vol_name)
+        self.assert_error_propagates(
+            [self.array.copy_volume],
+            self.driver.create_volume_from_snapshot, vol, snap)
+        self.assertFalse(self.array.extend_volume.called)
+
+    @mock.patch.object(qos_specs, "get_qos_specs")
+    @mock.patch.object(volume_types, 'get_volume_type')
+    def test_manage_existing_with_qos(self, mock_get_volume_type,
+                                      mock_get_qos_specs):
+        ref_name = 'vol1'
+        volume_ref = {'name': ref_name}
+        qos = qos_specs.create(mock.MagicMock(), "qos-iops-bws", QOS_IOPS_BWS)
+        vol, vol_name = self.new_fake_vol(set_provider_id=False,
+                                          type_qos_specs_id=qos.id)
+
+        mock_get_volume_type.return_value = vol.volume_type
+        mock_get_qos_specs.return_value = qos
+        self.array.list_volume_private_connections.return_value = []
+        self.array.get_rest_version.return_value = '1.17'
+
+        self.driver.manage_existing(vol, volume_ref)
+        self.array.list_volume_private_connections.assert_called_with(ref_name)
+        self.array.rename_volume.assert_called_with(ref_name, vol_name)
+        self.array.set_volume.assert_called_with(
+            vol_name,
+            iops_limit=int(QOS_IOPS_BWS["maxIOPS"]),
+            bandwidth_limit=int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+
+    def test_retype_qos(self):
+        mock_context = mock.MagicMock()
+        vol, vol_name = self.new_fake_vol()
+        qos = qos_specs.create(mock.MagicMock(), "qos-iops-bws", QOS_IOPS_BWS)
+        new_type = fake_volume.fake_volume_type_obj(mock_context)
+        new_type.qos_specs_id = qos.id
+
+        self.array.get_rest_version.return_value = '1.17'
+        get_voltype = "cinder.objects.volume_type.VolumeType.get_by_name_or_id"
+        with mock.patch(get_voltype) as mock_get_vol_type:
+            mock_get_vol_type.return_value = new_type
+            did_retype, model_update = self.driver.retype(
+                mock_context,
+                vol,
+                new_type,
+                None,  # ignored by driver
+                None,  # ignored by driver
+            )
+
+        self.array.set_volume.assert_called_with(
+            vol_name,
+            iops_limit=int(QOS_IOPS_BWS["maxIOPS"]),
+            bandwidth_limit=int(QOS_IOPS_BWS["maxBWS"]) * 1024 * 1024)
+        self.assertTrue(did_retype)
+        self.assertIsNone(model_update)
+
+    def test_retype_qos_reset_iops(self):
+        mock_context = mock.MagicMock()
+        vol, vol_name = self.new_fake_vol()
+        new_type = fake_volume.fake_volume_type_obj(mock_context)
+
+        self.array.get_rest_version.return_value = '1.17'
+        get_voltype = "cinder.objects.volume_type.VolumeType.get_by_name_or_id"
+        with mock.patch(get_voltype) as mock_get_vol_type:
+            mock_get_vol_type.return_value = new_type
+            did_retype, model_update = self.driver.retype(
+                mock_context,
+                vol,
+                new_type,
+                None,  # ignored by driver
+                None,  # ignored by driver
+            )
+
+        self.array.set_volume.assert_called_with(
+            vol_name,
+            iops_limit="",
+            bandwidth_limit="")
+        self.assertTrue(did_retype)
+        self.assertIsNone(model_update)
 
 
 class PureISCSIDriverTestCase(PureBaseSharedDriverTestCase):
@@ -3642,6 +3844,22 @@ class PureFCDriverTestCase(PureBaseSharedDriverTestCase):
              self.array.create_host],
             self.driver._connect, self.array, vol_name, FC_CONNECTOR)
 
+        self.mock_config.safe_get.return_value = 'oracle-vm-server'
+
+        # Branch where we fail due to invalid version for setting personality
+        self.assertRaises(pure.PureDriverException, self.driver._connect,
+                          self.array, vol_name, FC_CONNECTOR)
+        self.assertTrue(self.array.create_host.called)
+        self.assertFalse(self.array.set_host.called)
+
+        self.array.get_rest_version.return_value = '1.14'
+
+        # Branch where personality is set
+        self.driver._connect(self.array, vol_name, FC_CONNECTOR)
+        self.assertDictEqual(result, real_result)
+        self.array.set_host.assert_called_with(PURE_HOST_NAME,
+                                               personality='oracle-vm-server')
+
     @mock.patch(FC_DRIVER_OBJ + "._get_host", autospec=True)
     def test_connect_already_connected(self, mock_host):
         vol, vol_name = self.new_fake_vol()
@@ -3804,7 +4022,7 @@ class PureVolumeUpdateStatsTestCase(PureBaseSharedDriverTestCase):
             'consistencygroup_support': True,
             'thin_provisioning_support': True,
             'multiattach': True,
-            'QoS_support': False,
+            'QoS_support': True,
             'total_capacity_gb': TOTAL_CAPACITY,
             'free_capacity_gb': TOTAL_CAPACITY - USED_SPACE,
             'reserved_percentage': reserved_percentage,

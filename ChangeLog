@@ -1,29 +1,138 @@
 CHANGES
 =======
 
+18.0.0
+------
+
+* Add known issue note about encrypted volumes
+* Add releasenote for glance mTLS fix
+* Add release note about cgroups v1
+* Fix: show volume by name for non-admins
+* Quota: Fix multiple race conditions
+* Prevent quota and reservations to go into negative
+* Update cinder manage quota commands
+* Fix quota usage duplicate entries
+* Remove nested quota leftovers
+* Quota: Fix until\_refresh config changes
+* Remove unused quota python classes
+* LVM: Fix delete volume error due to lvs failure
+* Add quota utils to cinder-manage
+* Change snapshots type with volume retype
+* Cinder - Creating clone of encrypted volume fails
+* Use os-brick 4.3.1
+* Add prelude for Wallaby release notes
+* Fix automatic quota sync for temporary volumes
+* Fix PowerStore iSCSI targets filtering
+* Update TOX\_CONSTRAINTS\_FILE for stable/wallaby
+* Update .gitreview for stable/wallaby
+
+18.0.0.0rc1
+-----------
+
+* Use os-brick 4.3.0
+* NetApp ONTAP: Fix FlexGroup replication
+* Imported Translations from Zanata
+* Support mTLS when calling the glance API
+* Follow up NetApp ONTAP FlexGroup feature
+* Backup manager: Synchronously call remove\_export
+* Bug fix for revert to snapshot feature
+* JovianDSS: add certs and snapshot restore
+* Update code layout and missing Zadara features
+* doc: Remove cryptsetup reference for compute setup
+* Add explanations on safe delete
+* Fix volume OVO create method
+* Remove unnecessary save call
+* Fix old attach method
+* Fix automatic quota sync for migrating volumes
+* [SVF]: Volume name is not validated for host
+* Changed whitelist to allowlist in tox
+* [SVF]:Storwize hyperswap volume is not deleting
+* Resolve SADeprecationWarning for joinedload\_all
+* Always constraint dependencies in tox
+* Add support for consistency groups in the Nimble Storage driver
+* NFS: Fix for groups and cloning
+* Dropping explicit unicode literal
+* Add virtualenv requirement to tox.ini
+* NetApp ONTAP: Implement FlexGroup pool
+* Add support for RBD fast-diff feature for backups stored in Ceph
+* API validation: Use cinder\_host for services checks
+* Support format info in fs type drivers
+* PowerMax Driver - Release notes for 761643 and 767172
+* Add Consistency Groups support in PowerStore driver
+* Add OpenStack volume replication v2.1 support in PowerStore driver
+* API validation: Add cinder\_host type to support ipv6 in manage
+* [SVF] Set volume IOPS based on volume size
+* Add QoS Suport for Pure Storage
+* Imported Translations from Zanata
+* NetApp ONTAP: Add support for dynamic Adaptive QoS policy group creation
+* NetApp ONTAP: Add support for QoS minimums specs
+* PowerMax Driver - Initiator group contents check
+* PowerMax Driver - Allowing for all types of boolean in extra specs
+* PowerMax Driver - Offline r1 promotion fixes
+* api-ref: Don't list HTTP 500 for backup create
+* [SVF]: Fixed host and group failback issues
+* Pure Storage: check volumename length does not exceed maximum
+* [DS8K]: Support revert to snapshot
+* [Pure] Add missing FC host personality support
+* Tests: Don't assert notifier not called
+* [Storwize] Provide IOPS based storage offering
+* doc: add specs repo maintenance tasks
+* PowerMax Driver - Extend replicated volume
+* Hitachi: Trace REST API input/output logs
+* PowerMax Driver - Fix pylint errors in test\_common and provision
+* PowerMax Driver - U4P Failover SerialNumber KeyError fix
+* Hitachi: Use get\_volume\_stats in the base driver
+* Fix in api-ref
+* [Pure] Fix failing consistency group tempest tests
+* Resolve SAWarning SQLAlchemy warning
+* Fix CI\_WIKI\_NAME entries
+* Use TOX\_CONSTRAINTS\_FILE
+* Drop policy check failures to DEBUG
+* Fusionstorage Cinder Driver Support OceanStor 100D Storage.(dsware)
+* image\_utils: Use QEMU\_IMG\_FORCE\_SHARE\_VERSION constant
+* [SVF] Update volume replication properties
+* smbfs: set VHD UUID using volume UUID
+* TOYOU:  Abandon the target parameter and  Report SAN driver options
+* Simplify composite check strings for project personas
+* Make sure we pass context objects directly to policy enforcement
+* Properly handle InvalidScope exceptions
+* Update secure RBAC check strings with descriptions
+* Tests: Improve RBD v2 clone API unit tests
+
 18.0.0.0b1
 ----------
 
+* Add ports filtering support to Dell EMC XtremIO driver
+* Update to hacking 4.0.0
 * HPE: Add Peer Persistence support for Primera backend
 * Use os-brick 4.2.0
 * Move trace methods from utils to volume\_utils
 * Imported Translations from Zanata
+* Bump pylint to 2.6.0
+* LVM: fix \_create\_vg
 * Move brick calls from cinder.utils to volume\_utils
+* vmware: Use cookiejar from oslo.vmware client directly
+* mypy: annotate volume manager
 * Add KIOXIA KumoScale NVMeOF driver
 * Fix irrelevant-files for two devstack jobs
 * doc: add rbd-iscsi-client info
 * Fix RBD\_OPERATION\_FEATURE\_CLONE\_PARENT in unittest
 * Require oslo.serialization 4.1.0
 * Update ceph driver docs, mentioning Hyper-V support
+* PowerMax Driver - Check for missing port group
+* Add encryption\_key\_id to volume and backup details
 * RBD: Pass bytes type for mon\_command inbuf
 * Change the CLI document for the extend-attached-volume
+* Correct format string in error message
 * 3PAR: Allow iSCSI driver to be enabled for Primera 4.2 onwards
 * Imported Translations from Zanata
 * Log information about the Ceph v2 clone API
 * created s3 cinder backup driver
+* Tests: Add another mock psutil in quobyte tests
 * Add ceph iscsi volume driver
 * Add Cinder driver for TOYOU ACS5000
 * Remove NestedQuotaDriver
+* Label temporary files created by image\_utils
 * Update SolidFire Storage assisted migration in support-matrix
 * Pure: Add default value to pure\_host\_personality
 * Add driver for Dell EMC PowerVault ME Series
@@ -35,25 +144,35 @@ CHANGES
 * Tests: Fix rbd unit test failure due to ceph keyring file
 * Remove \_\_unicode\_\_() from CinderException
 * doc: update release cycle tasks
+* tox mypy: Call mypywrap.sh directly
 * pylint: run coding-checks.sh with bash
+* Hitachi: Wait until the volume can be deleted
 * Basic volume QoS doc
+* PowerMax Driver - Promotion RDF Group number fix
 * Add docs and update support matrix for Hitachi driver
 * Imported Translations from Zanata
+* [RBD] Fix snapshot backup name
 * Correct group:reset\_group\_snapshot\_status policy
 * Imported Translations from Zanata
 * [goal] Deprecate the JSON formatted policy file
+* RBD: Change rbd\_exclusive\_cinder\_pool's default
 * Imported Translations from Zanata
 * RBD: Retry delete if VolumeIsBusy in \_copy\_image\_to\_volume
 * Update requirements and lower-constraints
 * Add CHAP support to Dell EMC PowerStore driver
+* add openstack-python3-wallaby-jobs-arm64 job
 * [SVF]:Fix in change\_vdisk\_iogrp during retype
+* Exception type is not iterable so should change it to string type
+* [IBM DS8000]: Fix compatability issue in get\_host
 * Imported Translations from Zanata
+* PowerMax Driver - Fix assign SRP during promotion retype
 * Imported Translations from Zanata
 * Pure Storage FlashArray: Add active/active support
 * [SVF]: Fixed host and group failover issues
 * [SVF]:Fix clone fcmap not being deleted in cleanup
 * Fix volume rekey during clone
 * Pure Storage - bump version numbers for Wallaby
+* Tests: Move glance\_stubs to glance dir
 * Clarify 'supported' reinstatement policy
 * [IBM DS8000] Support volume name template
 * Update doc contributor doc
@@ -63,6 +182,7 @@ CHANGES
 * Replace md5 with oslo version
 * doc: restrict supported Ceph versions
 * Tests: Improve get\_qemu\_img\_version coverage
+* PowerMax Driver - Port status check
 * NetApp SolidFire: Fix duplicate volume when API response is lost
 * NetApp SolidFire: Fix error on cluster workload rebalancing
 * Add common RBAC personas to cinder/policies/base.py
@@ -140,6 +260,7 @@ CHANGES
 * SPDK: Report info in top-level volume\_stats
 * Disallow extension of attached volumes for NFS & Quobyte drivers
 * Fix volume\_stats storage\_protocol usage in vol mgr
+* Remove install unnecessary packages
 * PowerMax Driver -  Exception when multipath not enabled for metro
 * [storwize]:Fixed select\_io\_group issues
 * [storwize]:Fixed check\_flashcopy\_rate issues
@@ -207,6 +328,7 @@ CHANGES
 * Docs: Improve contributor's release notes
 * [vmware] ensure datastores exist while fetching stats
 * PowerMax Driver - Legacy volumes fail to live migrate
+* PowerMax Docs - Incorrect property set on volume group
 * Uncomment psycopg2 in test-requirements.txt
 * Update to oslo.privsep 2.3.0
 * Fix lower-constraints conflicts

@@ -22,6 +22,7 @@ import uuid
 
 import ddt
 from lxml import etree
+from oslo_utils import units
 import paramiko
 import six
 
@@ -53,6 +54,12 @@ class NetAppCmodeClientTestCase(test.TestCase):
         super(NetAppCmodeClientTestCase, self).setUp()
 
         self.mock_object(client_cmode.Client, '_init_ssh_client')
+        # store the original reference so we can call it later in
+        # test__get_cluster_nodes_info
+        self.original_get_cluster_nodes_info = (
+            client_cmode.Client._get_cluster_nodes_info)
+        self.mock_object(client_cmode.Client, '_get_cluster_nodes_info',
+                         return_value=fake.HYBRID_SYSTEM_NODES_INFO)
         self.mock_object(client_cmode.Client, 'get_ontap_version',
                          return_value='9.6')
         with mock.patch.object(client_cmode.Client,
@@ -215,6 +222,25 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertRaises(netapp_utils.NetAppDriverException,
                           self.client.send_iter_request,
                           'storage-disk-get-iter')
+
+    @ddt.data((fake.AFF_SYSTEM_NODE_GET_ITER_RESPONSE,
+               fake.AFF_SYSTEM_NODES_INFO),
+              (fake.FAS_SYSTEM_NODE_GET_ITER_RESPONSE,
+               fake.FAS_SYSTEM_NODES_INFO),
+              (fake_client.NO_RECORDS_RESPONSE, []),
+              (fake.HYBRID_SYSTEM_NODE_GET_ITER_RESPONSE,
+               fake.HYBRID_SYSTEM_NODES_INFO))
+    @ddt.unpack
+    def test__get_cluster_nodes_info(self, response, expected):
+        client_cmode.Client._get_cluster_nodes_info = (
+            self.original_get_cluster_nodes_info)
+        nodes_response = netapp_api.NaElement(response)
+        self.mock_object(client_cmode.Client, 'send_iter_request',
+                         return_value=nodes_response)
+
+        result = self.client._get_cluster_nodes_info()
+
+        self.assertEqual(expected, result)
 
     def test_list_vservers(self):
 
@@ -704,6 +730,67 @@ class NetAppCmodeClientTestCase(test.TestCase):
 
         self.assertSetEqual(igroups, expected)
 
+    @ddt.data(True, False)
+    def test__validate_qos_policy_group_none_adaptive(self, is_adaptive):
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=True)
+        self.client._validate_qos_policy_group(
+            is_adaptive=is_adaptive, spec=None)
+
+    def test__validate_qos_policy_group_none_adaptive_no_support(self):
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=False)
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client._validate_qos_policy_group,
+            is_adaptive=True,
+            spec=None)
+
+    @ddt.data(True, False)
+    def test__validate_qos_policy_group_no_qos_min_support(self, is_adaptive):
+        spec = {'min_throughput': '10'}
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client._validate_qos_policy_group,
+            is_adaptive=is_adaptive,
+            spec=spec,
+            qos_min_support=False)
+
+    def test__validate_qos_policy_group_no_block_size_support(self):
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_BLOCK_SIZE', supported=False)
+        spec = {'block_size': '4K'}
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client._validate_qos_policy_group,
+            is_adaptive=True,
+            spec=spec)
+
+    def test__validate_qos_policy_group_no_expected_iops_allocation_support(
+            self):
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION', supported=False)
+        spec = {'expected_iops_allocation': 'used-space'}
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client._validate_qos_policy_group,
+            is_adaptive=True,
+            spec=spec)
+
+    def test__validate_qos_policy_group_adaptive_qos_spec(self):
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_BLOCK_SIZE', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION', supported=True)
+        spec = {
+            'expected_iops': '128IOPS/GB',
+            'peak_iops': '512IOPS/GB',
+            'expected_iops_allocation': 'used-space',
+            'peak_iops_allocation': 'used-space',
+            'absolute_min_iops': '64IOPS',
+            'block_size': '4K',
+        }
+        self.client._validate_qos_policy_group(is_adaptive=True, spec=spec)
+
     def test_clone_lun(self):
         self.client.clone_lun(
             'volume', 'fakeLUN', 'newFakeLUN',
@@ -828,45 +915,215 @@ class NetAppCmodeClientTestCase(test.TestCase):
             mock.call('lun-set-qos-policy-group', api_args)])
 
     def test_provision_qos_policy_group_no_qos_policy_group_info(self):
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
 
-        self.client.provision_qos_policy_group(qos_policy_group_info=None)
+        self.client.provision_qos_policy_group(qos_policy_group_info=None,
+                                               qos_min_support=True)
 
-        self.assertEqual(0, self.connection.qos_policy_group_create.call_count)
+        mock_qos_policy_group_create.assert_not_called()
+
+    def test_provision_qos_policy_group_no_legacy_no_spec(self):
+        mock_qos_policy_group_exists = self.mock_object(
+            self.client, 'qos_policy_group_exists')
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+
+        self.client.provision_qos_policy_group(qos_policy_group_info={},
+                                               qos_min_support=False)
+
+        mock_qos_policy_group_exists.assert_not_called()
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_not_called()
 
     def test_provision_qos_policy_group_legacy_qos_policy_group_info(self):
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
 
         self.client.provision_qos_policy_group(
-            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO_LEGACY)
+            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO_LEGACY,
+            qos_min_support=True)
 
-        self.assertEqual(0, self.connection.qos_policy_group_create.call_count)
+        mock_qos_policy_group_create.assert_not_called()
+
+    def test_provision_qos_policy_group_with_qos_spec_create_with_min(self):
+
+        self.mock_object(self.client,
+                         'qos_policy_group_exists',
+                         return_value=False)
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+
+        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO,
+                                               True)
+
+        mock_qos_policy_group_create.assert_called_once_with({
+            'policy_name': fake.QOS_POLICY_GROUP_NAME,
+            'min_throughput': fake.MIN_IOPS,
+            'max_throughput': fake.MAX_IOPS,
+        })
+        mock_qos_policy_group_modify.assert_not_called()
+
+    def test_provision_qos_policy_group_with_qos_spec_create_with_aqos(self):
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_BLOCK_SIZE', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION', supported=True)
+        self.mock_object(self.client,
+                         'qos_policy_group_exists',
+                         return_value=False)
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+        mock_qos_adaptive_policy_group_create = self.mock_object(
+            self.client, 'qos_adaptive_policy_group_create')
+        mock_qos_adaptive_policy_group_modify = self.mock_object(
+            self.client, 'qos_adaptive_policy_group_modify')
+
+        self.client.provision_qos_policy_group(
+            fake.ADAPTIVE_QOS_POLICY_GROUP_INFO, False)
+
+        mock_qos_adaptive_policy_group_create.assert_called_once_with(
+            fake.ADAPTIVE_QOS_SPEC)
+        mock_qos_adaptive_policy_group_modify.assert_not_called()
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_not_called()
+
+    def test_provision_qos_policy_group_with_qos_spec_create_unsupported(self):
+        mock_qos_policy_group_exists = self.mock_object(
+            self.client, 'qos_policy_group_exists')
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client.provision_qos_policy_group,
+            fake.QOS_POLICY_GROUP_INFO,
+            False)
+
+        mock_qos_policy_group_exists.assert_not_called()
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_not_called()
+
+    def test_provision_qos_policy_group_with_invalid_qos_spec(self):
+        self.mock_object(self.client, '_validate_qos_policy_group',
+                         side_effect=netapp_utils.NetAppDriverException)
+        mock_policy_group_spec_is_adaptive = self.mock_object(
+            netapp_utils, 'is_qos_policy_group_spec_adaptive')
+        mock_qos_policy_group_exists = self.mock_object(
+            self.client, 'qos_policy_group_exists')
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+
+        self.assertRaises(
+            netapp_utils.NetAppDriverException,
+            self.client.provision_qos_policy_group,
+            fake.QOS_POLICY_GROUP_INFO,
+            False)
+
+        mock_policy_group_spec_is_adaptive.assert_called_once_with(
+            fake.QOS_POLICY_GROUP_INFO)
+        mock_qos_policy_group_exists.assert_not_called()
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_not_called()
 
     def test_provision_qos_policy_group_with_qos_spec_create(self):
 
         self.mock_object(self.client,
                          'qos_policy_group_exists',
                          return_value=False)
-        self.mock_object(self.client, 'qos_policy_group_create')
-        self.mock_object(self.client, 'qos_policy_group_modify')
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
 
-        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO)
+        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO_MAX,
+                                               True)
 
-        self.client.qos_policy_group_create.assert_has_calls([
-            mock.call(fake.QOS_POLICY_GROUP_NAME, fake.MAX_THROUGHPUT)])
-        self.assertFalse(self.client.qos_policy_group_modify.called)
+        mock_qos_policy_group_create.assert_has_calls([
+            mock.call({
+                'policy_name': fake.QOS_POLICY_GROUP_NAME,
+                'max_throughput': fake.MAX_THROUGHPUT,
+            })])
+        mock_qos_policy_group_modify.assert_not_called()
+
+    def test_provision_qos_policy_group_with_qos_spec_modify_with_min(self):
+
+        self.mock_object(self.client,
+                         'qos_policy_group_exists',
+                         return_value=True)
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+
+        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO,
+                                               True)
+
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_has_calls([
+            mock.call({
+                'policy_name': fake.QOS_POLICY_GROUP_NAME,
+                'min_throughput': fake.MIN_IOPS,
+                'max_throughput': fake.MAX_IOPS,
+            })])
 
     def test_provision_qos_policy_group_with_qos_spec_modify(self):
 
         self.mock_object(self.client,
                          'qos_policy_group_exists',
                          return_value=True)
-        self.mock_object(self.client, 'qos_policy_group_create')
-        self.mock_object(self.client, 'qos_policy_group_modify')
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
 
-        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO)
+        self.client.provision_qos_policy_group(fake.QOS_POLICY_GROUP_INFO_MAX,
+                                               True)
 
-        self.assertFalse(self.client.qos_policy_group_create.called)
-        self.client.qos_policy_group_modify.assert_has_calls([
-            mock.call(fake.QOS_POLICY_GROUP_NAME, fake.MAX_THROUGHPUT)])
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_has_calls([
+            mock.call({
+                'policy_name': fake.QOS_POLICY_GROUP_NAME,
+                'max_throughput': fake.MAX_THROUGHPUT,
+            })])
+
+    def test_provision_qos_policy_group_with_qos_spec_modify_with_aqos(self):
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_BLOCK_SIZE', supported=True)
+        self.client.features.add_feature(
+            'ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION', supported=True)
+        self.mock_object(self.client,
+                         'qos_policy_group_exists',
+                         return_value=True)
+        mock_qos_policy_group_create = self.mock_object(
+            self.client, 'qos_policy_group_create')
+        mock_qos_policy_group_modify = self.mock_object(
+            self.client, 'qos_policy_group_modify')
+        mock_qos_adaptive_policy_group_create = self.mock_object(
+            self.client, 'qos_adaptive_policy_group_create')
+        mock_qos_adaptive_policy_group_modify = self.mock_object(
+            self.client, 'qos_adaptive_policy_group_modify')
+
+        self.client.provision_qos_policy_group(
+            fake.ADAPTIVE_QOS_POLICY_GROUP_INFO, False)
+
+        mock_qos_adaptive_policy_group_modify.assert_called_once_with(
+            fake.ADAPTIVE_QOS_SPEC)
+        mock_qos_adaptive_policy_group_create.assert_not_called()
+        mock_qos_policy_group_create.assert_not_called()
+        mock_qos_policy_group_modify.assert_not_called()
 
     def test_qos_policy_group_exists(self):
 
@@ -906,40 +1163,83 @@ class NetAppCmodeClientTestCase(test.TestCase):
 
         api_args = {
             'policy-group': fake.QOS_POLICY_GROUP_NAME,
+            'min-throughput': '0',
             'max-throughput': fake.MAX_THROUGHPUT,
             'vserver': self.vserver,
         }
 
-        self.client.qos_policy_group_create(
-            fake.QOS_POLICY_GROUP_NAME, fake.MAX_THROUGHPUT)
+        self.client.qos_policy_group_create({
+            'policy_name': fake.QOS_POLICY_GROUP_NAME,
+            'min_throughput': '0',
+            'max_throughput': fake.MAX_THROUGHPUT,
+        })
 
         self.mock_send_request.assert_has_calls([
             mock.call('qos-policy-group-create', api_args, False)])
+
+    def test_qos_adaptive_policy_group_create(self):
+
+        api_args = {
+            'policy-group': fake.QOS_POLICY_GROUP_NAME,
+            'expected-iops': '%sIOPS/GB' % fake.EXPECTED_IOPS_PER_GB,
+            'peak-iops': '%sIOPS/GB' % fake.PEAK_IOPS_PER_GB,
+            'expected-iops-allocation': fake.EXPECTED_IOPS_ALLOCATION,
+            'peak-iops-allocation': fake.PEAK_IOPS_ALLOCATION,
+            'block-size': fake.BLOCK_SIZE,
+            'vserver': self.vserver,
+        }
+
+        self.client.qos_adaptive_policy_group_create({
+            'policy_name': fake.QOS_POLICY_GROUP_NAME,
+            'expected_iops': '%sIOPS/GB' % fake.EXPECTED_IOPS_PER_GB,
+            'peak_iops': '%sIOPS/GB' % fake.PEAK_IOPS_PER_GB,
+            'expected_iops_allocation': fake.EXPECTED_IOPS_ALLOCATION,
+            'peak_iops_allocation': fake.PEAK_IOPS_ALLOCATION,
+            'block_size': fake.BLOCK_SIZE,
+        })
+
+        self.mock_send_request.assert_has_calls([
+            mock.call('qos-adaptive-policy-group-create', api_args, False)])
 
     def test_qos_policy_group_modify(self):
 
         api_args = {
             'policy-group': fake.QOS_POLICY_GROUP_NAME,
+            'min-throughput': '0',
             'max-throughput': fake.MAX_THROUGHPUT,
         }
 
-        self.client.qos_policy_group_modify(
-            fake.QOS_POLICY_GROUP_NAME, fake.MAX_THROUGHPUT)
+        self.client.qos_policy_group_modify({
+            'policy_name': fake.QOS_POLICY_GROUP_NAME,
+            'min_throughput': '0',
+            'max_throughput': fake.MAX_THROUGHPUT,
+        })
 
         self.mock_send_request.assert_has_calls([
             mock.call('qos-policy-group-modify', api_args, False)])
 
-    def test_qos_policy_group_delete(self):
+    def test_qos_adaptive_policy_group_modify(self):
 
         api_args = {
-            'policy-group': fake.QOS_POLICY_GROUP_NAME
+            'policy-group': fake.QOS_POLICY_GROUP_NAME,
+            'expected-iops': '%sIOPS/GB' % fake.EXPECTED_IOPS_PER_GB,
+            'peak-iops': '%sIOPS/GB' % fake.PEAK_IOPS_PER_GB,
+            'expected-iops-allocation': fake.EXPECTED_IOPS_ALLOCATION,
+            'peak-iops-allocation': fake.PEAK_IOPS_ALLOCATION,
+            'block-size': fake.BLOCK_SIZE,
         }
 
-        self.client.qos_policy_group_delete(
-            fake.QOS_POLICY_GROUP_NAME)
+        self.client.qos_adaptive_policy_group_modify({
+            'policy_name': fake.QOS_POLICY_GROUP_NAME,
+            'expected_iops': '%sIOPS/GB' % fake.EXPECTED_IOPS_PER_GB,
+            'peak_iops': '%sIOPS/GB' % fake.PEAK_IOPS_PER_GB,
+            'expected_iops_allocation': fake.EXPECTED_IOPS_ALLOCATION,
+            'peak_iops_allocation': fake.PEAK_IOPS_ALLOCATION,
+            'block_size': fake.BLOCK_SIZE,
+        })
 
         self.mock_send_request.assert_has_calls([
-            mock.call('qos-policy-group-delete', api_args, False)])
+            mock.call('qos-adaptive-policy-group-modify', api_args, False)])
 
     def test_qos_policy_group_rename(self):
 
@@ -979,7 +1279,9 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(0, mock_rename.call_count)
         self.assertEqual(1, mock_remove.call_count)
 
-    def test_mark_qos_policy_group_for_deletion_w_qos_spec(self):
+    @ddt.data(True, False)
+    def test_mark_qos_policy_group_for_deletion_w_qos_spec(self,
+                                                           is_adaptive):
 
         mock_rename = self.mock_object(self.client, 'qos_policy_group_rename')
         mock_remove = self.mock_object(self.client,
@@ -988,14 +1290,17 @@ class NetAppCmodeClientTestCase(test.TestCase):
         new_name = 'deleted_cinder_%s' % fake.QOS_POLICY_GROUP_NAME
 
         self.client.mark_qos_policy_group_for_deletion(
-            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO)
+            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO_MAX,
+            is_adaptive=is_adaptive)
 
         mock_rename.assert_has_calls([
-            mock.call(fake.QOS_POLICY_GROUP_NAME, new_name)])
+            mock.call(fake.QOS_POLICY_GROUP_NAME, new_name, is_adaptive)])
         self.assertEqual(0, mock_log.call_count)
         self.assertEqual(1, mock_remove.call_count)
 
-    def test_mark_qos_policy_group_for_deletion_exception_path(self):
+    @ddt.data(True, False)
+    def test_mark_qos_policy_group_for_deletion_exception_path(self,
+                                                               is_adaptive):
 
         mock_rename = self.mock_object(self.client, 'qos_policy_group_rename')
         mock_rename.side_effect = netapp_api.NaApiError
@@ -1005,10 +1310,11 @@ class NetAppCmodeClientTestCase(test.TestCase):
         new_name = 'deleted_cinder_%s' % fake.QOS_POLICY_GROUP_NAME
 
         self.client.mark_qos_policy_group_for_deletion(
-            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO)
+            qos_policy_group_info=fake.QOS_POLICY_GROUP_INFO_MAX,
+            is_adaptive=is_adaptive)
 
         mock_rename.assert_has_calls([
-            mock.call(fake.QOS_POLICY_GROUP_NAME, new_name)])
+            mock.call(fake.QOS_POLICY_GROUP_NAME, new_name, is_adaptive)])
         self.assertEqual(1, mock_log.call_count)
         self.assertEqual(1, mock_remove.call_count)
 
@@ -1035,15 +1341,29 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(0, mock_log.call_count)
 
     def test_remove_unused_qos_policy_groups_api_error(self):
-
+        self.client.features.add_feature('ADAPTIVE_QOS', supported=True)
         mock_log = self.mock_object(client_cmode.LOG, 'debug')
-        api_args = {
-            'query': {
-                'qos-policy-group-info': {
-                    'policy-group': 'deleted_cinder_*',
-                    'vserver': self.vserver,
-                }
-            },
+        qos_query = {
+            'qos-policy-group-info': {
+                'policy-group': 'deleted_cinder_*',
+                'vserver': self.vserver,
+            }
+        }
+        adaptive_qos_query = {
+            'qos-adaptive-policy-group-info': {
+                'policy-group': 'deleted_cinder_*',
+                'vserver': self.vserver,
+            }
+        }
+        qos_api_args = {
+            'query': qos_query,
+            'max-records': 3500,
+            'continue-on-failure': 'true',
+            'return-success-list': 'false',
+            'return-failure-list': 'false',
+        }
+        adaptive_qos_api_args = {
+            'query': adaptive_qos_query,
             'max-records': 3500,
             'continue-on-failure': 'true',
             'return-success-list': 'false',
@@ -1054,8 +1374,12 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.client.remove_unused_qos_policy_groups()
 
         self.mock_send_request.assert_has_calls([
-            mock.call('qos-policy-group-delete-iter', api_args, False)])
-        self.assertEqual(1, mock_log.call_count)
+            mock.call('qos-policy-group-delete-iter',
+                      qos_api_args, False),
+            mock.call('qos-adaptive-policy-group-delete-iter',
+                      adaptive_qos_api_args, False),
+        ])
+        self.assertEqual(2, mock_log.call_count)
 
     @mock.patch('cinder.volume.volume_utils.resolve_hostname',
                 return_value='192.168.1.101')
@@ -1109,23 +1433,28 @@ class NetAppCmodeClientTestCase(test.TestCase):
         fake_vserver = 'fake_vserver'
         fake_junc = 'fake_junction_path'
         expected_flex_vol = 'fake_flex_vol'
+        volume_attr_str = ("""
+            <volume-attributes>
+            <volume-id-attributes>
+                <name>%(flex_vol)s</name>
+            </volume-id-attributes>
+          </volume-attributes>
+        """ % {'flex_vol': expected_flex_vol})
+        volume_attr = netapp_api.NaElement(etree.XML(volume_attr_str))
         response = netapp_api.NaElement(
             etree.XML("""<results status="passed">
                             <num-records>1</num-records>
-                            <attributes-list>
-                              <volume-attributes>
-                                <volume-id-attributes>
-                                  <name>%(flex_vol)s</name>
-                                </volume-id-attributes>
-                              </volume-attributes>
-                            </attributes-list>
-                          </results>""" % {'flex_vol': expected_flex_vol}))
+                            <attributes-list>%(vol)s</attributes-list>
+                          </results>""" % {'vol': volume_attr_str}))
         self.connection.invoke_successfully.return_value = response
+        mock_get_unique_vol = self.mock_object(
+            self.client, 'get_unique_volume', return_value=volume_attr)
 
         actual_flex_vol = self.client.get_vol_by_junc_vserver(fake_vserver,
                                                               fake_junc)
 
         self.assertEqual(expected_flex_vol, actual_flex_vol)
+        mock_get_unique_vol.assert_called_once_with(response)
 
     def test_clone_file(self):
         expected_flex_vol = "fake_flex_vol"
@@ -1389,6 +1718,51 @@ class NetAppCmodeClientTestCase(test.TestCase):
 
         self.assertEqual(expected_result, address_list)
 
+    @ddt.data({'junction_path': '/fake/vol'},
+              {'name': 'fake_volume'},
+              {'junction_path': '/fake/vol', 'name': 'fake_volume'})
+    def test_get_volume_state(self, kwargs):
+
+        api_response = netapp_api.NaElement(
+            fake_client.VOLUME_GET_ITER_STATE_RESPONSE)
+        mock_send_iter_request = self.mock_object(
+            self.client, 'send_iter_request', return_value=api_response)
+        volume_response = netapp_api.NaElement(
+            fake_client.VOLUME_GET_ITER_STATE_ATTR)
+        mock_get_unique_vol = self.mock_object(
+            self.client, 'get_unique_volume', return_value=volume_response)
+
+        state = self.client.get_volume_state(**kwargs)
+
+        volume_id_attributes = {}
+        if 'junction_path' in kwargs:
+            volume_id_attributes['junction-path'] = kwargs['junction_path']
+        if 'name' in kwargs:
+            volume_id_attributes['name'] = kwargs['name']
+
+        volume_get_iter_args = {
+            'query': {
+                'volume-attributes': {
+                    'volume-id-attributes': volume_id_attributes,
+                }
+            },
+            'desired-attributes': {
+                'volume-attributes': {
+                    'volume-id-attributes': {
+                        'style-extended': None,
+                    },
+                    'volume-state-attributes': {
+                        'state': None
+                    }
+                }
+            },
+        }
+        mock_send_iter_request.assert_called_once_with(
+            'volume-get-iter', volume_get_iter_args)
+        mock_get_unique_vol.assert_called_once_with(api_response)
+
+        self.assertEqual(fake_client.VOLUME_STATE_ONLINE, state)
+
     @ddt.data({'flexvol_path': '/fake/vol'},
               {'flexvol_name': 'fake_volume'},
               {'flexvol_path': '/fake/vol', 'flexvol_name': 'fake_volume'})
@@ -1398,6 +1772,10 @@ class NetAppCmodeClientTestCase(test.TestCase):
             fake_client.VOLUME_GET_ITER_CAPACITY_RESPONSE)
         mock_send_iter_request = self.mock_object(
             self.client, 'send_iter_request', return_value=api_response)
+        volume_response = netapp_api.NaElement(
+            fake_client.VOLUME_GET_ITER_CAPACITY_ATTR)
+        mock_get_unique_vol = self.mock_object(
+            self.client, 'get_unique_volume', return_value=volume_response)
 
         capacity = self.client.get_flexvol_capacity(**kwargs)
 
@@ -1415,6 +1793,9 @@ class NetAppCmodeClientTestCase(test.TestCase):
             },
             'desired-attributes': {
                 'volume-attributes': {
+                    'volume-id-attributes': {
+                        'style-extended': None,
+                    },
                     'volume-space-attributes': {
                         'size-available': None,
                         'size-total': None,
@@ -1424,6 +1805,7 @@ class NetAppCmodeClientTestCase(test.TestCase):
         }
         mock_send_iter_request.assert_called_once_with(
             'volume-get-iter', volume_get_iter_args)
+        mock_get_unique_vol.assert_called_once_with(api_response)
 
         self.assertEqual(fake_client.VOLUME_SIZE_TOTAL, capacity['size-total'])
         self.assertEqual(fake_client.VOLUME_SIZE_AVAILABLE,
@@ -1487,13 +1869,25 @@ class NetAppCmodeClientTestCase(test.TestCase):
 
         self.assertEqual([], result)
 
-    def test_get_flexvol(self):
+    @ddt.data(False, True)
+    def test_get_flexvol(self, is_flexgroup):
 
-        api_response = netapp_api.NaElement(
-            fake_client.VOLUME_GET_ITER_SSC_RESPONSE)
+        if is_flexgroup:
+            api_response = netapp_api.NaElement(
+                fake_client.VOLUME_GET_ITER_SSC_RESPONSE_FLEXGROUP)
+            volume_response = netapp_api.NaElement(
+                fake_client.VOLUME_GET_ITER_SSC_RESPONSE_ATTR_FLEXGROUP)
+        else:
+            api_response = netapp_api.NaElement(
+                fake_client.VOLUME_GET_ITER_SSC_RESPONSE)
+            volume_response = netapp_api.NaElement(
+                fake_client.VOLUME_GET_ITER_SSC_RESPONSE_ATTR)
+
         self.mock_object(self.client,
                          'send_iter_request',
                          return_value=api_response)
+        mock_get_unique_vol = self.mock_object(
+            self.client, 'get_unique_volume', return_value=volume_response)
 
         result = self.client.get_flexvol(
             flexvol_name=fake_client.VOLUME_NAMES[0],
@@ -1523,7 +1917,11 @@ class NetAppCmodeClientTestCase(test.TestCase):
                         'owning-vserver-name': None,
                         'junction-path': None,
                         'type': None,
+                        'aggr-list': {
+                            'aggr-name': None,
+                        },
                         'containing-aggregate-name': None,
+                        'style-extended': None,
                     },
                     'volume-mirror-attributes': {
                         'is-data-protection-mirror': None,
@@ -1549,19 +1947,12 @@ class NetAppCmodeClientTestCase(test.TestCase):
         }
         self.client.send_iter_request.assert_called_once_with(
             'volume-get-iter', volume_get_iter_args)
-        self.assertEqual(fake_client.VOLUME_INFO_SSC, result)
+        mock_get_unique_vol.assert_called_once_with(api_response)
 
-    def test_get_flexvol_not_found(self):
-
-        api_response = netapp_api.NaElement(
-            fake_client.NO_RECORDS_RESPONSE)
-        self.mock_object(self.client,
-                         'send_iter_request',
-                         return_value=api_response)
-
-        self.assertRaises(exception.VolumeBackendAPIException,
-                          self.client.get_flexvol,
-                          flexvol_name=fake_client.VOLUME_NAMES[0])
+        if is_flexgroup:
+            self.assertEqual(fake_client.VOLUME_INFO_SSC_FLEXGROUP, result)
+        else:
+            self.assertEqual(fake_client.VOLUME_INFO_SSC, result)
 
     def test_create_flexvol(self):
         self.mock_object(self.client.connection, 'send_request')
@@ -1615,6 +2006,51 @@ class NetAppCmodeClientTestCase(test.TestCase):
             fake_client.VOLUME_NAME)
         self.client.enable_flexvol_compression.assert_called_once_with(
             fake_client.VOLUME_NAME)
+
+    def test_create_volume_async(self):
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.create_volume_async(
+            fake_client.VOLUME_NAME, [fake_client.VOLUME_AGGREGATE_NAME], 100,
+            volume_type='dp')
+
+        volume_create_args = {
+            'aggr-list': [{'aggr-name': fake_client.VOLUME_AGGREGATE_NAME}],
+            'size': 100 * units.Gi,
+            'volume-name': fake_client.VOLUME_NAME,
+            'volume-type': 'dp'
+        }
+
+        self.client.connection.send_request.assert_called_once_with(
+            'volume-create-async', volume_create_args)
+
+    @ddt.data('dp', 'rw', None)
+    def test_create_volume_async_with_extra_specs(self, volume_type):
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.create_volume_async(
+            fake_client.VOLUME_NAME, [fake_client.VOLUME_AGGREGATE_NAME], 100,
+            space_guarantee_type='volume', language='en-US',
+            snapshot_policy='default', snapshot_reserve=15,
+            volume_type=volume_type)
+
+        volume_create_args = {
+            'aggr-list': [{'aggr-name': fake_client.VOLUME_AGGREGATE_NAME}],
+            'size': 100 * units.Gi,
+            'volume-name': fake_client.VOLUME_NAME,
+            'space-reserve': 'volume',
+            'language-code': 'en-US',
+            'volume-type': volume_type,
+            'percentage-snapshot-reserve': '15',
+        }
+
+        if volume_type != 'dp':
+            volume_create_args['snapshot-policy'] = 'default'
+            volume_create_args['junction-path'] = ('/%s' %
+                                                   fake_client.VOLUME_NAME)
+
+        self.client.connection.send_request.assert_called_with(
+            'volume-create-async', volume_create_args)
 
     def test_flexvol_exists(self):
 
@@ -1699,6 +2135,53 @@ class NetAppCmodeClientTestCase(test.TestCase):
 
         self.client.connection.send_request.assert_has_calls([
             mock.call('volume-mount', volume_mount_args)])
+
+    def test_enable_volume_dedupe_async(self):
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.enable_volume_dedupe_async(fake_client.VOLUME_NAME)
+
+        sis_enable_args = {'volume-name': fake_client.VOLUME_NAME}
+
+        self.client.connection.send_request.assert_called_once_with(
+            'sis-enable-async', sis_enable_args)
+
+    def test_disable_volume_dedupe_async(self):
+
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.disable_volume_dedupe_async(fake_client.VOLUME_NAME)
+
+        sis_enable_args = {'volume-name': fake_client.VOLUME_NAME}
+
+        self.client.connection.send_request.assert_called_once_with(
+            'sis-disable-async', sis_enable_args)
+
+    def test_enable_volume_compression_async(self):
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.enable_volume_compression_async(fake_client.VOLUME_NAME)
+
+        sis_set_config_args = {
+            'volume-name': fake_client.VOLUME_NAME,
+            'enable-compression': 'true'
+        }
+
+        self.client.connection.send_request.assert_called_once_with(
+            'sis-set-config-async', sis_set_config_args)
+
+    def test_disable_volume_compression_async(self):
+        self.mock_object(self.client.connection, 'send_request')
+
+        self.client.disable_volume_compression_async(fake_client.VOLUME_NAME)
+
+        sis_set_config_args = {
+            'volume-name': fake_client.VOLUME_NAME,
+            'enable-compression': 'false'
+        }
+
+        self.client.connection.send_request.assert_called_once_with(
+            'sis-set-config-async', sis_set_config_args)
 
     def test_enable_flexvol_dedupe(self):
 
@@ -2187,17 +2670,20 @@ class NetAppCmodeClientTestCase(test.TestCase):
                     'raid-type': None,
                     'is-hybrid': None,
                 },
+                'aggr-ownership-attributes': {
+                    'home-name': None,
+                },
             },
         }
         self.client._get_aggregates.assert_has_calls([
             mock.call(
                 aggregate_names=[fake_client.VOLUME_AGGREGATE_NAME],
                 desired_attributes=desired_attributes)])
-
         expected = {
             'name': fake_client.VOLUME_AGGREGATE_NAME,
             'raid-type': 'raid_dp',
             'is-hybrid': True,
+            'node-name': fake_client.NODE_NAME,
         }
         self.assertEqual(expected, result)
 
@@ -2232,29 +2718,6 @@ class NetAppCmodeClientTestCase(test.TestCase):
         result = self.client.get_aggregate(fake_client.VOLUME_AGGREGATE_NAME)
 
         self.assertEqual({}, result)
-
-    def test_list_cluster_nodes(self):
-
-        api_response = netapp_api.NaElement(
-            fake_client.SYSTEM_NODE_GET_ITER_RESPONSE)
-        self.mock_object(self.client.connection,
-                         'send_request',
-                         mock.Mock(return_value=api_response))
-
-        result = self.client.list_cluster_nodes()
-
-        self.assertListEqual([fake_client.NODE_NAME], result)
-
-    def test_list_cluster_nodes_not_found(self):
-
-        api_response = netapp_api.NaElement(fake_client.NO_RECORDS_RESPONSE)
-        self.mock_object(self.client.connection,
-                         'send_request',
-                         mock.Mock(return_value=api_response))
-
-        result = self.client.list_cluster_nodes()
-
-        self.assertListEqual([], result)
 
     @ddt.data({'types': {'FCAL'}, 'expected': ['FCAL']},
               {'types': {'SATA', 'SSD'}, 'expected': ['SATA', 'SSD']},)
@@ -3508,7 +3971,8 @@ class NetAppCmodeClientTestCase(test.TestCase):
             'snapshot_policy': 'default',
             'snapshot_reserve': '5',
             'space_guarantee_type': 'none',
-            'volume_type': 'rw'
+            'volume_type': 'rw',
+            'is_flexgroup': False,
         }
 
         actual_prov_opts = self.client.get_provisioning_options_from_flexvol(
@@ -3591,3 +4055,42 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.client.connection.send_request.assert_called_once_with(
             'snapshot-get-iter', api_args)
         self.assertListEqual(expected, result)
+
+    @ddt.data(True, False)
+    def test_is_qos_min_supported(self, supported):
+        self.client.features.add_feature('test', supported=supported)
+        mock_name = self.mock_object(netapp_utils,
+                                     'qos_min_feature_name',
+                                     return_value='test')
+        result = self.client.is_qos_min_supported(True, 'node')
+
+        mock_name.assert_called_once_with(True, 'node')
+        self.assertEqual(result, supported)
+
+    def test_is_qos_min_supported_invalid_node(self):
+        mock_name = self.mock_object(netapp_utils,
+                                     'qos_min_feature_name',
+                                     return_value='invalid_feature')
+        result = self.client.is_qos_min_supported(True, 'node')
+
+        mock_name.assert_called_once_with(True, 'node')
+        self.assertFalse(result)
+
+    def test_get_unique_volume(self):
+        api_response = netapp_api.NaElement(
+            fake_client.VOLUME_GET_ITER_STYLE_RESPONSE)
+        volume_elem = netapp_api.NaElement(fake_client.VOLUME_FLEXGROUP_STYLE)
+
+        volume_id_attr = self.client.get_unique_volume(api_response)
+
+        xml_exp = str(volume_elem).replace(" ", "").replace("\n", "")
+        xml_res = str(volume_id_attr).replace(" ", "").replace("\n", "")
+        self.assertEqual(xml_exp, xml_res)
+
+    def test_get_unique_volume_raise_exception(self):
+        api_response = netapp_api.NaElement(
+            fake_client.VOLUME_GET_ITER_SAME_STYLE_RESPONSE)
+
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.client.get_unique_volume,
+                          api_response)

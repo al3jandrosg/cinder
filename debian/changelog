@@ -1,3 +1,16 @@
+cinder (2:18.0.0-0ubuntu2) hirsute; urgency=medium
+
+  * d/p/skip-victoria-failures.patch: Dropped. Fixed upstream.
+  * d/p/add-mock-psutil-in-quobyte-tests.patch: Dropped. Fixed upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 14 Apr 2021 14:54:52 -0400
+
+cinder (2:18.0.0-0ubuntu1) hirsute; urgency=medium
+
+  * New upstream release for OpenStack Wallaby.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 14 Apr 2021 14:49:38 -0400
+
 cinder (2:18.0.0~b1-0ubuntu2) hirsute; urgency=medium
 
   * d/py3dist-overrides: Add boto3 which is a Suggests.

@@ -346,24 +346,41 @@ class TestConvertImage(test.TestCase):
                                     ' image conversion.')
 
 
+@ddt.ddt
 class TestResizeImage(test.TestCase):
     @mock.patch('cinder.utils.execute')
-    def test_defaults(self, mock_exec):
+    @ddt.data(None, 'raw', 'qcow2')
+    def test_defaults(self, file_format, mock_exec):
         source = mock.sentinel.source
         size = mock.sentinel.size
-        output = image_utils.resize_image(source, size)
+        output = image_utils.resize_image(source, size,
+                                          file_format=file_format)
         self.assertIsNone(output)
-        mock_exec.assert_called_once_with('qemu-img', 'resize', source,
-                                          'sentinel.sizeG', run_as_root=False)
+        if file_format:
+            mock_exec.assert_called_once_with(
+                'qemu-img', 'resize', '-f', file_format, source,
+                'sentinel.sizeG', run_as_root=False)
+        else:
+            mock_exec.assert_called_once_with('qemu-img', 'resize',
+                                              source, 'sentinel.sizeG',
+                                              run_as_root=False)
 
     @mock.patch('cinder.utils.execute')
-    def test_run_as_root(self, mock_exec):
+    @ddt.data(None, 'raw', 'qcow2')
+    def test_run_as_root(self, file_format, mock_exec):
         source = mock.sentinel.source
         size = mock.sentinel.size
-        output = image_utils.resize_image(source, size, run_as_root=True)
+        output = image_utils.resize_image(source, size, run_as_root=True,
+                                          file_format=file_format)
         self.assertIsNone(output)
-        mock_exec.assert_called_once_with('qemu-img', 'resize', source,
-                                          'sentinel.sizeG', run_as_root=True)
+        if file_format:
+            mock_exec.assert_called_once_with(
+                'qemu-img', 'resize', '-f', file_format, source,
+                'sentinel.sizeG', run_as_root=True)
+        else:
+            mock_exec.assert_called_once_with('qemu-img', 'resize',
+                                              source, 'sentinel.sizeG',
+                                              run_as_root=True)
 
 
 class TestFetch(test.TestCase):
@@ -1149,7 +1166,8 @@ class TestFetchToVolumeFormat(test.TestCase):
                                                     volume_format, blocksize)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=True),
             mock.call(tmp, run_as_root=True)])
@@ -1201,7 +1219,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1257,7 +1276,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1309,7 +1329,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1413,7 +1434,8 @@ class TestFetchToVolumeFormat(test.TestCase):
 
         self.assertIsNone(output)
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_called_once_with(tmp,
                                           force_share=False,
                                           run_as_root=run_as_root)
@@ -1460,7 +1482,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_called_once_with(tmp,
                                           force_share=False,
                                           run_as_root=run_as_root)
@@ -1505,7 +1528,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_called_once_with(tmp,
                                           force_share=False,
                                           run_as_root=run_as_root)
@@ -1556,7 +1580,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1604,7 +1629,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1652,7 +1678,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         image_service.show.assert_called_once_with(ctxt, image_id)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1701,7 +1728,8 @@ class TestFetchToVolumeFormat(test.TestCase):
             run_as_root=run_as_root)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=run_as_root),
             mock.call(tmp, run_as_root=run_as_root)])
@@ -1859,7 +1887,8 @@ class TestFetchToVolumeFormat(test.TestCase):
                                                     volume_format, blocksize)
 
         self.assertIsNone(output)
-        mock_temp.assert_called_once_with()
+        mock_temp.assert_called_once_with(prefix='image_download_%s_' %
+                                          image_id)
         mock_info.assert_has_calls([
             mock.call(tmp, force_share=False, run_as_root=True),
             mock.call(tmp, run_as_root=True)])

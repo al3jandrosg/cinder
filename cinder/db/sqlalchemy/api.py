@@ -41,12 +41,11 @@ osprofiler_sqlalchemy = importutils.try_import('osprofiler.sqlalchemy')
 import sqlalchemy
 from sqlalchemy import MetaData
 from sqlalchemy import or_, and_, case
-from sqlalchemy.orm import joinedload, joinedload_all, undefer_group, load_only
+from sqlalchemy.orm import joinedload, undefer_group, load_only
 from sqlalchemy.orm import RelationshipProperty
 from sqlalchemy import sql
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import desc
-from sqlalchemy.sql.expression import literal_column
 from sqlalchemy.sql.expression import true
 from sqlalchemy.sql import func
 from sqlalchemy.sql import sqltypes
@@ -573,12 +572,15 @@ def service_create(context, values):
 @require_admin_context
 @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def service_update(context, service_id, values):
+    query = _service_query(context, id=service_id)
+
     if 'disabled' in values:
+        entity = query.column_descriptions[0]['entity']
+
         values = values.copy()
         values['modified_at'] = values.get('modified_at', timeutils.utcnow())
-        values['updated_at'] = values.get('updated_at',
-                                          literal_column('updated_at'))
-    query = _service_query(context, id=service_id)
+        values['updated_at'] = values.get('updated_at', entity.updated_at)
+
     result = query.update(values)
     if not result:
         raise exception.ServiceNotFound(service_id=service_id)
@@ -633,7 +635,7 @@ def _cluster_query(context, is_up=None, get_services=False,
         query = query.params(expired=utils.service_expired_time())
 
     if get_services:
-        query = query.options(joinedload_all('services'))
+        query = query.options(joinedload('services'))
 
     if is_up is not None:
         date_limit = utils.service_expired_time()
@@ -855,16 +857,6 @@ def quota_get_all_by_project(context, project_id):
 
 
 @require_context
-def quota_allocated_get_all_by_project(context, project_id, session=None):
-    rows = model_query(context, models.Quota, read_deleted='no',
-                       session=session).filter_by(project_id=project_id).all()
-    result = {'project_id': project_id}
-    for row in rows:
-        result[row.resource] = row.allocated
-    return result
-
-
-@require_context
 def _quota_get_all_by_resource(context, resource, session=None):
     rows = model_query(context, models.Quota,
                        session=session,
@@ -874,13 +866,11 @@ def _quota_get_all_by_resource(context, resource, session=None):
 
 
 @require_context
-def quota_create(context, project_id, resource, limit, allocated):
+def quota_create(context, project_id, resource, limit):
     quota_ref = models.Quota()
     quota_ref.project_id = project_id
     quota_ref.resource = resource
     quota_ref.hard_limit = limit
-    if allocated:
-        quota_ref.allocated = allocated
 
     session = get_session()
     with session.begin():
@@ -904,15 +894,6 @@ def quota_update_resource(context, old_res, new_res):
         quotas = _quota_get_all_by_resource(context, old_res, session=session)
         for quota in quotas:
             quota.resource = new_res
-
-
-@require_admin_context
-def quota_allocated_update(context, project_id, resource, allocated):
-    session = get_session()
-    with session.begin():
-        quota_ref = _quota_get(context, project_id, resource, session=session)
-        quota_ref.allocated = allocated
-        return quota_ref
 
 
 @require_admin_context
@@ -1071,7 +1052,6 @@ def quota_usage_get_all_by_project(context, project_id):
 @require_admin_context
 def _quota_usage_create(context, project_id, resource, in_use, reserved,
                         until_refresh, session=None):
-
     quota_usage_ref = models.QuotaUsage()
     quota_usage_ref.project_id = project_id
     quota_usage_ref.resource = resource
@@ -1087,7 +1067,7 @@ def _quota_usage_create(context, project_id, resource, in_use, reserved,
 
 
 def _reservation_create(context, uuid, usage, project_id, resource, delta,
-                        expire, session=None, allocated_id=None):
+                        expire, session=None):
     usage_id = usage['id'] if usage else None
     reservation_ref = models.Reservation()
     reservation_ref.uuid = uuid
@@ -1096,7 +1076,6 @@ def _reservation_create(context, uuid, usage, project_id, resource, delta,
     reservation_ref.resource = resource
     reservation_ref.delta = delta
     reservation_ref.expire = expire
-    reservation_ref.allocated_id = allocated_id
     reservation_ref.save(session=session)
     return reservation_ref
 
@@ -1144,40 +1123,93 @@ def quota_usage_update_resource(context, old_res, new_res):
             usage.until_refresh = 1
 
 
+def _is_duplicate(exc):
+    """Check if an exception is caused by a unique constraint failure."""
+    return isinstance(exc, db_exc.DBDuplicateEntry)
+
+
+def _get_sync_updates(ctxt, project_id, session, resources, resource_name):
+    """Return usage for a specific resource.
+
+    Resources are volumes, gigabytes, backups, snapshots, and also
+    volumes_<type_name> snapshots_<type_name> for each volume type.
+    """
+    # Grab the sync routine
+    sync = QUOTA_SYNC_FUNCTIONS[resources[resource_name].sync]
+    # VolumeTypeResource includes the id and name of the resource.
+    volume_type_id = getattr(resources[resource_name],
+                             'volume_type_id', None)
+    volume_type_name = getattr(resources[resource_name],
+                               'volume_type_name', None)
+    updates = sync(ctxt, project_id,
+                   volume_type_id=volume_type_id,
+                   volume_type_name=volume_type_name,
+                   session=session)
+    return updates
+
+
 @require_context
-@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
+@oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True,
+                           exception_checker=_is_duplicate)
 def quota_reserve(context, resources, quotas, deltas, expire,
-                  until_refresh, max_age, project_id=None,
-                  is_allocated_reserve=False):
+                  until_refresh, max_age, project_id=None):
     elevated = context.elevated()
     session = get_session()
-    with session.begin():
+
+    # We don't use begin as a context manager because there are cases where we
+    # want to finish a transaction and begin a new one.
+    session.begin()
+    try:
         if project_id is None:
             project_id = context.project_id
 
-        # Get the current usages
-        usages = _get_quota_usages(context, session, project_id,
-                                   resources=deltas.keys())
-        allocated = quota_allocated_get_all_by_project(context, project_id,
-                                                       session=session)
-        allocated.pop('project_id')
+        # Loop until we can lock all the resource rows we'll be modifying
+        while True:
+            # Get the current usages and lock existing rows
+            usages = _get_quota_usages(context, session, project_id,
+                                       resources=deltas.keys())
+            missing = [res for res in deltas if res not in usages]
+            # If we have successfully locked all the rows we can continue.
+            # SELECT ... FOR UPDATE used in _get_quota usages cannot lock
+            # non-existing rows, so there can be races with other requests
+            # trying to create those rows.
+            if not missing:
+                break
+
+            # Create missing rows calculating current values instead of
+            # assuming there are no used resources as admins may have been
+            # using this mechanism to force quota usage refresh.
+            for resource in missing:
+                updates = _get_sync_updates(elevated, project_id, session,
+                                            resources, resource)
+                _quota_usage_create(elevated, project_id, resource,
+                                    updates[resource], 0,
+                                    until_refresh or None, session=session)
+
+            # NOTE: When doing the commit there can be a race condition with
+            # other service instances or thread  that are also creating the
+            # same rows and in that case this will raise either a Deadlock
+            # exception (when multiple transactions were creating the same rows
+            # and the DB failed to acquire the row lock on the non-first
+            # transaction) or a DBDuplicateEntry exception if some other
+            # transaction created the row between us doing the
+            # _get_quota_usages and here.  In both cases this transaction will
+            # be rolled back and the wrap_db_retry decorator will retry.
+
+            # Commit new rows to the DB.
+            session.commit()
+
+            # Start a new session before trying to lock all the rows again.  By
+            # trying to get all the locks in a loop we can protect us against
+            # admins directly deleting DB rows.
+            session.begin()
 
         # Handle usage refresh
-        work = set(deltas.keys())
-        while work:
-            resource = work.pop()
-
+        for resource in deltas.keys():
             # Do we need to refresh the usage?
             refresh = False
-            if resource not in usages:
-                usages[resource] = _quota_usage_create(elevated,
-                                                       project_id,
-                                                       resource,
-                                                       0, 0,
-                                                       until_refresh or None,
-                                                       session=session)
-                refresh = True
-            elif usages[resource].in_use < 0:
+            if usages[resource].in_use < 0:
+                # If we created the entry right now we want to refresh.
                 # Negative in_use count indicates a desync, so try to
                 # heal from that...
                 refresh = True
@@ -1192,51 +1224,25 @@ def quota_reserve(context, resources, quotas, deltas, expire,
 
             # OK, refresh the usage
             if refresh:
-                # Grab the sync routine
-                sync = QUOTA_SYNC_FUNCTIONS[resources[resource].sync]
-                volume_type_id = getattr(resources[resource],
-                                         'volume_type_id', None)
-                volume_type_name = getattr(resources[resource],
-                                           'volume_type_name', None)
-                updates = sync(elevated, project_id,
-                               volume_type_id=volume_type_id,
-                               volume_type_name=volume_type_name,
-                               session=session)
-                for res, in_use in updates.items():
-                    # Make sure we have a destination for the usage!
-                    if res not in usages:
-                        usages[res] = _quota_usage_create(
-                            elevated,
-                            project_id,
-                            res,
-                            0, 0,
-                            until_refresh or None,
-                            session=session
-                        )
+                updates = _get_sync_updates(elevated, project_id, session,
+                                            resources, resource)
+                # Updates will always contain a single resource usage matching
+                # the resource variable.
+                usages[resource].in_use = updates[resource]
+                usages[resource].until_refresh = until_refresh or None
 
-                    # Update the usage
-                    usages[res].in_use = in_use
-                    usages[res].until_refresh = until_refresh or None
-
-                    # Because more than one resource may be refreshed
-                    # by the call to the sync routine, and we don't
-                    # want to double-sync, we make sure all refreshed
-                    # resources are dropped from the work set.
-                    work.discard(res)
-
-                    # NOTE(Vek): We make the assumption that the sync
-                    #            routine actually refreshes the
-                    #            resources that it is the sync routine
-                    #            for.  We don't check, because this is
-                    #            a best-effort mechanism.
+            # There are 3 cases where we want to update "until_refresh" in the
+            # DB: when we enabled it, when we disabled it, and when we changed
+            # to a value lower than the current remaining value.
+            else:
+                res_until = usages[resource].until_refresh
+                if ((res_until is None and until_refresh) or
+                        ((res_until or 0) > (until_refresh or 0))):
+                    usages[resource].until_refresh = until_refresh or None
 
         # Check for deltas that would go negative
-        if is_allocated_reserve:
-            unders = [r for r, delta in deltas.items()
-                      if delta < 0 and delta + allocated.get(r, 0) < 0]
-        else:
-            unders = [r for r, delta in deltas.items()
-                      if delta < 0 and delta + usages[r].in_use < 0]
+        unders = [r for r, delta in deltas.items()
+                  if delta < 0 and delta + usages[r].in_use < 0]
 
         # TODO(mc_nair): Should ignore/zero alloc if using non-nested driver
 
@@ -1247,7 +1253,7 @@ def quota_reserve(context, resources, quotas, deltas, expire,
         #            problems.
         overs = [r for r, delta in deltas.items()
                  if quotas[r] >= 0 and delta >= 0 and
-                 quotas[r] < delta + usages[r].total + allocated.get(r, 0)]
+                 quotas[r] < delta + usages[r].total]
 
         # NOTE(Vek): The quota check needs to be in the transaction,
         #            but the transaction doesn't fail just because
@@ -1261,24 +1267,9 @@ def quota_reserve(context, resources, quotas, deltas, expire,
             reservations = []
             for resource, delta in deltas.items():
                 usage = usages[resource]
-                allocated_id = None
-                if is_allocated_reserve:
-                    try:
-                        quota = _quota_get(context, project_id, resource,
-                                           session=session)
-                    except exception.ProjectQuotaNotFound:
-                        # If we were using the default quota, create DB entry
-                        quota = quota_create(context, project_id, resource,
-                                             quotas[resource], 0)
-                    # Since there's no reserved/total for allocated, update
-                    # allocated immediately and subtract on rollback if needed
-                    quota_allocated_update(context, project_id, resource,
-                                           quota.allocated + delta)
-                    allocated_id = quota.id
-                    usage = None
                 reservation = _reservation_create(
                     elevated, str(uuid.uuid4()), usage, project_id, resource,
-                    delta, expire, session=session, allocated_id=allocated_id)
+                    delta, expire, session=session)
 
                 reservations.append(reservation.uuid)
 
@@ -1294,18 +1285,22 @@ def quota_reserve(context, resources, quotas, deltas, expire,
                 #
                 #            To prevent this, we only update the
                 #            reserved value if the delta is positive.
-                if delta > 0 and not is_allocated_reserve:
+                if delta > 0:
                     usages[resource].reserved += delta
 
-    if unders:
-        LOG.warning("Change will make usage less than 0 for the following "
-                    "resources: %s", unders)
-    if overs:
-        usages = {k: dict(in_use=v.in_use, reserved=v.reserved,
-                          allocated=allocated.get(k, 0))
-                  for k, v in usages.items()}
-        raise exception.OverQuota(overs=sorted(overs), quotas=quotas,
-                                  usages=usages)
+        if unders:
+            LOG.warning("Reservation would make usage less than 0 for the "
+                        "following resources, so on commit they will be "
+                        "limited to prevent going below 0: %s", unders)
+        if overs:
+            usages = {k: dict(in_use=v.in_use, reserved=v.reserved)
+                      for k, v in usages.items()}
+            raise exception.OverQuota(overs=sorted(overs), quotas=quotas,
+                                      usages=usages)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
 
     return reservations
 
@@ -1343,6 +1338,13 @@ def _dict_with_usage_id(usages):
 def reservation_commit(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
+        # NOTE: There's a potential race condition window with
+        # reservation_expire, since _get_reservation_resources does not lock
+        # the rows, but we won't fix it because:
+        # - Minuscule chance of happening, since quota expiration is usually
+        #   very high
+        # - Solution could create a DB lock on rolling upgrades since we need
+        #   to reverse the order of locking the rows.
         usages = _get_quota_usages(
             context, session, project_id,
             resources=_get_reservation_resources(session, context,
@@ -1350,12 +1352,15 @@ def reservation_commit(context, reservations, project_id=None):
         usages = _dict_with_usage_id(usages)
 
         for reservation in _quota_reservations(session, context, reservations):
-            # Allocated reservations will have already been bumped
-            if not reservation.allocated_id:
-                usage = usages[reservation.usage_id]
-                if reservation.delta >= 0:
-                    usage.reserved -= reservation.delta
-                usage.in_use += reservation.delta
+            usage = usages[reservation.usage_id]
+            delta = reservation.delta
+            if delta >= 0:
+                usage.reserved -= min(delta, usage.reserved)
+            # For negative deltas make sure we never go into negative usage
+            elif -delta > usage.in_use:
+                delta = -usage.in_use
+
+            usage.in_use += delta
 
             reservation.delete(session=session)
 
@@ -1365,18 +1370,22 @@ def reservation_commit(context, reservations, project_id=None):
 def reservation_rollback(context, reservations, project_id=None):
     session = get_session()
     with session.begin():
+        # NOTE: There's a potential race condition window with
+        # reservation_expire, since _get_reservation_resources does not lock
+        # the rows, but we won't fix it because:
+        # - Minuscule chance of happening, since quota expiration is usually
+        #   very high
+        # - Solution could create a DB lock on rolling upgrades since we need
+        #   to reverse the order of locking the rows.
         usages = _get_quota_usages(
             context, session, project_id,
             resources=_get_reservation_resources(session, context,
                                                  reservations))
         usages = _dict_with_usage_id(usages)
         for reservation in _quota_reservations(session, context, reservations):
-            if reservation.allocated_id:
-                reservation.quota.allocated -= reservation.delta
-            else:
-                usage = usages[reservation.usage_id]
-                if reservation.delta >= 0:
-                    usage.reserved -= reservation.delta
+            usage = usages[reservation.usage_id]
+            if reservation.delta >= 0:
+                usage.reserved -= min(reservation.delta, usage.reserved)
 
             reservation.delete(session=session)
 
@@ -1403,32 +1412,23 @@ def quota_destroy_all_by_project(context, project_id, only_quotas=False):
     """
     session = get_session()
     with session.begin():
-        quotas = model_query(context, models.Quota, session=session,
-                             read_deleted="no").\
+        model_query(context, models.Quota, session=session,
+                    read_deleted="no").\
             filter_by(project_id=project_id).\
-            all()
-
-        for quota_ref in quotas:
-            quota_ref.delete(session=session)
+            update(models.Quota.delete_values())
 
         if only_quotas:
             return
 
-        quota_usages = model_query(context, models.QuotaUsage,
-                                   session=session, read_deleted="no").\
+        model_query(context, models.QuotaUsage, session=session,
+                    read_deleted="no").\
             filter_by(project_id=project_id).\
-            all()
+            update(models.QuotaUsage.delete_values())
 
-        for quota_usage_ref in quota_usages:
-            quota_usage_ref.delete(session=session)
-
-        reservations = model_query(context, models.Reservation,
-                                   session=session, read_deleted="no").\
+        model_query(context, models.Reservation, session=session,
+                    read_deleted="no").\
             filter_by(project_id=project_id).\
-            all()
-
-        for reservation_ref in reservations:
-            reservation_ref.delete(session=session)
+            update(models.Reservation.delete_values())
 
 
 @require_admin_context
@@ -1440,17 +1440,15 @@ def reservation_expire(context):
         results = model_query(context, models.Reservation, session=session,
                               read_deleted="no").\
             filter(models.Reservation.expire < current_time).\
+            with_for_update().\
             all()
 
         if results:
             for reservation in results:
                 if reservation.delta >= 0:
-                    if reservation.allocated_id:
-                        reservation.quota.allocated -= reservation.delta
-                        reservation.quota.save(session=session)
-                    else:
-                        reservation.usage.reserved -= reservation.delta
-                        reservation.usage.save(session=session)
+                    reservation.usage.reserved -= min(
+                        reservation.delta, reservation.usage.reserved)
+                    reservation.usage.save(session=session)
 
                 reservation.delete(session=session)
 
@@ -1507,7 +1505,7 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
                           'attached_host': host_name,
                           'attach_time': timeutils.utcnow(),
                           'attach_mode': attach_mode,
-                          'updated_at': literal_column('updated_at')}
+                          'updated_at': volume_attachment_ref.updated_at}
         volume_attachment_ref.update(updated_values)
         volume_attachment_ref.save(session=session)
         del updated_values['updated_at']
@@ -1579,15 +1577,35 @@ def volume_data_get_for_host(context, host, count_only=False):
 
 @require_admin_context
 def _volume_data_get_for_project(context, project_id, volume_type_id=None,
-                                 session=None, host=None):
+                                 session=None, host=None, skip_internal=True):
+    model = models.Volume
     query = model_query(context,
-                        func.count(models.Volume.id),
-                        func.sum(models.Volume.size),
+                        func.count(model.id),
+                        func.sum(model.size),
                         read_deleted="no",
                         session=session).\
         filter_by(project_id=project_id)
+
+    # When calling the method for quotas we don't count volumes that are the
+    # destination of a migration since they were not accounted for quotas or
+    # reservations in the first place.
+    # Also skip temporary volumes that have 'temporary' admin_metadata key set
+    # to True.
+    if skip_internal:
+        admin_model = models.VolumeAdminMetadata
+        query = query.filter(
+            and_(or_(model.migration_status.is_(None),
+                     ~model.migration_status.startswith('target:')),
+                 ~sql.exists().where(and_(model.id == admin_model.volume_id,
+                                          ~admin_model.deleted,
+                                          admin_model.key == 'temporary',
+                                          admin_model.value == 'True')
+                                     )
+                 )
+        )
+
     if host:
-        query = query.filter(_filter_host(models.Volume.host, host))
+        query = query.filter(_filter_host(model.host, host))
 
     if volume_type_id:
         query = query.filter_by(volume_type_id=volume_type_id)
@@ -1618,10 +1636,9 @@ def _backup_data_get_for_project(context, project_id, volume_type_id=None,
 
 
 @require_admin_context
-def volume_data_get_for_project(context, project_id,
-                                volume_type_id=None, host=None):
-    return _volume_data_get_for_project(context, project_id,
-                                        volume_type_id, host=host)
+def volume_data_get_for_project(context, project_id, host=None):
+    return _volume_data_get_for_project(context, project_id, host=host,
+                                        skip_internal=False)
 
 
 VOLUME_DEPENDENT_MODELS = frozenset([models.VolumeMetadata,
@@ -1639,19 +1656,23 @@ def volume_destroy(context, volume_id):
     updated_values = {'status': 'deleted',
                       'deleted': True,
                       'deleted_at': now,
-                      'updated_at': literal_column('updated_at'),
                       'migration_status': None}
     with session.begin():
-        model_query(context, models.Volume, session=session).\
-            filter_by(id=volume_id).\
-            update(updated_values)
+        query = model_query(context, models.Volume, session=session).\
+            filter_by(id=volume_id)
+        entity = query.column_descriptions[0]['entity']
+        updated_values['updated_at'] = entity.updated_at
+        query.update(updated_values)
+
         for model in VOLUME_DEPENDENT_MODELS:
-            model_query(context, model, session=session).\
-                filter_by(volume_id=volume_id).\
-                update({'deleted': True,
-                        'deleted_at': now,
-                        'updated_at': literal_column('updated_at')})
-    del updated_values['updated_at']
+            query = model_query(context, model, session=session).\
+                filter_by(volume_id=volume_id)
+            entity = query.column_descriptions[0]['entity']
+            query.update({'deleted': True,
+                          'deleted_at': now,
+                          'updated_at': entity.updated_at})
+        del updated_values['updated_at']
+
     return updated_values
 
 
@@ -1734,8 +1755,7 @@ def volume_detached(context, volume_id, attachment_id):
                 'detach_time': now,
                 'deleted': True,
                 'deleted_at': now,
-                'updated_at':
-                literal_column('updated_at'),
+                'updated_at': attachment.updated_at,
             }
             attachment.update(attachment_updates)
             attachment.save(session=session)
@@ -1744,7 +1764,7 @@ def volume_detached(context, volume_id, attachment_id):
         attachment_list = None
         volume_ref = _volume_get(context, volume_id,
                                  session=session)
-        volume_updates = {'updated_at': literal_column('updated_at')}
+        volume_updates = {'updated_at': volume_ref.updated_at}
         if not volume_ref.volume_attachment:
             # NOTE(jdg): We kept the old arg style allowing session exclusively
             # for this one call
@@ -2004,18 +2024,21 @@ def attachment_destroy(context, attachment_id):
     utcnow = timeutils.utcnow()
     session = get_session()
     with session.begin():
+        query = model_query(context, models.VolumeAttachment,
+                            session=session).filter_by(id=attachment_id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'attach_status': fields.VolumeAttachStatus.DELETED,
                           'deleted': True,
                           'deleted_at': utcnow,
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.VolumeAttachment, session=session).\
-            filter_by(id=attachment_id).\
-            update(updated_values)
-        model_query(context, models.AttachmentSpecs, session=session).\
-            filter_by(attachment_id=attachment_id).\
-            update({'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
+
+        query = model_query(context, models.AttachmentSpecs, session=session).\
+            filter_by(attachment_id=attachment_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': utcnow,
+                      'updated_at': entity.updated_at})
     del updated_values['updated_at']
     return updated_values
 
@@ -2050,11 +2073,12 @@ def attachment_specs_delete(context, attachment_id, key):
                                    attachment_id,
                                    key,
                                    session)
-        _attachment_specs_query(context, attachment_id, session).\
-            filter_by(key=key).\
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+        query = _attachment_specs_query(context, attachment_id, session).\
+            filter_by(key=key)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 @require_context
@@ -2862,19 +2886,21 @@ def volume_metadata_get(context, volume_id):
 @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_metadata_delete(context, volume_id, key, meta_type):
     if meta_type == common.METADATA_TYPES.user:
-        (_volume_user_metadata_get_query(context, volume_id).
-            filter_by(key=key).
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')}))
+        query = _volume_user_metadata_get_query(context, volume_id).\
+            filter_by(key=key)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
     elif meta_type == common.METADATA_TYPES.image:
         metadata_id = _volume_glance_metadata_key_to_id(context,
                                                         volume_id, key)
-        (_volume_image_metadata_get_query(context, volume_id).
-            filter_by(id=metadata_id).
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')}))
+        query = _volume_image_metadata_get_query(context, volume_id).\
+            filter_by(id=metadata_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
     else:
         raise exception.InvalidMetadataType(metadata_type=meta_type,
                                             id=volume_id)
@@ -2933,11 +2959,12 @@ def volume_admin_metadata_get(context, volume_id):
 @require_volume_exists
 @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def volume_admin_metadata_delete(context, volume_id, key):
-    _volume_admin_metadata_get_query(context, volume_id).\
-        filter_by(key=key).\
-        update({'deleted': True,
-                'deleted_at': timeutils.utcnow(),
-                'updated_at': literal_column('updated_at')})
+    query = _volume_admin_metadata_get_query(context, volume_id).\
+        filter_by(key=key)
+    entity = query.column_descriptions[0]['entity']
+    query.update({'deleted': True,
+                  'deleted_at': timeutils.utcnow(),
+                  'updated_at': entity.updated_at})
 
 
 @require_admin_context
@@ -2974,18 +3001,20 @@ def snapshot_destroy(context, snapshot_id):
     utcnow = timeutils.utcnow()
     session = get_session()
     with session.begin():
+        query = model_query(context, models.Snapshot, session=session).\
+            filter_by(id=snapshot_id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'status': 'deleted',
                           'deleted': True,
                           'deleted_at': utcnow,
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.Snapshot, session=session).\
-            filter_by(id=snapshot_id).\
-            update(updated_values)
-        model_query(context, models.SnapshotMetadata, session=session).\
-            filter_by(snapshot_id=snapshot_id).\
-            update({'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
+        query = model_query(context, models.SnapshotMetadata,
+                            session=session).filter_by(snapshot_id=snapshot_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': utcnow,
+                      'updated_at': entity.updated_at})
     del updated_values['updated_at']
     return updated_values
 
@@ -3356,11 +3385,12 @@ def snapshot_metadata_get(context, snapshot_id):
 @require_snapshot_exists
 @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
 def snapshot_metadata_delete(context, snapshot_id, key):
-    _snapshot_metadata_get_query(context, snapshot_id).\
-        filter_by(key=key).\
-        update({'deleted': True,
-                'deleted_at': timeutils.utcnow(),
-                'updated_at': literal_column('updated_at')})
+    query = _snapshot_metadata_get_query(context, snapshot_id).\
+        filter_by(key=key)
+    entity = query.column_descriptions[0]['entity']
+    query.update({'deleted': True,
+                  'deleted_at': timeutils.utcnow(),
+                  'updated_at': entity.updated_at})
 
 
 @require_context
@@ -4125,22 +4155,25 @@ def volume_type_destroy(context, id):
         if results or group_count or cg_count:
             LOG.error('VolumeType %s deletion failed, VolumeType in use.', id)
             raise exception.VolumeTypeInUse(volume_type_id=id)
+        query = model_query(context, models.VolumeType, session=session).\
+            filter_by(id=id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'deleted': True,
                           'deleted_at': utcnow,
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.VolumeType, session=session).\
-            filter_by(id=id).\
-            update(updated_values)
-        model_query(context, models.VolumeTypeExtraSpecs, session=session).\
-            filter_by(volume_type_id=id).\
-            update({'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
-        model_query(context, models.Encryption, session=session).\
-            filter_by(volume_type_id=id).\
-            update({'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
+        query = model_query(context, models.VolumeTypeExtraSpecs,
+                            session=session).filter_by(volume_type_id=id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': utcnow,
+                      'updated_at': entity.updated_at})
+        query = model_query(context, models.Encryption, session=session).\
+            filter_by(volume_type_id=id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': utcnow,
+                      'updated_at': entity.updated_at})
         model_query(context, models.VolumeTypeProjects, session=session,
                     read_deleted="int_no").filter_by(
             volume_type_id=id).soft_delete(synchronize_session=False)
@@ -4160,16 +4193,18 @@ def group_type_destroy(context, id):
             LOG.error('GroupType %s deletion failed, '
                       'GroupType in use.', id)
             raise exception.GroupTypeInUse(group_type_id=id)
-        model_query(context, models.GroupType, session=session).\
-            filter_by(id=id).\
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
-        model_query(context, models.GroupTypeSpecs, session=session).\
-            filter_by(group_type_id=id).\
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+        query = model_query(context, models.GroupType, session=session).\
+            filter_by(id=id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
+        query = model_query(context, models.GroupTypeSpecs, session=session).\
+            filter_by(group_type_id=id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 @require_context
@@ -4406,11 +4441,12 @@ def volume_type_extra_specs_delete(context, volume_type_id, key):
     with session.begin():
         _volume_type_extra_specs_get_item(context, volume_type_id, key,
                                           session)
-        _volume_type_extra_specs_query(context, volume_type_id, session).\
-            filter_by(key=key).\
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+        query = _volume_type_extra_specs_query(context, volume_type_id,
+                                               session).filter_by(key=key)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 @require_context
@@ -4477,11 +4513,12 @@ def group_type_specs_delete(context, group_type_id, key):
     with session.begin():
         _group_type_specs_get_item(context, group_type_id, key,
                                    session)
-        _group_type_specs_query(context, group_type_id, session).\
-            filter_by(key=key).\
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+        query = _group_type_specs_query(context, group_type_id, session).\
+            filter_by(key=key)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 @require_context
@@ -4614,7 +4651,7 @@ def _qos_specs_get_all_ref(context, qos_specs_id, session=None,
     result = model_query(context, models.QualityOfServiceSpecs,
                          read_deleted=read_deleted, session=session). \
         filter_by(id=qos_specs_id). \
-        options(joinedload_all('specs')).all()
+        options(joinedload('specs')).all()
 
     if not result:
         raise exception.QoSSpecsNotFound(specs_id=qos_specs_id)
@@ -4721,7 +4758,7 @@ def _qos_specs_get_query(context, session):
     rows = model_query(context, models.QualityOfServiceSpecs,
                        session=session,
                        read_deleted='no').\
-        options(joinedload_all('specs')).filter_by(key='QoS_Specs_Name')
+        options(joinedload('specs')).filter_by(key='QoS_Specs_Name')
     return rows
 
 
@@ -4796,12 +4833,13 @@ def qos_specs_disassociate_all(context, qos_specs_id):
 def qos_specs_item_delete(context, qos_specs_id, key):
     session = get_session()
     with session.begin():
-        session.query(models.QualityOfServiceSpecs). \
+        query = session.query(models.QualityOfServiceSpecs). \
             filter(models.QualityOfServiceSpecs.key == key). \
-            filter(models.QualityOfServiceSpecs.specs_id == qos_specs_id). \
-            update({'deleted': True,
-                    'deleted_at': timeutils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+            filter(models.QualityOfServiceSpecs.specs_id == qos_specs_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 @require_admin_context
@@ -4809,14 +4847,15 @@ def qos_specs_delete(context, qos_specs_id):
     session = get_session()
     with session.begin():
         _qos_specs_get_all_ref(context, qos_specs_id, session)
-        updated_values = {'deleted': True,
-                          'deleted_at': timeutils.utcnow(),
-                          'updated_at': literal_column('updated_at')}
-        session.query(models.QualityOfServiceSpecs).\
+        query = session.query(models.QualityOfServiceSpecs).\
             filter(or_(models.QualityOfServiceSpecs.id == qos_specs_id,
                        models.QualityOfServiceSpecs.specs_id ==
-                       qos_specs_id)).\
-            update(updated_values)
+                       qos_specs_id))
+        entity = query.column_descriptions[0]['entity']
+        updated_values = {'deleted': True,
+                          'deleted_at': timeutils.utcnow(),
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
     del updated_values['updated_at']
     return updated_values
 
@@ -4901,7 +4940,7 @@ def volume_type_encryption_delete(context, volume_type_id):
                 type_id=volume_type_id)
         encryption.update({'deleted': True,
                            'deleted_at': timeutils.utcnow(),
-                           'updated_at': literal_column('updated_at')})
+                           'updated_at': encryption.updated_at})
 
 
 @handle_db_data_error
@@ -5167,20 +5206,22 @@ def volume_glance_metadata_copy_to_volume(context, volume_id, snapshot_id):
 
 @require_context
 def volume_glance_metadata_delete_by_volume(context, volume_id):
-    model_query(context, models.VolumeGlanceMetadata, read_deleted='no').\
-        filter_by(volume_id=volume_id).\
-        update({'deleted': True,
-                'deleted_at': timeutils.utcnow(),
-                'updated_at': literal_column('updated_at')})
+    query = model_query(context, models.VolumeGlanceMetadata,
+                        read_deleted='no').filter_by(volume_id=volume_id)
+    entity = query.column_descriptions[0]['entity']
+    query.update({'deleted': True,
+                  'deleted_at': timeutils.utcnow(),
+                  'updated_at': entity.updated_at})
 
 
 @require_context
 def volume_glance_metadata_delete_by_snapshot(context, snapshot_id):
-    model_query(context, models.VolumeGlanceMetadata, read_deleted='no').\
-        filter_by(snapshot_id=snapshot_id).\
-        update({'deleted': True,
-                'deleted_at': timeutils.utcnow(),
-                'updated_at': literal_column('updated_at')})
+    query = model_query(context, models.VolumeGlanceMetadata,
+                        read_deleted='no').filter_by(snapshot_id=snapshot_id)
+    entity = query.column_descriptions[0]['entity']
+    query.update({'deleted': True,
+                  'deleted_at': timeutils.utcnow(),
+                  'updated_at': entity.updated_at})
 
 
 ###############################
@@ -5344,19 +5385,22 @@ def backup_destroy(context, backup_id):
     utcnow = timeutils.utcnow()
     updated_values = {'status': fields.BackupStatus.DELETED,
                       'deleted': True,
-                      'deleted_at': utcnow,
-                      'updated_at': literal_column('updated_at')}
+                      'deleted_at': utcnow}
     session = get_session()
     with session.begin():
-        model_query(context, models.Backup, session=session).\
-            filter_by(id=backup_id).\
-            update(updated_values)
-        model_query(context, models.BackupMetadata, session=session).\
-            filter_by(backup_id=backup_id).\
-            update({'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
-    del updated_values['updated_at']
+        query = model_query(context, models.Backup, session=session).\
+            filter_by(id=backup_id)
+        entity = query.column_descriptions[0]['entity']
+        updated_values['updated_at'] = entity.updated_at
+        query.update(updated_values)
+
+        query = model_query(context, models.BackupMetadata, session=session).\
+            filter_by(backup_id=backup_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': utcnow,
+                      'updated_at': entity.updated_at})
+        del updated_values['updated_at']
     return updated_values
 
 
@@ -5565,12 +5609,15 @@ def transfer_destroy(context, transfer_id):
                    % {'transfer_id': transfer_id})
             LOG.error(msg)
 
+        query = model_query(context, models.Transfer, session=session).\
+            filter_by(id=transfer_id)
+
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'deleted': True,
                           'deleted_at': utcnow,
-                          'updated_at': literal_column('updated_at')}
-        (model_query(context, models.Transfer, session=session)
-         .filter_by(id=transfer_id)
-         .update(updated_values))
+                          'updated_at': entity.updated_at}
+
+        query.update(updated_values)
         del updated_values['updated_at']
         return updated_values
 
@@ -5649,13 +5696,13 @@ def transfer_accept(context, transfer_id, user_id, project_id,
                     raise exception.InvalidSnapshot(reason=msg)
                 transferred_snapshots.append(snapshot['id'])
 
-        (session.query(models.Transfer)
-         .filter_by(id=transfer_id)
-         .update({'deleted': True,
-                  'deleted_at': timeutils.utcnow(),
-                  'updated_at': literal_column('updated_at'),
-                  'destination_project_id': project_id,
-                  'accepted': True}))
+        query = session.query(models.Transfer).filter_by(id=transfer_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at,
+                      'destination_project_id': project_id,
+                      'accepted': True})
 
 
 ###############################
@@ -5843,16 +5890,14 @@ def consistencygroup_destroy(context, consistencygroup_id):
     utcnow = timeutils.utcnow()
     session = get_session()
     with session.begin():
+        query = model_query(context, models.ConsistencyGroup,
+                            session=session).filter_by(id=consistencygroup_id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'status': fields.ConsistencyGroupStatus.DELETED,
                           'deleted': True,
                           'deleted_at': utcnow,
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.ConsistencyGroup, session=session).\
-            filter_by(id=consistencygroup_id).\
-            update({'status': fields.ConsistencyGroupStatus.DELETED,
-                    'deleted': True,
-                    'deleted_at': utcnow,
-                    'updated_at': literal_column('updated_at')})
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
 
     del updated_values['updated_at']
     return updated_values
@@ -6230,18 +6275,20 @@ def group_update(context, group_id, values):
 def group_destroy(context, group_id):
     session = get_session()
     with session.begin():
-        (model_query(context, models.Group, session=session).
-         filter_by(id=group_id).
-         update({'status': fields.GroupStatus.DELETED,
-                 'deleted': True,
-                 'deleted_at': timeutils.utcnow(),
-                 'updated_at': literal_column('updated_at')}))
+        query = model_query(context, models.Group, session=session).\
+            filter_by(id=group_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'status': fields.GroupStatus.DELETED,
+                      'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
-        (session.query(models.GroupVolumeTypeMapping).
-         filter_by(group_id=group_id).
-         update({'deleted': True,
-                 'deleted_at': timeutils.utcnow(),
-                 'updated_at': literal_column('updated_at')}))
+        query = session.query(models.GroupVolumeTypeMapping).\
+            filter_by(group_id=group_id)
+        entity = query.column_descriptions[0]['entity']
+        query.update({'deleted': True,
+                      'deleted_at': timeutils.utcnow(),
+                      'updated_at': entity.updated_at})
 
 
 def group_has_group_snapshot_filter():
@@ -6417,13 +6464,14 @@ def cgsnapshot_update(context, cgsnapshot_id, values):
 def cgsnapshot_destroy(context, cgsnapshot_id):
     session = get_session()
     with session.begin():
+        query = model_query(context, models.CGSnapshot, session=session).\
+            filter_by(id=cgsnapshot_id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'status': 'deleted',
                           'deleted': True,
                           'deleted_at': timeutils.utcnow(),
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.CGSnapshot, session=session).\
-            filter_by(id=cgsnapshot_id).\
-            update(updated_values)
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
     del updated_values['updated_at']
     return updated_values
 
@@ -6573,14 +6621,15 @@ def group_snapshot_update(context, group_snapshot_id, values):
 def group_snapshot_destroy(context, group_snapshot_id):
     session = get_session()
     with session.begin():
+        query = model_query(context, models.GroupSnapshot, session=session).\
+            filter_by(id=group_snapshot_id)
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'status': 'deleted',
                           'deleted': True,
                           'deleted_at': timeutils.utcnow(),
-                          'updated_at': literal_column('updated_at')}
-        model_query(context, models.GroupSnapshot, session=session).\
-            filter_by(id=group_snapshot_id).\
-            update(updated_values)
-    del updated_values['updated_at']
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
+        del updated_values['updated_at']
     return updated_values
 
 
@@ -6628,8 +6677,9 @@ def purge_deleted_rows(context, age_in_days):
                             deleted.is_(True), models.QualityOfServiceSpecs.
                             deleted_at < deleted_age)).delete()
                 result = session.execute(
-                    table.delete()
-                    .where(table.c.deleted_at < deleted_age))
+                    table.delete().
+                    where(and_(table.columns.deleted.is_(True),
+                               table.c.deleted_at < deleted_age)))
         except db_exc.DBReferenceError as ex:
             LOG.error('DBError detected when purging from '
                       '%(tablename)s: %(error)s.',
@@ -6789,12 +6839,13 @@ def message_destroy(context, message):
     session = get_session()
     now = timeutils.utcnow()
     with session.begin():
+        query = model_query(context, models.Message, session=session).\
+            filter_by(id=message.get('id'))
+        entity = query.column_descriptions[0]['entity']
         updated_values = {'deleted': True,
                           'deleted_at': now,
-                          'updated_at': literal_column('updated_at')}
-        (model_query(context, models.Message, session=session).
-            filter_by(id=message.get('id')).
-            update(updated_values))
+                          'updated_at': entity.updated_at}
+        query.update(updated_values)
     del updated_values['updated_at']
     return updated_values
 

@@ -1,4 +1,2 @@
 patch-botocore-exceptions.patch
 skip-moto-tests.patch
-skip-victoria-failures.patch
-add-mock-psutil-in-quobyte-tests.patch

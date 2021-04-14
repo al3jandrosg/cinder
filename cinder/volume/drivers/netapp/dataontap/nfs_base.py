@@ -36,9 +36,11 @@ from oslo_utils import units
 import six
 from six.moves import urllib
 
+from cinder import context
 from cinder import exception
 from cinder.i18n import _
 from cinder.image import image_utils
+from cinder import objects
 import cinder.privsep.path
 from cinder import utils
 from cinder.volume import driver
@@ -137,6 +139,7 @@ class NetAppNfsDriver(driver.ManageableVD,
         :param volume: volume reference
         """
         LOG.debug('create_volume on %s', volume['host'])
+        self._ensure_flexgroup_not_in_cg(volume)
         self._ensure_shares_mounted()
 
         # get share as pool name
@@ -170,21 +173,64 @@ class NetAppNfsDriver(driver.ManageableVD,
             'vol': volume['name'], 'pool': pool_name})
 
     def create_volume_from_snapshot(self, volume, snapshot):
-        """Creates a volume from a snapshot."""
-        source = {
-            'name': snapshot['name'],
-            'size': snapshot['volume_size'],
-            'id': snapshot['volume_id'],
-        }
-        return self._clone_source_to_destination_volume(source, volume)
+        """Creates a volume from a snapshot.
+
+        For a FlexGroup pool, the operation relies on the NFS generic driver
+        because the ONTAP clone file is not supported by FlexGroup yet.
+        """
+        self._ensure_flexgroup_not_in_cg(volume)
+        if (self._is_flexgroup(vol_id=snapshot['volume_id']) and
+                not self._is_flexgroup_clone_file_supported()):
+            model = super(NetAppNfsDriver, self).create_volume_from_snapshot(
+                volume, snapshot)
+
+            return self._do_qos_for_file_flexgroup(volume, model)
+        else:
+            source = {
+                'name': snapshot['name'],
+                'size': snapshot['volume_size'],
+                'id': snapshot['volume_id'],
+            }
+            return self._clone_source_to_destination_volume(source, volume)
 
     def create_cloned_volume(self, volume, src_vref):
-        """Creates a clone of the specified volume."""
-        source = {'name': src_vref['name'],
-                  'size': src_vref['size'],
-                  'id': src_vref['id']}
+        """Creates a clone of the specified volume.
 
-        return self._clone_source_to_destination_volume(source, volume)
+        For a FlexGroup pool, the operation relies on the NFS generic driver
+        because the ONTAP clone file is not supported by FlexGroup yet.
+        """
+        self._ensure_flexgroup_not_in_cg(volume)
+        if (self._is_flexgroup(vol_id=src_vref['id']) and
+                not self._is_flexgroup_clone_file_supported()):
+            model = super(NetAppNfsDriver, self).create_cloned_volume(
+                volume, src_vref)
+
+            return self._do_qos_for_file_flexgroup(volume, model)
+        else:
+            source = {'name': src_vref['name'],
+                      'size': src_vref['size'],
+                      'id': src_vref['id']}
+            return self._clone_source_to_destination_volume(source, volume)
+
+    def _do_qos_for_file_flexgroup(self, volume, model):
+        """Creates the QoS for a file inside the FlexGroup."""
+        try:
+            extra_specs = na_utils.get_volume_extra_specs(volume)
+            volume['provider_location'] = model['provider_location']
+            self._do_qos_for_volume(volume, extra_specs)
+
+            model_update = (
+                self._get_volume_model_update(volume) or {})
+            model_update['provider_location'] = model[
+                'provider_location']
+            return model_update
+        except Exception as e:
+            LOG.exception('Exception while setting the QoS for the %(vol_id)s'
+                          ' volume inside a FlexGroup pool. Exception: '
+                          ' %(exc)s',
+                          {'vol_id': volume['id'], 'exc': e})
+            msg = _("Volume %s could not set QoS.")
+            raise exception.VolumeBackendAPIException(data=msg % volume['id'])
 
     def _clone_source_to_destination_volume(self, source, destination_volume):
         share = self._get_volume_location(source['id'])
@@ -257,15 +303,71 @@ class NetAppNfsDriver(driver.ManageableVD,
         raise NotImplementedError()
 
     def create_snapshot(self, snapshot):
-        """Creates a snapshot."""
-        self._clone_backing_file_for_volume(snapshot['volume_name'],
-                                            snapshot['name'],
-                                            snapshot['volume_id'],
-                                            is_snapshot=True)
+        """Creates a snapshot.
+
+        For a FlexGroup pool, the operation relies on the NFS generic driver
+        because the ONTAP clone file is not supported by FlexGroup yet.
+        """
+        if (self._is_flexgroup(vol_id=snapshot['volume_id']) and
+                not self._is_flexgroup_clone_file_supported()):
+            self._create_snapshot_for_flexgroup(snapshot)
+        else:
+            self._clone_backing_file_for_volume(snapshot['volume_name'],
+                                                snapshot['name'],
+                                                snapshot['volume_id'],
+                                                is_snapshot=True)
+
+    def _create_snapshot_for_flexgroup(self, snapshot):
+        """Creates the snapshot falling back to the Generic NFS driver.
+
+        The generic NFS driver snapshot creates a new file which is gonna be
+        the active one (used to attach). So, it must assign the QoS to this
+        new file too. It does not require to create the policy group, though,
+        only reusing the created one for the source volume.
+        """
+        try:
+            super(NetAppNfsDriver, self).create_snapshot(snapshot)
+
+            source_vol = {
+                'id': snapshot['volume_id'],
+                'name': snapshot['volume_name'],
+                'volume_type_id': snapshot['volume_type_id'],
+            }
+            extra_specs = na_utils.get_volume_extra_specs(source_vol)
+            qos_policy_group_is_adaptive = volume_utils.is_boolean_str(
+                extra_specs.get('netapp:qos_policy_group_is_adaptive'))
+            qos_policy_group_info = na_utils.get_valid_qos_policy_group_info(
+                source_vol, extra_specs)
+            snap_vol = {
+                'name': '%s.%s' % (snapshot['volume_name'], snapshot['id']),
+                'host': self._get_volume_host(source_vol['id'])
+            }
+
+            self._set_qos_policy_group_on_volume(snap_vol,
+                                                 qos_policy_group_info,
+                                                 qos_policy_group_is_adaptive)
+        except Exception as e:
+            LOG.exception('Exception while creating the %(snap_id)s snapshot'
+                          ' of the %(vol_id)s volume inside a FlexGroup pool.'
+                          ' Exception: %(exc)s',
+                          {'snap_id': snapshot['id'],
+                           'vol_id': snapshot['volume_id'],
+                           'exc': e})
+            msg = _("Snapshot could not be created on shares.")
+            raise exception.VolumeBackendAPIException(data=msg)
+
+    def _set_qos_policy_group_on_volume(self, volume, qos_policy_group_info,
+                                        qos_policy_group_is_adaptive):
+        """Set the qos policy group for a volume"""
+        raise NotImplementedError()
 
     def delete_snapshot(self, snapshot):
         """Deletes a snapshot."""
-        self._delete_file(snapshot.volume_id, snapshot.name)
+        if (self._is_flexgroup(vol_id=snapshot.volume_id) and
+                not self._is_flexgroup_clone_file_supported()):
+            super(NetAppNfsDriver, self).delete_snapshot(snapshot)
+        else:
+            self._delete_file(snapshot.volume_id, snapshot.name)
 
     def _delete_file(self, file_id, file_name):
         nfs_share = self._get_provider_location(file_id)
@@ -297,6 +399,10 @@ class NetAppNfsDriver(driver.ManageableVD,
         """Clone backing file for Cinder volume."""
         raise NotImplementedError()
 
+    def _is_flexgroup(self, vol_id=None, host=None):
+        """Discover if a given volume is a FlexGroup or not"""
+        raise NotImplementedError()
+
     def _get_backing_flexvol_names(self):
         """Returns backing flexvol names."""
         raise NotImplementedError()
@@ -309,6 +415,11 @@ class NetAppNfsDriver(driver.ManageableVD,
         """Returns provider location for given volume."""
         volume = self.db.volume_get(self._context, volume_id)
         return volume.provider_location
+
+    def _get_volume_host(self, volume_id):
+        """Returns volume host for given volume."""
+        volume = self.db.volume_get(self._context, volume_id)
+        return volume.host
 
     def _volume_not_present(self, nfs_mount, volume_name):
         """Check if volume exists."""
@@ -364,11 +475,18 @@ class NetAppNfsDriver(driver.ManageableVD,
 
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Fetch the image from image_service and write it to the volume."""
+        self._ensure_flexgroup_not_in_cg(volume)
         super(NetAppNfsDriver, self).copy_image_to_volume(
             context, volume, image_service, image_id)
         LOG.info('Copied image to volume %s using regular download.',
                  volume['id'])
-        self._register_image_in_cache(volume, image_id)
+
+        if (not self._is_flexgroup(host=volume['host']) or
+                self._is_flexgroup_clone_file_supported()):
+            # NOTE(felipe_rodrigues): NetApp image cache relies on the
+            # FlexClone file, which is only available for the earliest
+            # versions of FlexGroup.
+            self._register_image_in_cache(volume, image_id)
 
     def _register_image_in_cache(self, volume, image_id):
         """Stores image in the cache."""
@@ -529,6 +647,10 @@ class NetAppNfsDriver(driver.ManageableVD,
         Returns a dict of volume properties eg. provider_location,
         boolean indicating whether cloning occurred.
         """
+        if (self._is_flexgroup(host=volume['host']) and
+                not self._is_flexgroup_clone_file_supported()):
+            return None, False
+
         image_id = image_meta['id']
         cloned = False
         post_clone = False
@@ -644,7 +766,7 @@ class NetAppNfsDriver(driver.ManageableVD,
         raise exception.InvalidResults(
             _("NFS file could not be discovered."))
 
-    def _resize_image_file(self, path, new_size):
+    def _resize_image_file(self, path, new_size, file_format=None):
         """Resize the image file on share to new size."""
         LOG.debug('Checking file for resize')
         if self._is_file_size_equal(path, new_size):
@@ -652,10 +774,10 @@ class NetAppNfsDriver(driver.ManageableVD,
         else:
             LOG.info('Resizing file to %sG', new_size)
             image_utils.resize_image(path, new_size,
-                                     run_as_root=self._execute_as_root)
-            if self._is_file_size_equal(path, new_size):
-                return
-            else:
+                                     run_as_root=self._execute_as_root,
+                                     file_format=file_format)
+            if file_format == 'qcow2' and not self._is_file_size_equal(
+                    path, new_size):
                 raise exception.InvalidResults(
                     _('Resizing image file failed.'))
 
@@ -798,7 +920,13 @@ class NetAppNfsDriver(driver.ManageableVD,
 
         try:
             path = self.local_path(volume)
-            self._resize_image_file(path, new_size)
+            file_format = None
+            admin_metadata = objects.Volume.get_by_id(
+                context.get_admin_context(), volume.id).admin_metadata
+            if admin_metadata and 'format' in admin_metadata:
+                file_format = admin_metadata['format']
+            self._resize_image_file(
+                path, new_size, file_format=file_format)
         except Exception as err:
             exception_msg = (_("Failed to extend volume "
                                "%(name)s, Error msg: %(msg)s.") %
@@ -1068,3 +1196,30 @@ class NetAppNfsDriver(driver.ManageableVD,
         vol_path = os.path.join(volume['provider_location'], vol_str)
         LOG.info('Cinder NFS volume with current path "%(cr)s" is '
                  'no longer being managed.', {'cr': vol_path})
+
+    def _find_share(self, volume):
+        """Returns the NFS share for the created volume.
+
+        The method is used by base class to determine the
+        provider_location share of the new volume.
+
+        :param volume: the volume to be created.
+        """
+        pool_name = volume_utils.extract_host(volume['host'], level='pool')
+
+        if pool_name is None:
+            msg = _("Pool is not available in the volume host field.")
+            raise exception.InvalidHost(reason=msg)
+
+        return pool_name
+
+    def _ensure_flexgroup_not_in_cg(self, volume):
+        if (self._is_flexgroup(host=volume['host']) and volume['group'] and
+                volume_utils.is_group_a_cg_snapshot_type(volume['group'])):
+            msg = _("Cannot create %s volume on FlexGroup pool with "
+                    "consistency group.")
+            raise na_utils.NetAppDriverException(msg % volume['id'])
+
+    def _is_flexgroup_clone_file_supported(self):
+        """Check whether storage can perform clone file for FlexGroup"""
+        raise NotImplementedError()

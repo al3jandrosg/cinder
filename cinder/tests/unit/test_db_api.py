@@ -20,6 +20,7 @@ from unittest.mock import call
 
 import ddt
 from oslo_config import cfg
+import oslo_db
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
 from sqlalchemy.sql import operators
@@ -44,7 +45,7 @@ ONE_HUNDREDS = 100
 UTC_NOW = timeutils.utcnow()
 
 
-def _quota_reserve(context, project_id):
+def _quota_reserve(context, project_id, **resource_dict):
     """Create sample Quota, QuotaUsage and Reservation objects.
 
     There is no method db.quota_usage_create(), so we have to use
@@ -57,19 +58,23 @@ def _quota_reserve(context, project_id):
         def sync(elevated, project_id, session):
             return {resource: usage}
         return sync
+
+    if not resource_dict:
+        resource_dict = {'volumes': 1, 'gigabytes': 2}
+
     quotas = {}
     resources = {}
     deltas = {}
-    for i, resource in enumerate(('volumes', 'gigabytes')):
-        quota_obj = db.quota_create(context, project_id, resource, i + 1)
+    for resource, value in resource_dict.items():
+        quota_obj = db.quota_create(context, project_id, resource, value)
         quotas[resource] = quota_obj.hard_limit
         resources[resource] = quota.ReservableResource(resource,
                                                        '_sync_%s' % resource)
-        deltas[resource] = i + 1
+        deltas[resource] = value
     return db.quota_reserve(
         context, resources, quotas, deltas,
-        datetime.datetime.utcnow(), datetime.datetime.utcnow(),
-        datetime.timedelta(days=1), project_id
+        datetime.datetime.utcnow(), until_refresh=None,
+        max_age=datetime.timedelta(days=1), project_id=project_id
     )
 
 
@@ -512,6 +517,69 @@ class DBAPIVolumeTestCase(BaseTest):
             self.assertEqual((THREE, THREE_HUNDREDS),
                              db.volume_data_get_for_project(
                                  self.ctxt, 'p%d' % i))
+
+    @mock.patch.object(sqlalchemy_api, '_volume_data_get_for_project')
+    def test_volume_data_get_for_project_migrating(self, mock_vol_data):
+        expected = (mock.sentinel.count, mock.sentinel.gb)
+        mock_vol_data.return_value = expected
+        res = db.volume_data_get_for_project(self.ctxt,
+                                             mock.sentinel.project_id,
+                                             mock.sentinel.host)
+        self.assertEqual(expected, res)
+        mock_vol_data.assert_called_once_with(self.ctxt,
+                                              mock.sentinel.project_id,
+                                              host=mock.sentinel.host,
+                                              skip_internal=False)
+
+    @ddt.data((True, THREE_HUNDREDS, THREE),
+              (False, THREE_HUNDREDS + ONE_HUNDREDS, THREE + 1))
+    @ddt.unpack
+    def test__volume_data_get_for_project_migrating(self, skip_internal,
+                                                    gigabytes, count):
+        for i in range(2):
+            db.volume_create(self.ctxt,
+                             {'project_id': 'project',
+                              'size': ONE_HUNDREDS,
+                              'host': 'h-%d' % i,
+                              'volume_type_id': fake.VOLUME_TYPE_ID})
+        # This volume is migrating and will be counted
+        db.volume_create(self.ctxt, {'project_id': 'project',
+                                     'size': ONE_HUNDREDS,
+                                     'host': 'h-%d' % i,
+                                     'volume_type_id': fake.VOLUME_TYPE_ID,
+                                     'migration_status': 'migrating'})
+        # This one will not be counted
+        db.volume_create(self.ctxt, {'project_id': 'project',
+                                     'size': ONE_HUNDREDS,
+                                     'host': 'h-%d' % i,
+                                     'volume_type_id': fake.VOLUME_TYPE_ID,
+                                     'migration_status': 'target:vol-id'})
+
+        result = sqlalchemy_api._volume_data_get_for_project(
+            self.ctxt, 'project', skip_internal=skip_internal)
+        self.assertEqual((count, gigabytes), result)
+
+    @ddt.data((True, THREE_HUNDREDS, THREE),
+              (False, THREE_HUNDREDS + ONE_HUNDREDS, THREE + 1))
+    @ddt.unpack
+    def test__volume_data_get_for_project_temporary(self, skip_internal,
+                                                    gigabytes, count):
+        for i in range(3):
+            db.volume_create(self.ctxt,
+                             {'project_id': 'project',
+                              'size': ONE_HUNDREDS,
+                              'host': 'h-%d' % i,
+                              'volume_type_id': fake.VOLUME_TYPE_ID})
+        # This is a temporary volume
+        db.volume_create(self.ctxt, {'project_id': 'project',
+                                     'size': ONE_HUNDREDS,
+                                     'host': 'h-%d' % i,
+                                     'volume_type_id': fake.VOLUME_TYPE_ID,
+                                     'admin_metadata': {'temporary': 'True'}})
+
+        result = sqlalchemy_api._volume_data_get_for_project(
+            self.ctxt, 'project', skip_internal=skip_internal)
+        self.assertEqual((count, gigabytes), result)
 
     def test_volume_data_get_for_project_with_host(self):
 
@@ -2466,6 +2534,47 @@ class DBAPIReservationTestCase(BaseTest):
                              self.ctxt,
                              'project1'))
 
+    def test_reservation_commit_negative_reservation(self):
+        """Verify we can't make reservations negative on commit."""
+        project = 'project1'
+        reservations = _quota_reserve(self.ctxt, project, volumes=2)
+
+        # Force a smaller reserved value in quota_usages table
+        session = sqlalchemy_api.get_session()
+        with session.begin():
+            vol_usage = db.quota_usage_get(self.ctxt, project, 'volumes')
+            vol_usage.reserved -= 1
+            vol_usage.save(session=session)
+
+        # When committing 2 volumes from reserved to used reserved should not
+        # go from 1 to -1 but from 1 to 0, but in-use should still increase by
+        # 2
+        db.reservation_commit(self.ctxt, reservations, project)
+        expected = {'project_id': project,
+                    'volumes': {'reserved': 0, 'in_use': 2}}
+        self.assertEqual(expected,
+                         db.quota_usage_get_all_by_project(self.ctxt, project))
+
+    def test_reservation_commit_negative_in_use(self):
+        """Verify we can't make in-use negative on commit."""
+        project = 'project1'
+        reservations = _quota_reserve(self.ctxt, project, volumes=-2)
+
+        # Force a smaller in_use than the one the reservation will decrease
+        session = sqlalchemy_api.get_session()
+        with session.begin():
+            vol_usage = db.quota_usage_get(self.ctxt, 'project1', 'volumes')
+            vol_usage.in_use = 1
+            vol_usage.save(session=session)
+
+        # When committing -2 volumes from reserved to in-use they should not
+        # make in-use go from 1 to -1, but from 1 to 0
+        db.reservation_commit(self.ctxt, reservations, project)
+        expected = {'project_id': project,
+                    'volumes': {'reserved': 0, 'in_use': 0}}
+        self.assertEqual(expected,
+                         db.quota_usage_get_all_by_project(self.ctxt, project))
+
     def test_reservation_rollback(self):
         reservations = _quota_reserve(self.ctxt, 'project1')
         expected = {'project_id': 'project1',
@@ -2486,6 +2595,27 @@ class DBAPIReservationTestCase(BaseTest):
                              self.ctxt,
                              'project1'))
 
+    def test_reservation_rollback_negative(self):
+        """Verify we can't make reservations negative on rollback."""
+        project = 'project1'
+        reservations = _quota_reserve(self.ctxt, project, volumes=2)
+
+        # Force a smaller reserved value in quota_usages table
+        session = sqlalchemy_api.get_session()
+        with session.begin():
+            vol_usage = db.quota_usage_get(self.ctxt, project, 'volumes')
+            vol_usage.reserved -= 1
+            vol_usage.save(session=session)
+
+        # When rolling back 2 volumes from reserved when there's only 1 in the
+        # quota usage's reserved field, reserved should not go from 1 to -1
+        # but from 1 to 0
+        db.reservation_rollback(self.ctxt, reservations, project)
+        expected = {'project_id': project,
+                    'volumes': {'reserved': 0, 'in_use': 0}}
+        self.assertEqual(expected,
+                         db.quota_usage_get_all_by_project(self.ctxt, project))
+
     def test_reservation_expire(self):
         self.values['expire'] = datetime.datetime.utcnow() + \
             datetime.timedelta(days=1)
@@ -2499,6 +2629,67 @@ class DBAPIReservationTestCase(BaseTest):
                          db.quota_usage_get_all_by_project(
                              self.ctxt,
                              'project1'))
+
+    def test_reservation_expire_negative(self):
+        """Verify we can't make reservation negative on expiration."""
+        project = 'project1'
+        _quota_reserve(self.ctxt, project, volumes=2)
+
+        # Force a smaller reserved value in quota_usages table
+        session = sqlalchemy_api.get_session()
+        with session.begin():
+            vol_usage = db.quota_usage_get(self.ctxt, project, 'volumes')
+            vol_usage.reserved -= 1
+            vol_usage.save(session=session)
+
+        # When expiring 2 volumes from reserved when there's only 1 in the
+        # quota usage's reserved field, reserved should not go from 1 to -1
+        # but from 1 to 0
+        db.reservation_expire(self.ctxt)
+        expected = {'project_id': project,
+                    'volumes': {'reserved': 0, 'in_use': 0}}
+        self.assertEqual(expected,
+                         db.quota_usage_get_all_by_project(self.ctxt, project))
+
+    @mock.patch('time.sleep', mock.Mock())
+    def test_quota_reserve_create_usages_race(self):
+        """Test we retry when there is a race in creation."""
+        def create(*args, original_create=sqlalchemy_api._quota_usage_create,
+                   **kwargs):
+            # Create the quota usage entry (with values set to 0)
+            session = sqlalchemy_api.get_session()
+            kwargs['session'] = session
+            with session.begin():
+                original_create(*args, **kwargs)
+            # Simulate that there's been a race condition with other create and
+            # that we got the exception
+            raise oslo_db.exception.DBDuplicateEntry
+
+        resources = quota.QUOTAS.resources
+        quotas = {'volumes': 5}
+        deltas = {'volumes': 2}
+        project_id = 'project1'
+        expire = timeutils.utcnow() + datetime.timedelta(seconds=3600)
+
+        with mock.patch.object(sqlalchemy_api, '_quota_usage_create',
+                               side_effect=create) as create_mock:
+            sqlalchemy_api.quota_reserve(self.ctxt, resources, quotas, deltas,
+                                         expire, 0, 0, project_id=project_id)
+
+            # The create call only happens once, when the race happens, because
+            # on the second try of the quota_reserve call the entry is already
+            # in the DB.
+            create_mock.assert_called_once_with(mock.ANY, 'project1',
+                                                'volumes', 0, 0, None,
+                                                session=mock.ANY)
+
+        # Confirm that regardless of who created the DB entry the values are
+        # updated
+        usages = sqlalchemy_api.quota_usage_get_all_by_project(self.ctxt,
+                                                               project_id)
+        expected = {'project_id': project_id,
+                    'volumes': {'in_use': 0, 'reserved': deltas['volumes']}}
+        self.assertEqual(expected, usages)
 
 
 class DBAPIMessageTestCase(BaseTest):
@@ -2758,6 +2949,29 @@ class DBAPIQuotaTestCase(BaseTest):
                     'gigabytes': {'in_use': 0, 'reserved': 2}}
         self.assertEqual(expected, db.quota_usage_get_all_by_project(
                          self.ctxt, 'p1'))
+
+    def test__quota_usage_create(self):
+        session = sqlalchemy_api.get_session()
+        usage = sqlalchemy_api._quota_usage_create(self.ctxt, 'project1',
+                                                   'resource',
+                                                   in_use=10, reserved=0,
+                                                   until_refresh=None,
+                                                   session=session)
+        self.assertEqual('project1', usage.project_id)
+        self.assertEqual('resource', usage.resource)
+        self.assertEqual(10, usage.in_use)
+        self.assertEqual(0, usage.reserved)
+        self.assertIsNone(usage.until_refresh)
+
+    def test__quota_usage_create_duplicate(self):
+        session = sqlalchemy_api.get_session()
+        kwargs = {'project_id': 'project1', 'resource': 'resource',
+                  'in_use': 10, 'reserved': 0, 'until_refresh': None,
+                  'session': session}
+        sqlalchemy_api._quota_usage_create(self.ctxt, **kwargs)
+        self.assertRaises(oslo_db.exception.DBDuplicateEntry,
+                          sqlalchemy_api._quota_usage_create,
+                          self.ctxt, **kwargs)
 
 
 class DBAPIBackupTestCase(BaseTest):

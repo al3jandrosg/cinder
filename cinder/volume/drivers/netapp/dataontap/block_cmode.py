@@ -48,7 +48,19 @@ LOG = logging.getLogger(__name__)
 @six.add_metaclass(volume_utils.TraceWrapperMetaclass)
 class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
                                      data_motion.DataMotionMixin):
-    """NetApp block storage library for Data ONTAP (Cluster-mode)."""
+    """NetApp block storage library for Data ONTAP (Cluster-mode).
+
+    Version history:
+
+    .. code-block:: none
+
+        1.0.0 - Driver development before Wallaby
+        2.0.0 - Add support for QoS minimums specs
+                Add support for dynamic Adaptive QoS policy group creation
+
+    """
+
+    VERSION = "2.0.0"
 
     REQUIRED_CMODE_FLAGS = ['netapp_vserver']
 
@@ -402,7 +414,10 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
             msg = _('Invalid QoS specification detected while getting QoS '
                     'policy for volume %s') % volume['id']
             raise exception.VolumeBackendAPIException(data=msg)
-        self.zapi_client.provision_qos_policy_group(qos_policy_group_info)
+        pool = volume_utils.extract_host(volume['host'], level='pool')
+        qos_min_support = self.ssc_library.is_qos_min_supported(pool)
+        self.zapi_client.provision_qos_policy_group(qos_policy_group_info,
+                                                    qos_min_support)
         return qos_policy_group_info
 
     def _get_volume_model_update(self, volume):
@@ -411,8 +426,10 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
             return {'replication_status': fields.ReplicationStatus.ENABLED}
 
     def _mark_qos_policy_group_for_deletion(self, qos_policy_group_info):
-        self.zapi_client.mark_qos_policy_group_for_deletion(
+        is_adaptive = na_utils.is_qos_policy_group_spec_adaptive(
             qos_policy_group_info)
+        self.zapi_client.mark_qos_policy_group_for_deletion(
+            qos_policy_group_info, is_adaptive)
 
     def unmanage(self, volume):
         """Removes the specified volume from Cinder management.

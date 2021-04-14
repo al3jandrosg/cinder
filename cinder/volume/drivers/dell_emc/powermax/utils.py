@@ -213,6 +213,10 @@ PORT_ID = 'portId'
 # Revert snapshot exception
 REVERT_SS_EXC = 'Link must be fully copied for this operation to proceed'
 
+# extra specs
+IS_TRUE = ['<is> True', 'True', 'true', True]
+IS_FALSE = ['<is> False', 'False', 'false', False]
+
 
 class PowerMaxUtils(object):
     """Utility class for Rest based PowerMax volume drivers.
@@ -505,7 +509,7 @@ class PowerMaxUtils(object):
         compression_disabled = False
 
         if extra_specs.get(DISABLECOMPRESSION, False):
-            if strutils.bool_from_string(extra_specs.get(DISABLECOMPRESSION)):
+            if extra_specs.get(DISABLECOMPRESSION) in IS_TRUE:
                 compression_disabled = True
         else:
             if extra_specs.get(SLO):
@@ -1781,6 +1785,9 @@ class PowerMaxUtils(object):
         :param storage_group_name: the storage group name -- str
         :returns: updated payload -- dict
         """
+        create_new_vol = {"create_new_volumes": "True"}
+        payload["editStorageGroupActionParam"]["expandStorageGroupParam"][
+            "addVolumeParam"].update(create_new_vol)
         remote_dict = {"remoteSymmSGInfoParam": {
             "remote_symmetrix_1_id": remote_array_id,
             "remote_symmetrix_1_sgs": [storage_group_name],
@@ -2054,6 +2061,7 @@ class PowerMaxUtils(object):
         :returns: array_id, srp, service_level, workload -- str, str, str, str
         """
         array_id, srp, service_level, workload = str(), str(), str(), str()
+
         pool_details = pool_name.split('+')
         if len(pool_details) == 4:
             array_id = pool_details[3]

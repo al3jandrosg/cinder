@@ -634,8 +634,7 @@ class PowerMaxCommonTest(test.TestCase):
             self, mck_unmap, mck_info):
         volume = deepcopy(self.data.test_volume)
         connector = deepcopy(self.data.connector)
-        ret = self.common._unmap_lun_promotion(volume, connector)
-        self.assertIsNone(ret)
+        self.common._unmap_lun_promotion(volume, connector)
         self.assertEqual(0, mck_unmap.call_count)
         self.assertEqual(0, mck_info.call_count)
 
@@ -1599,7 +1598,7 @@ class PowerMaxCommonTest(test.TestCase):
         srp_record = self.common.get_attributes_from_cinder_config()
         extra_specs = self.common._set_vmax_extra_specs(
             self.data.vol_type_extra_specs, srp_record)
-        self.assertTrue('storagetype:storagegrouptags' not in extra_specs)
+        self.assertNotIn('storagetype:storagegrouptags', extra_specs)
 
     def test_set_vmax_extra_specs_tags_set_correctly(self):
         srp_record = self.common.get_attributes_from_cinder_config()
@@ -1781,6 +1780,14 @@ class PowerMaxCommonTest(test.TestCase):
         ip_iqn_list = self.common._find_ip_and_iqns(
             self.data.array, self.data.port_group_name_i)
         self.assertEqual(ref_ip_iqn, ip_iqn_list)
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_portgroup',
+                       return_value=None)
+    def test_find_ip_and_iqns_no_port_group(self, mock_port):
+        self.assertRaises(
+            exception.VolumeBackendAPIException,
+            self.common._find_ip_and_iqns, self.data.array,
+            self.data.port_group_name_i)
 
     def test_create_replica_snap_name(self):
         array = self.data.array
@@ -2188,7 +2195,10 @@ class PowerMaxCommonTest(test.TestCase):
             device_id, volume, host, volume_name, new_type, extra_specs)
         self.assertFalse(migrate_status)
 
-    def test_slo_workload_migration_same_host_change_compression(self):
+    @mock.patch.object(rest.PowerMaxRest, 'is_compression_capable',
+                       return_value=True)
+    def test_slo_workload_migration_same_host_change_compression(
+            self, mock_cap):
         device_id = self.data.device_id
         volume_name = self.data.test_volume.name
         extra_specs = self.data.extra_specs
@@ -2440,12 +2450,17 @@ class PowerMaxCommonTest(test.TestCase):
             self.data.workload, False)
         self.assertEqual(ref_return, return_val)
         # Already in correct sg
-        host4 = {'host': self.data.fake_host}
-        return_val = self.common._is_valid_for_storage_assisted_migration(
-            device_id, host4, self.data.array,
-            self.data.srp, volume_name, False, False, self.data.slo,
-            self.data.workload, False)
-        self.assertEqual(ref_return, return_val)
+        with mock.patch.object(
+                self.common.provision,
+                'get_slo_workload_settings_from_storage_group',
+                return_value='Diamond+DSS') as mock_settings:
+            host4 = {'host': self.data.fake_host}
+            return_val = self.common._is_valid_for_storage_assisted_migration(
+                device_id, host4, self.data.array,
+                self.data.srp, volume_name, False, False, self.data.slo,
+                self.data.workload, False)
+            self.assertEqual(ref_return, return_val)
+            mock_settings.assert_called_once()
 
     def test_is_valid_for_storage_assisted_migration_next_gen(self):
         device_id = self.data.device_id
@@ -3314,6 +3329,40 @@ class PowerMaxCommonTest(test.TestCase):
         self.assertTrue(self.rest.u4p_failover_enabled)
         self.assertIsNotNone(self.rest.u4p_failover_targets)
 
+    @mock.patch.object(rest.PowerMaxRest, 'set_u4p_failover_config')
+    def test_get_u4p_failover_info_failover_config(self, mck_set_fo):
+        configuration = tpfo.FakeConfiguration(
+            None, 'CommonTests', 1, 1, san_ip='1.1.1.1', san_login='test',
+            san_password='test', san_api_port=8443,
+            driver_ssl_cert_verify='/path/to/cert',
+            u4p_failover_target=(self.data.u4p_failover_config[
+                'u4p_failover_targets']), u4p_failover_backoff_factor='2',
+            u4p_failover_retries='3', u4p_failover_timeout='10',
+            u4p_primary='10.10.10.10', powermax_array=self.data.array,
+            powermax_srp=self.data.srp)
+        expected_u4p_failover_config = {
+            'u4p_failover_targets': [
+                {'RestServerIp': '10.10.10.11', 'RestServerPort': '8443',
+                 'RestUserName': 'test', 'RestPassword': 'test',
+                 'SSLVerify': 'True', 'SerialNumber': '000197800123'},
+                {'RestServerIp': '10.10.10.12', 'RestServerPort': '8443',
+                 'RestUserName': 'test', 'RestPassword': 'test',
+                 'SSLVerify': True, 'SerialNumber': '000197800123'},
+                {'RestServerIp': '10.10.10.11', 'RestServerPort': '8443',
+                 'RestUserName': 'test', 'RestPassword': 'test',
+                 'SSLVerify': 'False', 'SerialNumber': '000197800123'}],
+            'u4p_failover_backoff_factor': '2', 'u4p_failover_retries': '3',
+            'u4p_failover_timeout': '10', 'u4p_failover_autofailback': None,
+            'u4p_primary': {
+                'RestServerIp': '1.1.1.1', 'RestServerPort': 8443,
+                'RestUserName': 'test', 'RestPassword': 'test',
+                'SerialNumber': '000197800123', 'srpName': 'SRP_1',
+                'PortGroup': None, 'SSLVerify': True}}
+        self.common.configuration = configuration
+        self.common._get_u4p_failover_info()
+        self.assertIsNotNone(self.rest.u4p_failover_targets)
+        mck_set_fo.assert_called_once_with(expected_u4p_failover_config)
+
     def test_update_vol_stats_retest_u4p(self):
         self.rest.u4p_in_failover = True
         self.rest.u4p_failover_autofailback = True
@@ -3970,6 +4019,26 @@ class PowerMaxCommonTest(test.TestCase):
                 self.data.test_volume, None)
             self.assertEqual(self.data.rep_extra_specs_metro, extra_specs)
 
+    @mock.patch.object(utils.PowerMaxUtils, 'get_rdf_management_group_name')
+    def test_retype_volume_promotion_get_extra_specs_mgmt_group(self, mck_get):
+        array = self.data.array
+        srp = self.data.srp
+        device_id = self.data.device_id
+        volume = self.data.test_volume
+        volume_name = self.data.volume_id
+        extra_specs = deepcopy(self.data.rep_extra_specs)
+        target_slo = self.data.slo_silver
+        target_workload = self.data.workload
+        target_extra_specs = deepcopy(self.data.extra_specs)
+        target_extra_specs[utils.DISABLECOMPRESSION] = False
+        extra_specs[utils.REP_CONFIG] = self.data.rep_config_async
+        self.common.promotion = True
+        self.common._retype_volume(
+            array, srp, device_id, volume, volume_name, extra_specs,
+            target_slo, target_workload, target_extra_specs)
+        self.common.promotion = False
+        mck_get.assert_called_once_with(extra_specs[utils.REP_CONFIG])
+
     @mock.patch.object(rest.PowerMaxRest, 'is_volume_in_storagegroup',
                        return_value=True)
     @mock.patch.object(masking.PowerMaxMasking,
@@ -4250,8 +4319,8 @@ class PowerMaxCommonTest(test.TestCase):
         rep_driver_data = dict()
         group_name = self.common._add_to_group(
             source_volume, self.data, source_volume.name,
-            self.data.test_group_1.id, self.data.test_group_1, extra_specs,
-            rep_driver_data)
+            self.data.test_group_1.fields.get('id'), self.data.test_group_1,
+            extra_specs, rep_driver_data)
         self.assertEqual('my_group', group_name)
         mock_group.assert_called_once()
 
@@ -4266,7 +4335,7 @@ class PowerMaxCommonTest(test.TestCase):
         rep_driver_data = dict()
         group_name = self.common._add_to_group(
             source_volume, self.data, source_volume.name,
-            self.data.test_group_1.id, None, extra_specs,
+            self.data.test_group_1.fields.get('id'), None, extra_specs,
             rep_driver_data)
         self.assertIsNone(group_name)
         mock_group.assert_not_called()

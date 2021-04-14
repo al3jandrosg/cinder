@@ -42,7 +42,9 @@ SSC = {
         'netapp_disk_type': ['SSD'],
         'netapp_hybrid_aggregate': 'false',
         'netapp_flexvol_encryption': 'true',
+        'netapp_qos_min_support': 'true',
         'pool_name': 'volume1',
+        'netapp_is_flexgroup': 'false',
     },
     'volume2': {
         'thick_provisioning_support': False,
@@ -56,7 +58,9 @@ SSC = {
         'netapp_disk_type': ['FCAL', 'SSD'],
         'netapp_hybrid_aggregate': 'true',
         'netapp_flexvol_encryption': 'false',
+        'netapp_qos_min_support': 'false',
         'pool_name': 'volume2',
+        'netapp_is_flexgroup': 'false',
     },
 }
 
@@ -66,12 +70,14 @@ SSC_FLEXVOL_INFO = {
         'thin_provisioning_support': False,
         'netapp_thin_provisioned': 'false',
         'netapp_aggregate': 'aggr1',
+        'netapp_is_flexgroup': 'false',
     },
     'volume2': {
         'thick_provisioning_support': False,
         'thin_provisioning_support': True,
         'netapp_thin_provisioned': 'true',
         'netapp_aggregate': 'aggr2',
+        'netapp_is_flexgroup': 'false',
     },
 }
 
@@ -95,6 +101,15 @@ SSC_ENCRYPTION_INFO = {
     },
 }
 
+SSC_QOS_MIN_INFO = {
+    'volume1': {
+        'netapp_qos_min_support': 'true',
+    },
+    'volume2': {
+        'netapp_qos_min_support': 'false',
+    },
+}
+
 SSC_MIRROR_INFO = {
     'volume1': {
         'netapp_mirrored': 'false',
@@ -109,28 +124,31 @@ SSC_AGGREGATE_INFO = {
         'netapp_disk_type': ['SSD'],
         'netapp_raid_type': 'raid_dp',
         'netapp_hybrid_aggregate': 'false',
+        'netapp_node_name': 'node1',
     },
     'volume2': {
         'netapp_disk_type': ['FCAL', 'SSD'],
         'netapp_raid_type': 'raid_dp',
         'netapp_hybrid_aggregate': 'true',
+        'netapp_node_name': 'node2',
     },
 }
 
 PROVISIONING_OPTS = {
-    'aggregate': 'fake_aggregate',
+    'aggregate': ['fake_aggregate'],
     'thin_provisioned': True,
     'snapshot_policy': None,
     'language': 'en_US',
-    'dedupe_enabled': False,
-    'compression_enabled': False,
+    'dedupe_enabled': True,
+    'compression_enabled': True,
     'snapshot_reserve': '12',
     'volume_type': 'rw',
     'size': 20,
+    'is_flexgroup': False,
 }
 
 ENCRYPTED_PROVISIONING_OPTS = {
-    'aggregate': 'fake_aggregate',
+    'aggregate': ['fake_aggregate'],
     'thin_provisioned': True,
     'snapshot_policy': None,
     'language': 'en_US',
@@ -140,6 +158,7 @@ ENCRYPTED_PROVISIONING_OPTS = {
     'volume_type': 'rw',
     'size': 20,
     'encrypt': 'true',
+    'is_flexgroup': False,
 }
 
 

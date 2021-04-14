@@ -34,6 +34,8 @@ from cinder.volume import volume_utils
 
 LOG = logging.getLogger(__name__)
 DEFAULT_MAX_PAGE_LENGTH = 50
+ONTAP_SELECT_MODEL = 'FDvM300'
+ONTAP_C190 = 'C190'
 
 
 @six.add_metaclass(volume_utils.TraceWrapperMetaclass)
@@ -48,9 +50,9 @@ class Client(client_base.Client):
         self.connection.set_api_version(1, 15)
         (major, minor) = self.get_ontapi_version(cached=False)
         self.connection.set_api_version(major, minor)
-        self._init_features()
         ontap_version = self.get_ontap_version(cached=False)
         self.connection.set_ontap_version(ontap_version)
+        self._init_features()
 
     def _init_features(self):
         super(Client, self)._init_features()
@@ -62,6 +64,30 @@ class Client(client_base.Client):
         ontapi_1_30 = ontapi_version >= (1, 30)
         ontapi_1_100 = ontapi_version >= (1, 100)
         ontapi_1_1xx = (1, 100) <= ontapi_version < (1, 200)
+        ontapi_1_60 = ontapi_version >= (1, 160)
+        ontapi_1_40 = ontapi_version >= (1, 140)
+        ontapi_1_50 = ontapi_version >= (1, 150)
+        ontapi_1_80 = ontapi_version >= (1, 180)
+        ontapi_1_90 = ontapi_version >= (1, 190)
+
+        nodes_info = self._get_cluster_nodes_info()
+        for node in nodes_info:
+            qos_min_block = False
+            qos_min_nfs = False
+            if node['model'] == ONTAP_SELECT_MODEL:
+                qos_min_block = node['is_all_flash_select'] and ontapi_1_60
+                qos_min_nfs = qos_min_block
+            elif ONTAP_C190 in node['model']:
+                qos_min_block = node['is_all_flash'] and ontapi_1_60
+                qos_min_nfs = qos_min_block
+            else:
+                qos_min_block = node['is_all_flash'] and ontapi_1_20
+                qos_min_nfs = node['is_all_flash'] and ontapi_1_30
+
+            qos_name = na_utils.qos_min_feature_name(True, node['name'])
+            self.features.add_feature(qos_name, supported=qos_min_nfs)
+            qos_name = na_utils.qos_min_feature_name(False, node['name'])
+            self.features.add_feature(qos_name, supported=qos_min_block)
 
         self.features.add_feature('SNAPMIRROR_V2', supported=ontapi_1_20)
         self.features.add_feature('USER_CAPABILITY_LIST',
@@ -76,6 +102,15 @@ class Client(client_base.Client):
         self.features.add_feature('BACKUP_CLONE_PARAM', supported=ontapi_1_100)
         self.features.add_feature('CLUSTER_PEER_POLICY', supported=ontapi_1_30)
         self.features.add_feature('FLEXVOL_ENCRYPTION', supported=ontapi_1_1xx)
+        self.features.add_feature('FLEXGROUP', supported=ontapi_1_80)
+        self.features.add_feature('FLEXGROUP_CLONE_FILE',
+                                  supported=ontapi_1_90)
+
+        self.features.add_feature('ADAPTIVE_QOS', supported=ontapi_1_40)
+        self.features.add_feature('ADAPTIVE_QOS_BLOCK_SIZE',
+                                  supported=ontapi_1_50)
+        self.features.add_feature('ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION',
+                                  supported=ontapi_1_50)
 
         LOG.info('Reported ONTAPI Version: %(major)s.%(minor)s',
                  {'major': ontapi_version[0], 'minor': ontapi_version[1]})
@@ -146,6 +181,45 @@ class Client(client_base.Client):
             six.text_type(num_records))
         result.get_child_by_name('next-tag').set_content('')
         return result
+
+    def _get_cluster_nodes_info(self):
+        """Return a list of models of the nodes in the cluster"""
+        api_args = {
+            'desired-attributes': {
+                'node-details-info': {
+                    'node': None,
+                    'node-model': None,
+                    'is-all-flash-select-optimized': None,
+                    'is-all-flash-optimized': None,
+                }
+            }
+        }
+
+        nodes = []
+        try:
+            result = self.send_iter_request('system-node-get-iter', api_args,
+                                            enable_tunneling=False)
+            system_node_list = result.get_child_by_name(
+                'attributes-list') or netapp_api.NaElement('none')
+            for system_node in system_node_list.get_children():
+                node = {
+                    'model': system_node.get_child_content('node-model'),
+                    'name': system_node.get_child_content('node'),
+                    'is_all_flash': system_node.get_child_content(
+                        'is-all-flash-optimized') == 'true',
+                    'is_all_flash_select': system_node.get_child_content(
+                        'is-all-flash-select-optimized') == 'true',
+                }
+                nodes.append(node)
+
+        except netapp_api.NaApiError as e:
+            if e.code == netapp_api.EAPINOTFOUND:
+                LOG.debug('Cluster nodes can only be collected with '
+                          'cluster scoped credentials.')
+            else:
+                LOG.exception('Failed to get the cluster nodes.')
+
+        return nodes
 
     def list_vservers(self, vserver_type='data'):
         """Get the names of vservers present, optionally filtered by type."""
@@ -450,10 +524,39 @@ class Client(client_base.Client):
 
         return igroup_list
 
+    def _validate_qos_policy_group(self, is_adaptive, spec=None,
+                                   qos_min_support=False):
+        if is_adaptive and not self.features.ADAPTIVE_QOS:
+            msg = _("Adaptive QoS feature requires ONTAP 9.4 or later.")
+            raise na_utils.NetAppDriverException(msg)
+
+        if not spec:
+            return
+
+        qos_spec_support = [
+            {'key': 'min_throughput',
+             'support': qos_min_support,
+             'reason': _('is not supported by this back end.')},
+            {'key': 'block_size',
+             'support': self.features.ADAPTIVE_QOS_BLOCK_SIZE,
+             'reason': _('requires ONTAP >= 9.5.')},
+            {'key': 'expected_iops_allocation',
+             'support': self.features.ADAPTIVE_QOS_EXPECTED_IOPS_ALLOCATION,
+             'reason': _('requires ONTAP >= 9.5.')},
+        ]
+        for feature in qos_spec_support:
+            if feature['key'] in spec and not feature['support']:
+                msg = '%(key)s %(reason)s'
+                raise na_utils.NetAppDriverException(msg % {
+                    'key': feature['key'],
+                    'reason': feature['reason']})
+
     def clone_lun(self, volume, name, new_name, space_reserved='true',
                   qos_policy_group_name=None, src_block=0, dest_block=0,
                   block_count=0, source_snapshot=None, is_snapshot=False,
                   qos_policy_group_is_adaptive=False):
+        self._validate_qos_policy_group(qos_policy_group_is_adaptive)
+
         # ONTAP handles only 128 MB per call as of v9.1
         bc_limit = 2 ** 18  # 2^18 blocks * 512 bytes/block = 128 MB
         z_calls = int(math.ceil(block_count / float(bc_limit)))
@@ -480,13 +583,9 @@ class Client(client_base.Client):
             clone_create = netapp_api.NaElement.create_node_with_children(
                 'clone-create', **zapi_args)
             if qos_policy_group_name is not None:
-                if qos_policy_group_is_adaptive:
-                    clone_create.add_new_child(
-                        'qos-adaptive-policy-group-name',
-                        qos_policy_group_name)
-                else:
-                    clone_create.add_new_child('qos-policy-group-name',
-                                               qos_policy_group_name)
+                child_name = 'qos-%spolicy-group-name' % (
+                    'adaptive-' if qos_policy_group_is_adaptive else '')
+                clone_create.add_new_child(child_name, qos_policy_group_name)
             if block_count > 0:
                 block_ranges = netapp_api.NaElement("block-ranges")
                 segments = int(math.ceil(block_count / float(bc_limit)))
@@ -528,6 +627,8 @@ class Client(client_base.Client):
     def file_assign_qos(self, flex_vol, qos_policy_group_name,
                         qos_policy_group_is_adaptive, file_path):
         """Assigns the named QoS policy-group to a file."""
+        self._validate_qos_policy_group(qos_policy_group_is_adaptive)
+
         qos_arg_name = "qos-%spolicy-group-name" % (
             "adaptive-" if qos_policy_group_is_adaptive else "")
         api_args = {
@@ -538,7 +639,8 @@ class Client(client_base.Client):
         }
         return self.connection.send_request('file-assign-qos', api_args, False)
 
-    def provision_qos_policy_group(self, qos_policy_group_info):
+    def provision_qos_policy_group(self, qos_policy_group_info,
+                                   qos_min_support):
         """Create QOS policy group on the backend if appropriate."""
         if qos_policy_group_info is None:
             return
@@ -546,73 +648,100 @@ class Client(client_base.Client):
         # Legacy QOS uses externally provisioned QOS policy group,
         # so we don't need to create one on the backend.
         legacy = qos_policy_group_info.get('legacy')
-        if legacy is not None:
+        if legacy:
             return
 
         spec = qos_policy_group_info.get('spec')
-        if spec is not None:
-            if not self.qos_policy_group_exists(spec['policy_name']):
-                self.qos_policy_group_create(spec['policy_name'],
-                                             spec['max_throughput'])
-            else:
-                self.qos_policy_group_modify(spec['policy_name'],
-                                             spec['max_throughput'])
 
-    def qos_policy_group_exists(self, qos_policy_group_name):
+        if not spec:
+            return
+
+        is_adaptive = na_utils.is_qos_policy_group_spec_adaptive(
+            qos_policy_group_info)
+        self._validate_qos_policy_group(is_adaptive, spec=spec,
+                                        qos_min_support=qos_min_support)
+        if is_adaptive:
+            if not self.qos_policy_group_exists(spec['policy_name'],
+                                                is_adaptive=True):
+                self.qos_adaptive_policy_group_create(spec)
+            else:
+                self.qos_adaptive_policy_group_modify(spec)
+        else:
+            if not self.qos_policy_group_exists(spec['policy_name']):
+                self.qos_policy_group_create(spec)
+            else:
+                self.qos_policy_group_modify(spec)
+
+    def qos_policy_group_exists(self, qos_policy_group_name,
+                                is_adaptive=False):
         """Checks if a QOS policy group exists."""
+        query_name = 'qos-%spolicy-group-info' % (
+            'adaptive-' if is_adaptive else '')
+        request_name = 'qos-%spolicy-group-get-iter' % (
+            'adaptive-' if is_adaptive else '')
         api_args = {
             'query': {
-                'qos-policy-group-info': {
+                query_name: {
                     'policy-group': qos_policy_group_name,
                 },
             },
             'desired-attributes': {
-                'qos-policy-group-info': {
+                query_name: {
                     'policy-group': None,
                 },
             },
         }
-        result = self.connection.send_request('qos-policy-group-get-iter',
-                                              api_args,
-                                              False)
+        result = self.connection.send_request(request_name, api_args, False)
         return self._has_records(result)
 
-    def qos_policy_group_create(self, qos_policy_group_name, max_throughput):
+    def _qos_spec_to_api_args(self, spec, **kwargs):
+        """Convert a QoS spec to ZAPI args."""
+        formatted_spec = {k.replace('_', '-'): v for k, v in spec.items() if v}
+        formatted_spec['policy-group'] = formatted_spec.pop('policy-name')
+        formatted_spec = {**formatted_spec, **kwargs}
+
+        return formatted_spec
+
+    def qos_policy_group_create(self, spec):
         """Creates a QOS policy group."""
-        api_args = {
-            'policy-group': qos_policy_group_name,
-            'max-throughput': max_throughput,
-            'vserver': self.vserver,
-        }
+        api_args = self._qos_spec_to_api_args(
+            spec, vserver=self.vserver)
         return self.connection.send_request(
             'qos-policy-group-create', api_args, False)
 
-    def qos_policy_group_modify(self, qos_policy_group_name, max_throughput):
+    def qos_adaptive_policy_group_create(self, spec):
+        """Creates a QOS adaptive policy group."""
+        api_args = self._qos_spec_to_api_args(
+            spec, vserver=self.vserver)
+        return self.connection.send_request(
+            'qos-adaptive-policy-group-create', api_args, False)
+
+    def qos_policy_group_modify(self, spec):
         """Modifies a QOS policy group."""
-        api_args = {
-            'policy-group': qos_policy_group_name,
-            'max-throughput': max_throughput,
-        }
+        api_args = self._qos_spec_to_api_args(spec)
         return self.connection.send_request(
             'qos-policy-group-modify', api_args, False)
 
-    def qos_policy_group_delete(self, qos_policy_group_name):
-        """Attempts to delete a QOS policy group."""
-        api_args = {'policy-group': qos_policy_group_name}
+    def qos_adaptive_policy_group_modify(self, spec):
+        """Modifies a QOS adaptive policy group."""
+        api_args = self._qos_spec_to_api_args(spec)
         return self.connection.send_request(
-            'qos-policy-group-delete', api_args, False)
+            'qos-adaptive-policy-group-modify', api_args, False)
 
-    def qos_policy_group_rename(self, qos_policy_group_name, new_name):
+    def qos_policy_group_rename(self, qos_policy_group_name, new_name,
+                                is_adaptive=False):
         """Renames a QOS policy group."""
+        request_name = 'qos-%spolicy-group-rename' % (
+            'adaptive-' if is_adaptive else '')
         api_args = {
             'policy-group-name': qos_policy_group_name,
             'new-name': new_name,
         }
-        return self.connection.send_request(
-            'qos-policy-group-rename', api_args, False)
+        return self.connection.send_request(request_name, api_args, False)
 
-    def mark_qos_policy_group_for_deletion(self, qos_policy_group_info):
-        """Do (soft) delete of backing QOS policy group for a cinder volume."""
+    def mark_qos_policy_group_for_deletion(self, qos_policy_group_info,
+                                           is_adaptive=False):
+        """Soft delete a QOS policy group backing a cinder volume."""
         if qos_policy_group_info is None:
             return
 
@@ -624,11 +753,12 @@ class Client(client_base.Client):
         # we instead rename the QoS policy group using a specific pattern and
         # later attempt on a best effort basis to delete any QoS policy groups
         # matching that pattern.
-        if spec is not None:
+        if spec:
             current_name = spec['policy_name']
             new_name = client_base.DELETED_PREFIX + current_name
             try:
-                self.qos_policy_group_rename(current_name, new_name)
+                self.qos_policy_group_rename(current_name, new_name,
+                                             is_adaptive)
             except netapp_api.NaApiError as ex:
                 LOG.warning('Rename failure in cleanup of cDOT QOS policy '
                             'group %(name)s: %(ex)s',
@@ -637,11 +767,15 @@ class Client(client_base.Client):
         # Attempt to delete any QoS policies named "delete-openstack-*".
         self.remove_unused_qos_policy_groups()
 
-    def remove_unused_qos_policy_groups(self):
-        """Deletes all QOS policy groups that are marked for deletion."""
+    def _send_qos_policy_group_delete_iter_request(self, is_adaptive=False):
+        request_name = 'qos-%spolicy-group-delete-iter' % (
+            'adaptive-' if is_adaptive else '')
+        query_name = 'qos-%spolicy-group-info' % (
+            'adaptive-' if is_adaptive else '')
+
         api_args = {
             'query': {
-                'qos-policy-group-info': {
+                query_name: {
                     'policy-group': '%s*' % client_base.DELETED_PREFIX,
                     'vserver': self.vserver,
                 }
@@ -653,18 +787,32 @@ class Client(client_base.Client):
         }
 
         try:
-            self.connection.send_request(
-                'qos-policy-group-delete-iter', api_args, False)
+            self.connection.send_request(request_name, api_args, False)
         except netapp_api.NaApiError as ex:
-            msg = 'Could not delete QOS policy groups. Details: %(ex)s'
-            msg_args = {'ex': ex}
+            msg = ('Could not delete QOS %(prefix)spolicy groups. '
+                   'Details: %(ex)s')
+            msg_args = {
+                'prefix': 'adaptive ' if is_adaptive else '',
+                'ex': ex,
+            }
             LOG.debug(msg, msg_args)
 
-    def set_lun_qos_policy_group(self, path, qos_policy_group):
+    def remove_unused_qos_policy_groups(self):
+        """Deletes all QOS policy groups that are marked for deletion."""
+        self._send_qos_policy_group_delete_iter_request()
+        if self.features.ADAPTIVE_QOS:
+            self._send_qos_policy_group_delete_iter_request(is_adaptive=True)
+
+    def set_lun_qos_policy_group(self, path, qos_policy_group,
+                                 is_adaptive=False):
         """Sets qos_policy_group on a LUN."""
+        self._validate_qos_policy_group(is_adaptive)
+
+        policy_group_key = 'qos-%spolicy-group' % (
+            'adaptive-' if is_adaptive else '')
         api_args = {
             'path': path,
-            'qos-policy-group': qos_policy_group,
+            policy_group_key: qos_policy_group,
         }
         return self.connection.send_request(
             'lun-set-qos-policy-group', api_args)
@@ -705,9 +853,8 @@ class Client(client_base.Client):
         result = self._invoke_vserver_api(vol_iter, vserver)
         num_records = result.get_child_content('num-records')
         if num_records and int(num_records) >= 1:
-            attr_list = result.get_child_by_name('attributes-list')
-            vols = attr_list.get_children()
-            vol_id = vols[0].get_child_by_name('volume-id-attributes')
+            volume_attr = self.get_unique_volume(result)
+            vol_id = volume_attr.get_child_by_name('volume-id-attributes')
             return vol_id.get_child_content('name')
         msg_fmt = {'vserver': vserver, 'junction': junction}
         raise exception.NotFound(_("No volume on cluster with vserver "
@@ -835,22 +982,6 @@ class Client(client_base.Client):
 
         return True
 
-    def list_cluster_nodes(self):
-        """Get all available cluster nodes."""
-
-        api_args = {
-            'desired-attributes': {
-                'node-details-info': {
-                    'node': None,
-                },
-            },
-        }
-        result = self.send_iter_request('system-node-get-iter', api_args)
-        nodes_info_list = result.get_child_by_name(
-            'attributes-list') or netapp_api.NaElement('none')
-        return [node_info.get_child_content('node') for node_info
-                in nodes_info_list.get_children()]
-
     def get_operational_lif_addresses(self):
         """Gets the IP addresses of operational LIFs on the vserver."""
 
@@ -892,6 +1023,9 @@ class Client(client_base.Client):
             },
             'desired-attributes': {
                 'volume-attributes': {
+                    'volume-id-attributes': {
+                        'style-extended': None,
+                    },
                     'volume-space-attributes': {
                         'size-available': None,
                         'size-total': None,
@@ -901,14 +1035,12 @@ class Client(client_base.Client):
         }
 
         result = self.send_iter_request('volume-get-iter', api_args)
-        if self._get_record_count(result) != 1:
+        if self._get_record_count(result) < 1:
             msg = _('Volume %s not found.')
             msg_args = flexvol_path or flexvol_name
             raise na_utils.NetAppDriverException(msg % msg_args)
 
-        attributes_list = result.get_child_by_name('attributes-list')
-        volume_attributes = attributes_list.get_child_by_name(
-            'volume-attributes')
+        volume_attributes = self.get_unique_volume(result)
         volume_space_attributes = volume_attributes.get_child_by_name(
             'volume-space-attributes')
 
@@ -921,6 +1053,26 @@ class Client(client_base.Client):
             'size-total': size_total,
             'size-available': size_available,
         }
+
+    def get_unique_volume(self, get_volume_result):
+        """Get the unique FlexVol or FleGroup volume from a get volume list"""
+        volume_list = []
+        attributes_list = get_volume_result.get_child_by_name(
+            'attributes-list') or netapp_api.NaElement('none')
+
+        for volume_attributes in attributes_list.get_children():
+            volume_id_attributes = volume_attributes.get_child_by_name(
+                'volume-id-attributes') or netapp_api.NaElement('none')
+            style = volume_id_attributes.get_child_content('style-extended')
+            if style == 'flexvol' or style == 'flexgroup':
+                volume_list.append(volume_attributes)
+
+        if len(volume_list) != 1:
+            msg = _('Could not find unique volume. Volumes found: %(vol)s.')
+            msg_args = {'vol': volume_list}
+            raise exception.VolumeBackendAPIException(data=msg % msg_args)
+
+        return volume_list[0]
 
     def list_flexvols(self):
         """Returns the names of the flexvols on the controller."""
@@ -966,6 +1118,43 @@ class Client(client_base.Client):
 
         return volumes
 
+    def get_volume_state(self, junction_path=None, name=None):
+        """Returns volume state for a given name or junction path"""
+
+        volume_id_attributes = {}
+        if junction_path:
+            volume_id_attributes['junction-path'] = junction_path
+        if name:
+            volume_id_attributes['name'] = name
+
+        api_args = {
+            'query': {
+                'volume-attributes': {
+                    'volume-id-attributes': volume_id_attributes
+                }
+            },
+            'desired-attributes': {
+                'volume-attributes': {
+                    'volume-id-attributes': {
+                        'style-extended': None
+                    },
+                    'volume-state-attributes': {
+                        'state': None
+                    }
+                }
+            }
+        }
+        result = self.send_iter_request('volume-get-iter', api_args)
+        try:
+            volume_attributes = self.get_unique_volume(result)
+        except exception.VolumeBackendAPIException:
+            return None
+
+        volume_state_attributes = volume_attributes.get_child_by_name(
+            'volume-state-attributes') or netapp_api.NaElement('none')
+        volume_state = volume_state_attributes.get_child_content('state')
+        return volume_state
+
     def get_flexvol(self, flexvol_path=None, flexvol_name=None):
         """Get flexvol attributes needed for the storage service catalog."""
 
@@ -993,8 +1182,12 @@ class Client(client_base.Client):
                         'name': None,
                         'owning-vserver-name': None,
                         'junction-path': None,
+                        'aggr-list': {
+                            'aggr-name': None,
+                        },
                         'containing-aggregate-name': None,
                         'type': None,
+                        'style-extended': None,
                     },
                     'volume-mirror-attributes': {
                         'is-data-protection-mirror': None,
@@ -1020,19 +1213,19 @@ class Client(client_base.Client):
         }
         result = self.send_iter_request('volume-get-iter', api_args)
 
-        if self._get_record_count(result) != 1:
-            msg = _('Could not find unique volume %(vol)s.')
-            msg_args = {'vol': flexvol_name}
-            raise exception.VolumeBackendAPIException(data=msg % msg_args)
-
-        attributes_list = result.get_child_by_name(
-            'attributes-list') or netapp_api.NaElement('none')
-
-        volume_attributes = attributes_list.get_child_by_name(
-            'volume-attributes') or netapp_api.NaElement('none')
+        volume_attributes = self.get_unique_volume(result)
 
         volume_id_attributes = volume_attributes.get_child_by_name(
             'volume-id-attributes') or netapp_api.NaElement('none')
+        aggr = volume_id_attributes.get_child_content(
+            'containing-aggregate-name')
+        if not aggr:
+            aggr_list_attr = volume_id_attributes.get_child_by_name(
+                'aggr-list') or netapp_api.NaElement('none')
+            aggr = [aggr_elem.get_content()
+                    for aggr_elem in
+                    aggr_list_attr.get_children()]
+
         volume_space_attributes = volume_attributes.get_child_by_name(
             'volume-space-attributes') or netapp_api.NaElement('none')
         volume_qos_attributes = volume_attributes.get_child_by_name(
@@ -1048,8 +1241,7 @@ class Client(client_base.Client):
                 'owning-vserver-name'),
             'junction-path': volume_id_attributes.get_child_content(
                 'junction-path'),
-            'aggregate': volume_id_attributes.get_child_content(
-                'containing-aggregate-name'),
+            'aggregate': aggr,
             'type': volume_id_attributes.get_child_content('type'),
             'space-guarantee-enabled': strutils.bool_from_string(
                 volume_space_attributes.get_child_content(
@@ -1066,6 +1258,9 @@ class Client(client_base.Client):
                 'snapshot-policy'),
             'language': volume_language_attributes.get_child_content(
                 'language-code'),
+            'style-extended': volume_id_attributes.get_child_content(
+                'style-extended'),
+
         }
 
         return volume
@@ -1233,6 +1428,46 @@ class Client(client_base.Client):
 
         return True
 
+    def is_qos_min_supported(self, is_nfs, node_name):
+        """Check if the node supports QoS minimum."""
+        qos_min_name = na_utils.qos_min_feature_name(is_nfs, node_name)
+        return getattr(self.features, qos_min_name, False).__bool__()
+
+    def create_volume_async(self, name, aggregate_list, size_gb,
+                            space_guarantee_type=None, snapshot_policy=None,
+                            language=None, snapshot_reserve=None,
+                            volume_type='rw'):
+        """Creates a FlexGroup volume asynchronously."""
+
+        api_args = {
+            'aggr-list': [{'aggr-name': aggr} for aggr in aggregate_list],
+            'size': size_gb * units.Gi,
+            'volume-name': name,
+            'volume-type': volume_type,
+        }
+        if volume_type == 'dp':
+            snapshot_policy = None
+        else:
+            api_args['junction-path'] = '/%s' % name
+        if snapshot_policy is not None:
+            api_args['snapshot-policy'] = snapshot_policy
+        if space_guarantee_type:
+            api_args['space-reserve'] = space_guarantee_type
+        if language is not None:
+            api_args['language-code'] = language
+        if snapshot_reserve is not None:
+            api_args['percentage-snapshot-reserve'] = six.text_type(
+                snapshot_reserve)
+
+        result = self.connection.send_request('volume-create-async', api_args)
+        job_info = {
+            'status': result.get_child_content('result-status'),
+            'jobid': result.get_child_content('result-jobid'),
+            'error-code': result.get_child_content('result-error-code'),
+            'error-message': result.get_child_content('result-error-message')
+        }
+        return job_info
+
     def create_flexvol(self, flexvol_name, aggregate_name, size_gb,
                        space_guarantee_type=None, snapshot_policy=None,
                        language=None, dedupe_enabled=False,
@@ -1333,6 +1568,32 @@ class Client(client_base.Client):
         }
         self.connection.send_request('sis-set-config', api_args)
 
+    def enable_volume_dedupe_async(self, volume_name):
+        """Enable deduplication on FlexVol/FlexGroup volume asynchronously."""
+        api_args = {'volume-name': volume_name}
+        self.connection.send_request('sis-enable-async', api_args)
+
+    def disable_volume_dedupe_async(self, volume_name):
+        """Disable deduplication on FlexVol/FlexGroup volume asynchronously."""
+        api_args = {'volume-name': volume_name}
+        self.connection.send_request('sis-disable-async', api_args)
+
+    def enable_volume_compression_async(self, volume_name):
+        """Enable compression on FlexVol/FlexGroup volume asynchronously."""
+        api_args = {
+            'volume-name': volume_name,
+            'enable-compression': 'true'
+        }
+        self.connection.send_request('sis-set-config-async', api_args)
+
+    def disable_volume_compression_async(self, volume_name):
+        """Disable compression on FlexVol/FlexGroup volume asynchronously."""
+        api_args = {
+            'volume-name': volume_name,
+            'enable-compression': 'false'
+        }
+        self.connection.send_request('sis-set-config-async', api_args)
+
     @volume_utils.trace_method
     def delete_file(self, path_to_file):
         """Delete file at path."""
@@ -1415,6 +1676,9 @@ class Client(client_base.Client):
                     'raid-type': None,
                     'is-hybrid': None,
                 },
+                'aggr-ownership-attributes': {
+                    'home-name': None,
+                },
             },
         }
 
@@ -1432,12 +1696,15 @@ class Client(client_base.Client):
         aggr_attributes = aggrs[0]
         aggr_raid_attrs = aggr_attributes.get_child_by_name(
             'aggr-raid-attributes') or netapp_api.NaElement('none')
+        aggr_ownership_attrs = aggrs[0].get_child_by_name(
+            'aggr-ownership-attributes') or netapp_api.NaElement('none')
 
         aggregate = {
             'name': aggr_attributes.get_child_content('aggregate-name'),
             'raid-type': aggr_raid_attrs.get_child_content('raid-type'),
             'is-hybrid': strutils.bool_from_string(
                 aggr_raid_attrs.get_child_content('is-hybrid')),
+            'node-name': aggr_ownership_attrs.get_child_content('home-name'),
         }
 
         return aggregate
@@ -1971,6 +2238,7 @@ class Client(client_base.Client):
             'destination-vserver': destination_vserver,
             'relationship-type': relationship_type,
         }
+
         if schedule:
             api_args['schedule'] = schedule
         if policy:
@@ -2249,6 +2517,7 @@ class Client(client_base.Client):
             'snapshot_reserve': flexvol_info['percentage-snapshot-reserve'],
             'volume_type': flexvol_info['type'],
             'size': int(math.ceil(float(flexvol_info['size']) / units.Gi)),
+            'is_flexgroup': flexvol_info['style-extended'] == 'flexgroup',
         }
 
         return provisioning_opts

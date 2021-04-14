@@ -15,9 +15,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import collections
 import datetime
 from unittest import mock
 
+import ddt
 from oslo_config import cfg
 from oslo_utils import timeutils
 
@@ -34,6 +36,8 @@ from cinder import quota
 from cinder import quota_utils
 from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder.tests.unit import fake_constants as fake
+from cinder.tests.unit import fake_snapshot
+from cinder.tests.unit import fake_volume
 import cinder.tests.unit.image.fake
 from cinder.tests.unit import test
 from cinder.tests.unit import utils as tests_utils
@@ -162,7 +166,7 @@ class QuotaIntegrationTestCase(test.TestCase):
             status='available',
             host=CONF.host,
             volume_type_id=self.vt['id'])
-        volume_api = volume.api.API()
+        volume_api = volume.API()
         volume_api.create_snapshots_in_db(self.context,
                                           [test_volume1, test_volume2],
                                           'fake_name',
@@ -543,7 +547,7 @@ class QuotaEngineTestCase(test.TestCase):
 
     def test_register_resource(self):
         quota_obj = quota.QuotaEngine()
-        resource = quota.AbsoluteResource('test_resource')
+        resource = quota.BaseResource('test_resource')
         quota_obj.register_resource(resource)
 
         self.assertEqual(dict(test_resource=resource), quota_obj.resources)
@@ -551,9 +555,9 @@ class QuotaEngineTestCase(test.TestCase):
     def test_register_resources(self):
         quota_obj = quota.QuotaEngine()
         resources = [
-            quota.AbsoluteResource('test_resource1'),
-            quota.AbsoluteResource('test_resource2'),
-            quota.AbsoluteResource('test_resource3'), ]
+            quota.BaseResource('test_resource1'),
+            quota.BaseResource('test_resource2'),
+            quota.BaseResource('test_resource3'), ]
         quota_obj.register_resources(resources)
 
         self.assertEqual(dict(test_resource1=resources[0],
@@ -593,10 +597,10 @@ class QuotaEngineTestCase(test.TestCase):
     def _make_quota_obj(self, driver):
         quota_obj = quota.QuotaEngine(quota_driver_class=driver)
         resources = [
-            quota.AbsoluteResource('test_resource4'),
-            quota.AbsoluteResource('test_resource3'),
-            quota.AbsoluteResource('test_resource2'),
-            quota.AbsoluteResource('test_resource1'), ]
+            quota.BaseResource('test_resource4'),
+            quota.BaseResource('test_resource3'),
+            quota.BaseResource('test_resource2'),
+            quota.BaseResource('test_resource1'), ]
         quota_obj.register_resources(resources)
 
         return quota_obj
@@ -687,37 +691,6 @@ class QuotaEngineTestCase(test.TestCase):
              False), ], driver.called)
         self.assertEqual(quota_obj.resources, result1)
         self.assertEqual(quota_obj.resources, result2)
-
-    def test_count_no_resource(self):
-        context = FakeContext(None, None)
-        driver = FakeDriver()
-        quota_obj = self._make_quota_obj(driver)
-        self.assertRaises(exception.QuotaResourceUnknown,
-                          quota_obj.count, context, 'test_resource5',
-                          True, foo='bar')
-
-    def test_count_wrong_resource(self):
-        context = FakeContext(None, None)
-        driver = FakeDriver()
-        quota_obj = self._make_quota_obj(driver)
-        self.assertRaises(exception.QuotaResourceUnknown,
-                          quota_obj.count, context, 'test_resource1',
-                          True, foo='bar')
-
-    def test_count(self):
-        def fake_count(context, *args, **kwargs):
-            self.assertEqual((True,), args)
-            self.assertEqual(dict(foo='bar'), kwargs)
-            return 5
-
-        context = FakeContext(None, None)
-        driver = FakeDriver()
-        quota_obj = self._make_quota_obj(driver)
-        quota_obj.register_resource(quota.CountableResource('test_resource5',
-                                                            fake_count))
-        result = quota_obj.count(context, 'test_resource5', True, foo='bar')
-
-        self.assertEqual(5, result)
 
     def test_limit_check(self):
         context = FakeContext(None, None)
@@ -919,20 +892,13 @@ class DbQuotaDriverBaseTestCase(test.TestCase):
                    )
 
         # These can be used for expected defaults for child/non-child
-        self._default_quotas_non_child = dict(
+        self._default_quotas = dict(
             volumes=10,
             snapshots=10,
             gigabytes=1000,
             backups=10,
             backup_gigabytes=1000,
             per_volume_gigabytes=-1)
-        self._default_quotas_child = dict(
-            volumes=0,
-            snapshots=0,
-            gigabytes=0,
-            backups=0,
-            backup_gigabytes=0,
-            per_volume_gigabytes=0)
 
         self.calls = []
 
@@ -966,15 +932,6 @@ class DbQuotaDriverBaseTestCase(test.TestCase):
             return dict(gigabytes=500, volumes=10, snapshots=10, backups=10,
                         backup_gigabytes=500)
         self.mock_object(db, 'quota_class_get_all_by_name', fake_qcgabn)
-
-    def _mock_allocated_get_all_by_project(self, allocated_quota=False):
-        def fake_qagabp(context, project_id, session=None):
-            self.calls.append('quota_allocated_get_all_by_project')
-            if allocated_quota:
-                return dict(project_id=project_id, volumes=3)
-            return dict(project_id=project_id)
-
-        self.mock_object(db, 'quota_allocated_get_all_by_project', fake_qagabp)
 
 
 class DbQuotaDriverTestCase(DbQuotaDriverBaseTestCase):
@@ -1051,14 +1008,12 @@ class DbQuotaDriverTestCase(DbQuotaDriverBaseTestCase):
     def test_get_project_quotas(self):
         self._mock_get_by_project()
         self._mock_volume_type_get_all()
-        self._mock_allocated_get_all_by_project()
         result = self.driver.get_project_quotas(
             FakeContext('test_project', 'test_class'),
             quota.QUOTAS.resources, 'test_project')
 
         self.assertEqual(['quota_get_all_by_project',
                           'quota_usage_get_all_by_project',
-                          'quota_allocated_get_all_by_project',
                           'quota_class_get_all_by_name',
                           'quota_class_get_defaults', ], self.calls)
         self.assertEqual(dict(volumes=dict(limit=10,
@@ -1085,7 +1040,7 @@ class DbQuotaDriverTestCase(DbQuotaDriverBaseTestCase):
     @mock.patch('cinder.quota.db.quota_class_get_defaults')
     def test_get_project_quotas_lazy_load_defaults(
             self, mock_defaults, mock_quotas):
-        defaults = self._default_quotas_non_child
+        defaults = self._default_quotas
         volume_types = volume.volume_types.get_all_types(
             context.get_admin_context())
         for vol_type in volume_types:
@@ -1105,44 +1060,6 @@ class DbQuotaDriverTestCase(DbQuotaDriverBaseTestCase):
             FakeContext('test_project', None),
             quota.QUOTAS.resources, 'test_project', usages=False)
         self.assertTrue(mock_defaults.called)
-
-    def test_get_root_project_with_subprojects_quotas(self):
-        self._mock_get_by_project()
-        self._mock_volume_type_get_all()
-        self._mock_allocated_get_all_by_project(allocated_quota=True)
-        result = self.driver.get_project_quotas(
-            FakeContext('test_project', None),
-            quota.QUOTAS.resources, 'test_project')
-
-        self.assertEqual(['quota_get_all_by_project',
-                          'quota_usage_get_all_by_project',
-                          'quota_allocated_get_all_by_project',
-                          'quota_class_get_defaults', ], self.calls)
-        self.assertEqual(dict(volumes=dict(limit=10,
-                                           in_use=2,
-                                           reserved=0,
-                                           allocated=3, ),
-                              snapshots=dict(limit=10,
-                                             in_use=2,
-                                             reserved=0,
-                                             allocated=0, ),
-                              gigabytes=dict(limit=50,
-                                             in_use=10,
-                                             reserved=0,
-                                             allocated=0, ),
-                              backups=dict(limit=10,
-                                           in_use=2,
-                                           reserved=0,
-                                           allocated=0, ),
-                              backup_gigabytes=dict(limit=50,
-                                                    in_use=10,
-                                                    reserved=0,
-                                                    allocated=0, ),
-                              per_volume_gigabytes=dict(in_use=0,
-                                                        limit=-1,
-                                                        reserved=0,
-                                                        allocated=0)
-                              ), result)
 
     def test_get_project_quotas_alt_context_no_class(self):
         self._mock_get_by_project()
@@ -1425,6 +1342,12 @@ class FakeSession(object):
     def query(self, *args, **kwargs):
         pass
 
+    def rollback(self):
+        pass
+
+    def commit(self):
+        pass
+
 
 class FakeUsage(sqa_models.QuotaUsage):
     def save(self, *args, **kwargs):
@@ -1486,11 +1409,10 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
             return quota_usage_ref
 
         def fake_reservation_create(context, uuid, usage_id, project_id,
-                                    resource, delta, expire, session=None,
-                                    allocated_id=None):
+                                    resource, delta, expire, session=None):
             reservation_ref = self._make_reservation(
                 uuid, usage_id, project_id, resource, delta, expire,
-                timeutils.utcnow(), timeutils.utcnow(), allocated_id)
+                timeutils.utcnow(), timeutils.utcnow())
 
             self.reservations_created[resource] = reservation_ref
 
@@ -1549,7 +1471,7 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
                                  (actual, value, resource))
 
     def _make_reservation(self, uuid, usage_id, project_id, resource,
-                          delta, expire, created_at, updated_at, alloc_id):
+                          delta, expire, created_at, updated_at):
         reservation_ref = sqa_models.Reservation()
         reservation_ref.id = len(self.reservations_created)
         reservation_ref.uuid = uuid
@@ -1562,7 +1484,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         reservation_ref.updated_at = updated_at
         reservation_ref.deleted_at = None
         reservation_ref.deleted = False
-        reservation_ref.allocated_id = alloc_id
 
         return reservation_ref
 
@@ -1583,81 +1504,61 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
 
         self.assertEqual(0, len(reservations))
 
-    def _mock_allocated_get_all_by_project(self, allocated_quota=False):
-        def fake_qagabp(context, project_id, session=None):
-            self.assertEqual('test_project', project_id)
-            self.assertIsNotNone(session)
-            if allocated_quota:
-                return dict(project_id=project_id, volumes=3,
-                            gigabytes = 2 * 1024)
-            return dict(project_id=project_id)
+    @mock.patch.object(sqa_api, '_reservation_create')
+    @mock.patch.object(sqa_api, '_get_sync_updates')
+    @mock.patch.object(sqa_api, '_quota_usage_create')
+    @mock.patch.object(sqa_api, '_get_quota_usages')
+    def test_quota_reserve_create_usages(self, usages_mock, quota_create_mock,
+                                         sync_mock, reserve_mock):
+        project_id = 'test_project'
+        context = FakeContext(project_id, 'test_class')
+        quotas = collections.OrderedDict([('volumes', 5),
+                                          ('gigabytes', 10 * 1024)])
+        deltas = collections.OrderedDict([('volumes', 2),
+                                          ('gigabytes', 2 * 1024)])
 
-        self.mock_object(sqa_api, 'quota_allocated_get_all_by_project',
-                         fake_qagabp)
+        sync_mock.side_effect = [{'volumes': 2}, {'gigabytes': 2 * 1024}]
+        vol_usage = self._make_quota_usage(project_id, 'volumes', 2, 0,
+                                           None, None, None)
+        gb_usage = self._make_quota_usage(project_id, 'gigabytes', 2 * 1024, 0,
+                                          None, None, None)
+        usages_mock.side_effect = [
+            {},
+            collections.OrderedDict([('volumes', vol_usage),
+                                     ('gigabytes', gb_usage)])
+        ]
+        reservations = [mock.Mock(), mock.Mock()]
+        reserve_mock.side_effect = reservations
 
-    def test_quota_reserve_with_allocated(self):
-        context = FakeContext('test_project', 'test_class')
-        # Allocated quota for volume will be updated for 3
-        self._mock_allocated_get_all_by_project(allocated_quota=True)
-        # Quota limited for volume updated for 10
-        quotas = dict(volumes=10,
-                      gigabytes=10 * 1024, )
-        # Try reserve 7 volumes
-        deltas = dict(volumes=7,
-                      gigabytes=2 * 1024, )
-        result = sqa_api.quota_reserve(context, self.resources, quotas,
-                                       deltas, self.expire, 5, 0)
-        # The reservation works
-        self.compare_reservation(
-            result,
-            [dict(resource='volumes',
-                  usage_id=self.usages_created['volumes'],
-                  project_id='test_project',
-                  delta=7),
-             dict(resource='gigabytes',
-                  usage_id=self.usages_created['gigabytes'],
-                  delta=2 * 1024), ])
-
-        # But if we try reserve 8 volumes(more free quota that we have)
-        deltas = dict(volumes=8,
-                      gigabytes=2 * 1024, )
-
-        self.assertRaises(exception.OverQuota,
-                          sqa_api.quota_reserve,
-                          context, self.resources, quotas,
-                          deltas, self.expire, 0, 0)
-
-    def test_quota_reserve_create_usages(self):
-        context = FakeContext('test_project', 'test_class')
-        quotas = dict(volumes=5,
-                      gigabytes=10 * 1024, )
-        deltas = dict(volumes=2,
-                      gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, 0)
 
-        self.assertEqual(set(['volumes', 'gigabytes']), self.sync_called)
-        self.compare_usage(self.usages_created,
-                           [dict(resource='volumes',
-                                 project_id='test_project',
-                                 in_use=0,
-                                 reserved=2,
-                                 until_refresh=None),
-                            dict(resource='gigabytes',
-                                 project_id='test_project',
-                                 in_use=0,
-                                 reserved=2 * 1024,
-                                 until_refresh=None), ])
-        self.compare_reservation(
-            result,
-            [dict(resource='volumes',
-                  usage_id=self.usages_created['volumes'],
-                  project_id='test_project',
-                  delta=2),
-             dict(resource='gigabytes',
-                  usage_id=self.usages_created['gigabytes'],
-                  delta=2 * 1024), ])
+        self.assertEqual([r.uuid for r in reservations], result)
+
+        usages_mock.assert_has_calls([
+            mock.call(mock.ANY, mock.ANY, project_id, resources=deltas.keys()),
+            mock.call(mock.ANY, mock.ANY, project_id, resources=deltas.keys())
+        ])
+
+        sync_mock.assert_has_calls([
+            mock.call(mock.ANY, project_id, mock.ANY, self.resources,
+                      'volumes'),
+            mock.call(mock.ANY, project_id, mock.ANY, self.resources,
+                      'gigabytes')])
+
+        quota_create_mock.assert_has_calls([
+            mock.call(mock.ANY, project_id, 'volumes', 2, 0, None,
+                      session=mock.ANY),
+            mock.call(mock.ANY, project_id, 'gigabytes', 2 * 1024, 0, None,
+                      session=mock.ANY)
+        ])
+
+        reserve_mock.assert_has_calls([
+            mock.call(mock.ANY, mock.ANY, vol_usage, project_id, 'volumes',
+                      2, mock.ANY, session=mock.ANY),
+            mock.call(mock.ANY, mock.ANY, gb_usage, project_id, 'gigabytes',
+                      2 * 1024, mock.ANY, session=mock.ANY),
+        ])
 
     def test_quota_reserve_negative_in_use(self):
         self.init_usage('test_project', 'volumes', -1, 0, until_refresh=1)
@@ -1667,7 +1568,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
                       gigabytes=10 * 1024, )
         deltas = dict(volumes=2,
                       gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 5, 0)
 
@@ -1698,7 +1598,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=2, gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 5, 0)
 
@@ -1723,6 +1622,55 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
                                        usage_id=self.usages['gigabytes'],
                                        delta=2 * 1024), ])
 
+    def test_quota_reserve_until_refresh_enable(self):
+        """Test that enabling until_refresh works."""
+        # Simulate service running with until_refresh disabled
+        self.init_usage('test_project', 'volumes', 3, 0, until_refresh=None)
+        self.init_usage('test_project', 'gigabytes', 100, 0,
+                        until_refresh=None)
+        context = FakeContext('test_project', 'test_class')
+        quotas = dict(volumes=5, gigabytes=10 * 1024, )
+        deltas = dict(volumes=2, gigabytes=2 * 1024, )
+
+        # Simulate service is now running with until_refresh set to 5
+        sqa_api.quota_reserve(context, self.resources, quotas, deltas,
+                              self.expire, 5, 0)
+
+        self.compare_usage(self.usages, [dict(resource='volumes',
+                                              project_id='test_project',
+                                              in_use=3,
+                                              reserved=2,
+                                              until_refresh=5),
+                                         dict(resource='gigabytes',
+                                              project_id='test_project',
+                                              in_use=100,
+                                              reserved=2 * 1024,
+                                              until_refresh=5), ])
+
+    def test_quota_reserve_until_refresh_disable(self):
+        """Test that disabling until_refresh works."""
+        # Simulate service running with until_refresh enabled and set to 5
+        self.init_usage('test_project', 'volumes', 3, 0, until_refresh=5)
+        self.init_usage('test_project', 'gigabytes', 100, 0, until_refresh=5)
+        context = FakeContext('test_project', 'test_class')
+        quotas = dict(volumes=5, gigabytes=10 * 1024, )
+        deltas = dict(volumes=2, gigabytes=2 * 1024, )
+
+        # Simulate service is now running with until_refresh disabled
+        sqa_api.quota_reserve(context, self.resources, quotas, deltas,
+                              self.expire, None, 0)
+
+        self.compare_usage(self.usages, [dict(resource='volumes',
+                                              project_id='test_project',
+                                              in_use=3,
+                                              reserved=2,
+                                              until_refresh=None),
+                                         dict(resource='gigabytes',
+                                              project_id='test_project',
+                                              in_use=100,
+                                              reserved=2 * 1024,
+                                              until_refresh=None), ])
+
     def test_quota_reserve_max_age(self):
         max_age = 3600
         record_created = (timeutils.utcnow() -
@@ -1734,7 +1682,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=2, gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, max_age)
 
@@ -1770,7 +1717,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=2, gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, max_age)
 
@@ -1801,7 +1747,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=2, gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, 0)
 
@@ -1832,7 +1777,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=-2, gigabytes=-2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, 0)
 
@@ -1863,7 +1807,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=2, gigabytes=2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         self.assertRaises(exception.OverQuota,
                           sqa_api.quota_reserve,
                           context, self.resources, quotas,
@@ -1889,7 +1832,6 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
         context = FakeContext('test_project', 'test_class')
         quotas = dict(volumes=5, gigabytes=10 * 1024, )
         deltas = dict(volumes=-2, gigabytes=-2 * 1024, )
-        self._mock_allocated_get_all_by_project()
         result = sqa_api.quota_reserve(context, self.resources, quotas,
                                        deltas, self.expire, 0, 0)
 
@@ -1916,6 +1858,7 @@ class QuotaReserveSqlAlchemyTestCase(test.TestCase):
                                        delta=-2 * 1024), ])
 
 
+@ddt.ddt
 class QuotaVolumeTypeReservationTestCase(test.TestCase):
 
     def setUp(self):
@@ -1932,32 +1875,32 @@ class QuotaVolumeTypeReservationTestCase(test.TestCase):
                                      mock_add_volume_type_opts,
                                      mock_reserve):
         my_context = FakeContext('MyProject', None)
-        volume = {'name': 'my_vol_name',
-                  'id': 'my_vol_id',
-                  'size': '1',
-                  'project_id': 'vol_project_id',
-                  }
-        reserve_opts = {'volumes': 1, 'gigabytes': volume['size']}
+        volume = fake_volume.fake_volume_obj(my_context,
+                                             name= 'my_vol_name',
+                                             id= 'my_vol_id',
+                                             size= 1,
+                                             project_id= 'vol_project_id')
         quota_utils.get_volume_type_reservation(my_context,
                                                 volume,
                                                 self.volume_type['id'])
+        reserve_opts = {'volumes': 1, 'gigabytes': volume.size}
         mock_add_volume_type_opts.assert_called_once_with(
             my_context,
             reserve_opts,
             self.volume_type['id'])
         mock_reserve.assert_called_once_with(my_context,
                                              project_id='vol_project_id',
-                                             gigabytes='1',
+                                             gigabytes=1,
                                              volumes=1)
 
     @mock.patch.object(quota.QUOTAS, 'reserve')
     def test_volume_type_reservation_with_type_only(self, mock_reserve):
         my_context = FakeContext('MyProject', None)
-        volume = {'name': 'my_vol_name',
-                  'id': 'my_vol_id',
-                  'size': '1',
-                  'project_id': 'vol_project_id',
-                  }
+        volume = fake_volume.fake_volume_obj(my_context,
+                                             name='my_vol_name',
+                                             id='my_vol_id',
+                                             size=1,
+                                             project_id='vol_project_id')
         quota_utils.get_volume_type_reservation(my_context,
                                                 volume,
                                                 self.volume_type['id'],
@@ -1965,7 +1908,58 @@ class QuotaVolumeTypeReservationTestCase(test.TestCase):
         vtype_volume_quota = "%s_%s" % ('volumes', self.volume_type['name'])
         vtype_size_quota = "%s_%s" % ('gigabytes', self.volume_type['name'])
         reserve_opts = {vtype_volume_quota: 1,
-                        vtype_size_quota: volume['size']}
+                        vtype_size_quota: volume.size}
         mock_reserve.assert_called_once_with(my_context,
                                              project_id='vol_project_id',
+                                             **reserve_opts)
+
+    @ddt.data({'count_snaps': True, 'negative': True},
+              {'count_snaps': True, 'negative': False},
+              {'count_snaps': False, 'negative': True},
+              {'count_snaps': False, 'negative': False})
+    @ddt.unpack
+    @mock.patch.object(quota.QUOTAS, 'reserve')
+    def test_volume_type_reservation_snapshots_with_type_only(self,
+                                                              mock_reserve,
+                                                              count_snaps,
+                                                              negative):
+        """Volume type reservations on volume with snapshots
+
+        Test that when the volume has snapshots it takes them into account,
+        and even calculates the quota correctly depending on
+        no_snapshot_gb_quota configuration option.
+
+        It should work for negative and positive quotas.
+        """
+        self.override_config('no_snapshot_gb_quota', not count_snaps)
+        my_context = FakeContext('MyProject', None)
+        snaps = [fake_snapshot.fake_db_snapshot(volume_size=1),
+                 fake_snapshot.fake_db_snapshot(volume_size=2)]
+        volume = fake_volume.fake_volume_obj(my_context,
+                                             expected_attrs=['snapshots'],
+                                             name='my_vol_name',
+                                             id=fake.VOLUME_ID,
+                                             size=1,
+                                             project_id=fake.PROJECT_ID,
+                                             snapshots=snaps)
+        quota_utils.get_volume_type_reservation(my_context,
+                                                volume,
+                                                self.volume_type['id'],
+                                                reserve_vol_type_only=True,
+                                                negative=negative)
+
+        factor = -1 if negative else 1
+        if count_snaps:
+            snaps_size = (snaps[0]['volume_size'] + snaps[1]['volume_size'])
+        else:
+            snaps_size = 0
+        vtype_volume_quota = "volumes_%s" % self.volume_type['name']
+        vtype_snapshot_quota = "snapshots_%s" % self.volume_type['name']
+        vtype_size_quota = "%s_%s" % ('gigabytes', self.volume_type['name'])
+        reserve_opts = {vtype_volume_quota: factor * 1,
+                        vtype_snapshot_quota: factor * 2,
+                        vtype_size_quota: factor * (volume['size'] +
+                                                    snaps_size)}
+        mock_reserve.assert_called_once_with(my_context,
+                                             project_id=fake.PROJECT_ID,
                                              **reserve_opts)

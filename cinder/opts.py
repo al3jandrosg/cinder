@@ -167,8 +167,6 @@ from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
 from cinder.volume.drivers.toyou.acs5000 import acs5000_common as \
     cinder_volume_drivers_toyou_acs5000_acs5000common
-from cinder.volume.drivers.toyou.acs5000 import acs5000_iscsi as \
-    cinder_volume_drivers_toyou_acs5000_acs5000iscsi
 from cinder.volume.drivers.veritas_access import veritas_iscsi as \
     cinder_volume_drivers_veritas_access_veritasiscsi
 from cinder.volume.drivers.vmware import vmdk as \
@@ -178,7 +176,8 @@ from cinder.volume.drivers.windows import iscsi as \
     cinder_volume_drivers_windows_iscsi
 from cinder.volume.drivers.windows import smbfs as \
     cinder_volume_drivers_windows_smbfs
-from cinder.volume.drivers import zadara as cinder_volume_drivers_zadara
+from cinder.volume.drivers.zadara import zadara as \
+    cinder_volume_drivers_zadara_zadara
 from cinder.volume import manager as cinder_volume_manager
 from cinder.volume.targets import spdknvmf as cinder_volume_targets_spdknvmf
 from cinder.wsgi import eventlet_server as cinder_wsgi_eventletserver
@@ -287,8 +286,6 @@ def list_opts():
                 cinder_volume_drivers_sandstone_sdsdriver.sds_opts,
                 cinder_volume_drivers_toyou_acs5000_acs5000common.
                 acs5000c_opts,
-                cinder_volume_drivers_toyou_acs5000_acs5000iscsi.
-                acs5000_iscsi_opts,
                 cinder_volume_drivers_veritas_access_veritasiscsi.VA_VOL_OPTS,
                 cinder_volume_manager.volume_manager_opts,
                 cinder_wsgi_eventletserver.socket_opts,
@@ -396,7 +393,7 @@ def list_opts():
                 cinder_volume_drivers_vzstorage.vzstorage_opts,
                 cinder_volume_drivers_windows_iscsi.windows_opts,
                 cinder_volume_drivers_windows_smbfs.volume_opts,
-                cinder_volume_drivers_zadara.zadara_opts,
+                cinder_volume_drivers_zadara_zadara.common.zadara_opts,
                 cinder_volume_manager.volume_backend_opts,
                 cinder_volume_targets_spdknvmf.spdk_opts,
             )),

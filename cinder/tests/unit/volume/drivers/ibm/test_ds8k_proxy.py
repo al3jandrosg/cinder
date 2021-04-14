@@ -1444,7 +1444,7 @@ class DS8KProxyTest(test.TestCase):
         lun = ds8kproxy.Lun(volume)
         self.driver._create_lun_helper(lun)
         pid, lss = lun.pool_lss_pair['source']
-        self.assertTrue(lss in ['20', '21', '22', '23'])
+        self.assertIn(lss, ('20', '21', '22', '23'))
 
     def test_find_lss_for_volume_which_belongs_to_cg2(self):
         """find lss for volume, which is in CG having volumes."""
@@ -4513,3 +4513,89 @@ class DS8KProxyTest(test.TestCase):
         lun = ds8kproxy.Lun(volume)
         exp_repl_name = helper.filter_alnum(volume.name)[:16]
         self.assertEqual(lun.replica_ds_name, exp_repl_name)
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_revert_to_snapshot_normal_vol(self, mock_get_flashcopy,
+                                           mock_sleep):
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        vol_type = testutils.create_volume_type(self.ctxt, name='VOL_TYPE')
+        location = six.text_type({'vol_hex_id': '0002'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        snapshot = self._create_snapshot(volume_id=volume.id)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+
+        self.driver.revert_to_snapshot(self.ctxt, volume, snapshot)
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_revert_to_snapshot_replication_vol(self, mock_get_flashcopy,
+                                                mock_sleep):
+        """test a successful creation of snapshot."""
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        extra_specs = {'replication_enabled': '<is> True'}
+        vol_type = testutils.create_volume_type(self.ctxt, name='VOL_TYPE',
+                                                extra_specs=extra_specs)
+        location = six.text_type({'vol_hex_id': '0002'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        snapshot = self._create_snapshot(volume_id=volume.id)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+
+        self.assertRaises(exception.VolumeDriverException,
+                          self.driver.revert_to_snapshot,
+                          self.ctxt, volume, snapshot)
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_revert_to_snapshot_tar_vol_is_in_fc(self, mock_get_flashcopy,
+                                                 mock_sleep):
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        vol_type = testutils.create_volume_type(self.ctxt, name='VOL_TYPE')
+        location = six.text_type({'vol_hex_id': 'fake_volume_id_2'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        snapshot = self._create_snapshot(volume_id=volume.id)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.revert_to_snapshot,
+                          self.ctxt, volume, snapshot)
+
+    @mock.patch.object(eventlet, 'sleep')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_revert_to_snapshot_with_diff_size(self, mock_get_flashcopy,
+                                               mock_sleep):
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        vol_type = testutils.create_volume_type(self.ctxt, name='VOL_TYPE')
+        location = six.text_type({'vol_hex_id': 'fake_volume_id_2'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        snapshot = self._create_snapshot(volume_id=volume.id)
+
+        volume1 = self._create_volume(volume_type_id=vol_type.id,
+                                      provider_location=location,
+                                      size=2)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+
+        self.assertRaises(exception.InvalidInput,
+                          self.driver.revert_to_snapshot,
+                          self.ctxt, volume1, snapshot)

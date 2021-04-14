@@ -129,12 +129,13 @@ class PowerMaxFCDriver(san.SanDriver, driver.FibreChannelDriver):
               - Fix to enable legacy volumes to live migrate (#1867163)
               - Use of snap id instead of generation (bp powermax-snapset-ids)
               - Support for Failover Abilities (bp/powermax-failover-abilities)
+        4.4.0 - Early check for status of port
     """
 
-    VERSION = "4.3.0"
+    VERSION = "4.4.0"
 
     # ThirdPartySystems wiki
-    CI_WIKI_NAME = "EMC_VMAX_CI"
+    CI_WIKI_NAME = "DellEMC_PowerMAX_CI"
 
     def __init__(self, *args, **kwargs):
 

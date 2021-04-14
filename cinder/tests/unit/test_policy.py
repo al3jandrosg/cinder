@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 import os.path
+from unittest import mock
 
 from oslo_config import cfg
 from oslo_config import fixture as config_fixture
@@ -131,3 +132,50 @@ class PolicyTestCase(test.TestCase):
                                                roles=['AdMiN'])
         policy.authorize(admin_context, lowercase_action, self.target)
         policy.authorize(admin_context, uppercase_action, self.target)
+
+    def test_enforce_properly_handles_invalid_scope_exception(self):
+        self.fixture.config(enforce_scope=True, group='oslo_policy')
+        project_context = context.RequestContext(project_id='fake-project-id',
+                                                 roles=['bar'])
+        policy.reset()
+        policy.init()
+        rule = oslo_policy.RuleDefault('foo', 'role:bar',
+                                       scope_types=['system'])
+        policy._ENFORCER.register_defaults([rule])
+
+        self.assertRaises(exception.PolicyNotAuthorized, policy.enforce,
+                          project_context, 'foo', {})
+
+    def test_enforce_does_not_raise_forbidden(self):
+        self.fixture.config(enforce_scope=False, group='oslo_policy')
+        project_context = context.RequestContext(project_id='fake-project-id',
+                                                 roles=['bar'])
+        policy.reset()
+        policy.init()
+        rule = oslo_policy.RuleDefault('foo', 'role:bar',
+                                       scope_types=['system'])
+        policy._ENFORCER.register_defaults([rule])
+
+        self.assertTrue(policy.enforce(project_context, 'foo', {}))
+
+    def test_enforce_passes_context_objects_to_enforcement(self):
+        fake_context = context.RequestContext(roles=['foo'])
+        action = 'foo'
+        target = {}
+        with mock.patch.object(policy._ENFORCER, 'enforce') as fake_enforce:
+            policy.enforce(fake_context, action, target)
+            fake_enforce.assert_called_once_with(
+                action, target, fake_context, do_raise=True,
+                exc=exception.PolicyNotAuthorized, action=action)
+
+    def test_authorize_passes_context_objects_to_enforcement(self):
+        fake_context = context.RequestContext(project_id='fake-project-id',
+                                              user_id='fake-user-id',
+                                              roles=['foo'])
+        action = 'foo'
+        target = {'project_id': 'fake-project-id', 'user_id': 'fake-user-id'}
+        with mock.patch.object(policy._ENFORCER, 'authorize') as fake_authz:
+            fake_context.authorize('foo')
+            fake_authz.assert_called_once_with(
+                action, target, fake_context, do_raise=True,
+                exc=exception.PolicyNotAuthorized, action=action)

@@ -616,6 +616,7 @@ class Quota(BASE, CinderBase):
 
     resource = Column(String(255))
     hard_limit = Column(Integer, nullable=True)
+    # TODO: (X release): Remove allocated, belonged to nested quotas
     allocated = Column(Integer, default=0)
 
 
@@ -640,6 +641,13 @@ class QuotaUsage(BASE, CinderBase):
     """Represents the current usage for a given resource."""
 
     __tablename__ = 'quota_usages'
+    # NOTE: project_id and resource are not enough as unique constraint since
+    # we do soft deletes and there could be duplicated entries, so we add the
+    # race_preventer field.
+    __table_args__ = (
+        UniqueConstraint('project_id', 'resource', 'race_preventer'),
+        CinderBase.__table_args__)
+
     id = Column(Integer, primary_key=True)
 
     project_id = Column(String(255), index=True)
@@ -653,6 +661,15 @@ class QuotaUsage(BASE, CinderBase):
         return self.in_use + self.reserved
 
     until_refresh = Column(Integer, nullable=True)
+
+    # To prevent races during creation on quota_reserve method
+    race_preventer = Column(Boolean, nullable=True, default=True)
+
+    @staticmethod
+    def delete_values():
+        res = CinderBase.delete_values()
+        res['race_preventer'] = None
+        return res
 
 
 class Reservation(BASE, CinderBase):
@@ -670,6 +687,7 @@ class Reservation(BASE, CinderBase):
 
     usage_id = Column(Integer, ForeignKey('quota_usages.id'), nullable=True,
                       index=True)
+    # TODO: (X release): Remove allocated_id, belonged to nested quotas
     allocated_id = Column(Integer, ForeignKey('quotas.id'), nullable=True,
                           index=True)
 
@@ -684,6 +702,7 @@ class Reservation(BASE, CinderBase):
         foreign_keys=usage_id,
         primaryjoin='and_(Reservation.usage_id == QuotaUsage.id,'
                     'QuotaUsage.deleted == False)')
+    # TODO: (X release): Remove allocated_id, belonged to nested quotas
     quota = relationship(
         "Quota",
         foreign_keys=allocated_id,

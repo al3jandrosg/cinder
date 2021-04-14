@@ -23,6 +23,7 @@ import shutil
 import sys
 import textwrap
 import time
+import typing as ty
 import urllib
 
 import glanceclient.exc
@@ -32,6 +33,7 @@ from oslo_log import log as logging
 from oslo_serialization import jsonutils
 from oslo_utils import timeutils
 
+from cinder import context
 from cinder import exception
 from cinder.i18n import _
 from cinder import service_auth
@@ -118,6 +120,8 @@ def _create_glance_client(context, netloc, use_ssl):
             config_options = {'insecure': CONF.glance_api_insecure,
                               'cacert': CONF.glance_ca_certificates_file,
                               'timeout': CONF.glance_request_timeout,
+                              'cert': CONF.glance_certfile,
+                              'key': CONF.glance_keyfile,
                               'split_loggers': CONF.split_loggers
                               }
             _SESSION = ks_session.Session().load_from_options(**config_options)
@@ -651,7 +655,8 @@ def _translate_plain_exception(exc_value):
     return exc_value
 
 
-def get_remote_image_service(context, image_href):
+def get_remote_image_service(context: context.RequestContext,
+                             image_href) -> ty.Tuple[GlanceImageService, str]:
     """Create an image_service and parse the id from the given image_href.
 
     The image_href param can be an href of the form

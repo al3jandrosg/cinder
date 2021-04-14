@@ -353,10 +353,6 @@ class API(base.Base):
                 if flow_engine.storage.fetch('refresh_az'):
                     self.list_availability_zones(enable_cache=True,
                                                  refresh_cache=True)
-                # Refresh the object here, otherwise things ain't right
-                vref = objects.Volume.get_by_id(
-                    context, vref['id'])
-                vref.save()
                 LOG.info("Create volume request issued successfully.",
                          resource=vref)
                 return vref
@@ -1195,15 +1191,17 @@ class API(base.Base):
         context.authorize(vol_meta_policy.UPDATE_ADMIN_METADATA_POLICY,
                           target_obj=volume)
         utils.check_metadata_properties(metadata)
-        db_meta = self.db.volume_admin_metadata_update(context, volume.id,
-                                                       metadata, delete, add,
-                                                       update)
+        # Policy could allow non admin users to update admin metadata, but
+        # underlying DB methods require admin privileges, so we elevate the
+        # context.
+        with volume.obj_as_admin():
+            volume.admin_metadata_update(metadata, delete, add, update)
 
         # TODO(jdg): Implement an RPC call for drivers that may use this info
 
         LOG.info("Update volume admin metadata completed successfully.",
                  resource=volume)
-        return db_meta
+        return volume.admin_metadata
 
     def get_snapshot_metadata(self, context, snapshot):
         """Get all metadata associated with a snapshot."""
@@ -1690,18 +1688,10 @@ class API(base.Base):
 
         # Get old reservations
         try:
-            reserve_opts = {'volumes': -1, 'gigabytes': -volume.size}
-            QUOTAS.add_volume_type_opts(context,
-                                        reserve_opts,
-                                        volume.volume_type_id)
-            # NOTE(wanghao): We don't need to reserve volumes and gigabytes
-            # quota for retyping operation since they didn't changed, just
-            # reserve volume_type and type gigabytes is fine.
-            reserve_opts.pop('volumes')
-            reserve_opts.pop('gigabytes')
-            old_reservations = QUOTAS.reserve(context,
-                                              project_id=volume.project_id,
-                                              **reserve_opts)
+            old_reservations = quota_utils.get_volume_type_reservation(
+                context, volume, volume.volume_type_id,
+                reserve_vol_type_only=True, negative=True)
+
         except Exception:
             volume.status = volume.previous_status
             volume.save()
