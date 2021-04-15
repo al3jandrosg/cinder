@@ -1,2 +1,3 @@
 patch-botocore-exceptions.patch
 skip-moto-tests.patch
+skip-victoria-failures.patch

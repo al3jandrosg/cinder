@@ -1,3 +1,10 @@
+cinder (2:18.0.0-0ubuntu3) hirsute; urgency=medium
+
+  * d/p/skip-victoria-failures.patch: Restored and rebased. This is still
+    necessary for Launchpad builds.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 15 Apr 2021 09:18:12 -0400
+
 cinder (2:18.0.0-0ubuntu2) hirsute; urgency=medium
 
   * d/p/skip-victoria-failures.patch: Dropped. Fixed upstream.
