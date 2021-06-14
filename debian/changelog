@@ -1,3 +1,10 @@
+cinder (2:18.0.0+git2021061414.d5f0e5187-0ubuntu1) impish; urgency=medium
+
+  * New upstream snapshot for OpenStack Xena.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Chris MacNaughton <chris.macnaughton@ubuntu.com>  Mon, 14 Jun 2021 15:32:32 +0000
+
 cinder (2:18.0.0-0ubuntu3) hirsute; urgency=medium
 
   * d/p/skip-victoria-failures.patch: Restored and rebased. This is still

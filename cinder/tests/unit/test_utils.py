@@ -24,6 +24,7 @@ import webob.exc
 
 import cinder
 from cinder.api import api_utils
+from cinder import context
 from cinder import exception
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import test
@@ -297,12 +298,12 @@ class TemporaryChownTestCase(test.TestCase):
         mock_stat.return_value.st_uid = 5678
         test_filename = 'a_file'
         with utils.temporary_chown(test_filename):
-            mock_exec.assert_called_once_with('chown', 1234, test_filename,
+            mock_exec.assert_called_once_with('chown', '1234', test_filename,
                                               run_as_root=True)
         mock_getuid.assert_called_once_with()
         mock_stat.assert_called_once_with(test_filename)
-        calls = [mock.call('chown', 1234, test_filename, run_as_root=True),
-                 mock.call('chown', 5678, test_filename, run_as_root=True)]
+        calls = [mock.call('chown', '1234', test_filename, run_as_root=True),
+                 mock.call('chown', '5678', test_filename, run_as_root=True)]
         mock_exec.assert_has_calls(calls)
 
     @mock.patch('os.stat')
@@ -312,12 +313,12 @@ class TemporaryChownTestCase(test.TestCase):
         mock_stat.return_value.st_uid = 5678
         test_filename = 'a_file'
         with utils.temporary_chown(test_filename, owner_uid=9101):
-            mock_exec.assert_called_once_with('chown', 9101, test_filename,
+            mock_exec.assert_called_once_with('chown', '9101', test_filename,
                                               run_as_root=True)
         self.assertFalse(mock_getuid.called)
         mock_stat.assert_called_once_with(test_filename)
-        calls = [mock.call('chown', 9101, test_filename, run_as_root=True),
-                 mock.call('chown', 5678, test_filename, run_as_root=True)]
+        calls = [mock.call('chown', '9101', test_filename, run_as_root=True),
+                 mock.call('chown', '5678', test_filename, run_as_root=True)]
         mock_exec.assert_has_calls(calls)
 
     @mock.patch('os.stat')
@@ -1415,3 +1416,40 @@ class LimitOperationsTestCase(test.TestCase):
             mock_exec.assert_called_once_with(mocked_semaphore.__enter__)
             mocked_semaphore.__exit__.assert_not_called()
         mocked_semaphore.__exit__.assert_called_once_with(None, None, None)
+
+
+class TestKeystoneProjectGet(test.TestCase):
+    class FakeProject(object):
+        def __init__(self, id='foo', name=None):
+            self.id = id
+            self.name = name
+            self.description = 'fake project description'
+            self.domain_id = 'default'
+
+    @mock.patch('keystoneclient.client.Client')
+    def test_get_project_keystoneclient_v2(self, ksclient_class):
+        self.context = context.RequestContext('fake_user', 'fake_proj_id')
+        keystoneclient = ksclient_class.return_value
+        keystoneclient.version = 'v2.0'
+        returned_project = self.FakeProject(self.context.project_id, 'bar')
+        keystoneclient.projects.get.return_value = returned_project
+        expected_project = api_utils.GenericProjectInfo(
+            self.context.project_id, 'v2.0', domain_id='default', name='bar',
+            description='fake project description')
+        project = api_utils.get_project(
+            self.context, self.context.project_id)
+        self.assertEqual(expected_project.__dict__, project.__dict__)
+
+    @mock.patch('keystoneclient.client.Client')
+    def test_get_project_keystoneclient_v3(self, ksclient_class):
+        self.context = context.RequestContext('fake_user', 'fake_proj_id')
+        keystoneclient = ksclient_class.return_value
+        keystoneclient.version = 'v3'
+        returned_project = self.FakeProject(self.context.project_id, 'bar')
+        keystoneclient.projects.get.return_value = returned_project
+        expected_project = api_utils.GenericProjectInfo(
+            self.context.project_id, 'v3', domain_id='default', name='bar',
+            description='fake project description')
+        project = api_utils.get_project(
+            self.context, self.context.project_id)
+        self.assertEqual(expected_project.__dict__, project.__dict__)

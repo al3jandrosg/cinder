@@ -654,6 +654,9 @@ cinder/db/sqlalchemy/migrate_repo/versions/138_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/139_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/140_create_project_default_volume_type.py
 cinder/db/sqlalchemy/migrate_repo/versions/141_add_quota_usage_unique_constraint.py
+cinder/db/sqlalchemy/migrate_repo/versions/142_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/143_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/144_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/__init__.py
 cinder/group/__init__.py
 cinder/group/api.py
@@ -1387,6 +1390,7 @@ cinder/tests/unit/volume/drivers/toyou/test_acs5000.py
 cinder/tests/unit/volume/drivers/veritas_access/__init__.py
 cinder/tests/unit/volume/drivers/veritas_access/test_veritas_iscsi.py
 cinder/tests/unit/volume/drivers/vmware/__init__.py
+cinder/tests/unit/volume/drivers/vmware/fake.py
 cinder/tests/unit/volume/drivers/vmware/test_fcd.py
 cinder/tests/unit/volume/drivers/vmware/test_vmware_datastore.py
 cinder/tests/unit/volume/drivers/vmware/test_vmware_vmdk.py
@@ -2206,6 +2210,7 @@ releasenotes/notes/bug-1894381-fix-cinder-manage-cluster-remove-raising-nosuchop
 releasenotes/notes/bug-1895510-REST-API-issue-to-get-bundle-198a3b89255759bb.yaml
 releasenotes/notes/bug-1896087-rollback-volume-status-bd04951f929bb88d.yaml
 releasenotes/notes/bug-1896214-Fix-in-change_vdisk_iogrp-during-retype-ef83ccf27d8829f5.yaml
+releasenotes/notes/bug-1897598-powerflex-volume-type-conversion.yaml
 releasenotes/notes/bug-1898746-ibm-svf-fix-host-failover-switch-relationship-9d3c58822a8c918c.yaml
 releasenotes/notes/bug-1898918-b24a93d7d5aff238.yaml
 releasenotes/notes/bug-1900979-powerstore-chap-support.yaml
@@ -2222,6 +2227,7 @@ releasenotes/notes/bug-1908315-020fea3e244d49bb.yaml
 releasenotes/notes/bug-1912451-ibm-svf-update-replication-properties-68c4f9ea56df212d.yaml
 releasenotes/notes/bug-1912564-strowize-hyperswap-volume-is-not-deleting-a94291248f8f59cd.yaml
 releasenotes/notes/bug-1913449-4796b366ae7e871b.yaml
+releasenotes/notes/bug-1918229-0aa9fd75c5e843d5.yaml
 releasenotes/notes/bug-1920237-backup-remove-export-race-941e2ab1f056e54c.yaml
 releasenotes/notes/bug-1920729-powerstore-iscsi-targets-filtering-9623ac03da5c6721.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
@@ -2239,7 +2245,6 @@ releasenotes/notes/castellan-backend-0c49591a54821c45.yaml
 releasenotes/notes/ceph-iscsi-driver-b515bd7fb73ce13b.yaml
 releasenotes/notes/cg-scheduler-change-180a36b77e8cc26b.yaml
 releasenotes/notes/cg_api_volume_type-7db1856776e707c7.yaml
-releasenotes/notes/cgroups-v1-status-note-b1eff0e1907aa0f2.yaml
 releasenotes/notes/change-default-rbd_exclusive_cinder_pool-e59c528c7f728780.yaml
 releasenotes/notes/change-encryption-key-on-clone-3be7cdb0e27386e0.yaml
 releasenotes/notes/check-displayname-displaydescription-123sd5gef91acb12.yaml
@@ -2511,7 +2516,6 @@ releasenotes/notes/move-scaleio-driver-to-dell-emc-dir-c195374ca6b7e98d.yaml
 releasenotes/notes/move-xtremio-driver-to-dell-emc-dir-f7e07a502cafd78f.yaml
 releasenotes/notes/msa-multiattach-5407eb60093de8f1.yaml
 releasenotes/notes/msa2060-99150398a9c416f6.yaml
-releasenotes/notes/mtls-fix-for-glance-api-calls-469b992adc5f49ff.yaml
 releasenotes/notes/multiple_clone-82bd7f80ae439080.yaml
 releasenotes/notes/mv-volume-type-name-and-id-5f4fd8480874fe9b.yaml
 releasenotes/notes/nec-allow-more-than-4iSCSI-portals-8342defe64491f81.yaml
@@ -2581,6 +2585,7 @@ releasenotes/notes/powermax-auto-migration-5cc57773c23fef02.yaml
 releasenotes/notes/powermax-bug-1853589-f6c7164177da0496.yaml
 releasenotes/notes/powermax-bug-1875478-8c9072ad9a87b83d.yaml
 releasenotes/notes/powermax-bug-1894086-iterator-expiration-674a28d8b9e13b34.yaml
+releasenotes/notes/powermax-delete-replication-group-76656e96262201d5.yaml
 releasenotes/notes/powermax-disable-inuse-metro-89e9f398ec9e2672.yaml
 releasenotes/notes/powermax-expand-replicated-volume-124c62ea78b1c347.yaml
 releasenotes/notes/powermax-failover-abilities-1fa0a23128f1c00b.yaml
@@ -2614,6 +2619,7 @@ releasenotes/notes/pure-fc-wwpn-case-c1d97f3fa7663acf.yaml
 releasenotes/notes/pure-generic-volume-groups-2b0941103f7c01cb.yaml
 releasenotes/notes/pure-host-personality-3512f7ccd961d4ad.yaml
 releasenotes/notes/pure-iscsi-cidr-cbc1afb3850a9217.yaml
+releasenotes/notes/pure-iscsi-cidrs-7195eda9f7214fce.yaml
 releasenotes/notes/pure-list-mangeable-fed4a1b23212f545.yaml
 releasenotes/notes/pure-storage-add-qos-37958a90beff12d6.yaml
 releasenotes/notes/pure-storage-multiattach-support-994da363e181d627.yaml
@@ -2664,6 +2670,7 @@ releasenotes/notes/remove-backup-service-to-driver-mapping-4d2ed6f868a64175.yaml
 releasenotes/notes/remove-block-device-driver-14f76dca2ee9bd38.yaml
 releasenotes/notes/remove-cinder-manage-logs-cmds-40fb8f475b37fb2f.yaml
 releasenotes/notes/remove-cinder-manage-shell-6d6f42e5a4ee8c5c.yaml
+releasenotes/notes/remove-configurable-migration-backend-aaee5a2f808c9b36.yaml
 releasenotes/notes/remove-datacore-300c667e9f504590.yaml
 releasenotes/notes/remove-deprecated-driver-mappings-b927d8ef9fc3b713.yaml
 releasenotes/notes/remove-deprecated-keymgr-d11a25c620862ed6.yaml
@@ -2758,6 +2765,7 @@ releasenotes/notes/shared-backend-config-d841b806354ad5be.yaml
 releasenotes/notes/sheepdog-driver-removal-b63d12460e886c33.yaml
 releasenotes/notes/sheepdog-mark-unsupported-648b2458d4a198de.yaml
 releasenotes/notes/show-provider-id-for-admin-ff4fd5a2518a4bfa.yaml
+releasenotes/notes/slow-get-volume-stats-91b84c6e661dc605.yaml
 releasenotes/notes/slug-qnap-driver-d4465ea6009c66df.yaml
 releasenotes/notes/smbfs-drop-alloc-data-file-8b94da952a3b1548.yaml
 releasenotes/notes/smbfs-fixed-image-9b642b63fcb79c18.yaml
@@ -2943,8 +2951,6 @@ releasenotes/notes/vxflexos-support-compression-9139e556677ac093.yaml
 releasenotes/notes/vxflexos_drop_deprecated_opt-3231a222e458fa92.yaml
 releasenotes/notes/vzstorage-log-path-7539342e562a2e4a.yaml
 releasenotes/notes/vzstorage-volume-format-cde85d3ad02f6bb4.yaml
-releasenotes/notes/wallaby-encryption-known-issues-4078b6b066e51553.yaml
-releasenotes/notes/wallaby-prelude-661b619978e1b339.yaml
 releasenotes/notes/win-iscsi-config-portals-51895294228d7883.yaml
 releasenotes/notes/windows-multiple-backends-9aa83631ad3d42f2.yaml
 releasenotes/notes/windows-volume-backup-b328858a20f5a499.yaml
@@ -2976,6 +2982,7 @@ releasenotes/source/train.rst
 releasenotes/source/unreleased.rst
 releasenotes/source/ussuri.rst
 releasenotes/source/victoria.rst
+releasenotes/source/wallaby.rst
 releasenotes/source/_static/.placeholder
 releasenotes/source/_templates/.placeholder
 releasenotes/source/locale/en_GB/LC_MESSAGES/releasenotes.po

@@ -1,13 +1,44 @@
 CHANGES
 =======
 
-18.0.0
-------
-
-* Add known issue note about encrypted volumes
-* Add releasenote for glance mTLS fix
-* Add release note about cgroups v1
+* Update IRC info
+* Fix functional jobs
+* Tests: Don't assert notifier not called
+* Replace getargspec with getfullargspec
+* SQLA 1.4: Fix calculate\_resource\_count
+* SQLA 1.4: Fix conditional update Case
+* api-ref: Use key\_size 256 in API examples
+* remove the oslo\_utils.fnmatch
+* zuul: fixes for the A/A job (nodeset, variables)
+* Fix PowerFlex volume type conversion
+* mypy: annotate volume\_utils / utils / exc
+* zuul: add mypy experimental job
+* filter\_scheduler: Remove schedule() method
+* Remove references to 'sys.version\_info'
+* vmware: Use oslo.vmware's get\_moref\_value()
+* vmware tests: Support different moref backend representations
+* PowerMax Docs - Wallaby documentation
+* db: Remove 'cinder.database.migration\_backend' entrypoint
+* setup.cfg: Replace dashes with underscores
+* Remove unused \_get\_non\_shared\_target\_hosts from cmd/manage
+* api-ref: Fix "name" parameter
+* Update release note info
+* Add Python3 xena unit tests
+* pylint: Fix migration E1120 no-value-for-parameter
+* pylint: Fix E0213 no-self-argument in tests
+* pylint: Fix E1120 no-value-for-parameter for mocks
+* Fix sporadic cleanup unit test failure
+* Pure Storage - bump version numbers for Xena
+* Remove uuid check/generate in service
+* Open local image files with "rb" mode
+* Bug fix for free space calculation
+* Reserve migrations for DB backports
+* PowerMax Driver - Fix for deleting replication group
+* Update to pylint 2.7.4
 * Fix: show volume by name for non-admins
+* Modify/Move project validation methods to api\_utils
+* api-ref: add additional info for mv 3.64
+* Set Wallaby maximum mv in REST API version history
 * Quota: Fix multiple race conditions
 * Prevent quota and reservations to go into negative
 * Update cinder manage quota commands
@@ -15,27 +46,34 @@ CHANGES
 * Remove nested quota leftovers
 * Quota: Fix until\_refresh config changes
 * Remove unused quota python classes
-* LVM: Fix delete volume error due to lvs failure
 * Add quota utils to cinder-manage
-* Change snapshots type with volume retype
-* Cinder - Creating clone of encrypted volume fails
+* Update help text for backup compression option
 * Use os-brick 4.3.1
-* Add prelude for Wallaby release notes
+* LVM: Fix delete volume error due to lvs failure
+* Change snapshots type with volume retype
 * Fix automatic quota sync for temporary volumes
-* Fix PowerStore iSCSI targets filtering
-* Update TOX\_CONSTRAINTS\_FILE for stable/wallaby
-* Update .gitreview for stable/wallaby
+* Remove unnecessary DB read
+* Remove unused code path in attachment\_delete
+* Update master for stable/wallaby
 
 18.0.0.0rc1
 -----------
 
 * Use os-brick 4.3.0
+* Cinder - Creating clone of encrypted volume fails
+* PowerMax Driver - Temporary snapshot enhancements
+* api-ref: Fix "id" parameter
 * NetApp ONTAP: Fix FlexGroup replication
 * Imported Translations from Zanata
+* Make availability zone type exception easier to understand
+* Update contributor doc with additional meetings
 * Support mTLS when calling the glance API
 * Follow up NetApp ONTAP FlexGroup feature
+* Backup manager: Synchronously call remove\_export\_snapshot
 * Backup manager: Synchronously call remove\_export
+* Fix PowerStore iSCSI targets filtering
 * Bug fix for revert to snapshot feature
+* Remove six from quota.py
 * JovianDSS: add certs and snapshot restore
 * Update code layout and missing Zadara features
 * doc: Remove cryptsetup reference for compute setup
@@ -60,6 +98,7 @@ CHANGES
 * PowerMax Driver - Release notes for 761643 and 767172
 * Add Consistency Groups support in PowerStore driver
 * Add OpenStack volume replication v2.1 support in PowerStore driver
+* Fix invalid yaml in reno template
 * API validation: Add cinder\_host type to support ipv6 in manage
 * [SVF] Set volume IOPS based on volume size
 * Add QoS Suport for Pure Storage
@@ -78,6 +117,8 @@ CHANGES
 * [Storwize] Provide IOPS based storage offering
 * doc: add specs repo maintenance tasks
 * PowerMax Driver - Extend replicated volume
+* Add warning message about slow volume backend
+* [doc] remove outdated package python-keystone
 * Hitachi: Trace REST API input/output logs
 * PowerMax Driver - Fix pylint errors in test\_common and provision
 * PowerMax Driver - U4P Failover SerialNumber KeyError fix
@@ -85,6 +126,7 @@ CHANGES
 * Fix in api-ref
 * [Pure] Fix failing consistency group tempest tests
 * Resolve SAWarning SQLAlchemy warning
+* [PURE] support IPv6 / add parameter pure\_iscsi\_cidr\_list
 * Fix CI\_WIKI\_NAME entries
 * Use TOX\_CONSTRAINTS\_FILE
 * Drop policy check failures to DEBUG
@@ -107,6 +149,7 @@ CHANGES
 * HPE: Add Peer Persistence support for Primera backend
 * Use os-brick 4.2.0
 * Move trace methods from utils to volume\_utils
+* Tests: test\_backup - specify volume\_type\_id for snapshots
 * Imported Translations from Zanata
 * Bump pylint to 2.6.0
 * LVM: fix \_create\_vg
@@ -131,6 +174,7 @@ CHANGES
 * Tests: Add another mock psutil in quobyte tests
 * Add ceph iscsi volume driver
 * Add Cinder driver for TOYOU ACS5000
+* Tests: Solidfire - Use UUIDs in object UUID fields
 * Remove NestedQuotaDriver
 * Label temporary files created by image\_utils
 * Update SolidFire Storage assisted migration in support-matrix
@@ -559,6 +603,7 @@ CHANGES
 * Fix a spelling mistake
 * Do not rename rbd based volume after migration
 * PowerMax Driver - Allowing for default volume type in group
+* Excess availability\_zone judgment code
 * Vmware: Revert the volume stats revert
 * Update weekly meeting location
 * Imported Translations from Zanata

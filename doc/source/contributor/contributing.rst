@@ -71,14 +71,20 @@ Communication
 ~~~~~~~~~~~~~
 
 IRC
+    We use IRC *a lot*.  You will, too.  You can find infomation about what
+    IRC network OpenStack uses for communication (and tips for using IRC)
+    in the `Setup IRC
+    <https://docs.openstack.org/contributors/common/irc.html>`_
+    section of the main `OpenStack Contributor Guide`.
+
     People working on the Cinder project may be found in the
-    ``#openstack-cinder`` channel on Freenode during working hours
+    ``#openstack-cinder`` IRC channel during working hours
     in their timezone.  The channel is logged, so if you ask a question
     when no one is around, you can check the log to see if it's been
     answered: http://eavesdrop.openstack.org/irclogs/%23openstack-cinder/
 
 weekly meeting
-    Wednesdays at 14:00 UTC in ``#openstack-meeting-alt`` on Freenode.
+    Wednesdays at 14:00 UTC in the ``#openstack-meeting-alt`` IRC channel.
     Meetings are logged: http://eavesdrop.openstack.org/meetings/cinder/
 
     More information (including some pointers on meeting etiquette and an
@@ -92,6 +98,15 @@ weekly meeting
 
     The last meeting of each month is held simultaneously in videoconference
     and IRC.  Connection information is posted on the meeting agenda.
+
+    weekly bug squad meeting
+        This is a half-hour meeting on Wednesdays at 15:00 UTC (right after the
+        Cinder weekly meeting) in the ``#openstack-cinder`` IRC channel.  At
+        this meeting, led by the Cinder Bug Deputy, we discuss new bugs that
+        have been filed against Cinder project deliverables (and, if there's
+        time, discuss the relevance of old bugs that haven't seen any action
+        recently).  Info about the meeting is here:
+        http://eavesdrop.openstack.org/#Cinder_Bug_Squad_Meeting
 
 mailing list
     We use the openstack-discuss@lists.openstack.org mailing list for
@@ -108,6 +123,21 @@ virtual meet-ups
     address topics not easily covered by the above methods.  These are
     announced well in advance at the weekly meeting and on the mailing
     list.
+
+    Additionally, the Cinder project has been holding two virtual mid-cycle
+    meetings during each development cycle, roughly at weeks R-18 and R-9.
+    These are used to discuss follow-up issues from the PTG before the spec
+    freeze, and to assess the development status of features and priorities
+    roughly one month before the feature freeze.  The exact dates of these are
+    announced at the weekly meeting and on the mailing list.
+
+    cinder festival of XS reviews
+        This is a standing video meeting held the third Friday of each month
+        from 14:00-16:00 UTC in meetpad to review very small patches that
+        haven't yet been merged.  It's held in video so we can quickly discuss
+        issues and hand reviews back and forth.  It is not recorded.  Info
+        about the meeting is here:
+        http://eavesdrop.openstack.org/#Cinder_Festival_of_XS_Reviews
 
 physical meet-ups
     The Cinder project usually has a presence at the OpenDev/OpenStack
