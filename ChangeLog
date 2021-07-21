@@ -1,33 +1,66 @@
 CHANGES
 =======
 
+* [Pure Storage] Fix CG cloning crash when very long volume names
+* Add installation of mypy stubs packages
+* Drop lower-constraints jobs
+* mypy: image\_utils
+* LVM: Simplify version fetching
+* Tests: Simplify LVM fake\_execute
+* [Pure Storage] Fix minimum SDK version required
+* Add backup\_swift\_create\_storage\_policy config opt
+* LVM: Retry lvdisplay and lvcreate calls on segfault
+* Use mv.LIMITS\_ADMIN\_FILTER in the code
+* Retry "lvs" call on segfault for \_get\_thin\_pool\_free\_space
+* streamline \_report\_driver\_status method
+* Fix: Schema validation for attachment create API
+* LVM: Use --readonly for lvdisplay in lv\_has\_snapshot
+* Fix typo in Dell EMC Unity driver documentation
+* Update decode\_cipher doc text about encryption ciphers
+* Add libcgroup related packages in bindep.txt
+* Move require\_driver\_initialized / log\_unsupp to volume\_utils
+* NetApp ONTAP: Fix QoS lost after moving volume
+* [Pure Storage] Ensure multiattach volumes are not disconnected early
+* PowerMax Docs - Corrections to QoS section
 * Update IRC info
 * Fix functional jobs
+* Doc: Remove incorrect note about encryption flag
 * Tests: Don't assert notifier not called
+* PowerMax Driver - Fix for create group from source
 * Replace getargspec with getfullargspec
 * SQLA 1.4: Fix calculate\_resource\_count
 * SQLA 1.4: Fix conditional update Case
 * api-ref: Use key\_size 256 in API examples
+* Abort volume creation when encryption spec is invalid
 * remove the oslo\_utils.fnmatch
+* Tests: Fix oslo.i18n warning
 * zuul: fixes for the A/A job (nodeset, variables)
 * Fix PowerFlex volume type conversion
+* volume api: Remove unused get\_snapshot\_metadata\_value method
 * mypy: annotate volume\_utils / utils / exc
 * zuul: add mypy experimental job
+* Drop support for SQLite < 3.7
+* image\_utils: Remove unused \_validate\_file\_format method
 * filter\_scheduler: Remove schedule() method
 * Remove references to 'sys.version\_info'
 * vmware: Use oslo.vmware's get\_moref\_value()
 * vmware tests: Support different moref backend representations
 * PowerMax Docs - Wallaby documentation
+* db: Compact migrations to Train
 * db: Remove 'cinder.database.migration\_backend' entrypoint
 * setup.cfg: Replace dashes with underscores
+* Tests: Add coverage for coordinator start/stop
 * Remove unused \_get\_non\_shared\_target\_hosts from cmd/manage
+* Unit test RBD clone depth calculation
 * api-ref: Fix "name" parameter
 * Update release note info
 * Add Python3 xena unit tests
+* Driver assisted migration on retype when it's safe
 * pylint: Fix migration E1120 no-value-for-parameter
 * pylint: Fix E0213 no-self-argument in tests
 * pylint: Fix E1120 no-value-for-parameter for mocks
 * Fix sporadic cleanup unit test failure
+* Fix instance locality scheduler filter
 * Pure Storage - bump version numbers for Xena
 * Remove uuid check/generate in service
 * Open local image files with "rb" mode
@@ -38,6 +71,7 @@ CHANGES
 * Fix: show volume by name for non-admins
 * Modify/Move project validation methods to api\_utils
 * api-ref: add additional info for mv 3.64
+* Remove unused \_db\_error code from cmd/manage.py
 * Set Wallaby maximum mv in REST API version history
 * Quota: Fix multiple race conditions
 * Prevent quota and reservations to go into negative
@@ -98,6 +132,7 @@ CHANGES
 * PowerMax Driver - Release notes for 761643 and 767172
 * Add Consistency Groups support in PowerStore driver
 * Add OpenStack volume replication v2.1 support in PowerStore driver
+* Remove six from cinder.tests.unit.objects
 * Fix invalid yaml in reno template
 * API validation: Add cinder\_host type to support ipv6 in manage
 * [SVF] Set volume IOPS based on volume size
@@ -161,6 +196,7 @@ CHANGES
 * doc: add rbd-iscsi-client info
 * Fix RBD\_OPERATION\_FEATURE\_CLONE\_PARENT in unittest
 * Require oslo.serialization 4.1.0
+* image\_utils: Simplify fetch\_verify\_image
 * Update ceph driver docs, mentioning Hyper-V support
 * PowerMax Driver - Check for missing port group
 * Add encryption\_key\_id to volume and backup details
@@ -182,6 +218,7 @@ CHANGES
 * Add driver for Dell EMC PowerVault ME Series
 * Imported Translations from Zanata
 * Introduces MV to add volume type ID in volumes details
+* HPMSA: Report SAN driver options
 * LVM: Support only LVM 2.02.107+
 * LVM: Use --readonly for lvs
 * NetApp SolidFire: Refactor DuplicateSfVolumeNames exception
@@ -189,6 +226,7 @@ CHANGES
 * Remove \_\_unicode\_\_() from CinderException
 * doc: update release cycle tasks
 * tox mypy: Call mypywrap.sh directly
+* Tests: Improve cascade delete coverage
 * pylint: run coding-checks.sh with bash
 * Hitachi: Wait until the volume can be deleted
 * Basic volume QoS doc

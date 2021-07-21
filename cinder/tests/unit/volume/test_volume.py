@@ -966,7 +966,8 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         with mock.patch.object(
                 self.volume_api.key_manager,
                 'delete',
-                side_effect=castellan_exception.ManagedObjectNotFoundError):
+                side_effect=castellan_exception.ManagedObjectNotFoundError(
+                    uuid=fake.ENCRYPTION_KEY_ID)):
             self.volume_api.delete(self.context, volume)
 
         volume = objects.Volume.get_by_id(self.context, volume_id)
@@ -1001,6 +1002,20 @@ class VolumeTestCase(base.BaseVolumeTestCase):
                           self.context,
                           volume,
                           unmanage_only=True)
+        self.volume.delete_volume(self.context, volume)
+
+    def test_unmanage_cascade_delete_fails(self):
+        volume = tests_utils.create_volume(
+            self.context,
+            **self.volume_params)
+        self.volume.create_volume(self.context, volume)
+        manager = vol_manager.VolumeManager()
+        self.assertRaises(exception.Invalid,
+                          manager.delete_volume,
+                          self.context,
+                          volume,
+                          unmanage_only=True,
+                          cascade=True)
         self.volume.delete_volume(self.context, volume)
 
     def test_get_volume_different_tenant(self):

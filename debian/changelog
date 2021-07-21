@@ -1,3 +1,10 @@
+cinder (2:18.0.0+git2021072116.81f2aaeea-0ubuntu1) impish; urgency=medium
+
+  * New upstream snapshot for OpenStack Xena.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 21 Jul 2021 16:36:01 -0400
+
 cinder (2:18.0.0+git2021061414.d5f0e5187-0ubuntu1) impish; urgency=medium
 
   * New upstream snapshot for OpenStack Xena.

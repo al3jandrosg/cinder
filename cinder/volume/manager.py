@@ -74,7 +74,6 @@ from cinder.objects import cgsnapshot
 from cinder.objects import consistencygroup
 from cinder.objects import fields
 from cinder import quota
-from cinder import utils
 from cinder import volume as cinder_volume
 from cinder.volume import configuration as config
 from cinder.volume.flows.manager import create_volume
@@ -443,7 +442,7 @@ class VolumeManager(manager.CleanableManager,
                   **kwargs) -> None:
         """Perform any required initialization."""
         if not self.driver.supported:
-            utils.log_unsupported_driver_warning(self.driver)
+            volume_utils.log_unsupported_driver_warning(self.driver)
 
             if not self.configuration.enable_unsupported_driver:
                 LOG.error("Unsupported drivers are disabled."
@@ -582,6 +581,7 @@ class VolumeManager(manager.CleanableManager,
 
         # Keep the image tmp file clean when init host.
         backend_name = volume_utils.extract_host(self.service_topic_queue)
+        assert backend_name is not None
         image_utils.cleanup_temporary_file(backend_name)
 
         # Migrate any ConfKeyManager keys based on fixed_key to the currently
@@ -607,8 +607,8 @@ class VolumeManager(manager.CleanableManager,
 
         try:
             # Make sure the driver is initialized first
-            utils.log_unsupported_driver_warning(self.driver)
-            utils.require_driver_initialized(self.driver)
+            volume_utils.log_unsupported_driver_warning(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             LOG.error("Cannot complete RPC initialization because "
                       "driver isn't initialized properly.",
@@ -701,7 +701,7 @@ class VolumeManager(manager.CleanableManager,
                       allow_reschedule=True) -> ovo_fields.UUIDField:
         """Creates the volume."""
         # Log about unsupported drivers
-        utils.log_unsupported_driver_warning(self.driver)
+        volume_utils.log_unsupported_driver_warning(self.driver)
 
         # Make sure the host in the DB matches our own when clustered
         self._set_resource_host(volume)
@@ -894,10 +894,7 @@ class VolumeManager(manager.CleanableManager,
         if not is_temp_vol:
             self._notify_about_volume_usage(context, volume, notification)
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             self.driver.remove_export(context, volume)
             if unmanage_only:
@@ -1159,10 +1156,7 @@ class VolumeManager(manager.CleanableManager,
             context, snapshot, "create.start")
 
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the snapshot status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             # Pass context so that drivers that want to use it, can,
             # but it is not a requirement for all drivers.
@@ -1241,10 +1235,7 @@ class VolumeManager(manager.CleanableManager,
             context, snapshot, "delete.start")
 
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the snapshot status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             # Pass context so that drivers that want to use it, can,
             # but it is not a requirement for all drivers.
@@ -1373,10 +1364,7 @@ class VolumeManager(manager.CleanableManager,
             if volume_metadata.get('readonly') == 'True' and mode != 'ro':
                 raise exception.InvalidVolumeAttachMode(mode=mode,
                                                         volume_id=volume.id)
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             LOG.info('Attaching volume %(volume_id)s to instance '
                      '%(instance)s at mountpoint %(mount)s on host '
@@ -1460,10 +1448,7 @@ class VolumeManager(manager.CleanableManager,
 
         self._notify_about_volume_usage(context, volume, "detach.start")
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             LOG.info('Detaching volume %(volume_id)s from instance '
                      '%(instance)s.',
@@ -1486,7 +1471,7 @@ class VolumeManager(manager.CleanableManager,
         # We're going to remove the export here
         # (delete the iscsi target)
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
             self.driver.remove_export(context.elevated(), volume)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
@@ -1692,10 +1677,7 @@ class VolumeManager(manager.CleanableManager,
         try:
             volume = objects.Volume.get_by_id(context, volume_id)
 
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             image_service, image_id = \
                 glance.get_remote_image_service(context, image_meta['id'])
@@ -1868,12 +1850,8 @@ class VolumeManager(manager.CleanableManager,
             various places, so it should not contain any non-json data types.
 
         """
-        # NOTE(flaper87): Verify the driver is enabled
-        # before going forward. The exception will be caught
-        # and the volume status updated.
-
         # TODO(jdg): Add deprecation warning
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         try:
             self.driver.validate_connector(connector)
         except exception.InvalidConnectorException as err:
@@ -1924,7 +1902,7 @@ class VolumeManager(manager.CleanableManager,
                                        ctxt,
                                        snapshot_id: ovo_fields.UUIDField,
                                        connector: dict) -> dict:
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         snapshot = objects.Snapshot.get_by_id(ctxt, snapshot_id)
         try:
             self.driver.validate_connector(connector)
@@ -1990,10 +1968,7 @@ class VolumeManager(manager.CleanableManager,
 
         The format of connector is the same as for initialize_connection.
         """
-        # NOTE(flaper87): Verify the driver is enabled
-        # before going forward. The exception will be caught
-        # and the volume status updated.
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
 
         volume_ref = self.db.volume_get(context, volume_id)
         try:
@@ -2012,7 +1987,7 @@ class VolumeManager(manager.CleanableManager,
                                       snapshot_id: ovo_fields.UUIDField,
                                       connector: dict,
                                       force=False) -> None:
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
 
         snapshot = objects.Snapshot.get_by_id(ctxt, snapshot_id)
         try:
@@ -2028,7 +2003,7 @@ class VolumeManager(manager.CleanableManager,
 
     def remove_export(self, context, volume_id: ovo_fields.UUIDField) -> None:
         """Removes an export for a volume."""
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         volume_ref = self.db.volume_get(context, volume_id)
         try:
             self.driver.remove_export(context, volume_ref)
@@ -2044,7 +2019,7 @@ class VolumeManager(manager.CleanableManager,
                                ctxt,
                                snapshot_id: ovo_fields.UUIDField) -> None:
         """Removes an export for a snapshot."""
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         snapshot = objects.Snapshot.get_by_id(ctxt, snapshot_id)
         try:
             self.driver.remove_export_snapshot(ctxt, snapshot)
@@ -2058,10 +2033,7 @@ class VolumeManager(manager.CleanableManager,
 
     def accept_transfer(self, context, volume_id, new_user, new_project,
                         no_snapshots=False) -> dict:
-        # NOTE(flaper87): Verify the driver is enabled
-        # before going forward. The exception will be caught
-        # and the volume status updated.
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
 
         # NOTE(jdg): need elevated context as we haven't "given" the vol
         # yet
@@ -2410,10 +2382,7 @@ class VolumeManager(manager.CleanableManager,
                                   new_volume,
                                   error=False) -> ovo_fields.UUIDField:
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the migration status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 volume.migration_status = 'error'
@@ -2553,18 +2522,38 @@ class VolumeManager(manager.CleanableManager,
                  resource=volume)
         return volume.id
 
+    def _can_use_driver_migration(self, diff):
+        """Return when we can use driver assisted migration on a retype."""
+        # We can if there's no retype or there are no difference in the types
+        if not diff:
+            return True
+
+        extra_specs = diff.get('extra_specs')
+        qos = diff.get('qos_specs')
+        enc = diff.get('encryption')
+
+        # We cant' if QoS or Encryption changes and we can if there are no
+        # extra specs changes.
+        if qos or enc or not extra_specs:
+            return not (qos or enc)
+
+        # We can use driver assisted migration if we only change the backend
+        # name, and the AZ.
+        extra_specs = extra_specs.copy()
+        extra_specs.pop('volume_backend_name', None)
+        extra_specs.pop('RESKEY:availability_zones', None)
+        return not extra_specs
+
     def migrate_volume(self,
                        ctxt: context.RequestContext,
                        volume,
                        host,
                        force_host_copy: bool = False,
-                       new_type_id=None) -> None:
+                       new_type_id=None,
+                       diff=None) -> None:
         """Migrate the volume to the specified host (called on source host)."""
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the migration status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 volume.migration_status = 'error'
@@ -2579,7 +2568,7 @@ class VolumeManager(manager.CleanableManager,
 
         volume.migration_status = 'migrating'
         volume.save()
-        if not force_host_copy and new_type_id is None:
+        if not force_host_copy and self._can_use_driver_migration(diff):
             try:
                 LOG.debug("Issue driver.migrate_volume.", resource=volume)
                 moved, model_update = self.driver.migrate_volume(ctxt,
@@ -2598,6 +2587,8 @@ class VolumeManager(manager.CleanableManager,
                         updates.update(status_update)
                     if model_update:
                         updates.update(model_update)
+                    if new_type_id:
+                        updates['volume_type_id'] = new_type_id
                     volume.update(updates)
                     volume.save()
             except Exception:
@@ -2647,88 +2638,89 @@ class VolumeManager(manager.CleanableManager,
                         {'config_group': config_group},
                         resource={'type': 'driver',
                                   'id': self.driver.__class__.__name__})
-        else:
-            slowmsg = "The " + self.driver.__class__.__name__ + " volume " \
-                      "driver's get_volume_stats operation ran for " \
-                      "%(seconds).1f seconds.  This may indicate a " \
-                      "performance problem with the backend which can lead " \
-                      "to instability."
+            return
 
-            @timeutils.time_it(
-                LOG, log_level=logging.WARN, message=slowmsg,
-                min_duration=CONF.backend_stats_polling_interval / 2)
-            def get_stats():
-                return self.driver.get_volume_stats(refresh=True)
+        slowmsg = "The " + self.driver.__class__.__name__ + " volume " \
+                  "driver's get_volume_stats operation ran for " \
+                  "%(seconds).1f seconds.  This may indicate a " \
+                  "performance problem with the backend which can lead " \
+                  "to instability."
 
-            volume_stats = get_stats()
+        @timeutils.time_it(
+            LOG, log_level=logging.WARN, message=slowmsg,
+            min_duration=CONF.backend_stats_polling_interval / 2)
+        def get_stats():
+            return self.driver.get_volume_stats(refresh=True)
 
-            if self.extra_capabilities:
-                volume_stats.update(self.extra_capabilities)
-            if volume_stats:
+        volume_stats = get_stats()
 
-                # NOTE(xyang): If driver reports replication_status to be
-                # 'error' in volume_stats, get model updates from driver
-                # and update db
-                if volume_stats.get('replication_status') == (
-                        fields.ReplicationStatus.ERROR):
-                    filters = self._get_cluster_or_host_filters()
-                    groups = objects.GroupList.get_all_replicated(
-                        context, filters=filters)
-                    group_model_updates, volume_model_updates = (
-                        self.driver.get_replication_error_status(context,
-                                                                 groups))
-                    for grp_update in group_model_updates:
-                        try:
-                            grp_obj = objects.Group.get_by_id(
-                                context, grp_update['group_id'])
-                            grp_obj.update(grp_update)
-                            grp_obj.save()
-                        except exception.GroupNotFound:
-                            # Group may be deleted already. Log a warning
-                            # and continue.
-                            LOG.warning("Group %(grp)s not found while "
-                                        "updating driver status.",
-                                        {'grp': grp_update['group_id']},
-                                        resource={
-                                            'type': 'group',
-                                            'id': grp_update['group_id']})
-                    for vol_update in volume_model_updates:
-                        try:
-                            vol_obj = objects.Volume.get_by_id(
-                                context, vol_update['volume_id'])
-                            vol_obj.update(vol_update)
-                            vol_obj.save()
-                        except exception.VolumeNotFound:
-                            # Volume may be deleted already. Log a warning
-                            # and continue.
-                            LOG.warning("Volume %(vol)s not found while "
-                                        "updating driver status.",
-                                        {'vol': vol_update['volume_id']},
-                                        resource={
-                                            'type': 'volume',
-                                            'id': vol_update['volume_id']})
+        if self.extra_capabilities:
+            volume_stats.update(self.extra_capabilities)
+        if volume_stats:
 
-                # Append volume stats with 'allocated_capacity_gb'
-                self._append_volume_stats(volume_stats)
+            # NOTE(xyang): If driver reports replication_status to be
+            # 'error' in volume_stats, get model updates from driver
+            # and update db
+            if volume_stats.get('replication_status') == (
+                    fields.ReplicationStatus.ERROR):
+                filters = self._get_cluster_or_host_filters()
+                groups = objects.GroupList.get_all_replicated(
+                    context, filters=filters)
+                group_model_updates, volume_model_updates = (
+                    self.driver.get_replication_error_status(context,
+                                                             groups))
+                for grp_update in group_model_updates:
+                    try:
+                        grp_obj = objects.Group.get_by_id(
+                            context, grp_update['group_id'])
+                        grp_obj.update(grp_update)
+                        grp_obj.save()
+                    except exception.GroupNotFound:
+                        # Group may be deleted already. Log a warning
+                        # and continue.
+                        LOG.warning("Group %(grp)s not found while "
+                                    "updating driver status.",
+                                    {'grp': grp_update['group_id']},
+                                    resource={
+                                        'type': 'group',
+                                        'id': grp_update['group_id']})
+                for vol_update in volume_model_updates:
+                    try:
+                        vol_obj = objects.Volume.get_by_id(
+                            context, vol_update['volume_id'])
+                        vol_obj.update(vol_update)
+                        vol_obj.save()
+                    except exception.VolumeNotFound:
+                        # Volume may be deleted already. Log a warning
+                        # and continue.
+                        LOG.warning("Volume %(vol)s not found while "
+                                    "updating driver status.",
+                                    {'vol': vol_update['volume_id']},
+                                    resource={
+                                        'type': 'volume',
+                                        'id': vol_update['volume_id']})
 
-                # Append cacheable flag for iSCSI/FC/NVMe-oF and only when
-                # cacheable is not set in driver level
-                if volume_stats.get('storage_protocol') in [
-                        'iSCSI', 'FC', 'NVMe-oF']:
-                    if volume_stats.get('pools'):
-                        for pool in volume_stats.get('pools'):
-                            if pool.get('cacheable') is None:
-                                pool['cacheable'] = True
-                    else:
-                        if volume_stats.get('cacheable') is None:
-                            volume_stats['cacheable'] = True
+            # Append volume stats with 'allocated_capacity_gb'
+            self._append_volume_stats(volume_stats)
 
-                # Append filter and goodness function if needed
-                volume_stats = (
-                    self._append_filter_goodness_functions(volume_stats))
+            # Append cacheable flag for iSCSI/FC/NVMe-oF and only when
+            # cacheable is not set in driver level
+            if volume_stats.get('storage_protocol') in [
+                    'iSCSI', 'FC', 'NVMe-oF']:
+                if volume_stats.get('pools'):
+                    for pool in volume_stats.get('pools'):
+                        if pool.get('cacheable') is None:
+                            pool['cacheable'] = True
+                else:
+                    if volume_stats.get('cacheable') is None:
+                        volume_stats['cacheable'] = True
 
-                # queue it to be sent to the Schedulers.
-                self.update_service_capabilities(volume_stats)
+            # Append filter and goodness function if needed
+            volume_stats = (
+                self._append_filter_goodness_functions(volume_stats))
+
+            # queue it to be sent to the Schedulers.
+            self.update_service_capabilities(volume_stats)
 
     def _append_volume_stats(self, vol_stats) -> None:
         pools = vol_stats.get('pools', None)
@@ -2842,10 +2834,7 @@ class VolumeManager(manager.CleanableManager,
                       new_size: int,
                       reservations) -> None:
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 volume.status = 'error_extending'
@@ -2949,10 +2938,7 @@ class VolumeManager(manager.CleanableManager,
             project_id = context.project_id
 
         try:
-            # NOTE(flaper87): Verify the driver is enabled
-            # before going forward. The exception will be caught
-            # and the volume status updated.
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 # NOTE(flaper87): Other exceptions in this method don't
@@ -3047,7 +3033,7 @@ class VolumeManager(manager.CleanableManager,
 
             try:
                 self.migrate_volume(context, volume, host,
-                                    new_type_id=new_type_id)
+                                    new_type_id=new_type_id, diff=diff)
             except Exception:
                 with excutils.save_and_reraise_exception():
                     _retype_error(context, volume, old_reservations,
@@ -3184,7 +3170,7 @@ class VolumeManager(manager.CleanableManager,
     def get_manageable_volumes(self, ctxt, marker, limit, offset, sort_keys,
                                sort_dirs, want_objects=False):
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 LOG.exception("Listing manageable volumes failed, due "
@@ -3221,7 +3207,7 @@ class VolumeManager(manager.CleanableManager,
         self._notify_about_group_usage(context, group, "create.start")
 
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             LOG.info("Group %s: creating", group.name)
 
@@ -3350,7 +3336,7 @@ class VolumeManager(manager.CleanableManager,
             self._notify_about_group_usage(
                 context, group, "create.start")
 
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             try:
                 model_update, volumes_model_update = (
@@ -3632,7 +3618,7 @@ class VolumeManager(manager.CleanableManager,
         volumes_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             try:
                 model_update, volumes_model_update = (
@@ -3879,7 +3865,7 @@ class VolumeManager(manager.CleanableManager,
             context, group, "update.start")
 
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             try:
                 model_update, add_volumes_update, remove_volumes_update = (
@@ -3978,7 +3964,7 @@ class VolumeManager(manager.CleanableManager,
         snapshots_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             LOG.debug("Group snapshot %(grp_snap_id)s: creating.",
                       {'grp_snap_id': group_snapshot.id})
@@ -4147,7 +4133,7 @@ class VolumeManager(manager.CleanableManager,
         snapshots_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             LOG.debug("group_snapshot %(grp_snap_id)s: deleting",
                       {'grp_snap_id': group_snapshot.id})
@@ -4587,7 +4573,7 @@ class VolumeManager(manager.CleanableManager,
     def get_manageable_snapshots(self, ctxt, marker, limit, offset,
                                  sort_keys, sort_dirs, want_objects=False):
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
         except exception.DriverNotInitialized:
             with excutils.save_and_reraise_exception():
                 LOG.exception("Listing manageable snapshots failed, due "
@@ -4728,7 +4714,7 @@ class VolumeManager(manager.CleanableManager,
                                                   connector)
 
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
             self.driver.attach_volume(context,
                                       vref,
                                       attachment_ref.instance_uuid,
@@ -4768,7 +4754,7 @@ class VolumeManager(manager.CleanableManager,
         Exits early if the attachment does not have a connector and returns
         None to indicate shared connections are irrelevant.
         """
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         connector = attachment.connector
         if not connector and not force:
             # It's possible to attach a volume to a shelved offloaded server
@@ -4814,7 +4800,7 @@ class VolumeManager(manager.CleanableManager,
         param: attachment_id: Attachment id to remove
         param: vref: Volume object associated with the attachment
         """
-        utils.require_driver_initialized(self.driver)
+        volume_utils.require_driver_initialized(self.driver)
         attachment = objects.VolumeAttachment.get_by_id(context, attachment_id)
 
         self._notify_about_volume_usage(context, vref, "detach.start")
@@ -4872,7 +4858,7 @@ class VolumeManager(manager.CleanableManager,
         volumes_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             model_update, volumes_model_update = (
                 self.driver.enable_replication(ctxt, group, volumes))
@@ -4956,7 +4942,7 @@ class VolumeManager(manager.CleanableManager,
         volumes_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             model_update, volumes_model_update = (
                 self.driver.disable_replication(ctxt, group, volumes))
@@ -5047,7 +5033,7 @@ class VolumeManager(manager.CleanableManager,
         volumes_model_update = None
         model_update = None
         try:
-            utils.require_driver_initialized(self.driver)
+            volume_utils.require_driver_initialized(self.driver)
 
             model_update, volumes_model_update = (
                 self.driver.failover_replication(

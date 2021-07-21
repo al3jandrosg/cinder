@@ -10,7 +10,6 @@ LICENSE
 README.rst
 bindep.txt
 driver-requirements.txt
-lower-constraints.txt
 mypy-files.txt
 reno.yaml
 requirements.txt
@@ -635,19 +634,7 @@ cinder/db/sqlalchemy/migrate_repo/README
 cinder/db/sqlalchemy/migrate_repo/__init__.py
 cinder/db/sqlalchemy/migrate_repo/manage.py
 cinder/db/sqlalchemy/migrate_repo/migrate.cfg
-cinder/db/sqlalchemy/migrate_repo/versions/123_cinder_init.py
-cinder/db/sqlalchemy/migrate_repo/versions/124_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/125_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/126_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/127_change_project_resource_attribute_for_quota_usages.py
-cinder/db/sqlalchemy/migrate_repo/versions/128_add_project_id_and_accepted_to_transfer.py
-cinder/db/sqlalchemy/migrate_repo/versions/129_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/130_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/131_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/132_create_default_volume_type.py
-cinder/db/sqlalchemy/migrate_repo/versions/133_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/134_placeholder.py
-cinder/db/sqlalchemy/migrate_repo/versions/135_placeholder.py
+cinder/db/sqlalchemy/migrate_repo/versions/135_cinder_init.py
 cinder/db/sqlalchemy/migrate_repo/versions/136_make_vol_type_col_non_nullable.py
 cinder/db/sqlalchemy/migrate_repo/versions/137_placeholder.py
 cinder/db/sqlalchemy/migrate_repo/versions/138_placeholder.py
@@ -2052,6 +2039,7 @@ releasenotes/notes/ZadaraStorage-13a5fff6f4fa1710.yaml
 releasenotes/notes/a7401ead26a7c83b-keystone-url.yaml
 releasenotes/notes/add-availability_zone-filter-for-snapshot-8e1494212276abde.yaml
 releasenotes/notes/add-backup-project-attribute-3f57051ef9159b08.yaml
+releasenotes/notes/add-backup-swift-container-storage-policy-8d4a268ed61b9fe2.yaml
 releasenotes/notes/add-cg-capability-to-groups-2eb3e71682a88600.yaml
 releasenotes/notes/add-cluster-name-to-volume-details-ce01dd828faafcde.yaml
 releasenotes/notes/add-coho-driver-b4472bff3f64aa41.yaml
@@ -2535,6 +2523,7 @@ releasenotes/notes/netapp-data-ontap-deprecate-7mode-drivers-a39bfcb3afefc9a5.ya
 releasenotes/notes/netapp-deprecate-eseries-drivers-bc4f552d277c07b9.yaml
 releasenotes/notes/netapp-eseries-consistency-groups-4f6b2af2d20c94e9.yaml
 releasenotes/notes/netapp-log-filter-f3256f55c3ac3faa.yaml
+releasenotes/notes/netapp-migrated-qos-c0c8aae50d010c75.yaml
 releasenotes/notes/netapp-nfs-consistency-group-support-83eccc2da91ee19b.yaml
 releasenotes/notes/netapp-non-discovery-19af4e10f7b190ea.yaml
 releasenotes/notes/netapp-ontap-fix-detach-multiattach-d99d33dff2fefb4c.yaml
@@ -2585,6 +2574,7 @@ releasenotes/notes/powermax-auto-migration-5cc57773c23fef02.yaml
 releasenotes/notes/powermax-bug-1853589-f6c7164177da0496.yaml
 releasenotes/notes/powermax-bug-1875478-8c9072ad9a87b83d.yaml
 releasenotes/notes/powermax-bug-1894086-iterator-expiration-674a28d8b9e13b34.yaml
+releasenotes/notes/powermax-create-grp-source-560139c0850e60ce.yaml
 releasenotes/notes/powermax-delete-replication-group-76656e96262201d5.yaml
 releasenotes/notes/powermax-disable-inuse-metro-89e9f398ec9e2672.yaml
 releasenotes/notes/powermax-expand-replicated-volume-124c62ea78b1c347.yaml
@@ -2627,6 +2617,9 @@ releasenotes/notes/pure-storage-revert-snapshot-b7e0ec4f958418c4.yaml
 releasenotes/notes/pure-v2.1-replication-0246223caaa8a9b5.yaml
 releasenotes/notes/pure-verify-https-requests-464320c97ba77a1f.yaml
 releasenotes/notes/pure_fc_personality-3cada97fc940e498.yaml
+releasenotes/notes/pure_fix_clone_cg-cfdf7d16b63882f8.yaml
+releasenotes/notes/pure_sdk_version_checks-257cb8387ed6f5f8.yaml
+releasenotes/notes/pure_storage_multiattach-f4aee3576757b2ff.yaml
 releasenotes/notes/pure_tempest_cg_fix-913d405f7487de00.yaml
 releasenotes/notes/qb-backup-5b1f2161d160648a.yaml
 releasenotes/notes/qb-overlay-from-snap-cache-dc102acb4820e368.yaml
@@ -2728,6 +2721,7 @@ releasenotes/notes/report-backend-state-in-service-list-739a5398eec4a6b7.yaml
 releasenotes/notes/report-backend-state-in-service-list-93e9f2b204b735c0.yaml
 releasenotes/notes/reset-status-notification-update-4a80a8b5feb821ef.yaml
 releasenotes/notes/reset-status-notification-update-b655615871db4659.yaml
+releasenotes/notes/retype-assisted-migration-6cdc7f9b21beb859.yaml
 releasenotes/notes/retype-encrypted-volume-49b66d3e8e65f9a5.yaml
 releasenotes/notes/revert-snapshot-non-admin-8485be55060eab0d.yaml
 releasenotes/notes/revert-volume-to-snapshot-6aa0dffb010265e5.yaml

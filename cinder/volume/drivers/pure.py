@@ -137,13 +137,11 @@ EXTRA_SPECS_REPL_TYPE = "replication_type"
 MAX_VOL_LENGTH = 63
 MAX_SNAP_LENGTH = 96
 UNMANAGED_SUFFIX = '-unmanaged'
-QOS_REQUIRED_API_VERSION = ['1.17']
-SYNC_REPLICATION_REQUIRED_API_VERSIONS = ['1.13', '1.14', '1.17']
-ASYNC_REPLICATION_REQUIRED_API_VERSIONS = [
-    '1.3', '1.4', '1.5'] + SYNC_REPLICATION_REQUIRED_API_VERSIONS
-MANAGE_SNAP_REQUIRED_API_VERSIONS = [
-    '1.4', '1.5'] + SYNC_REPLICATION_REQUIRED_API_VERSIONS
-PERSONALITY_REQUIRED_API_VERSIONS = ['1.14']
+QOS_REQUIRED_API_VERSION = '1.17'
+SYNC_REPLICATION_REQUIRED_API_VERSION = '1.13'
+ASYNC_REPLICATION_REQUIRED_API_VERSION = '1.3'
+MANAGE_SNAP_REQUIRED_API_VERSION = '1.4'
+PERSONALITY_REQUIRED_API_VERSION = '1.14'
 
 REPL_SETTINGS_PROPAGATE_RETRY_INTERVAL = 5  # 5 seconds
 REPL_SETTINGS_PROPAGATE_MAX_RETRIES = 36  # 36 * 5 = 180 seconds
@@ -196,9 +194,6 @@ def pure_driver_debug_trace(f):
 
 class PureBaseVolumeDriver(san.SanDriver):
     """Performs volume management on Pure Storage FlashArray."""
-
-    SUPPORTED_REST_API_VERSIONS = ['1.2', '1.3', '1.4', '1.5',
-                                   '1.13', '1.14', '1.17']
 
     SUPPORTS_ACTIVE_ACTIVE = True
     PURE_QOS_KEYS = ['maxIOPS', 'maxBWS']
@@ -284,23 +279,21 @@ class PureBaseVolumeDriver(san.SanDriver):
                     ssl_cert_path=ssl_cert_path
                 )
 
-                api_version = target_array.get_rest_version()
+                api_versions = target_array._list_available_rest_versions()
 
                 if repl_type == REPLICATION_TYPE_ASYNC:
-                    req_api_versions = ASYNC_REPLICATION_REQUIRED_API_VERSIONS
+                    req_api_version = ASYNC_REPLICATION_REQUIRED_API_VERSION
                 elif repl_type == REPLICATION_TYPE_SYNC:
-                    req_api_versions = SYNC_REPLICATION_REQUIRED_API_VERSIONS
+                    req_api_version = SYNC_REPLICATION_REQUIRED_API_VERSION
                 else:
                     msg = _('Invalid replication type specified:') % repl_type
                     raise PureDriverException(reason=msg)
 
-                if api_version not in req_api_versions:
+                if req_api_version not in api_versions:
                     msg = _('Unable to do replication with Purity REST '
-                            'API version %(api_version)s, requires one of '
-                            '%(required_versions)s.') % {
-                        'api_version': api_version,
-                        'required_versions':
-                            ASYNC_REPLICATION_REQUIRED_API_VERSIONS
+                            'API version, requires minimum of '
+                            '%(required_version)s.') % {
+                        'required_version': req_api_version
                     }
                     raise PureDriverException(reason=msg)
 
@@ -377,8 +370,6 @@ class PureBaseVolumeDriver(san.SanDriver):
 
         # Raises PureDriverException if unable to connect and PureHTTPError
         # if unable to authenticate.
-        purestorage.FlashArray.supported_rest_versions = \
-            self.SUPPORTED_REST_API_VERSIONS
         self._array = self._get_flasharray(
             self.configuration.san_ip,
             api_token=self.configuration.pure_api_token,
@@ -492,9 +483,10 @@ class PureBaseVolumeDriver(san.SanDriver):
         ctxt = context.get_admin_context()
         type_id = volume.get('volume_type_id')
         current_array = self._get_current_array()
+        rest_versions = current_array._list_available_rest_versions()
         if type_id is not None:
             volume_type = volume_types.get_volume_type(ctxt, type_id)
-            if (current_array.get_rest_version() in QOS_REQUIRED_API_VERSION):
+            if QOS_REQUIRED_API_VERSION in rest_versions:
                 qos = self._get_qos_settings(volume_type)
         if qos is not None:
             self.create_with_qos(current_array, vol_name, vol_size, qos)
@@ -516,9 +508,10 @@ class PureBaseVolumeDriver(san.SanDriver):
         current_array = self._get_current_array()
         ctxt = context.get_admin_context()
         type_id = volume.get('volume_type_id')
+        rest_versions = current_array._list_available_rest_versions()
         if type_id is not None:
             volume_type = volume_types.get_volume_type(ctxt, type_id)
-            if (current_array.get_rest_version() in QOS_REQUIRED_API_VERSION):
+            if QOS_REQUIRED_API_VERSION in rest_versions:
                 qos = self._get_qos_settings(volume_type)
 
         current_array.copy_volume(snap_name, vol_name)
@@ -611,11 +604,11 @@ class PureBaseVolumeDriver(san.SanDriver):
         """Disconnect all hosts and delete the volume"""
         vol_name = self._get_vol_name(volume)
         current_array = self._get_current_array()
+        rest_versions = current_array._list_available_rest_versions()
         try:
             # Do a pass over remaining connections on the current array, if
             # we can try and remove any remote connections too.
-            if (current_array.get_rest_version() in
-                    SYNC_REPLICATION_REQUIRED_API_VERSIONS):
+            if SYNC_REPLICATION_REQUIRED_API_VERSION in rest_versions:
                 hosts = current_array.list_volume_private_connections(
                     vol_name, remote=True)
             else:
@@ -690,8 +683,23 @@ class PureBaseVolumeDriver(san.SanDriver):
         """
         raise NotImplementedError
 
+    def _is_multiattach_to_host(self, volume_attachment, host_name):
+        # When multiattach is enabled a volume could be attached to multiple
+        # instances which are hosted on the same Nova compute.
+        # Because Purity cannot recognize the volume is attached more than
+        # one instance we should keep the volume attached to the Nova compute
+        # until the volume is detached from the last instance
+        if not volume_attachment:
+            return False
+
+        attachment = [a for a in volume_attachment
+                      if a.attach_status == "attached" and
+                      a.attached_host == host_name]
+        return len(attachment) > 1
+
     @pure_driver_debug_trace
-    def _disconnect(self, array, volume, connector, remove_remote_hosts=False):
+    def _disconnect(self, array, volume, connector, remove_remote_hosts=False,
+                    is_multiattach=False):
         """Disconnect the volume from the host described by the connector.
 
         If no connector is specified it will remove *all* attachments for
@@ -700,13 +708,13 @@ class PureBaseVolumeDriver(san.SanDriver):
         Returns True if it was the hosts last connection.
         """
         vol_name = self._get_vol_name(volume)
+        rest_versions = array._list_available_rest_versions()
         if connector is None:
             # If no connector was provided it is a force-detach, remove all
             # host connections for the volume
             LOG.warning("Removing ALL host connections for volume %s",
                         vol_name)
-            if (array.get_rest_version() in
-                    SYNC_REPLICATION_REQUIRED_API_VERSIONS):
+            if SYNC_REPLICATION_REQUIRED_API_VERSION in rest_versions:
                 # Remote connections are only allowed in newer API versions
                 connections = array.list_volume_private_connections(
                     vol_name, remote=True)
@@ -722,11 +730,16 @@ class PureBaseVolumeDriver(san.SanDriver):
                                    remote=remove_remote_hosts)
             if hosts:
                 any_in_use = False
+                host_in_use = False
                 for host in hosts:
                     host_name = host["name"]
-                    host_in_use = self._disconnect_host(array,
-                                                        host_name,
-                                                        vol_name)
+                    if not is_multiattach:
+                        host_in_use = self._disconnect_host(array,
+                                                            host_name,
+                                                            vol_name)
+                    else:
+                        LOG.warning("Unable to disconnect host from volume. "
+                                    "Volume is multi-attached.")
                     any_in_use = any_in_use or host_in_use
                 return any_in_use
             else:
@@ -739,20 +752,27 @@ class PureBaseVolumeDriver(san.SanDriver):
     def terminate_connection(self, volume, connector, **kwargs):
         """Terminate connection."""
         vol_name = self._get_vol_name(volume)
+        # None `connector` indicates force detach, then delete all even
+        # if the volume is multi-attached.
+        multiattach = (connector is not None and
+                       self._is_multiattach_to_host(volume.volume_attachment,
+                                                    connector["host"]))
         if self._is_vol_in_pod(vol_name):
             # Try to disconnect from each host, they may not be online though
             # so if they fail don't cause a problem.
             for array in self._uniform_active_cluster_target_arrays:
                 try:
                     self._disconnect(array, volume, connector,
-                                     remove_remote_hosts=False)
+                                     remove_remote_hosts=False,
+                                     is_multiattach=multiattach)
                 except purestorage.PureError as err:
                     # Swallow any exception, just warn and continue
                     LOG.warning("Disconnect on secondary array failed with"
                                 " message: %(msg)s", {"msg": err.text})
         # Now disconnect from the current array
         self._disconnect(self._get_current_array(), volume,
-                         connector, remove_remote_hosts=False)
+                         connector, remove_remote_hosts=False,
+                         is_multiattach=multiattach)
 
     @pure_driver_debug_trace
     def _disconnect_host(self, array, host_name, vol_name):
@@ -1304,7 +1324,8 @@ class PureBaseVolumeDriver(san.SanDriver):
         # Check if the volume_type has QoS settings and if so
         # apply them to the newly managed volume
         qos = None
-        if (current_array.get_rest_version() in QOS_REQUIRED_API_VERSION):
+        rest_versions = current_array._list_available_rest_versions()
+        if QOS_REQUIRED_API_VERSION in rest_versions:
             qos = self._get_qos_settings(volume.volume_type)
             if qos is not None:
                 self.set_qos(current_array, new_vol_name, qos)
@@ -1373,13 +1394,12 @@ class PureBaseVolumeDriver(san.SanDriver):
 
     def _verify_manage_snap_api_requirements(self):
         current_array = self._get_current_array()
-        api_version = current_array.get_rest_version()
-        if api_version not in MANAGE_SNAP_REQUIRED_API_VERSIONS:
+        rest_versions = current_array._list_available_rest_versions()
+        if MANAGE_SNAP_REQUIRED_API_VERSION not in rest_versions:
             msg = _('Unable to do manage snapshot operations with Purity REST '
-                    'API version %(api_version)s, requires '
-                    '%(required_versions)s.') % {
-                'api_version': api_version,
-                'required_versions': MANAGE_SNAP_REQUIRED_API_VERSIONS
+                    'API version, requires '
+                    '%(required_version)s.') % {
+                'required_version': MANAGE_SNAP_REQUIRED_API_VERSION
             }
             raise PureDriverException(reason=msg)
 
@@ -1546,11 +1566,11 @@ class PureBaseVolumeDriver(san.SanDriver):
                         request_kwargs=None):
 
         if (version.LooseVersion(purestorage.VERSION) <
-                version.LooseVersion('1.14.0')):
+                version.LooseVersion('1.17.0')):
             if request_kwargs is not None:
                 LOG.warning("Unable to specify request_kwargs='%s' on "
                             "purestorage.FlashArray using 'purestorage' "
-                            "python module <1.14.0. Current version: %s",
+                            "python module <1.17.0. Current version: %s",
                             request_kwargs,
                             purestorage.VERSION)
             array = purestorage.FlashArray(san_ip,
@@ -1784,9 +1804,9 @@ class PureBaseVolumeDriver(san.SanDriver):
         elif snapshot.cgsnapshot:
             group_snap = snapshot.cgsnapshot
 
-        pg_vol_snap_name = "%(group_snap)s.%(volume_name)s-cinder" % {
+        pg_vol_snap_name = "%(group_snap)s.%(volume_name)s" % {
             'group_snap': self._get_pgroup_snap_name(group_snap),
-            'volume_name': snapshot.volume_name
+            'volume_name': self._get_vol_name(snapshot.volume)
         }
         return pg_vol_snap_name
 
@@ -1900,7 +1920,8 @@ class PureBaseVolumeDriver(san.SanDriver):
         # make sure the volume gets the correct new QoS settings.
         # This could mean removing existing QoS settings.
         current_array = self._get_current_array()
-        if (current_array.get_rest_version() in QOS_REQUIRED_API_VERSION):
+        rest_versions = current_array._list_available_rest_versions()
+        if QOS_REQUIRED_API_VERSION in rest_versions:
             qos = self._get_qos_settings(new_type)
             vol_name = self._generate_purity_vol_name(volume)
             if qos is not None:
@@ -2052,17 +2073,16 @@ class PureBaseVolumeDriver(san.SanDriver):
     @pure_driver_debug_trace
     def get_check_personality(self, array):
         personality = self.configuration.safe_get('pure_host_personality')
+        rest_versions = array._list_available_rest_versions()
         if personality:
-            api_version = array.get_rest_version()
-            if api_version not in PERSONALITY_REQUIRED_API_VERSIONS:
+            if PERSONALITY_REQUIRED_API_VERSION not in rest_versions:
                 # Continuing here would mean creating a host not according
                 # to specificiations, possibly leading to unexpected
                 # behavior later on.
                 msg = _('Unable to set host personality with Purity REST '
-                        'API version %(api_version)s, requires '
-                        '%(required_versions)s.') % {
-                    'api_version': api_version,
-                    'required_versions': PERSONALITY_REQUIRED_API_VERSIONS
+                        'API version, requires '
+                        '%(required_version)s.') % {
+                    'required_version': PERSONALITY_REQUIRED_API_VERSION
                 }
                 raise PureDriverException(reason=msg)
         return personality
@@ -2551,8 +2571,8 @@ class PureISCSIDriver(PureBaseVolumeDriver, san.SanISCSIDriver):
 
     def _get_host(self, array, connector, remote=False):
         """Return dict describing existing Purity host object or None."""
-        if (remote and array.get_rest_version() in
-                SYNC_REPLICATION_REQUIRED_API_VERSIONS):
+        rest_versions = array._list_available_rest_versions()
+        if remote and SYNC_REPLICATION_REQUIRED_API_VERSION in rest_versions:
             hosts = array.list_hosts(remote=True)
         else:
             hosts = array.list_hosts()
@@ -2778,8 +2798,8 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
 
     def _get_host(self, array, connector, remote=False):
         """Return dict describing existing Purity host object or None."""
-        if (remote and array.get_rest_version() in
-                SYNC_REPLICATION_REQUIRED_API_VERSIONS):
+        rest_versions = array._list_available_rest_versions()
+        if remote and SYNC_REPLICATION_REQUIRED_API_VERSION in rest_versions:
             hosts = array.list_hosts(remote=True)
         else:
             hosts = array.list_hosts()
@@ -2901,6 +2921,11 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
     def terminate_connection(self, volume, connector, **kwargs):
         """Terminate connection."""
         vol_name = self._get_vol_name(volume)
+        # None `connector` indicates force detach, then delete all even
+        # if the volume is multi-attached.
+        multiattach = (connector is not None and
+                       self._is_multiattach_to_host(volume.volume_attachment,
+                                                    connector["host"]))
         unused_wwns = []
 
         if self._is_vol_in_pod(vol_name):
@@ -2909,7 +2934,8 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
             for array in self._uniform_active_cluster_target_arrays:
                 try:
                     no_more_connections = self._disconnect(
-                        array, volume, connector, remove_remote_hosts=False)
+                        array, volume, connector, remove_remote_hosts=False,
+                        is_multiattach=multiattach)
                     if no_more_connections:
                         unused_wwns += self._get_array_wwns(array)
                 except purestorage.PureError as err:
@@ -2922,7 +2948,8 @@ class PureFCDriver(PureBaseVolumeDriver, driver.FibreChannelDriver):
         current_array = self._get_current_array()
         no_more_connections = self._disconnect(current_array,
                                                volume, connector,
-                                               remove_remote_hosts=False)
+                                               remove_remote_hosts=False,
+                                               is_multiattach=multiattach)
         if no_more_connections:
             unused_wwns += self._get_array_wwns(current_array)
 
