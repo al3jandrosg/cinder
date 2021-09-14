@@ -83,7 +83,17 @@ netapp_provisioning_opts = [
                help=('This option determines if storage space is reserved '
                      'for LUN allocation. If enabled, LUNs are thick '
                      'provisioned. If space reservation is disabled, '
-                     'storage space is allocated on demand.')), ]
+                     'storage space is allocated on demand.')),
+    cfg.BoolOpt('netapp_driver_reports_provisioned_capacity',
+                default=False,
+                help=('Set to True for Cinder to query the storage system in '
+                      'order to calculate volumes provisioned size, otherwise '
+                      'provisioned_capacity_gb will corresponds to the '
+                      'value of allocated_capacity_gb (calculated by Cinder '
+                      'Core code). Enabling this feature increases '
+                      'the number of API calls to the storage and '
+                      'requires more processing on host, which may impact '
+                      'volume report overall performance.')), ]
 
 netapp_cluster_opts = [
     cfg.StrOpt('netapp_vserver',
@@ -182,6 +192,14 @@ netapp_support_opts = [
                      'all APIs will be traced.')),
 ]
 
+netapp_migration_opts = [
+    cfg.IntOpt('netapp_migrate_volume_timeout',
+               default=3600,
+               min=30,
+               help='Sets time in seconds to wait for storage assisted volume '
+                    'migration to complete.'),
+]
+
 CONF = cfg.CONF
 CONF.register_opts(netapp_proxy_opts, group=conf.SHARED_CONF_GROUP)
 CONF.register_opts(netapp_connection_opts, group=conf.SHARED_CONF_GROUP)
@@ -194,3 +212,4 @@ CONF.register_opts(netapp_nfs_extra_opts, group=conf.SHARED_CONF_GROUP)
 CONF.register_opts(netapp_san_opts, group=conf.SHARED_CONF_GROUP)
 CONF.register_opts(netapp_replication_opts, group=conf.SHARED_CONF_GROUP)
 CONF.register_opts(netapp_support_opts, group=conf.SHARED_CONF_GROUP)
+CONF.register_opts(netapp_migration_opts, group=conf.SHARED_CONF_GROUP)

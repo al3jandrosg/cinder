@@ -171,9 +171,13 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
             volume_name, backend_helper, node_state = self._get_vol_sys_info(
                 volume)
 
-        host_site = self._get_volume_host_site_from_conf(volume,
-                                                         connector)
+        host_site = None
+        backend_helper.initialize_host_info()
+
         is_hyper_volume = self.is_volume_hyperswap(volume)
+        if is_hyper_volume:
+            host_site = self._get_volume_host_site_from_conf(volume,
+                                                             connector)
         # The host_site is necessary for hyperswap volume.
         if is_hyper_volume and host_site is None:
             msg = (_('There is no correct storwize_preferred_host_site '
@@ -181,12 +185,24 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
             LOG.error(msg)
             raise exception.VolumeDriverException(message=msg)
 
-        # Check if a host object is defined for this host name
-        host_name = backend_helper.get_host_from_connector(connector)
-        if host_name is None:
-            # Host does not exist - add a new host to Storwize/SVC
+        # Try creating the host, if host creation is successfull continue
+        # with intialization flow, else search for host object defined for
+        # this connector info.
+        host_name = None
+        try:
             host_name = backend_helper.create_host(connector, site=host_site)
-        elif is_hyper_volume:
+        except exception.VolumeBackendAPIException as excp:
+            if "CMMVC6035E" in excp.msg:
+                msg = (_('Host already exists for connector '
+                         '%(conn)s'), {'conn': connector})
+                LOG.info(msg)
+                host_name = backend_helper.get_host_from_connector(connector)
+            else:
+                msg = (_('Error creating host %(ex)s'), {'ex': excp.msg})
+                LOG.error(msg)
+                raise exception.VolumeDriverException(message=msg)
+
+        if is_hyper_volume:
             self._update_host_site_for_hyperswap_volume(host_name, host_site)
 
         volume_attributes = backend_helper.get_vdisk_attributes(volume_name)
@@ -365,3 +381,122 @@ class StorwizeSVCFCDriver(storwize_common.StorwizeSVCCommonDriver):
                                                         'conn': connector,
                                                         'info': info})
         return info
+
+    def _get_volume_connection_info(self, ctxt, volume, host_info,
+                                    iogrp_list):
+        connector = {'wwpns': []}
+        connection_info = {"driver_volume_type": "fibre_channel"}
+        data = {}
+
+        for wwpn in host_info.select('WWPN'):
+            connector['wwpns'].append(wwpn)
+
+        vol_name, backend_helper, node_state = self._get_vol_sys_info(volume)
+
+        data['target_discovered'] = False
+        data['volume_id'] = volume.id
+
+        conn_wwpns = []
+        for node in node_state['storage_nodes'].values():
+            if node['IO_group'] not in iogrp_list:
+                continue
+
+            # The Storwize/svc release 7.7.0.0 introduced NPIV feature,
+            # Different commands be used to get the wwpns for host I/O
+            if node_state['code_level'] < (7, 7, 0, 0):
+                conn_wwpns.extend(node['WWPN'])
+            else:
+                npivwwpns = backend_helper.get_npiv_wwpns(node_id=node['id'],
+                                                          host_io="yes")
+                conn_wwpns.extend(npivwwpns)
+
+        i_t_map = self._make_initiator_target_map(connector['wwpns'],
+                                                  conn_wwpns)
+        data["initiator_target_map"] = i_t_map
+        data["target_wwn"] = conn_wwpns
+
+        connection_info['data'] = data
+        connection_info['connector'] = connector
+
+        return connection_info
+
+    def _retype_hyperswap_volume(self, ctxt, volume, host, old_opts,
+                                 new_opts, old_pool, new_pool, vdisk_changes,
+                                 need_copy, new_type):
+        if (old_opts['volume_topology'] != 'hyperswap' and
+                new_opts['volume_topology'] == 'hyperswap'):
+            LOG.debug('retype: Convert a normal volume %s to hyperswap '
+                      'volume.', volume.name)
+            conn_info = {}
+            if volume.previous_status == 'in-use':
+                vdisk_info = self._helpers.ssh.lsvdiskhostmap(volume.name)
+                peer_pool = new_opts['peer_pool']
+                iogrp_list = self._helpers.get_hyperswap_pool_io_grp(
+                    self._state, new_pool, peer_pool)
+                for mapping_info in vdisk_info:
+                    host = mapping_info['host_name']
+                    try:
+                        host_info = self._helpers.ssh.lshost(host)
+                        conn_info[host] = self._get_volume_connection_info(
+                            ctxt, volume, host_info, iogrp_list)
+                        host_site = self._get_volume_host_site_from_conf(
+                            volume, conn_info[host].get('connector'))
+                        self._update_host_site_for_hyperswap_volume(
+                            host, host_site)
+                        self._helpers.ssh.addhostiogrp(host,
+                                                       iogrp_list)
+                    except Exception as ex:
+                        msg = _('Error updating host %(host)s due to %(ex)s',
+                                {'host': host, 'ex': ex})
+                        raise exception.VolumeBackendAPIException(data=msg)
+            self._helpers.convert_volume_to_hyperswap(volume.name,
+                                                      new_opts,
+                                                      self._state)
+            if volume.previous_status == 'in-use':
+                for host, info in conn_info.items():
+                    try:
+                        fczm_utils.add_fc_zone(info)
+                    except Exception as ex:
+                        self._helpers.convert_hyperswap_volume_to_normal(
+                            volume.name, new_opts['peer_pool'])
+                        msg = _('Zoning failed for volume %(vol)s and host '
+                                '%(host)s due to %(ex)s.',
+                                {'vol': volume.name, 'host': host, 'ex': ex})
+                        raise exception.VolumeBackendAPIException(data=msg)
+        elif (old_opts['volume_topology'] == 'hyperswap' and
+                new_opts['volume_topology'] != 'hyperswap'):
+            LOG.debug('retype: Convert a hyperswap volume %s to normal '
+                      'volume.', volume.name)
+            if new_pool == old_pool:
+                self._helpers.convert_hyperswap_volume_to_normal(
+                    volume.name,
+                    old_opts['peer_pool'])
+            elif new_pool == old_opts['peer_pool']:
+                self._helpers.convert_hyperswap_volume_to_normal(
+                    volume.name,
+                    old_pool)
+            if volume.previous_status == 'in-use':
+                vdisk_info = self._helpers.ssh.lsvdiskhostmap(volume.name)
+                for mapping_info in vdisk_info:
+                    res = self._helpers.check_host_mapped_vols(
+                        mapping_info['host_name'])
+                    if len(res) == 1:
+                        self._helpers.update_host(mapping_info['host_name'],
+                                                  None)
+        else:
+            rel_info = self._helpers.get_relationship_info(volume.name)
+            aux_vdisk = rel_info['aux_vdisk_name']
+            if need_copy:
+                self.add_vdisk_copy(aux_vdisk, old_opts['peer_pool'], new_type,
+                                    auto_delete=True)
+            elif vdisk_changes:
+                self._helpers.change_vdisk_options(aux_vdisk,
+                                                   vdisk_changes,
+                                                   new_opts, self._state)
+        if need_copy:
+            self.add_vdisk_copy(volume.name, old_pool, new_type,
+                                auto_delete=True)
+        elif vdisk_changes:
+            self._helpers.change_vdisk_options(volume.name,
+                                               vdisk_changes,
+                                               new_opts, self._state)

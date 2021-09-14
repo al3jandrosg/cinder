@@ -1,9 +1,90 @@
 CHANGES
 =======
 
+* Implement Xena personas for volume groups
+* Implement Xena project personas for volume types
+* Implement secure RBAC for snapshot actions
+* Implement project personas for the limits API
+* Implement project personas group\_types
+* Update project personas for default\_types
+* Implement project personas for volume API
+* Implement project personas for quotas and quota\_classes
+* Implement project personas for volume transfers
+* [SVF]:HyperSwap volume service status update
+* Hitachi: Add generic volume groups
+* [SVF] Update rccg details for mirror volumes
+* JovianDSS: add multiattach and 16K block support
+* JovianDSS: fix code style and naming
+* NetApp ONTAP: Add option to report storage provisioned capacity
+* Netapp ONTAP: Add support to revert to snapshot
+* Clean up user visible extra specs release note
+* Implement user visible extra specs
+* JovianDSS: fix iscsi target recovery function
+* HPE 3PAR: Add HPE Alletra 9k related information
+* Remove extraneous space from error message
+* Docs: Discourage using naked rechecks
+* NetApp ONTAP: Add storage assisted migration support
+* Implement project personas for attachments
+* Implement project personas for messages
+* Add infrastructure for testing new RBAC policies
+* Snapshot in-use volumes without force flag
+* Update mv version history document for 3.65
+* [SVF] Manage GMCV volumes on separate pools
+* Update base policy file
+* Correct the rest api url of import\_record of backup
+* db: Add alembic boilerplate
+* db: Vendor 'oslo\_db.sqlalchemy.migration'
+* db: Move sqlalchemy-migrate migrations
+* Add user messages for backup operations
+* Test glance with cinder backend optimization
+* Expose volume & snapshot use\_quota field
+* Improve quota usage for temporary resources
+* Clear OVO history and compatibility
+* Fix notifications of migration temp volume
+* Change 'host' option from HostAddressOpt to StrOpt
+* Update snapshot api microversion docs and tests
+* [SVF]:Fix multiple lshost calls during attach
+* Support Images API v2.11
+* Log connection info returned from driver
+* [SVF]:Fix add volumes to GMCV group
+* [SVF]:Retype in-use hyperswap volume
+* [SVF] Fixed update\_rep\_properties for empty values
+* LVM: Retry lvextend commands on code 139
+* [SVF]:Fix create volume on drp
+* Add releasenote for schema validation fix
+* Doc: IBM Storages user documentation update
+* [SVF] Fix issue to get volume relationship details
+* mypy: continued manager, scheduler, rpcapi
+* conditional\_update(): disable false pylint error message
+* mypy: image cache
+* mypy: create\_volume flows
+* Fix cinder-manage clean\_locks command
+* PowerMax Driver - Fix for create snapshot
+* [SVF]: Fix Enable Replication for Storwize\_V5000E
+* Doc: Remove backup\_id from backup import url and parameter
+* Add cinder permissions matrix
+* Remove 'enable\_v3\_api' option
+* Add cinder-manage command to remove file locks
+* Remove file locks once we delete a resource
+* [Pure Storage] Resolve missing provider\_id issue (PowerVC)
+* RBD: use correct stripe unit in clone operation
+* [rbd] Fix create encrypted volume from snapshot
+* Allow removing NFS snapshots in error status
+* Replace deprecated tenacity.Retrying.call
+* Add openstacksdk-functional-devstack job in cinder gate
+
+19.0.0.0b1
+----------
+
+* Doc: api-ref doc update
 * [Pure Storage] Fix CG cloning crash when very long volume names
+* Run cinder-mypy job in the check
 * Add installation of mypy stubs packages
+* db: Reorder initial migration
+* db: Use 'import sqlalchemy as sa' pattern
+* Tests: Fix InvalidUUID warnings
 * Drop lower-constraints jobs
+* NFS: Update connection info on online snap create
 * mypy: image\_utils
 * LVM: Simplify version fetching
 * Tests: Simplify LVM fake\_execute
@@ -18,9 +99,17 @@ CHANGES
 * Fix typo in Dell EMC Unity driver documentation
 * Update decode\_cipher doc text about encryption ciphers
 * Add libcgroup related packages in bindep.txt
+* PowerMax Driver - Allow for case mismatch in SGs
 * Move require\_driver\_initialized / log\_unsupp to volume\_utils
 * NetApp ONTAP: Fix QoS lost after moving volume
+* Update Block Storage API v2 api-ref
+* Remove Block Storage API v2
+* [SVF] Support volume-resize to hyperswap volume
+* [SVF] Fixed add volumes to clone group issue
 * [Pure Storage] Ensure multiattach volumes are not disconnected early
+* [SVF]: Fix extend issue for a clone of rep-volume
+* [SVF]:Bulk create Hyperswap volume is failing
+* Update volume api microversion doc and tests
 * PowerMax Docs - Corrections to QoS section
 * Update IRC info
 * Fix functional jobs

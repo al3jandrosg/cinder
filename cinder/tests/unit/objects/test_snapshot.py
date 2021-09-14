@@ -22,6 +22,7 @@ import pytz
 from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder import objects
+from cinder.objects import base as ovo_base
 from cinder.objects import fields
 from cinder.tests.unit import fake_constants as fake
 from cinder.tests.unit import fake_snapshot
@@ -229,29 +230,16 @@ class TestSnapshot(test_objects.BaseObjectsTestCase):
             mock.call(self.context,
                       fake.SNAPSHOT_ID)])
 
-    @ddt.data('1.1', '1.3')
-    def test_obj_make_compatible_1_3(self, version):
-        snapshot = objects.Snapshot(context=self.context)
-        snapshot.status = fields.SnapshotStatus.UNMANAGING
-        primitive = snapshot.obj_to_primitive(version)
-        snapshot = objects.Snapshot.obj_from_primitive(primitive)
-        if version == '1.3':
-            status = fields.SnapshotStatus.UNMANAGING
-        else:
-            status = fields.SnapshotStatus.DELETING
-        self.assertEqual(status, snapshot.status)
+    @ddt.data('1.38', '1.39')
+    def test_obj_make_compatible_use_quota_added(self, version):
+        snapshot = objects.Snapshot(self.context, use_quota=False)
 
-    @ddt.data('1.3', '1.4')
-    def test_obj_make_compatible_1_4(self, version):
-        snapshot = objects.Snapshot(context=self.context)
-        snapshot.status = fields.SnapshotStatus.BACKING_UP
-        primitive = snapshot.obj_to_primitive(version)
-        snapshot = objects.Snapshot.obj_from_primitive(primitive)
-        if version == '1.4':
-            status = fields.SnapshotStatus.BACKING_UP
-        else:
-            status = fields.SnapshotStatus.AVAILABLE
-        self.assertEqual(status, snapshot.status)
+        serializer = ovo_base.CinderObjectSerializer(version)
+        primitive = serializer.serialize_entity(self.context, snapshot)
+
+        converted_snapshot = objects.Snapshot.obj_from_primitive(primitive)
+        expected = version != '1.39'
+        self.assertIs(expected, converted_snapshot.use_quota)
 
 
 class TestSnapshotList(test_objects.BaseObjectsTestCase):

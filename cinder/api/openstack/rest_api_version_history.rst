@@ -490,3 +490,18 @@ in the volume details.
 -------------------------
 Include the ``encryption_key_id`` in volume and backup details when the
 associated volume is encrypted.
+
+3.65
+----
+Include a ``consumes_quota`` field in volume and snapshot details to indicate
+whether the resource is consuming quota or not.  Also, accept a
+``consumes_quota`` filter, which takes a boolean value, in the volume and
+snapshot list requests.  (The default listing behavior is not to use this
+filter.)
+
+3.66 (Maximum in Xena)
+----------------------
+Volume snapshots of in-use volumes can be created without the 'force' flag.
+Although the 'force' flag is now considered invalid when passed in a volume
+snapshot request, for backward compatibility, the 'force' flag with a value
+evaluating to True is silently ignored.

@@ -390,6 +390,71 @@ class Client(client_base.Client):
         LOG.debug('No iSCSI service found for vserver %s', self.vserver)
         return None
 
+    def get_lun_sizes_by_volume(self, volume_name):
+        """"Gets the list of LUNs and their sizes from a given volume name"""
+
+        api_args = {
+            'query': {
+                'lun-info': {
+                    'volume': volume_name
+                }
+            },
+            'desired-attributes': {
+                'lun-info': {
+                    'path': None,
+                    'size': None
+                }
+            }
+        }
+        result = self.send_iter_request(
+            'lun-get-iter', api_args, max_page_length=100)
+
+        if not self._has_records(result):
+            return []
+
+        attributes_list = result.get_child_by_name('attributes-list')
+
+        luns = []
+        for lun_info in attributes_list.get_children():
+            luns.append({
+                'path': lun_info.get_child_content('path'),
+                'size': float(lun_info.get_child_content('size'))
+            })
+        return luns
+
+    def get_file_sizes_by_dir(self, dir_path):
+        """Gets the list of files and their sizes from a given directory."""
+
+        api_args = {
+            'path': '/vol/%s' % dir_path,
+            'query': {
+                'file-info': {
+                    'file-type': 'file'
+                }
+            },
+            'desired-attributes': {
+                'file-info': {
+                    'name': None,
+                    'file-size': None
+                }
+            }
+        }
+        result = self.send_iter_request(
+            'file-list-directory-iter', api_args, max_page_length=100)
+
+        if not self._has_records(result):
+            return []
+
+        attributes_list = result.get_child_by_name('attributes-list')
+
+        files = []
+        for file_info in attributes_list.get_children():
+            files.append({
+                'name': file_info.get_child_content('name'),
+                'file-size': float(file_info.get_child_content('file-size'))
+            })
+        return files
+
     def get_lun_list(self):
         """Gets the list of LUNs on filer.
 
@@ -610,6 +675,169 @@ class Client(client_base.Client):
                     dest_block += int(block_count)
                 clone_create.add_child_elem(block_ranges)
             self.connection.invoke_successfully(clone_create, True)
+
+    def start_file_copy(self, file_name, dest_ontap_volume,
+                        src_ontap_volume=None,
+                        dest_file_name=None):
+        """Starts a file copy operation between ONTAP volumes."""
+        if src_ontap_volume is None:
+            src_ontap_volume = dest_ontap_volume
+        if dest_file_name is None:
+            dest_file_name = file_name
+
+        api_args = {
+            'source-paths': [{
+                'sfod-operation-path': '%s/%s' % (src_ontap_volume,
+                                                  file_name)
+            }],
+            'destination-paths': [{
+                'sfod-operation-path': '%s/%s' % (dest_ontap_volume,
+                                                  dest_file_name),
+            }],
+        }
+        result = self.connection.send_request('file-copy-start', api_args,
+                                              enable_tunneling=False)
+        return result.get_child_content('job-uuid')
+
+    def destroy_file_copy(self, job_uuid):
+        """Cancel/Destroy a in-progress file copy."""
+        api_args = {
+            'job-uuid': job_uuid,
+            'file-index': 0
+        }
+        try:
+            self.connection.send_request('file-copy-destroy', api_args,
+                                         enable_tunneling=False)
+        except netapp_api.NaApiError as e:
+            msg = (_('Could not cancel lun copy for job uuid %s. %s'))
+            raise na_utils.NetAppDriverException(msg % (job_uuid, e))
+
+    def get_file_copy_status(self, job_uuid):
+        """Get file copy job status from a given job's UUID."""
+        api_args = {
+            'query': {
+                'file-copy-info': {
+                    'job-uuid': job_uuid
+                }
+            }
+        }
+        result = self.connection.send_request('file-copy-get-iter', api_args,
+                                              enable_tunneling=False)
+        lun_copy_info_list = result.get_child_by_name('attributes-list')
+        if lun_copy_info_list:
+            lun_copy_info = lun_copy_info_list.get_children()[0]
+            copy_status = {
+                'job-status':
+                    lun_copy_info.get_child_content('scanner-status'),
+                'last-failure-reason':
+                    lun_copy_info.get_child_content('last-failure-reason')
+            }
+            return copy_status
+        return None
+
+    def start_lun_copy(self, lun_name, dest_ontap_volume, dest_vserver,
+                       src_ontap_volume=None, src_vserver=None,
+                       dest_lun_name=None):
+        """Starts a lun copy operation between ONTAP volumes."""
+        if src_ontap_volume is None:
+            src_ontap_volume = dest_ontap_volume
+        if src_vserver is None:
+            src_vserver = dest_vserver
+        if dest_lun_name is None:
+            dest_lun_name = lun_name
+
+        api_args = {
+            'source-vserver': src_vserver,
+            'destination-vserver': dest_vserver,
+            'paths': [{
+                'lun-path-pair': {
+                    'destination-path': '/vol/%s/%s' % (dest_ontap_volume,
+                                                        dest_lun_name),
+                    'source-path': '/vol/%s/%s' % (src_ontap_volume,
+                                                   lun_name)}
+            }],
+        }
+        result = self.connection.send_request('lun-copy-start', api_args,
+                                              enable_tunneling=False)
+        return result.get_child_content('job-uuid')
+
+    def cancel_lun_copy(self, job_uuid):
+        """Cancel an in-progress lun copy."""
+        api_args = {
+            'job-uuid': job_uuid
+        }
+        try:
+            self.connection.send_request('lun-copy-cancel', api_args,
+                                         enable_tunneling=False)
+        except netapp_api.NaApiError as e:
+            msg = (_('Could not cancel lun copy for job uuid %s. %s'))
+            raise na_utils.NetAppDriverException(msg % (job_uuid, e))
+
+    def get_lun_copy_status(self, job_uuid):
+        """Get lun copy job status from a given job's UUID."""
+        api_args = {
+            'query': {
+                'lun-copy-info': {
+                    'job-uuid': job_uuid
+                }
+            }
+        }
+        result = self.connection.send_request('lun-copy-get-iter', api_args,
+                                              enable_tunneling=False)
+        lun_copy_info_list = result.get_child_by_name('attributes-list')
+        if lun_copy_info_list:
+            lun_copy_info = lun_copy_info_list.get_children()[0]
+            copy_status = {
+                'job-status':
+                    lun_copy_info.get_child_content('job-status'),
+                'last-failure-reason':
+                    lun_copy_info.get_child_content('last-failure-reason')
+            }
+            return copy_status
+        return None
+
+    def start_lun_move(self, lun_name, dest_ontap_volume,
+                       src_ontap_volume=None, dest_lun_name=None):
+        """Starts a lun move operation between ONTAP volumes."""
+        if dest_lun_name is None:
+            dest_lun_name = lun_name
+        if src_ontap_volume is None:
+            src_ontap_volume = dest_ontap_volume
+
+        api_args = {
+            'paths': [{
+                'lun-path-pair': {
+                    'destination-path': '/vol/%s/%s' % (dest_ontap_volume,
+                                                        dest_lun_name),
+                    'source-path': '/vol/%s/%s' % (src_ontap_volume,
+                                                   lun_name)}
+            }]
+        }
+
+        result = self.connection.send_request('lun-move-start', api_args)
+        return result.get_child_content('job-uuid')
+
+    def get_lun_move_status(self, job_uuid):
+        """Get lun move job status from a given job's UUID."""
+        api_args = {
+            'query': {
+                'lun-move-info': {
+                    'job-uuid': job_uuid
+                }
+            }
+        }
+        result = self.connection.send_request('lun-move-get-iter', api_args)
+        lun_move_info_list = result.get_child_by_name('attributes-list')
+        if lun_move_info_list:
+            lun_move_info = lun_move_info_list.get_children()[0]
+            move_status = {
+                'job-status':
+                    lun_move_info.get_child_content('job-status'),
+                'last-failure-reason':
+                    lun_move_info.get_child_content('last-failure-reason')
+            }
+            return move_status
+        return None
 
     def get_lun_by_args(self, **args):
         """Retrieves LUN with specified args."""
@@ -1533,6 +1761,17 @@ class Client(client_base.Client):
         }
         self.connection.send_request('volume-rename', api_args)
 
+    def rename_file(self, orig_file_name, new_file_name):
+        """Rename a volume file."""
+        LOG.debug("Renaming the file %(original)s to %(new)s.",
+                  {'original': orig_file_name, 'new': new_file_name})
+
+        api_args = {
+            'from-path': orig_file_name,
+            'to-path': new_file_name,
+        }
+        self.connection.send_request('file-rename-file', api_args)
+
     def mount_flexvol(self, flexvol_name, junction_path=None):
         """Mounts a volume on a junction path."""
         api_args = {
@@ -2030,6 +2269,22 @@ class Client(client_base.Client):
             msg_args = {'snap': snapshot_name, 'vol': volume_name}
             raise exception.VolumeBackendAPIException(data=msg % msg_args)
 
+    def get_cluster_name(self):
+        """Gets cluster name."""
+        api_args = {
+            'desired-attributes': {
+                'cluster-identity-info': {
+                    'cluster-name': None,
+                }
+            }
+        }
+        result = self.connection.send_request('cluster-identity-get', api_args,
+                                              enable_tunneling=False)
+        attributes = result.get_child_by_name('attributes')
+        cluster_identity = attributes.get_child_by_name(
+            'cluster-identity-info')
+        return cluster_identity.get_child_content('cluster-name')
+
     def create_cluster_peer(self, addresses, username=None, password=None,
                             passphrase=None):
         """Creates a cluster peer relationship."""
@@ -2160,16 +2415,24 @@ class Client(client_base.Client):
 
         self.connection.send_request('cluster-peer-policy-modify', api_args)
 
-    def create_vserver_peer(self, vserver_name, peer_vserver_name):
-        """Creates a Vserver peer relationship for SnapMirrors."""
+    def create_vserver_peer(self, vserver_name, peer_vserver_name,
+                            vserver_peer_application=None):
+        """Creates a Vserver peer relationship."""
+
+        # default peering application to `snapmirror` if none is specified.
+        if not vserver_peer_application:
+            vserver_peer_application = ['snapmirror']
+
         api_args = {
             'vserver': vserver_name,
             'peer-vserver': peer_vserver_name,
             'applications': [
-                {'vserver-peer-application': 'snapmirror'},
+                {'vserver-peer-application': app}
+                for app in vserver_peer_application
             ],
         }
-        self.connection.send_request('vserver-peer-create', api_args)
+        self.connection.send_request('vserver-peer-create', api_args,
+                                     enable_tunneling=False)
 
     def delete_vserver_peer(self, vserver_name, peer_vserver_name):
         """Deletes a Vserver peer relationship."""
@@ -2196,7 +2459,8 @@ class Client(client_base.Client):
                 api_args['query']['vserver-peer-info']['peer-vserver'] = (
                     peer_vserver_name)
 
-        result = self.send_iter_request('vserver-peer-get-iter', api_args)
+        result = self.send_iter_request('vserver-peer-get-iter', api_args,
+                                        enable_tunneling=False)
         if not self._has_records(result):
             return []
 
@@ -2213,6 +2477,9 @@ class Client(client_base.Client):
                 vserver_peer_info.get_child_content('peer-state'),
                 'peer-cluster':
                 vserver_peer_info.get_child_content('peer-cluster'),
+                'applications': [app.get_content() for app in
+                                 vserver_peer_info.get_child_by_name(
+                                     'applications').get_children()],
             }
             vserver_peers.append(vserver_peer)
 
@@ -2373,7 +2640,7 @@ class Client(client_base.Client):
 
     def delete_snapmirror(self, source_vserver, source_volume,
                           destination_vserver, destination_volume):
-        """Destroys a SnapMirror relationship."""
+        """Destroys an SnapMirror relationship."""
         self._ensure_snapmirror_v2()
 
         api_args = {

@@ -120,17 +120,20 @@ class SchedulerManagerTestCase(test.TestCase):
     @mock.patch('cinder.objects.service.Service.get_minimum_rpc_version')
     @mock.patch('cinder.objects.service.Service.get_minimum_obj_version')
     @mock.patch('cinder.rpc.LAST_RPC_VERSIONS', {'cinder-volume': '1.3'})
-    @mock.patch('cinder.rpc.LAST_OBJ_VERSIONS', {'cinder-volume': '1.4',
-                                                 'cinder-scheduler': '1.4',
-                                                 'cinder-backup': '1.5'})
     def test_reset(self, get_min_obj, get_min_rpc):
-        mgr = self.manager_cls()
+        old_version = objects.base.OBJ_VERSIONS.versions[-2]
+
+        with mock.patch('cinder.rpc.LAST_OBJ_VERSIONS',
+                        {'cinder-volume': old_version,
+                         'cinder-scheduler': old_version,
+                         'cinder-backup': old_version}):
+            mgr = self.manager_cls()
 
         volume_rpcapi = mgr.driver.volume_rpcapi
         self.assertEqual('1.3', volume_rpcapi.client.version_cap)
-        self.assertEqual('1.4',
+        self.assertEqual(old_version,
                          volume_rpcapi.client.serializer._base.version_cap)
-        get_min_obj.return_value = objects.base.OBJ_VERSIONS.get_current()
+        get_min_obj.return_value = self.latest_ovo_version
         mgr.reset()
 
         volume_rpcapi = mgr.driver.volume_rpcapi
@@ -311,7 +314,7 @@ class SchedulerManagerTestCase(test.TestCase):
         # Test NoValidBackend exception behavior for create_volume.
         # Puts the volume in 'error' state and eats the exception.
         _mock_sched_create.side_effect = exception.NoValidBackend(reason="")
-        volume = fake_volume.fake_volume_obj(self.context)
+        volume = fake_volume.fake_volume_obj(self.context, use_quota=True)
         request_spec = {'volume_id': volume.id,
                         'volume': {'id': volume.id, '_name_id': None,
                                    'metadata': {}, 'admin_metadata': {},
@@ -686,7 +689,7 @@ class SchedulerDriverModuleTestCase(test.TestCase):
     @mock.patch('cinder.db.volume_update')
     @mock.patch('cinder.objects.volume.Volume.get_by_id')
     def test_volume_host_update_db(self, _mock_volume_get, _mock_vol_update):
-        volume = fake_volume.fake_volume_obj(self.context)
+        volume = fake_volume.fake_volume_obj(self.context, use_quota=True)
         _mock_volume_get.return_value = volume
 
         driver.volume_update_db(self.context, volume.id, 'fake_host',

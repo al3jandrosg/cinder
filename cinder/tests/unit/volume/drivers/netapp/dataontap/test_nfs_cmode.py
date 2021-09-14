@@ -25,6 +25,7 @@ from oslo_utils import units
 from cinder import exception
 from cinder.image import image_utils
 from cinder.objects import fields
+from cinder.tests.unit import fake_volume
 from cinder.tests.unit import test
 from cinder.tests.unit.volume.drivers.netapp.dataontap import fakes as fake
 from cinder.tests.unit.volume.drivers.netapp.dataontap.utils import fakes as \
@@ -156,16 +157,22 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
         self.assertEqual(expected_stats, self.driver._stats)
 
     @ddt.data({'replication_backends': [],
-               'cluster_credentials': False, 'is_fg': False},
+               'cluster_credentials': False, 'is_fg': False,
+               'report_provisioned_capacity': True},
               {'replication_backends': ['target_1', 'target_2'],
-               'cluster_credentials': True, 'is_fg': False},
+               'cluster_credentials': True, 'is_fg': False,
+               'report_provisioned_capacity': False},
               {'replication_backends': ['target_1', 'target_2'],
-               'cluster_credentials': True, 'is_fg': True}
+               'cluster_credentials': True, 'is_fg': True,
+               'report_provisioned_capacity': False}
               )
     @ddt.unpack
     def test_get_pool_stats(self, replication_backends, cluster_credentials,
-                            is_fg):
+                            is_fg, report_provisioned_capacity):
         self.driver.using_cluster_credentials = cluster_credentials
+        conf = self.driver.configuration
+        conf.netapp_driver_reports_provisioned_capacity = (
+            report_provisioned_capacity)
         self.driver.zapi_client = mock.Mock()
         ssc = {
             'vola': {
@@ -203,9 +210,19 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             'total_capacity_gb': total_capacity_gb,
             'free_capacity_gb': free_capacity_gb,
         }
+        files_provisioned_cap = [{
+            'name': 'volume-ae947c9b-2392-4956-b373-aaac4521f37e',
+            'file-size': 5368709120.0  # 5GB
+        }, {
+            'name': 'snapshot-527eedad-a431-483d-b0ca-18995dd65b66',
+            'file-size': 1073741824.0  # 1GB
+        }]
         self.mock_object(self.driver,
                          '_get_share_capacity_info',
                          return_value=capacity)
+        self.mock_object(self.driver.zapi_client,
+                         'get_file_sizes_by_dir',
+                         return_value=files_provisioned_cap)
         self.mock_object(self.driver.zapi_client,
                          'get_flexvol_dedupe_used_percent',
                          return_value=55.0)
@@ -254,6 +271,8 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
             'online_extend_support': False,
             'netapp_is_flexgroup': 'false',
         }]
+        if report_provisioned_capacity:
+            expected[0].update({'provisioned_capacity_gb': 5.0})
 
         expected[0].update({'QoS_support': cluster_credentials})
         if not cluster_credentials:
@@ -1870,3 +1889,460 @@ class NetAppCmodeNfsDriverTestCase(test.TestCase):
         is_fg_clone = self.driver._is_flexgroup_clone_file_supported()
 
         self.assertTrue(is_fg_clone)
+
+    def test_copy_file(self):
+        self.driver.configuration.netapp_migrate_volume_timeout = 1
+        fake_job_status = {'job-status': 'complete'}
+        mock_start_file_copy = self.mock_object(self.driver.zapi_client,
+                                                'start_file_copy',
+                                                return_value=fake.JOB_UUID)
+        mock_get_file_copy_status = self.mock_object(
+            self.driver.zapi_client, 'get_file_copy_status',
+            return_value=fake_job_status)
+        mock_cancel_file_copy = self.mock_object(
+            self.driver, '_cancel_file_copy')
+        ctxt = mock.Mock()
+        vol_fields = {
+            'id': fake.VOLUME_ID,
+            'name': fake.VOLUME_NAME,
+            'status': fields.VolumeStatus.AVAILABLE
+        }
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        result = self.driver._copy_file(
+            fake_vol, fake.POOL_NAME, fake.VSERVER_NAME, fake.DEST_POOL_NAME,
+            fake.DEST_VSERVER_NAME, dest_file_name=fake.VOLUME_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME, cancel_on_error=True)
+
+        mock_start_file_copy.assert_called_with(
+            fake_vol.name, fake.DEST_POOL_NAME,
+            src_ontap_volume=fake.POOL_NAME,
+            dest_file_name=fake.VOLUME_NAME)
+        mock_get_file_copy_status.assert_called_with(fake.JOB_UUID)
+        mock_cancel_file_copy.assert_not_called()
+        self.assertIsNone(result)
+
+    @ddt.data(('data', na_utils.NetAppDriverTimeout),
+              ('destroyed', na_utils.NetAppDriverException),
+              ('destroyed', na_utils.NetAppDriverException))
+    @ddt.unpack
+    def test_copy_file_error(self, status_on_error, copy_exception):
+        self.driver.configuration.netapp_migrate_volume_timeout = 1
+        fake_job_status = {
+            'job-status': status_on_error,
+            'last-failure-reason': None
+        }
+        mock_start_file_copy = self.mock_object(self.driver.zapi_client,
+                                                'start_file_copy',
+                                                return_value=fake.JOB_UUID)
+        mock_get_file_copy_status = self.mock_object(
+            self.driver.zapi_client, 'get_file_copy_status',
+            return_value=fake_job_status)
+        mock_cancel_file_copy = self.mock_object(
+            self.driver, '_cancel_file_copy')
+        ctxt = mock.Mock()
+        vol_fields = {
+            'id': fake.VOLUME_ID,
+            'name': fake.VOLUME_NAME,
+            'status': fields.VolumeStatus.AVAILABLE
+        }
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(copy_exception,
+                          self.driver._copy_file,
+                          fake_vol, fake.POOL_NAME, fake.VSERVER_NAME,
+                          fake.DEST_POOL_NAME, fake.DEST_VSERVER_NAME,
+                          dest_file_name=fake.VOLUME_NAME,
+                          dest_backend_name=fake.DEST_BACKEND_NAME,
+                          cancel_on_error=True)
+
+        mock_start_file_copy.assert_called_with(
+            fake_vol.name, fake.DEST_POOL_NAME,
+            src_ontap_volume=fake.POOL_NAME,
+            dest_file_name=fake.VOLUME_NAME)
+        mock_get_file_copy_status.assert_called_with(fake.JOB_UUID)
+        mock_cancel_file_copy.assert_called_once_with(
+            fake.JOB_UUID, fake_vol, fake.DEST_POOL_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME)
+
+    def test_migrate_volume_to_vserver(self):
+        self.driver.backend_name = fake.BACKEND_NAME
+        mock_copy_file = self.mock_object(self.driver, '_copy_file')
+        mock_create_vserver_peer = self.mock_object(self.driver,
+                                                    'create_vserver_peer')
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration', return_value={})
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        updates = self.driver._migrate_volume_to_vserver(
+            fake_vol, fake.NFS_SHARE, fake.VSERVER_NAME, fake.DEST_NFS_SHARE,
+            fake.DEST_VSERVER_NAME, fake.DEST_BACKEND_NAME)
+
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.DEST_VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_create_vserver_peer.assert_called_once_with(
+            fake.VSERVER_NAME, fake.BACKEND_NAME, fake.DEST_VSERVER_NAME,
+            ['file_copy'])
+        mock_finish_volume_migration.assert_called_once_with(
+            fake_vol, fake.DEST_NFS_SHARE)
+        self.assertEqual({}, updates)
+
+    def test_migrate_volume_create_vserver_peer_error(self):
+        self.driver.backend_name = fake.BACKEND_NAME
+        mock_copy_file = self.mock_object(
+            self.driver, '_copy_file',
+            side_effect=na_utils.NetAppDriverException)
+        mock_create_vserver_peer = self.mock_object(
+            self.driver, 'create_vserver_peer',
+            side_effect=na_utils.NetAppDriverException)
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(
+            na_utils.NetAppDriverException,
+            self.driver._migrate_volume_to_vserver,
+            fake_vol,
+            fake.NFS_SHARE,
+            fake.VSERVER_NAME,
+            fake.DEST_NFS_SHARE,
+            fake.DEST_VSERVER_NAME,
+            fake.DEST_BACKEND_NAME)
+        mock_create_vserver_peer.assert_called_once_with(
+            fake.VSERVER_NAME, fake.BACKEND_NAME, fake.DEST_VSERVER_NAME,
+            ['file_copy'])
+        mock_copy_file.assert_not_called()
+        mock_finish_volume_migration.assert_not_called()
+
+    def test_migrate_volume_to_vserver_file_copy_error(self):
+        self.driver.backend_name = fake.BACKEND_NAME
+        mock_create_vserver_peer = self.mock_object(
+            self.driver, 'create_vserver_peer')
+        mock_copy_file = self.mock_object(
+            self.driver, '_copy_file',
+            side_effect=na_utils.NetAppDriverException)
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(
+            na_utils.NetAppDriverException,
+            self.driver._migrate_volume_to_vserver,
+            fake_vol,
+            fake.NFS_SHARE,
+            fake.VSERVER_NAME,
+            fake.DEST_NFS_SHARE,
+            fake.DEST_VSERVER_NAME,
+            fake.DEST_BACKEND_NAME)
+
+        mock_create_vserver_peer.assert_called_once_with(
+            fake.VSERVER_NAME, fake.BACKEND_NAME, fake.DEST_VSERVER_NAME,
+            ['file_copy'])
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.DEST_VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_finish_volume_migration.assert_not_called()
+
+    def test_migrate_volume_to_vserver_file_copy_timeout(self):
+        self.driver.backend_name = fake.BACKEND_NAME
+        mock_create_vserver_peer = self.mock_object(
+            self.driver, 'create_vserver_peer')
+        mock_copy_file = self.mock_object(
+            self.driver, '_copy_file',
+            side_effect=na_utils.NetAppDriverTimeout)
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(
+            na_utils.NetAppDriverTimeout,
+            self.driver._migrate_volume_to_vserver,
+            fake_vol,
+            fake.NFS_SHARE,
+            fake.VSERVER_NAME,
+            fake.DEST_NFS_SHARE,
+            fake.DEST_VSERVER_NAME,
+            fake.DEST_BACKEND_NAME)
+
+        mock_create_vserver_peer.assert_called_once_with(
+            fake.VSERVER_NAME, fake.BACKEND_NAME, fake.DEST_VSERVER_NAME,
+            ['file_copy'])
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.DEST_VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_finish_volume_migration.assert_not_called()
+
+    def test_migrate_volume_to_pool(self):
+        mock_copy_file = self.mock_object(self.driver, '_copy_file')
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration', return_value={})
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        updates = self.driver._migrate_volume_to_pool(fake_vol,
+                                                      fake.NFS_SHARE,
+                                                      fake.DEST_NFS_SHARE,
+                                                      fake.VSERVER_NAME,
+                                                      fake.DEST_BACKEND_NAME)
+
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_finish_volume_migration.assert_called_once_with(
+            fake_vol, fake.DEST_NFS_SHARE)
+        self.assertEqual({}, updates)
+
+    def test_migrate_volume_to_pool_file_copy_error(self):
+        mock_copy_file = self.mock_object(
+            self.driver, '_copy_file',
+            side_effect=na_utils.NetAppDriverException)
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(
+            na_utils.NetAppDriverException,
+            self.driver._migrate_volume_to_pool,
+            fake_vol,
+            fake.NFS_SHARE,
+            fake.DEST_NFS_SHARE,
+            fake.VSERVER_NAME,
+            fake.DEST_BACKEND_NAME)
+
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_finish_volume_migration.assert_not_called()
+
+    def test_migrate_volume_to_pool_file_copy_timeout(self):
+        mock_copy_file = self.mock_object(
+            self.driver, '_copy_file',
+            side_effect=na_utils.NetAppDriverTimeout)
+        mock_finish_volume_migration = self.mock_object(
+            self.driver, '_finish_volume_migration')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID, 'name': fake.VOLUME_NAME}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        self.assertRaises(
+            na_utils.NetAppDriverTimeout,
+            self.driver._migrate_volume_to_pool,
+            fake_vol,
+            fake.NFS_SHARE,
+            fake.DEST_NFS_SHARE,
+            fake.VSERVER_NAME,
+            fake.DEST_BACKEND_NAME)
+
+        mock_copy_file.assert_called_once_with(
+            fake_vol, fake.EXPORT_PATH[1:], fake.VSERVER_NAME,
+            fake.DEST_EXPORT_PATH[1:], fake.VSERVER_NAME,
+            dest_backend_name=fake.DEST_BACKEND_NAME,
+            cancel_on_error=True)
+        mock_finish_volume_migration.assert_not_called()
+
+    def test_finish_volume_migration(self):
+        mock_delete_volume = self.mock_object(self.driver, 'delete_volume')
+        ctxt = mock.Mock()
+        vol_fields = {'id': fake.VOLUME_ID,
+                      'host': 'fakeHost@%s#%s' % (fake.BACKEND_NAME,
+                                                  fake.POOL_NAME)}
+        fake_vol = fake_volume.fake_volume_obj(ctxt, **vol_fields)
+
+        result = self.driver._finish_volume_migration(fake_vol,
+                                                      fake.DEST_POOL_NAME)
+
+        mock_delete_volume.assert_called_once_with(fake_vol)
+        expected = {'provider_location': fake.DEST_POOL_NAME}
+        self.assertEqual(expected, result)
+
+    def test_migrate_volume(self):
+        ctx = mock.Mock()
+        self.driver.backend_name = fake.BACKEND_NAME
+        self.driver.netapp_vserver = fake.VSERVER_NAME
+        mock_migrate_volume_ontap_assisted = self.mock_object(
+            self.driver, 'migrate_volume_ontap_assisted', return_value={})
+        vol_fields = {
+            'id': fake.VOLUME_ID,
+            'name': fake.VOLUME_NAME,
+            'status': fields.VolumeStatus.AVAILABLE
+        }
+        fake_vol = fake_volume.fake_volume_obj(ctx, **vol_fields)
+
+        result = self.driver.migrate_volume(ctx, fake_vol,
+                                            fake.DEST_HOST_STRING)
+
+        mock_migrate_volume_ontap_assisted.assert_called_once_with(
+            fake_vol, fake.DEST_HOST_STRING, fake.BACKEND_NAME,
+            fake.VSERVER_NAME)
+        self.assertEqual({}, result)
+
+    def test_migrate_volume_not_in_available_status(self):
+        ctx = mock.Mock()
+        self.driver.backend_name = fake.BACKEND_NAME
+        self.driver.netapp_vserver = fake.VSERVER_NAME
+        mock_migrate_volume_ontap_assisted = self.mock_object(
+            self.driver, 'migrate_volume_ontap_assisted', return_value={})
+        vol_fields = {
+            'id': fake.VOLUME_ID,
+            'name': fake.VOLUME_NAME,
+            'status': fields.VolumeStatus.IN_USE
+        }
+        fake_vol = fake_volume.fake_volume_obj(ctx, **vol_fields)
+
+        migrated, updates = self.driver.migrate_volume(ctx,
+                                                       fake_vol,
+                                                       fake.DEST_HOST_STRING)
+
+        mock_migrate_volume_ontap_assisted.assert_not_called()
+        self.assertFalse(migrated)
+        self.assertEqual({}, updates)
+
+    def test__revert_to_snapshot(self):
+        mock_clone_backing_file_for_volume = self.mock_object(
+            self.driver, '_clone_backing_file_for_volume')
+        mock_get_export_ip_path = self.mock_object(
+            self.driver, '_get_export_ip_path',
+            return_value=(fake.SHARE_IP, fake.EXPORT_PATH))
+        mock_get_vserver_for_ip = self.mock_object(
+            self.driver, '_get_vserver_for_ip', return_value=fake.VSERVER_NAME)
+        mock_get_vol_by_junc_vserver = self.mock_object(
+            self.driver.zapi_client, 'get_vol_by_junc_vserver',
+            return_value=fake.FLEXVOL)
+        mock_swap_files = self.mock_object(self.driver, '_swap_files')
+        mock_delete_file = self.mock_object(self.driver.zapi_client,
+                                            'delete_file')
+
+        self.driver._revert_to_snapshot(fake.SNAPSHOT_VOLUME, fake.SNAPSHOT)
+
+        mock_clone_backing_file_for_volume.assert_called_once_with(
+            fake.SNAPSHOT['name'],
+            'new-%s' % fake.SNAPSHOT['name'],
+            fake.SNAPSHOT_VOLUME['id'],
+            is_snapshot=False)
+        mock_get_export_ip_path.assert_called_once_with(
+            volume_id=fake.SNAPSHOT_VOLUME['id'])
+        mock_get_vserver_for_ip.assert_called_once_with(fake.SHARE_IP)
+        mock_get_vol_by_junc_vserver.assert_called_once_with(
+            fake.VSERVER_NAME, fake.EXPORT_PATH)
+        mock_swap_files.assert_called_once_with(
+            fake.FLEXVOL, fake.SNAPSHOT_VOLUME['name'],
+            'new-%s' % fake.SNAPSHOT['name'])
+        mock_delete_file.assert_not_called()
+
+    @ddt.data(False, True)
+    def test__revert_to_snapshot_swap_exception(self, delete_exception):
+        new_snap_name = 'new-%s' % fake.SNAPSHOT['name']
+        new_file_path = '/vol/%s/%s' % (fake.FLEXVOL, new_snap_name)
+
+        self.mock_object(self.driver, '_clone_backing_file_for_volume')
+        self.mock_object(self.driver, '_get_export_ip_path',
+                         return_value=(fake.SHARE_IP, fake.EXPORT_PATH))
+        self.mock_object(self.driver, '_get_vserver_for_ip',
+                         return_value=fake.VSERVER_NAME)
+        self.mock_object(self.driver.zapi_client, 'get_vol_by_junc_vserver',
+                         return_value=fake.FLEXVOL)
+        swap_exception = exception.VolumeBackendAPIException(data="data")
+        self.mock_object(self.driver, '_swap_files',
+                         side_effect=swap_exception)
+        side_effect = Exception if delete_exception else lambda: True
+        mock_delete_file = self.mock_object(self.driver.zapi_client,
+                                            'delete_file',
+                                            side_effect=side_effect)
+
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver._revert_to_snapshot,
+                          fake.SNAPSHOT_VOLUME, fake.SNAPSHOT)
+
+        mock_delete_file.assert_called_once_with(new_file_path)
+
+    def test__swap_files(self):
+        new_file = 'new-%s' % fake.SNAPSHOT['name']
+        new_file_path = '/vol/%s/%s' % (fake.FLEXVOL, new_file)
+        original_file_path = '/vol/%s/%s' % (fake.FLEXVOL, fake.VOLUME_NAME)
+        tmp_file_path = '/vol/%s/tmp-%s' % (fake.FLEXVOL, fake.VOLUME_NAME)
+
+        mock_rename_file = self.mock_object(
+            self.driver.zapi_client, 'rename_file')
+        mock_delete_file = self.mock_object(
+            self.driver.zapi_client, 'delete_file')
+
+        self.driver._swap_files(fake.FLEXVOL, fake.VOLUME_NAME, new_file)
+
+        mock_rename_file.assert_has_calls([
+            mock.call(original_file_path, tmp_file_path),
+            mock.call(new_file_path, original_file_path)])
+
+        mock_delete_file.assert_called_once_with(tmp_file_path)
+
+    @ddt.data((True, False), (False, False), (False, True))
+    @ddt.unpack
+    def test__swap_files_rename_exception(self, first_exception,
+                                          rollback_exception):
+        new_file = 'new-%s' % fake.SNAPSHOT['name']
+        new_file_path = '/vol/%s/%s' % (fake.FLEXVOL, new_file)
+        original_file_path = '/vol/%s/%s' % (fake.FLEXVOL, fake.VOLUME_NAME)
+        tmp_file_path = '/vol/%s/tmp-%s' % (fake.FLEXVOL, fake.VOLUME_NAME)
+        side_effect = None
+
+        def _skip_side_effect():
+            return True
+
+        if not first_exception and not rollback_exception:
+            side_effect = [_skip_side_effect,
+                           exception.VolumeBackendAPIException(data="data"),
+                           _skip_side_effect]
+        elif not first_exception and rollback_exception:
+            side_effect = [_skip_side_effect,
+                           exception.VolumeBackendAPIException(data="data"),
+                           exception.VolumeBackendAPIException(data="data")]
+        else:
+            side_effect = exception.VolumeBackendAPIException(data="data")
+
+        mock_rename_file = self.mock_object(self.driver.zapi_client,
+                                            'rename_file',
+                                            side_effect=side_effect)
+
+        self.assertRaises(
+            na_utils.NetAppDriverException,
+            self.driver._swap_files, fake.FLEXVOL, fake.VOLUME_NAME, new_file)
+
+        if not first_exception:
+            mock_rename_file.assert_has_calls([
+                mock.call(original_file_path, tmp_file_path),
+                mock.call(new_file_path, original_file_path),
+                mock.call(tmp_file_path, original_file_path)])
+        else:
+            mock_rename_file.assert_called_once_with(original_file_path,
+                                                     tmp_file_path)
+
+    def test__swap_files_delete_exception(self):
+        new_file = 'new-%s' % fake.SNAPSHOT['name']
+
+        self.mock_object(self.driver.zapi_client, 'rename_file')
+        side_effect = exception.VolumeBackendAPIException(data="data")
+        self.mock_object(self.driver.zapi_client, 'delete_file',
+                         side_effect=side_effect)
+
+        self.driver._swap_files(fake.FLEXVOL, fake.VOLUME_NAME, new_file)

@@ -93,10 +93,10 @@ def create_volume(ctxt,
     if id:
         with mock.patch('cinder.objects.Volume.obj_attr_is_set',
                         obj_attr_is_set(objects.Volume)):
-            volume = objects.Volume(ctxt, id=id, **vol)
+            volume = objects.Volume(context=ctxt, id=id, **vol)
             volume.create()
     else:
-        volume = objects.Volume(ctxt, **vol)
+        volume = objects.Volume(context=ctxt, **vol)
         volume.create()
 
     # If we get a TestCase instance we add cleanup
@@ -115,9 +115,9 @@ def attach_volume(ctxt, volume_id, instance_uuid, attached_host,
     values['mountpoint'] = mountpoint
     values['attach_time'] = now
 
-    attachment = db.volume_attach(ctxt, values)
+    attachment = db.volume_attach(ctxt.elevated(), values)
     volume, updated_values = db.volume_attached(
-        ctxt, attachment['id'], instance_uuid,
+        ctxt.elevated(), attachment['id'], instance_uuid,
         attached_host, mountpoint, mode)
     return volume
 

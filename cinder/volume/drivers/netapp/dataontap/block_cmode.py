@@ -25,6 +25,8 @@ Volume driver library for NetApp C-mode block storage systems.
 """
 
 from oslo_log import log as logging
+from oslo_service import loopingcall
+from oslo_utils import excutils
 from oslo_utils import units
 import six
 
@@ -57,10 +59,12 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
         1.0.0 - Driver development before Wallaby
         2.0.0 - Add support for QoS minimums specs
                 Add support for dynamic Adaptive QoS policy group creation
+        3.0.0 - Add support for Intra-cluster Storage assisted volume migration
+                Add support for revert to snapshot
 
     """
 
-    VERSION = "2.0.0"
+    VERSION = "3.0.0"
 
     REQUIRED_CMODE_FLAGS = ['netapp_vserver']
 
@@ -328,6 +332,19 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
 
             size_available_gb = capacity['size-available'] / units.Gi
             pool['free_capacity_gb'] = na_utils.round_down(size_available_gb)
+
+            if self.configuration.netapp_driver_reports_provisioned_capacity:
+                luns = self.zapi_client.get_lun_sizes_by_volume(
+                    ssc_vol_name)
+                provisioned_cap = 0
+                for lun in luns:
+                    lun_name = lun['path'].split('/')[-1]
+                    # Filtering luns that matches the volume name template to
+                    # exclude snapshots
+                    if volume_utils.extract_id_from_volume_name(lun_name):
+                        provisioned_cap = provisioned_cap + lun['size']
+                pool['provisioned_capacity_gb'] = na_utils.round_down(
+                    float(provisioned_cap) / units.Gi)
 
             if self.using_cluster_credentials:
                 dedupe_used = self.zapi_client.get_flexvol_dedupe_used_percent(
@@ -605,3 +622,328 @@ class NetAppBlockStorageCmodeLibrary(block_base.NetAppBlockStorageLibrary,
                     volume_model_updates.append(volume_model_update)
 
         return None, volume_model_updates
+
+    def _move_lun(self, volume, src_ontap_volume, dest_ontap_volume,
+                  dest_lun_name=None):
+        """Moves LUN from an ONTAP volume to another."""
+        job_uuid = self.zapi_client.start_lun_move(
+            volume.name, dest_ontap_volume, src_ontap_volume=src_ontap_volume,
+            dest_lun_name=dest_lun_name)
+        LOG.debug('Start moving LUN %s from %s to %s. '
+                  'Job UUID is %s.', volume.name, src_ontap_volume,
+                  dest_ontap_volume, job_uuid)
+
+        def _wait_lun_move_complete():
+            move_status = self.zapi_client.get_lun_move_status(job_uuid)
+            LOG.debug('Waiting for LUN move job %s to complete. '
+                      'Current status is: %s.', job_uuid,
+                      move_status['job-status'])
+
+            if not move_status:
+                status_error_msg = (_("Error moving LUN %s. The "
+                                      "corresponding Job UUID % doesn't "
+                                      "exist."))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id, job_uuid))
+            elif move_status['job-status'] == 'destroyed':
+                status_error_msg = (_('Error moving LUN %s. %s.'))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id,
+                                        move_status['last-failure-reason']))
+            elif move_status['job-status'] == 'complete':
+                raise loopingcall.LoopingCallDone()
+
+        try:
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_lun_move_complete)
+            timer.start(
+                interval=15,
+                timeout=self.configuration.netapp_migrate_volume_timeout
+            ).wait()
+        except loopingcall.LoopingCallTimeOut:
+            msg = (_('Timeout waiting to complete move operation of LUN %s.'))
+            raise na_utils.NetAppDriverTimeout(msg % volume.id)
+
+    def _cancel_lun_copy(self, job_uuid, volume, dest_pool, dest_backend_name):
+        """Cancel an on-going lun copy operation."""
+        try:
+            # NOTE(sfernand): Another approach would be first checking if
+            # the copy operation isn't in `destroying` or `destroyed` states
+            # before issuing cancel.
+            self.zapi_client.cancel_lun_copy(job_uuid)
+        except na_utils.NetAppDriverException:
+            dest_client = dot_utils.get_client_for_backend(dest_backend_name)
+            lun_path = '/vol/%s/%s' % (dest_pool, volume.name)
+            try:
+                dest_client.destroy_lun(lun_path)
+            except Exception:
+                LOG.warn('Error cleaning up LUN %s in destination volume. '
+                         'Verify if destination volume still exists in pool '
+                         '%s and delete it manually to avoid unused '
+                         'resources.', lun_path, dest_pool)
+
+    def _copy_lun(self, volume, src_ontap_volume, src_vserver,
+                  dest_ontap_volume, dest_vserver, dest_lun_name=None,
+                  dest_backend_name=None, cancel_on_error=False):
+        """Copies LUN from an ONTAP volume to another."""
+        job_uuid = self.zapi_client.start_lun_copy(
+            volume.name, dest_ontap_volume, dest_vserver,
+            src_ontap_volume=src_ontap_volume, src_vserver=src_vserver,
+            dest_lun_name=dest_lun_name)
+        LOG.debug('Start copying LUN %(vol)s from '
+                  '%(src_vserver)s:%(src_ontap_vol)s to '
+                  '%(dest_vserver)s:%(dest_ontap_vol)s. Job UUID is %(job)s.',
+                  {'vol': volume.name, 'src_vserver': src_vserver,
+                   'src_ontap_vol': src_ontap_volume,
+                   'dest_vserver': dest_vserver,
+                   'dest_ontap_vol': dest_ontap_volume,
+                   'job': job_uuid})
+
+        def _wait_lun_copy_complete():
+            copy_status = self.zapi_client.get_lun_copy_status(job_uuid)
+            LOG.debug('Waiting for LUN copy job %s to complete. Current '
+                      'status is: %s.', job_uuid, copy_status['job-status'])
+            if not copy_status:
+                status_error_msg = (_("Error copying LUN %s. The "
+                                      "corresponding Job UUID % doesn't "
+                                      "exist."))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id, job_uuid))
+            elif copy_status['job-status'] == 'destroyed':
+                status_error_msg = (_('Error copying LUN %s. %s.'))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id,
+                                        copy_status['last-failure-reason']))
+            elif copy_status['job-status'] == 'complete':
+                raise loopingcall.LoopingCallDone()
+
+        try:
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_lun_copy_complete)
+            timer.start(
+                interval=10,
+                timeout=self.configuration.netapp_migrate_volume_timeout
+            ).wait()
+        except Exception as e:
+            with excutils.save_and_reraise_exception() as ctxt:
+                if cancel_on_error:
+                    self._cancel_lun_copy(job_uuid, volume, dest_ontap_volume,
+                                          dest_backend_name=dest_backend_name)
+                if isinstance(e, loopingcall.LoopingCallTimeOut):
+                    ctxt.reraise = False
+                    msg = (_('Timeout waiting volume %s to complete '
+                             'migration.'))
+                    raise na_utils.NetAppDriverTimeout(msg % volume.id)
+
+    def _finish_migrate_volume_to_vserver(self, src_volume):
+        """Finish volume migration to another vserver within the cluster."""
+        # The source volume can be safely deleted after a successful migration.
+        self.delete_volume(src_volume)
+        # LUN cache for current backend can be deleted after migration.
+        self._delete_lun_from_table(src_volume.name)
+
+    def _migrate_volume_to_vserver(self, volume, src_pool, src_vserver,
+                                   dest_pool, dest_vserver, dest_backend_name):
+        """Migrate volume to a another vserver within the same cluster."""
+        LOG.info('Migrating volume %(vol)s from '
+                 '%(src_vserver)s:%(src_ontap_vol)s to '
+                 '%(dest_vserver)s:%(dest_ontap_vol)s.',
+                 {'vol': volume.id, 'src_vserver': src_vserver,
+                  'src_ontap_vol': src_pool, 'dest_vserver': dest_vserver,
+                  'dest_ontap_vol': dest_pool})
+        # NOTE(sfernand): Migrating to a different vserver relies on coping
+        # operations which are always disruptive, as it requires the
+        # destination volume to be added as a new block device to the Nova
+        # instance. This differs from migrating volumes in a same vserver,
+        # since we can make use of a LUN move operation without the
+        # need of changing the iSCSI target.
+        if volume.status != fields.VolumeStatus.AVAILABLE:
+            msg = _("Volume status must be 'available' in order to "
+                    "migrate volume to another vserver.")
+            LOG.error(msg)
+            raise exception.InvalidVolume(reason=msg)
+
+        vserver_peer_application = 'lun_copy'
+        self.create_vserver_peer(src_vserver, self.backend_name, dest_vserver,
+                                 [vserver_peer_application])
+        self._copy_lun(volume, src_pool, src_vserver, dest_pool,
+                       dest_vserver, dest_backend_name=dest_backend_name,
+                       cancel_on_error=True)
+        self._finish_migrate_volume_to_vserver(volume)
+        LOG.info('Successfully migrated volume %(vol)s from '
+                 '%(src_vserver)s:%(src_ontap_vol)s '
+                 'to %(dest_vserver)s:%(dest_ontap_vol)s.',
+                 {'vol': volume.id, 'src_vserver': src_vserver,
+                  'src_ontap_vol': src_pool, 'dest_vserver': dest_vserver,
+                  'dest_ontap_vol': dest_pool})
+        # No model updates are necessary, so return empty dict
+        return {}
+
+    def _finish_migrate_volume_to_pool(self, src_volume, dest_pool):
+        """Finish volume migration to another pool within the same vserver."""
+        # LUN cache must be updated with new path and volume information.
+        lun = self._get_lun_from_table(src_volume.name)
+        new_lun_path = '/vol/%s/%s' % (dest_pool, src_volume.name)
+        lun.metadata['Path'] = new_lun_path
+        lun.metadata['Volume'] = dest_pool
+
+    def _migrate_volume_to_pool(self, volume, src_pool, dest_pool, vserver,
+                                dest_backend_name):
+        """Migrate volume to another Cinder Pool within the same vserver."""
+        LOG.info('Migrating volume %(vol)s from pool %(src)s to '
+                 '%(dest)s within vserver %(vserver)s.',
+                 {'vol': volume.id, 'src': src_pool, 'dest': dest_pool,
+                  'vserver': vserver})
+        updates = {}
+        try:
+            self._move_lun(volume, src_pool, dest_pool)
+        except na_utils.NetAppDriverTimeout:
+            error_msg = (_('Timeout waiting volume %s to complete migration.'
+                           'Volume status is set to maintenance to prevent '
+                           'performing operations with this volume. Check the '
+                           'migration status on the storage side and set '
+                           'volume status manually if migration succeeded.'))
+            LOG.warn(error_msg, volume.id)
+            updates['status'] = fields.VolumeStatus.MAINTENANCE
+        except na_utils.NetAppDriverException as e:
+            error_msg = (_('Failed to migrate volume %(vol)s from pool '
+                           '%(src)s to %(dest)s. %(err)s'))
+            raise na_utils.NetAppDriverException(
+                error_msg % {'vol': volume.id, 'src': src_pool,
+                             'dest': dest_pool, 'err': e})
+
+        self._finish_migrate_volume_to_pool(volume, dest_pool)
+        LOG.info('Successfully migrated volume %(vol)s from pool %(src)s '
+                 'to %(dest)s within vserver %(vserver)s.',
+                 {'vol': volume.id, 'src': src_pool, 'dest': dest_pool,
+                  'vserver': vserver})
+        return updates
+
+    def migrate_volume(self, context, volume, host):
+        """Migrate Cinder volume to the specified pool or vserver."""
+        return self.migrate_volume_ontap_assisted(
+            volume, host, self.backend_name, self.configuration.netapp_vserver)
+
+    def revert_to_snapshot(self, volume, snapshot):
+        """Driver entry point for reverting volume to snapshot."""
+        try:
+            self._revert_to_snapshot(volume, snapshot)
+        except Exception:
+            raise exception.VolumeBackendAPIException(
+                "Revert snapshot failed.")
+
+    def _revert_to_snapshot(self, volume, snapshot):
+        """Sets up all required resources for _swap_luns.
+
+        If _swap_luns fails, the cloned LUN is destroyed.
+        """
+        new_lun_name = self._clone_snapshot(snapshot["name"])
+
+        LOG.debug("Cloned from snapshot: %s.", new_lun_name)
+
+        lun = self._get_lun_from_table(volume["name"])
+        volume_path = lun.metadata["Path"]
+        seg = volume_path.split("/")
+        lun_name = seg[-1]
+        flexvol_name = seg[2]
+
+        try:
+            self._swap_luns(lun_name, new_lun_name, flexvol_name)
+        except Exception:
+            LOG.error("Swapping LUN from %s to %s failed.", lun_name,
+                      new_lun_name)
+            with excutils.save_and_reraise_exception():
+                try:
+                    LOG.debug("Deleting temporary reverted LUN %s.",
+                              new_lun_name)
+                    new_lun_path = "/vol/%s/%s" % (flexvol_name, new_lun_name)
+                    self.zapi_client.destroy_lun(new_lun_path)
+                except Exception:
+                    LOG.error("Failure deleting temporary reverted LUN %s. "
+                              "A manual deletion is required.", new_lun_name)
+
+    def _clone_snapshot(self, snapshot_name):
+        """Returns the name of the LUN cloned from snapshot.
+
+        Creates a LUN with same metadata as original LUN and then clones
+        from snapshot. If clone operation fails, the new LUN is deleted.
+        """
+        snapshot_lun = self._get_lun_from_table(snapshot_name)
+        snapshot_path = snapshot_lun.metadata["Path"]
+        lun_name = snapshot_path.split("/")[-1]
+        flexvol_name = snapshot_path.split("/")[2]
+
+        LOG.info("Cloning LUN %s from snapshot %s in volume %s.", lun_name,
+                 snapshot_name, flexvol_name)
+
+        metadata = snapshot_lun.metadata
+
+        block_count = self._get_lun_block_count(snapshot_path)
+        if block_count == 0:
+            msg = _("%s cannot be reverted using clone operation"
+                    " as it contains no blocks.")
+            raise exception.VolumeBackendAPIException(data=msg % snapshot_name)
+
+        new_snap_name = "new-%s" % snapshot_name
+
+        self.zapi_client.create_lun(
+            flexvol_name, new_snap_name,
+            six.text_type(snapshot_lun.size), metadata)
+        try:
+            self._clone_lun(snapshot_name, new_snap_name,
+                            block_count=block_count)
+            return new_snap_name
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                try:
+                    new_lun_path = "/vol/%s/%s" % (flexvol_name, new_snap_name)
+                    self.zapi_client.destroy_lun(new_lun_path)
+                except Exception:
+                    LOG.error("Failure deleting temporary reverted LUN %s. "
+                              "A manual deletion is required.", new_snap_name)
+
+    def _swap_luns(self, original_lun, new_lun, flexvol_name):
+        """Swaps cloned and original LUNs using a temporary LUN.
+
+        Moves the original LUN to a temporary path, then moves the cloned LUN
+        to the original path (if this fails, moves the temporary LUN back as
+        original LUN) and finally destroys the LUN with temporary path.
+        """
+        tmp_lun = "tmp-%s" % original_lun
+
+        original_path = "/vol/%s/%s" % (flexvol_name, original_lun)
+        tmp_path = "/vol/%s/%s" % (flexvol_name, tmp_lun)
+        new_path = "/vol/%s/%s" % (flexvol_name, new_lun)
+
+        LOG.debug("Original Path: %s.", original_path)
+        LOG.debug("Temporary Path: %s.", tmp_path)
+        LOG.debug("New Path %s.", new_path)
+
+        try:
+            self.zapi_client.move_lun(original_path, tmp_path)
+        except Exception:
+            msg = _("Failure moving original LUN from %s to %s." %
+                    (original_path, tmp_path))
+            raise exception.VolumeBackendAPIException(data=msg)
+
+        try:
+            self.zapi_client.move_lun(new_path, original_path)
+        except Exception:
+            LOG.debug("Move temporary reverted LUN failed. Moving back "
+                      "original LUN to original path.")
+            try:
+                self.zapi_client.move_lun(tmp_path, original_path)
+            except Exception:
+                LOG.error("Could not move original LUN path from %s to %s. "
+                          "Cinder may lose the volume management. Please, you "
+                          "should move it back manually.",
+                          tmp_path, original_path)
+
+            msg = _("Failure moving temporary reverted LUN from %s to %s.")
+            raise exception.VolumeBackendAPIException(
+                data=msg % (new_path, original_path))
+        try:
+            self.zapi_client.destroy_lun(tmp_path)
+        except Exception:
+            LOG.error("Failure deleting old LUN %s. A manual deletion "
+                      "is required.", tmp_lun)

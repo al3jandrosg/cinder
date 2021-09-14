@@ -37,8 +37,6 @@ from cinder import exception
 
 # Add new constants here for each new microversion.
 
-V2_BASE_VERSION = '2.0'
-
 BASE_VERSION = '3.0'
 
 UPLOAD_IMAGE_PARAMS = '3.1'
@@ -168,6 +166,10 @@ DEFAULT_TYPE_OVERRIDES = '3.62'
 VOLUME_TYPE_ID_IN_VOLUME_DETAIL = '3.63'
 
 ENCRYPTION_KEY_ID_IN_DETAILS = '3.64'
+
+USE_QUOTA = '3.65'
+
+SNAPSHOT_IN_USE = '3.66'
 
 
 def get_mv_header(version):

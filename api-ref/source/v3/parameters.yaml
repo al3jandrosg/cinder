@@ -214,6 +214,18 @@ detail:
   in: query
   required: false
   type: boolean
+filter_consumes_quota:
+  description: |
+    Filters results by ``consumes_quota`` field.  Resources that don't use
+    quotas are usually temporary internal resources created to perform an
+    operation.  Default is to not filter by it.  Filtering by this option may
+    not be always possible in a cloud, see
+    :ref:`List Resource Filters <resource-filters>` to determine whether this
+    filter is available in your cloud.
+  in: query
+  required: false
+  type: boolean
+  min_version: 3.65
 filter_created_at:
   description: |
     Filters reuslts by a time that resources are created at with time
@@ -841,6 +853,15 @@ consumer:
   in: body
   required: false
   type: string
+consumes_quota:
+  description: |
+    Whether this resource consumes quota or not.  Resources that not counted
+    for quota usage are usually temporary internal resources created to perform
+    an operation.
+  in: body
+  required: false
+  type: boolean
+  min_version: 3.65
 container:
   description: |
     The container name or null.
@@ -1257,6 +1278,7 @@ group_id_optional:
   in: body
   required: false
   type: string
+  min_version: 3.13
 group_name:
   description: |
     The group name.
@@ -1265,10 +1287,11 @@ group_name:
   type: string
 group_replication_status:
   description: |
-    The group replication status. Introduced with API microversion 3.38.
+    The group replication status.
   in: body
   required: false
   type: string
+  min_version: 3.38
 group_snapshot:
   description: |
     The group snapshot.
@@ -1281,6 +1304,13 @@ group_snapshot_id:
   in: body
   required: false
   type: string
+group_snapshot_id_3_14:
+  description: |
+    The ID of the group snapshot.
+  in: body
+  required: true
+  type: string
+  min_version: 3.14
 group_snapshot_id_req:
   description: |
     The ID of the group snapshot.
@@ -2301,6 +2331,15 @@ provider:  # required response parameter (get/create)
   in: body
   required: true
   type: string
+provider_id:
+  description: |
+    The provider ID for the volume.  The value is either a string set by the
+    driver or ``null`` if the driver doesn't use the field or if it hasn't
+    created it yet.  Only returned for administrators.
+  in: body
+  required: false
+  type: string
+  min_version: 3.21
 provider_optional:  # optional response parameter (update)
   description: |
     The class that provides encryption support.

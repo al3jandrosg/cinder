@@ -39,18 +39,22 @@ class Snapshot(cleanable.CinderCleanableObject, base.CinderObject,
     # Version 1.3: SnapshotStatusField now includes "unmanaging"
     # Version 1.4: SnapshotStatusField now includes "backing-up"
     # Version 1.5: SnapshotStatusField now includes "restoring"
-    VERSION = '1.5'
+    # Version 1.6: Added use_quota
+    VERSION = '1.6'
 
     # NOTE(thangp): OPTIONAL_FIELDS are fields that would be lazy-loaded. They
     # are typically the relationship in the sqlalchemy object.
     OPTIONAL_FIELDS = ('volume', 'metadata', 'cgsnapshot', 'group_snapshot')
 
+    # NOTE: When adding a field obj_make_compatible needs to be updated
     fields = {
         'id': fields.UUIDField(),
 
         'user_id': fields.StringField(nullable=True),
         'project_id': fields.StringField(nullable=True),
 
+        # TODO: (Y release) Change nullable to False
+        'use_quota': fields.BooleanField(default=True, nullable=True),
         'volume_id': fields.UUIDField(nullable=True),
         'cgsnapshot_id': fields.UUIDField(nullable=True),
         'group_snapshot_id': fields.UUIDField(nullable=True),
@@ -109,6 +113,15 @@ class Snapshot(cleanable.CinderCleanableObject, base.CinderObject,
             self._orig_metadata = (dict(self.metadata)
                                    if self.obj_attr_is_set('metadata') else {})
 
+    # TODO: (Y release) remove method
+    @classmethod
+    def _obj_from_primitive(cls, context, objver, primitive):
+        primitive['versioned_object.data'].setdefault('use_quota', True)
+        obj = super(Snapshot, Snapshot)._obj_from_primitive(context, objver,
+                                                            primitive)
+        obj._reset_metadata_tracking()
+        return obj
+
     def obj_what_changed(self):
         changes = super(Snapshot, self).obj_what_changed()
         if hasattr(self, 'metadata') and self.metadata != self._orig_metadata:
@@ -117,23 +130,12 @@ class Snapshot(cleanable.CinderCleanableObject, base.CinderObject,
         return changes
 
     def obj_make_compatible(self, primitive, target_version):
-        """Make an object representation compatible with a target version."""
+        """Make a Snapshot representation compatible with a target version."""
         super(Snapshot, self).obj_make_compatible(primitive, target_version)
         target_version = versionutils.convert_version_to_tuple(target_version)
-
-        backport_statuses = (((1, 3),
-                              (c_fields.SnapshotStatus.UNMANAGING,
-                               c_fields.SnapshotStatus.DELETING)),
-                             ((1, 4),
-                             (c_fields.SnapshotStatus.BACKING_UP,
-                              c_fields.SnapshotStatus.AVAILABLE)),
-                             ((1, 5),
-                              (c_fields.SnapshotStatus.RESTORING,
-                               c_fields.SnapshotStatus.AVAILABLE)))
-        for version, status in backport_statuses:
-            if target_version < version:
-                if primitive.get('status') == status[0]:
-                    primitive['status'] = status[1]
+        # TODO: (Y release) remove next 2 lines & method if nothing else below
+        if target_version < (1, 6):
+            primitive.pop('use_quota', None)
 
     @classmethod
     def _from_db_object(cls, context, snapshot, db_snapshot,
@@ -197,6 +199,8 @@ class Snapshot(cleanable.CinderCleanableObject, base.CinderObject,
             updates['volume_type_id'] = (
                 volume_types.get_default_volume_type()['id'])
 
+        # TODO: (Y release) remove setting use_quota default, it's set by ORM
+        updates.setdefault('use_quota', True)
         db_snapshot = db.snapshot_create(self._context, updates)
         self._from_db_object(self._context, self, db_snapshot)
 

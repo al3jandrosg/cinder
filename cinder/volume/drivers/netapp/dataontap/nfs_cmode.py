@@ -25,7 +25,9 @@ import os
 import uuid
 
 from oslo_log import log as logging
+from oslo_service import loopingcall
 from oslo_utils import excutils
+from oslo_utils import units
 import six
 
 from cinder import exception
@@ -61,10 +63,12 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
         2.0.0 - Add support for QoS minimums specs
                 Add support for dynamic Adaptive QoS policy group creation
                 Implement FlexGroup pool
+        3.0.0 - Add support for Intra-cluster Storage assisted volume migration
+                Add support for revert to snapshot
 
     """
 
-    VERSION = "2.0.0"
+    VERSION = "3.0.0"
 
     REQUIRED_CMODE_FLAGS = ['netapp_vserver']
 
@@ -222,6 +226,80 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
                                          qos_policy_group_is_adaptive,
                                          target_path)
 
+    def _revert_to_snapshot(self, volume, snapshot):
+        """Clone volume from snapshot to perform the file name swap."""
+        new_snap_name = 'new-%s' % snapshot['name']
+        self._clone_backing_file_for_volume(snapshot['name'],
+                                            new_snap_name,
+                                            snapshot['volume_id'],
+                                            is_snapshot=False)
+
+        (host_ip, junction_path) = self._get_export_ip_path(
+            volume_id=volume['id'])
+        vserver = self._get_vserver_for_ip(host_ip)
+        flexvol_name = self.zapi_client.get_vol_by_junc_vserver(vserver,
+                                                                junction_path)
+
+        try:
+            self._swap_files(flexvol_name, volume['name'], new_snap_name)
+        except Exception:
+            LOG.error("Swapping temporary reverted volume name from %s to %s "
+                      "failed.", new_snap_name, volume['name'])
+            with excutils.save_and_reraise_exception():
+                try:
+                    LOG.debug("Deleting temporary reverted volume file %s.",
+                              new_snap_name)
+                    file_path = '/vol/%s/%s' % (flexvol_name, new_snap_name)
+                    self.zapi_client.delete_file(file_path)
+                except Exception:
+                    LOG.error("Could not delete temporary reverted volume %s. "
+                              "A manual deletion is required.", new_snap_name)
+
+    def _swap_files(self, flexvol_name, original_file, new_file):
+        """Swaps cloned and original files using a temporary file.
+
+        Renames the original file path to a temporary path, then changes the
+        cloned file path to the original path (if this fails, change the
+        temporary file path back as original path) and finally deletes the
+        file with temporary path.
+        """
+        prefix_path_on_backend = '/vol/' + flexvol_name + '/'
+
+        new_file_path = prefix_path_on_backend + new_file
+        original_file_path = prefix_path_on_backend + original_file
+        tmp_file_path = prefix_path_on_backend + 'tmp-%s' % original_file
+
+        try:
+            self.zapi_client.rename_file(original_file_path, tmp_file_path)
+        except exception.VolumeBackendAPIException:
+            msg = _("Could not rename original volume from %s to %s.")
+            raise na_utils.NetAppDriverException(msg % (original_file_path,
+                                                        tmp_file_path))
+
+        try:
+            self.zapi_client.rename_file(new_file_path, original_file_path)
+        except exception.VolumeBackendAPIException:
+            try:
+                LOG.debug("Revert volume failed. Rolling back to its original"
+                          " name.")
+                self.zapi_client.rename_file(tmp_file_path, original_file_path)
+            except exception.VolumeBackendAPIException:
+                LOG.error("Could not rollback original volume name from %s "
+                          "to %s. Cinder may lose the volume management. "
+                          "Please, you should rename it back manually.",
+                          tmp_file_path, original_file_path)
+
+            msg = _("Could not rename temporary reverted volume from %s "
+                    "to original volume name %s.")
+            raise na_utils.NetAppDriverException(msg % (new_file_path,
+                                                        original_file_path))
+
+        try:
+            self.zapi_client.delete_file(tmp_file_path)
+        except exception.VolumeBackendAPIException:
+            LOG.error("Could not delete old volume %s. A manual deletion is "
+                      "required.", tmp_file_path)
+
     def _clone_backing_file_for_volume(self, volume_name, clone_name,
                                        volume_id, share=None,
                                        is_snapshot=False,
@@ -313,6 +391,14 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
             nfs_share = ssc_vol_info['pool_name']
             capacity = self._get_share_capacity_info(nfs_share)
             pool.update(capacity)
+            if self.configuration.netapp_driver_reports_provisioned_capacity:
+                files = self.zapi_client.get_file_sizes_by_dir(ssc_vol_name)
+                provisioned_cap = 0
+                for f in files:
+                    if volume_utils.extract_id_from_volume_name(f['name']):
+                        provisioned_cap = provisioned_cap + f['file-size']
+                pool['provisioned_capacity_gb'] = na_utils.round_down(
+                    float(provisioned_cap) / units.Gi)
 
             if self.using_cluster_credentials and not is_flexgroup:
                 dedupe_used = self.zapi_client.get_flexvol_dedupe_used_percent(
@@ -984,3 +1070,150 @@ class NetAppCmodeNfsDriver(nfs_base.NetAppNfsDriver,
     def _is_flexgroup_clone_file_supported(self):
         """Check whether storage can perform clone file for FlexGroup"""
         return self.zapi_client.features.FLEXGROUP_CLONE_FILE
+
+    def _cancel_file_copy(self, job_uuid, volume, dest_pool,
+                          dest_backend_name=None):
+        """Cancel an on-going file copy operation."""
+        try:
+            # NOTE(sfernand): Another approach would be first checking if
+            # the copy operation isn't in `destroying` or `destroyed` states
+            # before issuing cancel.
+            self.zapi_client.destroy_file_copy(job_uuid)
+        except na_utils.NetAppDriverException:
+            dest_client = dot_utils.get_client_for_backend(dest_backend_name)
+            file_path = '%s/%s' % (dest_pool, volume.name)
+            try:
+                dest_client.delete_file(file_path)
+            except Exception:
+                LOG.warn('Error cleaning up file %s in destination volume. '
+                         'Verify if destination volume still exists in pool '
+                         '%s and delete it manually to avoid unused '
+                         'resources.', file_path, dest_pool)
+
+    def _copy_file(self, volume, src_ontap_volume, src_vserver,
+                   dest_ontap_volume, dest_vserver, dest_file_name=None,
+                   dest_backend_name=None, cancel_on_error=False):
+        """Copies file from an ONTAP volume to another."""
+        job_uuid = self.zapi_client.start_file_copy(
+            volume.name, dest_ontap_volume, src_ontap_volume=src_ontap_volume,
+            dest_file_name=dest_file_name)
+        LOG.debug('Start copying file %(vol)s from '
+                  '%(src_vserver)s:%(src_ontap_vol)s to '
+                  '%(dest_vserver)s:%(dest_ontap_vol)s. Job UUID is %(job)s.',
+                  {'vol': volume.name, 'src_vserver': src_vserver,
+                   'src_ontap_vol': src_ontap_volume,
+                   'dest_vserver': dest_vserver,
+                   'dest_ontap_vol': dest_ontap_volume,
+                   'job': job_uuid})
+
+        def _wait_file_copy_complete():
+            copy_status = self.zapi_client.get_file_copy_status(job_uuid)
+            LOG.debug('Waiting for file copy job %s to complete. Current '
+                      'status is: %s.', job_uuid, copy_status['job-status'])
+            if not copy_status:
+                status_error_msg = (_("Error copying file %s. The "
+                                      "corresponding Job UUID % doesn't "
+                                      "exist."))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id, job_uuid))
+            elif copy_status['job-status'] == 'destroyed':
+                status_error_msg = (_('Error copying file %s. %s.'))
+                raise na_utils.NetAppDriverException(
+                    status_error_msg % (volume.id,
+                                        copy_status['last-failure-reason']))
+            elif copy_status['job-status'] == 'complete':
+                raise loopingcall.LoopingCallDone()
+
+        try:
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_file_copy_complete)
+            timer.start(
+                interval=10,
+                timeout=self.configuration.netapp_migrate_volume_timeout
+            ).wait()
+        except Exception as e:
+            with excutils.save_and_reraise_exception() as ctxt:
+                if cancel_on_error:
+                    try:
+                        self._cancel_file_copy(
+                            job_uuid, volume, dest_ontap_volume,
+                            dest_backend_name=dest_backend_name)
+                    except na_utils.NetAppDriverException as ex:
+                        LOG.error("Failed to cancel file copy operation. %s",
+                                  ex)
+                if isinstance(e, loopingcall.LoopingCallTimeOut):
+                    ctxt.reraise = False
+                    msg = (_('Timeout waiting volume %s to complete '
+                             'migration.'))
+                    raise na_utils.NetAppDriverTimeout(msg % volume.id)
+
+    def _finish_volume_migration(self, src_volume, dest_pool):
+        """Finish volume migration to another ONTAP volume."""
+        # The source volume can be safely deleted after a successful migration.
+        self.delete_volume(src_volume)
+        # NFS driver requires the provider_location to be updated with the new
+        # destination.
+        updates = {'provider_location': dest_pool}
+        return updates
+
+    def _migrate_volume_to_vserver(self, volume, src_pool, src_vserver,
+                                   dest_pool, dest_vserver, dest_backend_name):
+        """Migrate volume to another vserver within the same cluster."""
+        LOG.info('Migrating volume %(vol)s from '
+                 '%(src_vserver)s:%(src_ontap_vol)s to '
+                 '%(dest_vserver)s:%(dest_ontap_vol)s.',
+                 {'vol': volume.id, 'src_vserver': src_vserver,
+                  'src_ontap_vol': src_pool, 'dest_vserver': dest_vserver,
+                  'dest_ontap_vol': dest_pool})
+        vserver_peer_application = 'file_copy'
+        self.create_vserver_peer(src_vserver, self.backend_name, dest_vserver,
+                                 [vserver_peer_application])
+        src_ontap_volume_name = src_pool.split(':/')[1]
+        dest_ontap_volume_name = dest_pool.split(':/')[1]
+        self._copy_file(volume, src_ontap_volume_name, src_vserver,
+                        dest_ontap_volume_name, dest_vserver,
+                        dest_backend_name=dest_backend_name,
+                        cancel_on_error=True)
+        updates = self._finish_volume_migration(volume, dest_pool)
+        LOG.info('Successfully migrated volume %(vol)s from '
+                 '%(src_vserver)s:%(src_ontap_vol)s '
+                 'to %(dest_vserver)s:%(dest_ontap_vol)s.',
+                 {'vol': volume.id, 'src_vserver': src_vserver,
+                  'src_ontap_vol': src_pool, 'dest_vserver': dest_vserver,
+                  'dest_ontap_vol': dest_pool})
+        return updates
+
+    def _migrate_volume_to_pool(self, volume, src_pool, dest_pool, vserver,
+                                dest_backend_name):
+        """Migrate volume to another Cinder Pool within the same vserver."""
+        LOG.info('Migrating volume %(vol)s from pool %(src)s to '
+                 '%(dest)s within vserver %(vserver)s.',
+                 {'vol': volume.id, 'src': src_pool, 'dest': dest_pool,
+                  'vserver': vserver})
+        src_ontap_volume_name = src_pool.split(':/')[1]
+        dest_ontap_volume_name = dest_pool.split(':/')[1]
+        self._copy_file(volume, src_ontap_volume_name, vserver,
+                        dest_ontap_volume_name, vserver,
+                        dest_backend_name=dest_backend_name,
+                        cancel_on_error=True)
+        updates = self._finish_volume_migration(volume, dest_pool)
+        LOG.info('Successfully migrated volume %(vol)s from pool %(src)s '
+                 'to %(dest)s within vserver %(vserver)s.',
+                 {'vol': volume.id, 'src': src_pool, 'dest': dest_pool,
+                  'vserver': vserver})
+        return updates
+
+    def migrate_volume(self, context, volume, host):
+        """Migrate Cinder volume to the specified pool or vserver."""
+        # NOTE(sfernand): the NetApp NFS driver relies only on coping
+        # operations for storage assisted migration which are always
+        # disruptive, as requires the destination volume to be added as a new
+        # block device to be the Nova instance.
+        if volume.status != fields.VolumeStatus.AVAILABLE:
+            LOG.info("Storage assisted migration requires volume to be in "
+                     "available status. Falling back to host assisted "
+                     "migration.")
+            return False, {}
+
+        return self.migrate_volume_ontap_assisted(
+            volume, host, self.backend_name, self.configuration.netapp_vserver)

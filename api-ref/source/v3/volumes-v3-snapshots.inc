@@ -67,6 +67,7 @@ Request
    - offset: offset
    - marker: marker
    - with_count: with_count
+   - consumes_quota: filter_consumes_quota
 
 
 Response Parameters
@@ -88,11 +89,13 @@ Response Parameters
    - count: count
    - updated_at: updated_at
    - snapshots_links: links_snap
+   - group_snapshot_id: group_snapshot_id_3_14
+   - consumes_quota: consumes_quota
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/snapshots/snapshots-list-detailed-response.json
+.. literalinclude:: ./samples/snapshots/v3.65/snapshots-list-detailed-response.json
    :language: javascript
 
 
@@ -103,6 +106,12 @@ Create a snapshot
 
 Creates a volume snapshot, which is a point-in-time, complete copy of a volume.
 You can create a volume from a snapshot.
+
+Prior to API version 3.66, a 'force' flag was required to create a snapshot of
+an in-use volume, but this is no longer the case.  From API version 3.66, the
+'force' flag is invalid when passed in a volume snapshot request.  (For
+backward compatibility, however, a 'force' flag with a value evaluating to
+True is silently ignored.)
 
 Response codes
 --------------
@@ -147,11 +156,13 @@ Response Parameters
    - id: id_snap
    - size: size
    - updated_at: updated_at
+   - group_snapshot_id: group_snapshot_id_3_14
+   - consumes_quota: consumes_quota
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/snapshots/snapshot-create-response.json
+.. literalinclude:: ./samples/snapshots/v3.65/snapshot-create-response.json
    :language: javascript
 
 
@@ -187,6 +198,7 @@ Request
    - limit: limit
    - offset: offset
    - marker: marker
+   - consumes_quota: filter_consumes_quota
    - with_count: with_count
 
 
@@ -385,11 +397,13 @@ Response Parameters
    - id: id_snap
    - metadata: metadata
    - updated_at: updated_at
+   - group_snapshot_id: group_snapshot_id_3_14
+   - consumes_quota: consumes_quota
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/snapshots/snapshot-show-response.json
+.. literalinclude:: ./samples/snapshots/v3.65/snapshot-show-response.json
    :language: javascript
 
 
@@ -442,11 +456,13 @@ Response Parameters
    - volume_id: volume_id_snap
    - user_id: user_id_min
    - metadata: metadata
+   - group_snapshot_id: group_snapshot_id_3_14
+   - consumes_quota: consumes_quota
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/snapshots/snapshot-update-response.json
+.. literalinclude:: ./samples/snapshots/v3.65/snapshot-update-response.json
    :language: javascript
 
 

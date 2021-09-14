@@ -1,3 +1,9 @@
+cinder (2:19.0.0~b1+git2021091409.768b8996b-0ubuntu1) impish; urgency=medium
+
+  * New upstream snapshot for OpenStack Xena.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 14 Sep 2021 09:14:32 -0400
+
 cinder (2:18.0.0+git2021072116.81f2aaeea-0ubuntu1) impish; urgency=medium
 
   * New upstream snapshot for OpenStack Xena.

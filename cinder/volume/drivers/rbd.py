@@ -1005,16 +1005,35 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
         with RBDVolumeProxy(self, volume_name, pool) as vol:
             vol.flatten()
 
+    def _get_stripe_unit(self, ioctx, volume_name):
+        """Return the correct stripe unit for a cloned volume.
+
+        A cloned volume must be created with a stripe unit at least as large
+        as the source volume.  We compute the desired stripe width from
+        rbd_store_chunk_size and compare that to the incoming source volume's
+        stripe width, selecting the larger to avoid error.
+        """
+        default_stripe_unit = \
+            self.configuration.rbd_store_chunk_size * units.Mi
+
+        image = self.rbd.Image(ioctx, volume_name)
+        try:
+            image_stripe_unit = image.stripe_unit()
+        finally:
+            image.close()
+
+        return max(image_stripe_unit, default_stripe_unit)
+
     def _clone(self, volume, src_pool, src_image, src_snap):
         LOG.debug('cloning %(pool)s/%(img)s@%(snap)s to %(dst)s',
                   dict(pool=src_pool, img=src_image, snap=src_snap,
                        dst=volume.name))
 
-        chunk_size = self.configuration.rbd_store_chunk_size * units.Mi
-        order = int(math.log(chunk_size, 2))
         vol_name = utils.convert_str(volume.name)
 
         with RADOSClient(self, src_pool) as src_client:
+            stripe_unit = self._get_stripe_unit(src_client.ioctx, src_image)
+            order = int(math.log(stripe_unit, 2))
             with RADOSClient(self) as dest_client:
                 self.RBDProxy().clone(src_client.ioctx,
                                       utils.convert_str(src_image),
@@ -1023,7 +1042,6 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
                                       vol_name,
                                       features=src_client.features,
                                       order=order)
-
             try:
                 volume_update = self._setup_volume(volume)
             except Exception:
@@ -1041,14 +1059,36 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
         with RBDVolumeProxy(self, volume.name) as vol:
             vol.resize(size)
 
+    def _calculate_new_size(self, size_diff, volume_name):
+        with RBDVolumeProxy(self, volume_name) as vol:
+            current_size_bytes = vol.volume.size()
+        size_diff_bytes = size_diff * units.Gi
+        new_size_bytes = current_size_bytes + size_diff_bytes
+        return new_size_bytes
+
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot."""
         volume_update = self._clone(volume, self.configuration.rbd_pool,
                                     snapshot.volume_name, snapshot.name)
         if self.configuration.rbd_flatten_volume_from_snapshot:
             self._flatten(self.configuration.rbd_pool, volume.name)
-        if int(volume.size):
-            self._resize(volume)
+
+        snap_vol_size = snapshot.volume_size
+        # In case the destination size is bigger than the snapshot size
+        # we should resize. In particular when the destination volume
+        # is encrypted we should consider the encryption header size.
+        # Because of this, we need to calculate the difference size to
+        # provide the size that the user is expecting.
+        # Otherwise if the destination volume size is equal to the
+        # source volume size we don't perform a resize.
+        if volume.size > snap_vol_size:
+            new_size = None
+            # In case the volume is encrypted we need to consider the
+            # size of the encryption header when resizing the volume
+            if volume.encryption_key_id:
+                size_diff = volume.size - snap_vol_size
+                new_size = self._calculate_new_size(size_diff, volume.name)
+            self._resize(volume, size=new_size)
 
         self._show_msg_check_clone_v2_api(snapshot.volume_name)
         return volume_update

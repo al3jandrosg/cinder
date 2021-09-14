@@ -13,6 +13,7 @@
 #    under the License.
 
 from oslo_config import cfg
+from oslo_log import log as logging
 from oslo_utils import versionutils
 from oslo_versionedobjects import fields
 
@@ -26,6 +27,8 @@ from cinder.objects import fields as c_fields
 from cinder.volume import volume_types
 
 CONF = cfg.CONF
+
+LOG = logging.getLogger(__name__)
 
 
 class MetadataObject(dict):
@@ -63,12 +66,14 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
     # Version 1.6: This object is now cleanable (adds rows to workers table)
     # Version 1.7: Added service_uuid
     # Version 1.8: Added shared_targets
-    VERSION = '1.8'
+    # Version 1.9: Added use_quota
+    VERSION = '1.9'
 
     OPTIONAL_FIELDS = ('metadata', 'admin_metadata', 'glance_metadata',
                        'volume_type', 'volume_attachment', 'consistencygroup',
                        'snapshots', 'cluster', 'group')
 
+    # NOTE: When adding a field obj_make_compatible needs to be updated
     fields = {
         'id': fields.UUIDField(),
         '_name_id': fields.UUIDField(nullable=True),
@@ -76,6 +81,8 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         'user_id': fields.StringField(nullable=True),
         'project_id': fields.StringField(nullable=True),
 
+        # TODO: (Y release) Change nullable to False
+        'use_quota': fields.BooleanField(default=True, nullable=True),
         'snapshot_id': fields.UUIDField(nullable=True),
 
         'cluster_name': fields.StringField(nullable=True),
@@ -208,6 +215,8 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
 
     @classmethod
     def _obj_from_primitive(cls, context, objver, primitive):
+        # TODO: (Y release) remove next line
+        cls._ensure_use_quota_is_set(primitive['versioned_object.data'])
         obj = super(Volume, Volume)._obj_from_primitive(context, objver,
                                                         primitive)
         obj._reset_metadata_tracking()
@@ -241,18 +250,11 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
 
     def obj_make_compatible(self, primitive, target_version):
         """Make a Volume representation compatible with a target version."""
-        added_fields = (((1, 4), ('cluster', 'cluster_name')),
-                        ((1, 5), ('group', 'group_id')),
-                        ((1, 7), ('service_uuid')))
-
-        # Convert all related objects
         super(Volume, self).obj_make_compatible(primitive, target_version)
-
         target_version = versionutils.convert_version_to_tuple(target_version)
-        for version, remove_fields in added_fields:
-            if target_version < version:
-                for obj_field in remove_fields:
-                    primitive.pop(obj_field, None)
+        # TODO: (Y release) remove next 2 lines & method if nothing else below
+        if target_version < (1, 9):
+            primitive.pop('use_quota', None)
 
     @classmethod
     def _from_db_object(cls, context, volume, db_volume, expected_attrs=None):
@@ -327,6 +329,20 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         volume.obj_reset_changes()
         return volume
 
+    # TODO: (Z release): Remove method and leave the default of False from DB
+    @staticmethod
+    def _ensure_use_quota_is_set(updates, warning=False):
+        if updates.get('use_quota') is None:
+            use_quota = not (
+                (updates.get('migration_status') or ''
+                 ).startswith('target:') or
+                (updates.get('admin_metadata') or {}
+                 ).get('temporary') == 'True')
+            if warning and not use_quota:
+                LOG.warning('Ooooops, we forgot to set the use_quota field to '
+                            'False!!  Fix code here')
+            updates['use_quota'] = use_quota
+
     def create(self):
         if self.obj_attr_is_set('id'):
             raise exception.ObjectActionError(action='create',
@@ -350,11 +366,19 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
             updates['volume_type_id'] = (
                 volume_types.get_default_volume_type()['id'])
 
+        # TODO: (Y release) Remove this call since we should have already made
+        # all methods in Cinder make the call with the right values.
+        self._ensure_use_quota_is_set(updates, warning=True)
+
         db_volume = db.volume_create(self._context, updates)
         expected_attrs = self._get_expected_attrs(self._context)
         self._from_db_object(self._context, self, db_volume, expected_attrs)
 
     def save(self):
+        # TODO: (Y release) Remove this online migration code
+        # Pass self directly since it's a CinderObjectDictCompat
+        self._ensure_use_quota_is_set(self)
+
         updates = self.cinder_obj_get_changes()
         if updates:
             # NOTE(xyang): Allow this to pass if 'consistencygroup' is
@@ -489,7 +513,7 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
         # We swap fields between source (i.e. self) and destination at the
         # end of migration because we want to keep the original volume id
         # in the DB but now pointing to the migrated volume.
-        skip = ({'id', 'provider_location', 'glance_metadata',
+        skip = ({'id', 'provider_location', 'glance_metadata', 'use_quota',
                  'volume_type'} | set(self.obj_extra_fields))
         for key in set(dest_volume.fields.keys()) - skip:
             # Only swap attributes that are already set.  We do not want to
@@ -579,6 +603,11 @@ class Volume(cleanable.CinderCleanableObject, base.CinderObject,
 
     def is_multiattach(self):
         return self.volume_type and self.volume_type.is_multiattach()
+
+    # Don't add it as a property to avoid having to add it obj_extra_fields,
+    # to manager's _VOLUME_CLONE_SKIP_PROPERTIES, etc.
+    def is_migration_target(self):
+        return (self.migration_status or '').startswith('target:')
 
 
 @base.CinderObjectRegistry.register

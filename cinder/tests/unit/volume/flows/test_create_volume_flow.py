@@ -1305,12 +1305,170 @@ class CreateVolumeFlowManagerTestCase(test.TestCase):
             detail=message_field.Detail.DRIVER_FAILED_CREATE,
             exception=err)
 
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
+    def test_notify_volume_action_do_nothing(self, notify_mock):
+        task = create_volume_manager.NotifyVolumeActionTask(mock.sentinel.db,
+                                                            None)
 
+        task.execute(mock.sentinel.context, mock.sentinel.volume)
+        notify_mock.assert_not_called()
+
+    @mock.patch('cinder.volume.volume_utils.notify_about_volume_usage')
+    def test_notify_volume_action_send_notification(self, notify_mock):
+        event_suffix = 'create.start'
+        volume = mock.Mock()
+        task = create_volume_manager.NotifyVolumeActionTask(mock.sentinel.db,
+                                                            event_suffix)
+
+        task.execute(mock.sentinel.context, volume)
+
+        notify_mock.assert_called_once_with(mock.sentinel.context,
+                                            volume,
+                                            event_suffix,
+                                            host=volume.host)
+
+    # Test possible combinations to confirm volumes from W, X, Y releases work
+    @ddt.data((False, True), (True, None), (True, False))
+    @ddt.unpack
+    @mock.patch('taskflow.engines.load')
+    @mock.patch.object(create_volume_manager, 'CreateVolumeOnFinishTask')
+    @mock.patch.object(create_volume_manager, 'CreateVolumeFromSpecTask')
+    @mock.patch.object(create_volume_manager, 'NotifyVolumeActionTask')
+    @mock.patch.object(create_volume_manager, 'ExtractVolumeSpecTask')
+    @mock.patch.object(create_volume_manager, 'OnFailureRescheduleTask')
+    @mock.patch.object(create_volume_manager, 'ExtractVolumeRefTask')
+    @mock.patch.object(create_volume_manager.linear_flow, 'Flow')
+    def test_get_flow(self, is_migration_target, use_quota, flow_mock,
+                      extract_ref_mock, onfailure_mock, extract_spec_mock,
+                      notify_mock, create_mock, onfinish_mock, load_mock):
+        assert(isinstance(is_migration_target, bool))
+        filter_properties = {'retry': mock.sentinel.retry}
+        tasks = [mock.call(extract_ref_mock.return_value),
+                 mock.call(onfailure_mock.return_value),
+                 mock.call(extract_spec_mock.return_value),
+                 mock.call(notify_mock.return_value),
+                 mock.call(create_mock.return_value,
+                           onfinish_mock.return_value)]
+
+        volume = mock.Mock(
+            **{'is_migration_target.return_value': is_migration_target,
+               'use_quota': use_quota})
+
+        result = create_volume_manager.get_flow(
+            mock.sentinel.context,
+            mock.sentinel.manager,
+            mock.sentinel.db,
+            mock.sentinel.driver,
+            mock.sentinel.scheduler_rpcapi,
+            mock.sentinel.host,
+            volume,
+            mock.sentinel.allow_reschedule,
+            mock.sentinel.reschedule_context,
+            mock.sentinel.request_spec,
+            filter_properties,
+            mock.sentinel.image_volume_cache)
+
+        if not volume.quota_use:
+            volume.is_migration_target.assert_called_once_with()
+        if is_migration_target or not use_quota:
+            tasks.pop(3)
+            notify_mock.assert_not_called()
+            end_notify_suffix = None
+        else:
+            notify_mock.assert_called_once_with(mock.sentinel.db,
+                                                'create.start')
+            end_notify_suffix = 'create.end'
+        flow_mock.assert_called_once_with('volume_create_manager')
+        extract_ref_mock.assert_called_once_with(mock.sentinel.db,
+                                                 mock.sentinel.host,
+                                                 set_error=False)
+        onfailure_mock.assert_called_once_with(
+            mock.sentinel.reschedule_context, mock.sentinel.db,
+            mock.sentinel.manager, mock.sentinel.scheduler_rpcapi, mock.ANY)
+
+        extract_spec_mock.assert_called_once_with(mock.sentinel.db)
+
+        create_mock.assert_called_once_with(mock.sentinel.manager,
+                                            mock.sentinel.db,
+                                            mock.sentinel.driver,
+                                            mock.sentinel.image_volume_cache)
+        onfinish_mock.assert_called_once_with(mock.sentinel.db,
+                                              end_notify_suffix)
+
+        volume_flow = flow_mock.return_value
+        self.assertEqual(len(tasks), volume_flow.add.call_count)
+        volume_flow.add.assert_has_calls(tasks)
+
+        load_mock.assert_called_once_with(
+            volume_flow,
+            store={'context': mock.sentinel.context,
+                   'filter_properties': filter_properties,
+                   'request_spec': mock.sentinel.request_spec,
+                   'volume': volume})
+        self.assertEqual(result, load_mock.return_value)
+
+
+@ddt.ddt(testNameFormat=ddt.TestNameFormat.INDEX_ONLY)
 class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
 
     def setUp(self):
         super(CreateVolumeFlowManagerGlanceCinderBackendCase, self).setUp()
         self.ctxt = context.get_admin_context()
+
+    # data for test__extract_cinder_ids
+    #   legacy glance cinder URI:    cinder://<volume-id>
+    #   new-style glance cinder URI: cinder://<glance-store>/<volume_id>
+    LEGACY_VOL2 = 'cinder://%s' % fakes.VOLUME2_ID
+    NEW_VOL3 = 'cinder://glance-store-name/%s' % fakes.VOLUME3_ID
+    # these *may* be illegal names in glance, but check anyway
+    NEW_VOL4 = 'cinder://glance/store/name/%s' % fakes.VOLUME4_ID
+    NEW_VOL5 = 'cinder://glance:store:name/%s' % fakes.VOLUME5_ID
+    NEW_VOL6 = 'cinder://glance:store,name/%s' % fakes.VOLUME6_ID
+    NOT_CINDER1 = 'rbd://%s' % fakes.UUID1
+    NOT_CINDER2 = 'http://%s' % fakes.UUID2
+    NOGOOD3 = 'cinder://glance:store,name/%s/garbage' % fakes.UUID3
+    NOGOOD4 = 'cinder://glance:store,name/%s-garbage' % fakes.UUID4
+    NOGOOD5 = fakes.UUID5
+    NOGOOD6 = 'cinder://store-name/12345678'
+    NOGOOD7 = 'cinder://'
+    NOGOOD8 = 'some-random-crap'
+    NOGOOD9 = None
+
+    TEST_CASE_DATA = (
+        # the format of these is: (input, expected output)
+        ([LEGACY_VOL2], [fakes.VOLUME2_ID]),
+        ([NEW_VOL3], [fakes.VOLUME3_ID]),
+        ([NEW_VOL4], [fakes.VOLUME4_ID]),
+        ([NEW_VOL5], [fakes.VOLUME5_ID]),
+        ([NEW_VOL6], [fakes.VOLUME6_ID]),
+        ([], []),
+        ([''], []),
+        ([NOT_CINDER1], []),
+        ([NOT_CINDER2], []),
+        ([NOGOOD3], []),
+        ([NOGOOD4], []),
+        ([NOGOOD5], []),
+        ([NOGOOD6], []),
+        ([NOGOOD7], []),
+        ([NOGOOD8], []),
+        ([NOGOOD9], []),
+        ([NOT_CINDER1, NOGOOD4], []),
+        # mix of URIs should only get the cinder IDs
+        ([LEGACY_VOL2, NOT_CINDER1, NEW_VOL3, NOT_CINDER2],
+         [fakes.VOLUME2_ID, fakes.VOLUME3_ID]),
+        # a bad cinder URI early in the list shouldn't prevent us from
+        # processing a good one later in the list
+        ([NOGOOD6, NEW_VOL3, NOGOOD7, LEGACY_VOL2],
+         [fakes.VOLUME3_ID, fakes.VOLUME2_ID]),
+    )
+
+    @ddt.data(*TEST_CASE_DATA)
+    @ddt.unpack
+    def test__extract_cinder_ids(self, url_list, id_list):
+        """Test utility function that gets IDs from Glance location URIs"""
+        klass = create_volume_manager.CreateVolumeFromSpecTask
+        actual = klass._extract_cinder_ids(url_list)
+        self.assertEqual(id_list, actual)
 
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.'
@@ -1373,6 +1531,10 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
             self.assertFalse(fake_driver.create_cloned_volume.called)
         mock_cleanup_cg.assert_called_once_with(volume)
 
+    LEGACY_URI = 'cinder://%s' % fakes.VOLUME_ID
+    MULTISTORE_URI = 'cinder://fake-store/%s' % fakes.VOLUME_ID
+
+    @ddt.data(LEGACY_URI, MULTISTORE_URI)
     @mock.patch('cinder.volume.flows.manager.create_volume.'
                 'CreateVolumeFromSpecTask.'
                 '_cleanup_cg_in_volume')
@@ -1381,7 +1543,8 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
                 'CreateVolumeFromSpecTask.'
                 '_handle_bootable_volume_glance_meta')
     @mock.patch('cinder.image.image_utils.qemu_img_info')
-    def test_create_from_image_volume_ignore_size(self, mock_qemu_info,
+    def test_create_from_image_volume_ignore_size(self, location_uri,
+                                                  mock_qemu_info,
                                                   handle_bootable,
                                                   mock_fetch_img,
                                                   mock_cleanup_cg,
@@ -1408,7 +1571,7 @@ class CreateVolumeFlowManagerGlanceCinderBackendCase(test.TestCase):
         # will fail because of free space being too low.
         image_info.virtual_size = '1073741824000000000000'
         mock_qemu_info.return_value = image_info
-        url = 'cinder://%s' % image_volume['id']
+        url = location_uri
         image_location = None
         if location:
             image_location = (url, [{'url': url, 'metadata': {}}])
@@ -1699,7 +1862,9 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
                           self.mock_image_service)
 
         self.assertTrue(mock_cleanup_cg.called)
-        mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 1})
+        # Online migration of the use_quota field
+        mock_volume_update.assert_any_call(self.ctxt, volume.id,
+                                           {'size': 1, 'use_quota': True})
         self.assertEqual(volume_size, volume.size)
 
     @mock.patch('cinder.image.image_utils.check_available_space')
@@ -1836,7 +2001,9 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         )
 
         # The volume size should be reduced to virtual_size and then put back
-        mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 2})
+        # Online migration of the use_quota field
+        mock_volume_update.assert_any_call(self.ctxt, volume.id,
+                                           {'size': 2, 'use_quota': True})
         mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 10})
 
         # Make sure created a new cache entry
@@ -1914,7 +2081,9 @@ class CreateVolumeFlowManagerImageCacheTestCase(test.TestCase):
         # The volume size should be reduced to virtual_size and then put back,
         # especially if there is an exception while creating the volume.
         self.assertEqual(2, mock_volume_update.call_count)
-        mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 2})
+        # Online migration of the use_quota field
+        mock_volume_update.assert_any_call(self.ctxt, volume.id,
+                                           {'size': 2, 'use_quota': True})
         mock_volume_update.assert_any_call(self.ctxt, volume.id, {'size': 10})
 
         # Make sure we didn't try and create a cache entry

@@ -47,13 +47,6 @@ core_opts = [
 CONF.register_cli_opts(core_opts)
 
 api_opts = [
-    cfg.BoolOpt('enable_v2_api',
-                default=True,
-                deprecated_for_removal=True,
-                help="DEPRECATED: Deploy v2 of the Cinder API."),
-    cfg.BoolOpt('enable_v3_api',
-                default=True,
-                help="Deploy v3 of the Cinder API."),
     cfg.BoolOpt('api_rate_limit',
                 default=True,
                 help='Enables or disables rate limit of the API.'),
@@ -84,12 +77,12 @@ global_opts = [
     cfg.StrOpt('scheduler_manager',
                default='cinder.scheduler.manager.SchedulerManager',
                help='Full class name for the Manager for scheduler'),
-    cfg.HostAddressOpt('host',
-                       sample_default='localhost',
-                       default=socket.gethostname(),
-                       help='Name of this node.  This can be an opaque '
-                            'identifier. It is not necessarily a host name, '
-                            'FQDN, or IP address.'),
+    cfg.StrOpt('host',
+               sample_default='localhost',
+               default=socket.gethostname(),
+               help='Name of this node.  This can be an opaque '
+                    'identifier. It is not necessarily a host name, '
+                    'FQDN, or IP address.'),
     # NOTE(vish): default to nova for compatibility with nova installs
     cfg.StrOpt('storage_availability_zone',
                default='nova',

@@ -62,19 +62,6 @@
 # POST  /backups/{backup_id}/restore
 "backup:restore": ""
 
-# List groups.
-# GET  /groups
-# GET  /groups/detail
-"group:get_all": ""
-
-# Show group.
-# GET  /groups/{group_id}
-"group:get": ""
-
-# Update group.
-# PUT  /groups/{group_id}
-"group:update": ""
-
 # List group snapshots.
 # GET  /group_snapshots
 # GET  /group_snapshots/detail
@@ -95,10 +82,6 @@
 # Reset status of group snapshot.
 # POST  /group_snapshots/{g_snapshot_id}/action (reset_status)
 "group:reset_group_snapshot_status": ""
-
-# Delete group.
-# POST  /groups/{group_id}/action (delete)
-"group:delete": ""
 
 # Reset status of group.
 # POST  /groups/{group_id}/action (reset_status)
@@ -129,10 +112,6 @@
 # PUT  /os-services/{action}
 #"volume_extension:services:update": "rule:admin_api"
 
-# Show limits with used limit attributes.
-# GET  /limits
-"limits_extension:used_limits": ""
-
 # Create, update and delete volume type.
 # POST  /types
 # PUT  /types
@@ -153,28 +132,6 @@
 # Upload a volume to image.
 # POST  /volumes/{volume_id}/action (os-volume_upload_image)
 "volume_extension:volume_actions:upload_image": ""
-
-# List volume transfer.
-# GET  /os-volume-transfer
-# GET  /os-volume-transfer/detail
-# GET  /volume_transfers
-# GET  /volume-transfers/detail
-"volume:get_all_transfers": ""
-
-# Create a volume transfer.
-# POST  /os-volume-transfer
-# POST  /volume_transfers
-"volume:create_transfer": ""
-
-# Show one specified volume transfer.
-# GET  /os-volume-transfer/{transfer_id}
-# GET  /volume-transfers/{transfer_id}
-"volume:get_transfer": ""
-
-# Delete volume transfer.
-# DELETE  /os-volume-transfer/{transfer_id}
-# DELETE  /volume-transfers/{transfer_id}
-"volume:delete_transfer": ""
 
 # List type extra specs.
 # GET  /types/{type_id}/extra_specs

@@ -4,7 +4,9 @@ Volumes (volumes)
 =================
 
 A volume is a detachable block storage device similar to a USB hard
-drive. You can attach a volume to one instance at a time.
+drive. You can attach a volume to an instance, and if the volume is
+of an appropriate volume type, a volume can be attached to multiple
+instances.
 
 The ``snapshot_id`` and ``source_volid`` parameters specify the ID
 of the snapshot or volume from which this volume originates. If the
@@ -96,6 +98,7 @@ Request
    - with_count: with_count
    - created_at: filter_created_at
    - updated_at: filter_updated_at
+   - consumes_quota: filter_consumes_quota
 
 
 Response Parameters
@@ -134,14 +137,18 @@ Response Parameters
    - volume_type_id: volume_type_id_363
    - group_id: group_id_optional
    - volumes_links: links_vol_optional
+   - provider_id:  provider_id
+   - service_uuid: service_uuid
+   - shared_targets: shared_targets
+   - cluster_name: cluster_name
+   - consumes_quota: consumes_quota
    - count: count
 
 
+Response Example (v3.65)
+------------------------
 
-Response Example
-----------------
-
-.. literalinclude:: ./samples/volumes/volumes-list-detailed-response.json
+.. literalinclude:: ./samples/volumes/v3.65/volumes-list-detailed-response.json
    :language: javascript
 
 
@@ -247,12 +254,18 @@ Response Parameters
    - bootable: bootable_response
    - created_at: created_at
    - volume_type: volume_type_vol
+   - volume_type_id: volume_type_id_363
    - group_id: group_id_optional
+   - provider_id:  provider_id
+   - service_uuid: service_uuid
+   - shared_targets: shared_targets
+   - cluster_name: cluster_name
+   - consumes_quota: consumes_quota
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/volumes/volume-create-response.json
+.. literalinclude:: ./samples/volumes/v3.65/volume-create-response.json
    :language: javascript
 
 
@@ -291,6 +304,7 @@ Request
    - marker: marker
    - with_count: with_count
    - created_at: filter_created_at
+   - consumes_quota: filter_consumes_quota
    - updated_at: filter_updated_at
 
 
@@ -382,12 +396,15 @@ Response Parameters
    - service_uuid: service_uuid
    - shared_targets: shared_targets
    - cluster_name: cluster_name
+   - provider_id:  provider_id
+   - group_id: group_id_optional
+   - consumes_quota: consumes_quota
 
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/volumes/volume-show-response.json
+.. literalinclude:: ./samples/volumes/v3.65/volume-show-response.json
    :language: javascript
 
 
@@ -455,12 +472,19 @@ Response Parameters
    - bootable: bootable_response
    - created_at: created_at
    - volume_type: volume_type_vol
+   - volume_type_id: volume_type_id_363
+   - group_id: group_id_optional
+   - provider_id:  provider_id
+   - service_uuid: service_uuid
+   - shared_targets: shared_targets
+   - cluster_name: cluster_name
+   - consumes_quota: consumes_quota
 
 
-Response Example
-----------------
+Response Example (v3.65)
+------------------------
 
-.. literalinclude:: ./samples/volumes/volume-update-response.json
+.. literalinclude:: ./samples/volumes/v3.65/volume-update-response.json
    :language: javascript
 
 

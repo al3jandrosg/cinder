@@ -888,13 +888,14 @@ class RBDTestCase(test.TestCase):
         self.mock_proxy().__enter__().volume.op_features.return_value = 1
         self.mock_rbd.RBD_OPERATION_FEATURE_CLONE_PARENT = 1
 
-        snapshot = mock.Mock()
         self.cfg.rbd_flatten_volume_from_snapshot = False
 
-        with mock.patch.object(driver, 'LOG') as \
-                mock_log:
-
-            self.driver.create_volume_from_snapshot(self.volume_a, snapshot)
+        with mock.patch.object(driver, 'LOG') as mock_log:
+            with mock.patch.object(self.driver.rbd.Image(), 'stripe_unit') as \
+                    mock_rbd_image_stripe_unit:
+                mock_rbd_image_stripe_unit.return_value = 4194304
+                self.driver.create_volume_from_snapshot(self.volume_a,
+                                                        self.snapshot)
 
             mock_log.info.assert_called_with('Using v2 Clone API')
 
@@ -910,13 +911,14 @@ class RBDTestCase(test.TestCase):
         self.mock_proxy().__enter__().volume.op_features.return_value = 0
         self.mock_rbd.RBD_OPERATION_FEATURE_CLONE_PARENT = 1
 
-        snapshot = mock.Mock()
         self.cfg.rbd_flatten_volume_from_snapshot = False
 
-        with mock.patch.object(driver, 'LOG') as \
-                mock_log:
-
-            self.driver.create_volume_from_snapshot(self.volume_a, snapshot)
+        with mock.patch.object(driver, 'LOG') as mock_log:
+            with mock.patch.object(self.driver.rbd.Image(), 'stripe_unit') as \
+                    mock_rbd_image_stripe_unit:
+                mock_rbd_image_stripe_unit.return_value = 4194304
+                self.driver.create_volume_from_snapshot(self.volume_a,
+                                                        self.snapshot)
 
             self.assertTrue(any(m for m in mock_log.warning.call_args_list
                                 if 'Not using v2 clone API' in m[0][0]))
@@ -1778,13 +1780,13 @@ class RBDTestCase(test.TestCase):
         self.assertEqual(cfg_file, self.driver.keyring_file)
         self.assertIsNone(self.driver.keyring_data)
 
-    @ddt.data({'rbd_chunk_size': 1, 'order': 20},
-              {'rbd_chunk_size': 8, 'order': 23},
-              {'rbd_chunk_size': 32, 'order': 25})
+    @ddt.data({'rbd_chunk_size': 1},
+              {'rbd_chunk_size': 8},
+              {'rbd_chunk_size': 32})
     @ddt.unpack
     @common_mocks
     @mock.patch.object(driver.RBDDriver, '_enable_replication')
-    def test_clone(self, mock_enable_repl, rbd_chunk_size, order):
+    def test_clone(self, mock_enable_repl, rbd_chunk_size):
         self.cfg.rbd_store_chunk_size = rbd_chunk_size
         src_pool = u'images'
         src_image = u'image-name'
@@ -1802,14 +1804,20 @@ class RBDTestCase(test.TestCase):
         # capture both rados client used to perform the clone
         client.__enter__.side_effect = mock__enter__(client)
 
-        res = self.driver._clone(self.volume_a, src_pool, src_image, src_snap)
+        with mock.patch.object(self.driver.rbd.Image(), 'stripe_unit') as \
+                mock_rbd_image_stripe_unit:
+            mock_rbd_image_stripe_unit.return_value = 4194304
+            res = self.driver._clone(self.volume_a, src_pool, src_image,
+                                     src_snap)
 
         self.assertEqual({}, res)
 
         args = [client_stack[0].ioctx, str(src_image), str(src_snap),
                 client_stack[1].ioctx, str(self.volume_a.name)]
+        stripe_unit = max(4194304, rbd_chunk_size * 1048576)
+        expected_order = int(math.log(stripe_unit, 2))
         kwargs = {'features': client.features,
-                  'order': order}
+                  'order': expected_order}
         self.mock_rbd.RBD.return_value.clone.assert_called_once_with(
             *args, **kwargs)
         self.assertEqual(2, client.__enter__.call_count)
@@ -1818,8 +1826,9 @@ class RBDTestCase(test.TestCase):
     @common_mocks
     @mock.patch.object(driver.RBDDriver, '_enable_replication')
     def test_clone_replicated(self, mock_enable_repl):
-        rbd_chunk_size = 1
         order = 20
+        rbd_chunk_size = 1
+        stripe_unit = 1048576
         self.volume_a.volume_type = fake_volume.fake_volume_type_obj(
             self.context,
             id=fake.VOLUME_TYPE_ID,
@@ -1848,7 +1857,11 @@ class RBDTestCase(test.TestCase):
         # capture both rados client used to perform the clone
         client.__enter__.side_effect = mock__enter__(client)
 
-        res = self.driver._clone(self.volume_a, src_pool, src_image, src_snap)
+        with mock.patch.object(self.driver.rbd.Image(), 'stripe_unit') as \
+                mock_rbd_image_stripe_unit:
+            mock_rbd_image_stripe_unit.return_value = stripe_unit
+            res = self.driver._clone(self.volume_a, src_pool, src_image,
+                                     src_snap)
 
         self.assertEqual(expected_update, res)
         mock_enable_repl.assert_called_once_with(self.volume_a)
@@ -1890,7 +1903,7 @@ class RBDTestCase(test.TestCase):
     @mock.patch.object(driver.RBDDriver, '_resize', mock.Mock())
     def test_create_vol_from_snap_replication(self, mock_clone):
         self.cfg.rbd_flatten_volume_from_snapshot = False
-        snapshot = mock.Mock()
+        snapshot = self.snapshot_b
 
         res = self.driver.create_volume_from_snapshot(self.volume_a, snapshot)
 
@@ -1899,6 +1912,75 @@ class RBDTestCase(test.TestCase):
                                            self.cfg.rbd_pool,
                                            snapshot.volume_name,
                                            snapshot.name)
+
+    @common_mocks
+    @mock.patch.object(driver.RBDDriver, '_clone',
+                       return_value=mock.sentinel.volume_update)
+    def test_create_encrypted_vol_from_snap_same_size(self, mock_clone):
+        """Test create encrypted volume from encrypted snapshot.
+
+        When creating an encrypted volume from encrypted snapshot
+        the new volume is same size than the snapshot.
+        """
+        self.cfg.rbd_flatten_volume_from_snapshot = False
+        volume_size = self.volume_c.size
+        self.snapshot_b.volume_size = volume_size
+
+        mock_resize = self.mock_object(self.driver, '_resize')
+        mock_new_size = self.mock_object(self.driver,
+                                         '_calculate_new_size')
+
+        res = self.driver.create_volume_from_snapshot(self.volume_c,
+                                                      self.snapshot_b)
+        self.assertEqual(mock.sentinel.volume_update, res)
+        mock_resize.assert_not_called()
+        mock_new_size.assert_not_called()
+
+    @common_mocks
+    @mock.patch.object(driver.RBDDriver, '_clone',
+                       return_value=mock.sentinel.volume_update)
+    def test_create_encrypted_vol_from_snap(self, mock_clone):
+        """Test create encrypted volume from encrypted snapshot.
+
+        When creating an encrypted volume from encrypted snapshot
+        the new volume is larger than the snapshot (12GB vs 11GB).
+        """
+        self.cfg.rbd_flatten_volume_from_snapshot = False
+        new_size_bytes = 12288
+        diff_size = 1
+        volume_size = 11
+        self.snapshot_b.volume_size = volume_size
+
+        mock_resize = self.mock_object(self.driver, '_resize')
+        mock_new_size = self.mock_object(self.driver,
+                                         '_calculate_new_size')
+
+        mock_new_size.return_value = new_size_bytes
+        res = self.driver.create_volume_from_snapshot(self.volume_c,
+                                                      self.snapshot_b)
+        self.assertEqual(mock.sentinel.volume_update, res)
+        mock_resize.assert_called_once_with(self.volume_c,
+                                            size=new_size_bytes)
+        volume_name = self.volume_c.name
+        mock_new_size.assert_called_once_with(diff_size,
+                                              volume_name)
+
+    @common_mocks
+    @mock.patch.object(driver.RBDDriver, '_clone',
+                       return_value=mock.sentinel.volume_update)
+    def test_create_unencrypted_vol_from_snap(self, mock_clone):
+        """Test create regular volume from regular snapshot"""
+
+        self.cfg.rbd_flatten_volume_from_snapshot = False
+        self.snapshot_b.volume.size = 9
+        mock_resize = self.mock_object(self.driver, '_resize')
+        mock_new_size = self.mock_object(self.driver,
+                                         '_calculate_new_size')
+        res = self.driver.create_volume_from_snapshot(self.volume_b,
+                                                      self.snapshot_b)
+        self.assertEqual(mock.sentinel.volume_update, res)
+        mock_resize.assert_called_once_with(self.volume_b, size=None)
+        mock_new_size.assert_not_called()
 
     @common_mocks
     def test_extend_volume(self):

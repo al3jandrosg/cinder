@@ -57,6 +57,7 @@ from oslo_utils import strutils
 from oslo_utils import timeutils
 import tenacity
 
+from cinder import coordination
 from cinder import exception
 from cinder.i18n import _
 
@@ -69,6 +70,48 @@ INFINITE_UNKNOWN_VALUES = ('infinite', 'unknown')
 
 
 synchronized = lockutils.synchronized_with_prefix('cinder-')
+synchronized_remove = lockutils.remove_external_lock_file_with_prefix(
+    'cinder-')
+
+
+def clean_volume_file_locks(volume_id, driver):
+    """Remove file locks used by Cinder.
+
+    This doesn't take care of driver locks, those should be handled in driver's
+    delete_volume method.
+    """
+    for name in (volume_id + '-delete_volume', volume_id,
+                 volume_id + '-detach_volume'):
+        try:
+            synchronized_remove(name)
+        except Exception as exc:
+            LOG.warning('Failed to cleanup volume lock %(name)s: %(exc)s',
+                        {'name': name, 'exc': exc})
+
+    try:
+        driver.clean_volume_file_locks(volume_id)
+    except Exception as exc:
+        LOG.warning('Failed to cleanup driver locks for volume %(id)s: '
+                    '%(exc)s', {'id': volume_id, 'exc': exc})
+
+
+def api_clean_volume_file_locks(volume_id):
+    coordination.synchronized_remove('attachment_update-' + volume_id + '-*')
+
+
+def clean_snapshot_file_locks(snapshot_id, driver):
+    try:
+        name = snapshot_id + '-delete_snapshot'
+        synchronized_remove(name)
+    except Exception as exc:
+        LOG.warning('Failed to cleanup snapshot lock %(name)s: %(exc)s',
+                    {'name': name, 'exc': exc})
+
+    try:
+        driver.clean_snapshot_file_locks(snapshot_id)
+    except Exception as exc:
+        LOG.warning('Failed to cleanup driver locks for snapshot %(id)s: '
+                    '%(exc)s', {'id': snapshot_id, 'exc': exc})
 
 
 def as_int(obj: Union[int, float, str], quiet: bool = True) -> int:
@@ -90,7 +133,8 @@ def as_int(obj: Union[int, float, str], quiet: bool = True) -> int:
     return obj
 
 
-def check_exclusive_options(**kwargs: dict) -> None:
+def check_exclusive_options(
+        **kwargs: Optional[Union[dict, str, bool]]) -> None:
     """Checks that only one of the provided options is actually not-none.
 
     Iterates over all the kwargs passed in and checks that only one of said
@@ -613,7 +657,7 @@ def retry(retry_param: Optional[Type[Exception]],
                 reraise=True,
                 retry=retry(retry_param),
                 wait=wait)
-            return r.call(f, *args, **kwargs)
+            return r(f, *args, **kwargs)
 
         return _wrapper
 
@@ -848,6 +892,12 @@ def create_ordereddict(adict: dict) -> OrderedDict:
     """Given a dict, return a sorted OrderedDict."""
     return OrderedDict(sorted(adict.items(),
                               key=operator.itemgetter(0)))
+
+
+@contextlib.contextmanager
+def nested_contexts(*contexts):
+    with contextlib.ExitStack() as stack:
+        yield [stack.enter_context(c) for c in contexts]
 
 
 class Semaphore(object):

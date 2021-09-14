@@ -49,6 +49,15 @@ NFS_EXPORT_2 = 'nfs-host2:/export'
 MOUNT_POINT = '/mnt/nfs'
 ATTACHED = 'attached'
 DETACHED = 'detached'
+DEST_POOL_NAME = 'dest-aggr'
+DEST_VSERVER_NAME = 'dest-vserver'
+DEST_BACKEND_NAME = 'dest-backend'
+DEST_HOST_STRING = '%s@%s#%s' % (HOST_NAME, DEST_BACKEND_NAME, DEST_POOL_NAME)
+DEST_EXPORT_PATH = '/fake/export/dest-path'
+DEST_NFS_SHARE = '%s:%s' % (SHARE_IP, DEST_EXPORT_PATH)
+CLUSTER_NAME = 'fake-cluster-name'
+DEST_CLUSTER_NAME = 'fake-dest-cluster-name'
+JOB_UUID = 'fb132b04-6422-43ce-9451-ee819f0131a4'
 LUN_METADATA = {
     'OsType': None,
     'SpaceReserved': 'true',
@@ -324,6 +333,7 @@ CLONE_DESTINATION = {
 }
 
 VOLUME_NAME = 'volume-fake_volume_id'
+VOLUME_PATH = '/vol/%s/%s' % (NETAPP_VOLUME, VOLUME_NAME)
 MOUNT_PATH = '168.10.16.11:/' + VOLUME_ID
 SNAPSHOT_NAME = 'fake_snapshot_name'
 SNAPSHOT_LUN_HANDLE = 'fake_snapshot_lun_handle'
@@ -337,6 +347,26 @@ SNAPSHOT = {
     'volume_type_id': 'fake_id',
     'busy': False,
     'id': 'fake_id'
+}
+
+SNAPSHOT_VOLUME = {
+    'id': VOLUME_ID,
+    'name': VOLUME_NAME
+}
+
+LUN_WITH_METADATA = {
+    'handle': 'vserver_fake:/vol/fake_flexvol/volume-fake-uuid',
+    'name': 'volume-fake-uuid',
+    'size': 20971520,
+    'metadata': {
+        'Vserver': 'vserver_fake',
+        'Volume': 'fake_flexvol',
+        'Qtree': None,
+        'Path': '/vol/fake_flexvol/volume-fake-uuid',
+        'OsType': 'linux',
+        'SpaceReserved': 'false',
+        'UUID': 'fake-uuid'
+    }
 }
 
 VOLUME_REF = {'name': 'fake_vref_name', 'size': 42}
