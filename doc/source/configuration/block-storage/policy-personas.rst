@@ -2,10 +2,6 @@
 Policy Personas and Permissions
 ===============================
 
-.. warning::
-   This describes work in progress.  Until this warning is removed,
-   you should regard the permissions described here as NOT IMPLEMENTED.
-
 Beginning with the Xena release, the Block Storage service API v3 takes
 advantage of the default authentication and authorization apparatus supplied
 by the Keystone project to give operators a rich set of default policies to
@@ -485,8 +481,7 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - | **NEEDS REVIEW**
-       | Update status (and optionally progress) of snapshot
+   * - Update status (and optionally progress) of snapshot
      - ``POST  /snapshots/{snapshot_id}/action`` (os-update_snapshot_status)
      - snapshot_extension:snapshot_actions:update_snapshot_status
      - empty
@@ -829,7 +824,7 @@ matrix is validated by human beings.
      - system-admin
      - (old "owner")
      - (old "admin")
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Create, update or delete a group type
      - | (NOTE: new policies split POST, PUT, DELETE)
        | ``POST /group_types/``
@@ -895,7 +890,7 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Create, show, update and delete group type spec
      - | (NOTE: new policies split GET, POST, PUT, DELETE)
        | ``GET /group_types/{group_type_id}/group_specs``
@@ -1251,7 +1246,7 @@ matrix is validated by human beings.
      - system-admin
      - (old "owner")
      - (old "admin")
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Show or update project quota class
      - | (NOTE: new policies split GET and PUT)
        | ``GET  /os-quota-class-sets/{project_id}``
@@ -1443,10 +1438,10 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - | **DEPRECATE**
-       | List, update or show hosts for a project
-     - | (NOTE: new policies split GETs and PUT)
-       | ``GET  /os-hosts``
+   * - | List, update or show hosts for a project
+       | (NOTE: will be deprecated in Yoga and new policies introduced
+       | for GETs and PUT)
+     - | ``GET  /os-hosts``
        | ``PUT  /os-hosts/{host_name}``
        | ``GET  /os-hosts/{host_id}``
      - volume_extension:hosts
@@ -1458,42 +1453,6 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - | **NEW**
-       | List hosts
-     - ``GET  /os-hosts``
-     - volume_extension:hosts:get_all
-     - (new policy)
-     - no
-     - no
-     - no
-     - no
-     - yes
-     - n/a
-     - n/a
-   * - | **NEW**
-       | Show detail about a host
-     - ``GET  /os-hosts/{host_id}``
-     - volume_extension:hosts:get
-     - (new policy)
-     - no
-     - no
-     - no
-     - no
-     - yes
-     - n/a
-     - n/a
-   * - | **NEW**
-       | Update a host
-     - ``PUT  /os-hosts/{host_name}``
-     - volume_extension:hosts:update
-     - (new policy)
-     - no
-     - no
-     - no
-     - no
-     - yes
-     - n/a
-     - n/a
    * - Show limits with used limit attributes
      - ``GET  /limits``
      - limits_extension:used_limits
@@ -1554,7 +1513,7 @@ matrix is validated by human beings.
      - system-admin
      - (old "owner")
      - (old "admin")
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Create, update and delete volume type
        | (new policies for create/update/delete)
      - | ``POST  /types``
@@ -1627,7 +1586,7 @@ matrix is validated by human beings.
      - yes
      - yes
      - yes
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Base policy for all volume type encryption type operations
        | (NOTE: can't use this anymore, because it gives GET and POST same
          permissions)
@@ -1693,13 +1652,13 @@ matrix is validated by human beings.
        | ``GET  /types``
        | The ability to make these API calls is governed by other policies.
      - volume_extension:access_types_extra_specs
-     - rule:admin_api
-     - no
-     - no
-     - no
-     - no
+     - empty
      - yes
-     - no
+     - yes
+     - yes
+     - yes
+     - yes
+     - yes
      - yes
    * - List or show volume type with access type qos specs id attribute
      - | Adds ``qos_specs_id`` to the following responses:
@@ -1715,9 +1674,7 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - | **REVISE** (it also governs listing all the projects with access,
-         which should be governed by a different policy)
-       | Volume type access related APIs.
+   * - Show whether a volume type is public in the type response
      - | Adds ``os-volume-type-access:is_public`` to the following responses:
        | ``GET  /types``
        | ``GET  /types/{type_id}``
@@ -2144,7 +2101,7 @@ matrix is validated by human beings.
      - yes
      - yes
      - yes
-   * - | **DEPRECATE**
+   * - | **DEPRECATED**
        | Volume's image metadata related operation, create, delete, show and
          list
      - | (NOTE: new policies are introduced below to split GET and POST)
@@ -2237,13 +2194,13 @@ matrix is validated by human beings.
    * - List type extra specs
      - ``GET  /types/{type_id}/extra_specs``
      - volume_extension:types_extra_specs:index
-     - rule:admin_api
-     - no
-     - no
-     - no
-     - no
+     - empty
      - yes
-     - no
+     - yes
+     - yes
+     - yes
+     - yes
+     - yes
      - yes
    * - Create type extra specs
      - ``POST  /types/{type_id}/extra_specs``
@@ -2259,13 +2216,13 @@ matrix is validated by human beings.
    * - Show one specified type extra specs
      - ``GET  /types/{type_id}/extra_specs/{extra_spec_key}``
      - volume_extension:types_extra_specs:show
-     - rule:admin_api
-     - no
-     - no
-     - no
-     - no
+     - empty
      - yes
-     - no
+     - yes
+     - yes
+     - yes
+     - yes
+     - yes
      - yes
    * - Update type extra specs
      - ``PUT  /types/{type_id}/extra_specs/{extra_spec_key}``
@@ -2281,6 +2238,23 @@ matrix is validated by human beings.
    * - Delete type extra specs
      - ``DELETE  /types/{type_id}/extra_specs/{extra_spec_key}``
      - volume_extension:types_extra_specs:delete
+     - rule:admin_api
+     - no
+     - no
+     - no
+     - no
+     - yes
+     - no
+     - yes
+   * - Include extra_specs fields that may reveal sensitive information about
+       the deployment that should not be exposed to end users in various
+       volume-type responses that show extra_specs.
+     - | ``GET  /types``
+       | ``GET  /types/{type_id}``
+       | ``GET  /types/{type_id}/extra_specs``
+       | ``GET  /types/{type_id}/extra_specs/{extra_spec_key}``
+       | The ability to make these API calls is governed by other policies.
+     - volume_extension:types_extra_specs:read_sensitive
      - rule:admin_api
      - no
      - no
@@ -2467,7 +2441,7 @@ matrix is validated by human beings.
      - system-admin
      - (old "owner")
      - (old "admin")
-   * - Set or update default volume type
+   * - Set or update default volume type for a project
      - ``PUT  /default-types``
      - volume_extension:default_set_or_update
      - rule:system_or_domain_or_project_admin
@@ -2478,7 +2452,7 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - Get default types
+   * - Get default type for a project
      - | ``GET  /default-types/{project-id}``
        | (Note: a project-\* persona can always determine their effective
          default-type by making the ``GET /v3/{project_id}/types/default``
@@ -2503,7 +2477,7 @@ matrix is validated by human beings.
      - yes
      - no
      - yes
-   * - Unset default type
+   * - Unset default type for a project
      - ``DELETE  /default-types/{project-id}``
      - volume_extension:default_unset
      - rule:system_or_domain_or_project_admin

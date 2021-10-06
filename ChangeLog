@@ -1,17 +1,62 @@
 CHANGES
 =======
 
+19.0.0
+------
+
+* Use os-brick 5.0.1
+* Add "known issues" to xena release note
+* Add warning about qcow2 version 2 format images
+* Fix cinder-manage db version
+* fixtures: Don't persist state in the Database fixture
+* Fix typo in release note file
+* Raise min of oslo.db to 11.0.0
+* RBD: Call trash operation when plain deletion fails
+* Specify xena os-brick series in requirements
+* Add deprecation notices to deprecated policy rules
+* Update SQLAlchemy related requirements
+* Raise min of oslo.policy to 3.8.1
+* Raise minimum oslo.log to 4.5.0
+* Update TOX\_CONSTRAINTS\_FILE for stable/xena
+* Update .gitreview for stable/xena
+
+19.0.0.0rc1
+-----------
+
+* Correct "Add release note about xena policy changes"
+* Correct "Clean up policy matrix for Xena release"
+* mypy: Fix unused type: ignore in manager.py
+* Add release note about xena policy changes
+* Clean up policy matrix for Xena release
+* Add release note prelude for the Xena release
+* Update policies related to user visible extra specs
+* Implement project personas for snapshot metadata
+* Implement Xena project personas for group snapshots
+* Implement project personas for backups API
+* Implement project personas for volume actions
+* Better workaround for policy file in PDF docs
+* Remove sample policy config from docs generation
+* [SVF] Fix extend issue for mirroring volumes
+* Implement Xena project personas for group\_actions
+* Add request method to test requests
+* [SVF]:Storwize HyperSwap snapshot clone is failing
 * Implement Xena personas for volume groups
 * Implement Xena project personas for volume types
+* Xena project personas for volume type access API
+* Implement project personas for snapshots
 * Implement secure RBAC for snapshot actions
+* Implement project personas for volume metadata API
 * Implement project personas for the limits API
+* Fix: Online migration for volume\_use\_quota\_online\_data\_migration
 * Implement project personas group\_types
 * Update project personas for default\_types
 * Implement project personas for volume API
 * Implement project personas for quotas and quota\_classes
 * Implement project personas for volume transfers
+* Native multibackend-matrix Zuul v3 job
 * [SVF]:HyperSwap volume service status update
 * Hitachi: Add generic volume groups
+* Nimble: Add Alletra 6k related information
 * [SVF] Update rccg details for mirror volumes
 * JovianDSS: add multiattach and 16K block support
 * JovianDSS: fix code style and naming
@@ -32,6 +77,11 @@ CHANGES
 * [SVF] Manage GMCV volumes on separate pools
 * Update base policy file
 * Correct the rest api url of import\_record of backup
+* db: Remove 'db' argument from various managers
+* db: Remove 'db\_driver' option
+* db: Integrate alembic
+* db: Add all migrations to initial alembic migration
+* db: Add initial alembic migration
 * db: Add alembic boilerplate
 * db: Vendor 'oslo\_db.sqlalchemy.migration'
 * db: Move sqlalchemy-migrate migrations

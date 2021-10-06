@@ -42,13 +42,21 @@ run Cinder.  From the Queens release onward, the following hold:
   <https://opendev.org/openstack/cinder>`_ (or its `github mirror
   <https://github.com/openstack/cinder>`_).
 
-The following provides a listing of the default policies. It is not recommended
-to copy this file into ``/etc/cinder`` unless you are planning on providing a
-different policy for an operation that is not the default.
-
 .. only:: html
+
+   The following provides a listing of the default policies. It is not
+   recommended to copy this file into ``/etc/cinder`` unless you are planning
+   on providing a different policy for an operation that is not the default.
 
    The sample policy file can also be viewed in `file form
    <../../../_static/cinder.policy.yaml.sample>`_.
 
-.. literalinclude:: ../../../_static/cinder.policy.yaml.sample
+   .. literalinclude:: ../../../_static/cinder.policy.yaml.sample
+      :language: ini
+
+.. only:: latex
+
+   A sample policy file is available in the online version of this
+   documentation.  Make sure you are looking at the sample file for the
+   OpenStack release you are running as the available policy rules and
+   their default values may change from release to release.

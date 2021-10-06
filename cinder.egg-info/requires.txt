@@ -1,7 +1,7 @@
 Paste>=3.4.3
 PasteDeploy>=2.1.0
 Routes>=2.4.1
-SQLAlchemy>=1.3.19
+SQLAlchemy>=1.4.23
 WebOb>=1.8.6
 boto3>=1.16.51
 castellan>=3.6.0
@@ -18,17 +18,17 @@ keystoneauth1>=4.2.1
 keystonemiddleware>=9.1.0
 lxml>=4.5.2
 oauth2client>=4.1.3
-os-brick>=4.3.1
+os-brick>=5.0.1
 os-win>=5.4.0
 oslo.concurrency>=4.4.0
 oslo.config>=8.3.2
 oslo.context>=3.1.1
-oslo.db>=8.4.0
+oslo.db>=11.0.0
 oslo.i18n>=5.0.1
-oslo.log>=4.4.0
+oslo.log>=4.5.0
 oslo.messaging>=12.5.0
 oslo.middleware>=4.1.1
-oslo.policy>=3.6.2
+oslo.policy>=3.8.1
 oslo.privsep>=2.4.0
 oslo.reports>=2.2.0
 oslo.rootwrap>=6.2.0
@@ -118,7 +118,7 @@ storpool>=4.0.0
 
 [test]
 PyMySQL>=0.10.0
-SQLAlchemy-Utils>=0.36.8
+SQLAlchemy-Utils>=0.37.8
 bandit==1.6.0
 coverage>=5.5
 ddt>=1.4.1

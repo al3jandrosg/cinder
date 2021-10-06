@@ -26,12 +26,12 @@ import ddt
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_service import loopingcall
-from oslo_utils import importutils
 from oslo_utils import units
 import paramiko
 import six
 
 from cinder import context
+import cinder.db
 from cinder import exception
 from cinder.i18n import _
 from cinder import objects
@@ -170,6 +170,9 @@ class StorwizeSVCManagementSimulator(object):
                                'is not in a group.'),
             'CMMVC9012E': ('', 'CMMVC9012E The copy type differs from other '
                                'copies already in the consistency group.'),
+            'CMMVC5951E': ('', 'CMMVC5951E The operation cannot be performed '
+                               'because the relationship is not a stand-alone '
+                               'relationship.'),
             'CMMVC9201E': ('', 'CMMVC9201E Task failed because volume has a '
                                'copy that is fully allocated and is part of a '
                                'Metro Mirror or Global Mirror relationship.'),
@@ -2234,6 +2237,9 @@ port_speed!N/A
         except KeyError:
             return self._errors['CMMVC5753E']
 
+        if rcrel.get('consistency_group_name', None):
+            return self._errors['CMMVC5951E']
+
         function = 'stop_access' if force_access else 'stop'
         self._rc_state_transition(function, rcrel)
         if force_access:
@@ -2360,6 +2366,11 @@ port_speed!N/A
             cycleperiodseconds = kwargs['cycleperiodseconds'].strip('\'\"')
             nonull_num += 1
 
+        cyclingmode = None
+        if 'cyclingmode' in kwargs:
+            cyclingmode = kwargs['cyclingmode'].strip('\'\"')
+            nonull_num += 1
+
         if nonull_num > 1:
             return self._errors['CMMVC5713E']
         elif masterchange:
@@ -2370,6 +2381,8 @@ port_speed!N/A
             return ('', '')
         elif cycleperiodseconds:
             rcrel['cycle_period_seconds'] = cycleperiodseconds
+        elif cyclingmode:
+            rcrel['cycling_mode'] = cyclingmode
         return ('', '')
 
     def _rc_state_transition(self, function, rcrel):
@@ -3127,8 +3140,7 @@ class StorwizeSVCISCSIDriverTestCase(test.TestCase):
 
         self._reset_flags()
         self.ctxt = context.get_admin_context()
-        db_driver = CONF.db_driver
-        self.db = importutils.import_module(db_driver)
+        self.db = cinder.db
         self.iscsi_driver.db = self.db
         self.iscsi_driver.do_setup(None)
         self.iscsi_driver.check_for_setup_error()
@@ -3776,8 +3788,7 @@ class StorwizeSVCFcDriverTestCase(test.TestCase):
 
         self._reset_flags()
         self.ctxt = context.get_admin_context()
-        db_driver = self.fc_driver.configuration.db_driver
-        self.db = importutils.import_module(db_driver)
+        self.db = cinder.db
         self.fc_driver.db = self.db
         self.fc_driver.do_setup(None)
         self.fc_driver.check_for_setup_error()
@@ -4605,8 +4616,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         else:
             self._reset_flags()
         self.ctxt = context.get_admin_context()
-        db_driver = CONF.db_driver
-        self.db = importutils.import_module(db_driver)
+        self.db = cinder.db
         self.driver.db = self.db
         self.driver.do_setup(None)
         self.driver.check_for_setup_error()
@@ -6741,14 +6751,14 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                           self.driver.create_group_from_src,
                           self.ctxt, group, [vol1])
 
-        hyper_specs = {'hyperswap_group_enabled': '<is> True'}
+        hyper_specs = {'hyperswap_group_enabled': '<is> False'}
         hyper_type_ref = group_types.create(self.ctxt, 'hypergroup',
                                             hyper_specs)
         group = self._create_group_in_db(volume_type_ids=[type_ref.id],
                                          group_type_id=hyper_type_ref.id)
         vol1 = testutils.create_volume(self.ctxt, volume_type_id=type_ref.id,
                                        group_id=group.id)
-        self.assertRaises(exception.VolumeBackendAPIException,
+        self.assertRaises(NotImplementedError,
                           self.driver.create_group_from_src,
                           self.ctxt, group, [vol1])
 
@@ -8034,11 +8044,77 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self._assert_vol_exists(vol.name, True)
 
         snap = testutils.create_snapshot(self.ctxt, vol.id)
-        self.assertRaises(exception.VolumeDriverException,
-                          self.driver.create_snapshot, snap)
+
+        if self.USESIM:
+            self.sim.error_injection('lsfcmap', 'speed_up')
+            self.sim.error_injection('startfcmap', 'bad_id')
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.driver.create_snapshot, snap)
+            self._assert_vol_exists(snap['name'], False)
+            self.sim.error_injection('prestartfcmap', 'bad_id')
+            self.assertRaises(exception.VolumeBackendAPIException,
+                              self.driver.create_snapshot, snap)
+            self._assert_vol_exists(snap['name'], False)
+
+        self.driver.create_snapshot(snap)
+        self._assert_vol_exists(snap['name'], True)
 
         self.driver.delete_volume(vol)
         self._assert_vol_exists(vol.name, False)
+        self.driver.delete_snapshot(snap)
+        self._assert_vol_exists(snap['name'], False)
+
+    def test_create_hyperswap_volume_from_snapshot(self):
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 7, 0, 0),
+                                'topology': 'hyperswap',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            self.driver.do_setup(None)
+
+        hyper_type = self._create_hyperswap_type('test_hyperswap_type')
+        vol = self._create_hyperswap_volume(hyper_type)
+        self._assert_vol_exists(vol.name, True)
+
+        snap = testutils.create_snapshot(self.ctxt, vol.id)
+        self.driver.create_snapshot(snap)
+        self._assert_vol_exists(snap['name'], True)
+
+        vol1 = testutils.create_volume(self.ctxt,
+                                       host='openstack@svc#hyperswap1',
+                                       volume_type_id=hyper_type.id)
+
+        self.driver.create_volume_from_snapshot(vol1, snap)
+        self._assert_vol_exists(vol1.name, True)
+        self._assert_vol_exists('site2' + vol1.name, True)
+        self._assert_vol_exists('fcsite1' + vol1.name, True)
+        self._assert_vol_exists('fcsite2' + vol1.name, True)
+
+        vol2 = testutils.create_volume(self.ctxt,
+                                       host='openstack@svc#hyperswap1',
+                                       volume_type_id=hyper_type.id)
+        with (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'convert_volume_to_hyperswap')) as convert_volume_to_hyperswap,\
+             (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'ensure_vdisk_no_fc_mappings')) as ensure_vdisk_no_fc_mappings:
+            self.driver.create_volume_from_snapshot(vol2, snap)
+            ensure_vdisk_no_fc_mappings.assert_called()
+            convert_volume_to_hyperswap.assert_called()
+            self.assertEqual(1, convert_volume_to_hyperswap.call_count)
+            self.assertEqual(1, ensure_vdisk_no_fc_mappings.call_count)
+            self._assert_vol_exists(vol2.name, True)
+
+        self.driver.delete_volume(vol)
+        self._assert_vol_exists(vol.name, False)
+        self._assert_vol_exists('site2' + vol.name, False)
+        self._assert_vol_exists('fcsite1' + vol.name, False)
+        self._assert_vol_exists('fcsite2' + vol.name, False)
+        self.driver.delete_snapshot(snap)
+        self._assert_vol_exists(snap['name'], False)
+        self.driver.delete_volume(vol1)
+        self._assert_vol_exists(vol1.name, False)
 
     def test_create_cloned_hyperswap_volume(self):
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
@@ -8083,10 +8159,7 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                                 'system_id': '0123456789ABCDEF'}
             get_system_info.return_value = fake_system_info
             self.driver.do_setup(None)
-        spec = {'drivers:volume_topology': 'hyperswap',
-                'peer_pool': 'hyperswap2'}
-        vol_type_ref = volume_types.create(self.ctxt, 'test_hyperswap_type',
-                                           spec)
+        vol_type_ref = self._create_hyperswap_type('test_hyperswap_type')
         vol = self._create_hyperswap_volume(vol_type_ref)
         self._assert_vol_exists(vol.name, True)
 
@@ -8094,6 +8167,38 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         attrs = self.driver._helpers.get_vdisk_attributes(vol['name'])
         vol_size = int(attrs['capacity']) / units.Gi
         self.assertAlmostEqual(vol_size, 13)
+        self.driver.delete_volume(vol)
+
+        # Extend hyperswap volume that added to group.
+        group_specs = {'hyperswap_group_enabled': '<is> True'}
+        group_type_ref = group_types.create(self.ctxt, 'testgroup',
+                                            group_specs)
+        hyper_group = testutils.create_group(
+            self.ctxt, name='hypergroup',
+            group_type_id=group_type_ref['id'],
+            volume_type_ids=[vol_type_ref['id']])
+        model_update = self.driver.create_group(self.ctxt, hyper_group)
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
+
+        vol = self._create_hyperswap_volume(vol_type_ref)
+        self.db.volume_update(context.get_admin_context(), vol['id'],
+                              {'group_id': hyper_group.id})
+        add_volumes = [vol]
+        del_volumes = []
+        (model_update, add_volumes_update,
+         remove_volumes_update) = self.driver.update_group(self.ctxt,
+                                                           hyper_group,
+                                                           add_volumes,
+                                                           del_volumes)
+        self.assertEqual(fields.GroupStatus.AVAILABLE, model_update['status'])
+        self.assertEqual([{'id': vol.id, 'group_id': hyper_group.id}],
+                         add_volumes_update)
+        self.assertEqual([], remove_volumes_update)
+
+        self.driver.extend_volume(vol, '15')
+        attrs = self.driver._helpers.get_vdisk_attributes(vol['name'])
+        vol_size = int(attrs['capacity']) / units.Gi
+        self.assertAlmostEqual(vol_size, 15)
         self.driver.delete_volume(vol)
 
         # Extend hyperswap volume with thick_provisioning_support.
@@ -8104,7 +8209,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
             self.ctxt, 'test_hyperswap_thick_type', spec)
         hs_vol = self._create_hyperswap_volume(hs_thick_type)
         self._assert_vol_exists(hs_vol.name, True)
-
         if self.USESIM:
             # tell expandvdisksize to fail while called extend_volume
             # because volume is fast formatting
@@ -8115,46 +8219,6 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
             vol_size = int(attrs['capacity']) / units.Gi
             self.assertAlmostEqual(vol_size, 1)
         self.driver.delete_volume(hs_vol)
-
-        # Extend hyperswap volume that added to group.
-        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
-                               'extend_vdisk') as extend_vdisk:
-            group_specs = {'hyperswap_group_enabled': '<is> True'}
-            group_type_ref = group_types.create(self.ctxt, 'testgroup',
-                                                group_specs)
-            hyper_group = testutils.create_group(
-                self.ctxt, name='hypergroup',
-                group_type_id=group_type_ref['id'],
-                volume_type_ids=[vol_type_ref['id']])
-            model_update = self.driver.create_group(self.ctxt, hyper_group)
-            self.assertEqual(fields.GroupStatus.AVAILABLE,
-                             model_update['status'])
-
-            vol = self._create_hyperswap_volume(vol_type_ref)
-            self.db.volume_update(context.get_admin_context(), vol['id'],
-                                  {'group_id': hyper_group.id})
-            add_volumes = [vol]
-            del_volumes = []
-
-            (model_update, add_volumes_update,
-             remove_volumes_update) = self.driver.update_group(self.ctxt,
-                                                               hyper_group,
-                                                               add_volumes,
-                                                               del_volumes)
-            self.assertEqual(fields.GroupStatus.AVAILABLE,
-                             model_update['status'])
-            self.assertEqual([{'id': vol.id, 'group_id': hyper_group.id}],
-                             add_volumes_update)
-            self.assertEqual([], remove_volumes_update)
-
-            self.assertRaises(exception.VolumeDriverException,
-                              self.driver.extend_volume, vol, 15)
-
-            self.assertFalse(extend_vdisk.called)
-            attrs = self.driver._helpers.get_vdisk_attributes(vol['name'])
-            vol_size = int(attrs['capacity']) / units.Gi
-            self.assertAlmostEqual(vol_size, 1)
-            self.driver.delete_volume(vol)
 
     def test_migrate_hyperswap_volume(self):
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
@@ -8605,8 +8669,12 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                           self.ctxt, mirror_volume, hyperswap_vol_type, diff,
                           host3)
 
+    @mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
+                       '_get_rccg_name')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers, 'create_rccg')
     @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
-    def test_storwize_hyperswap_group_create(self, is_grp_a_cg_snapshot_type):
+    def test_storwize_hyperswap_group_create(self, is_grp_a_cg_snapshot_type,
+                                             create_rccg, get_rccg_name):
         """Test group create."""
         is_grp_a_cg_snapshot_type.side_effect = [False, False, False, False]
         with mock.patch.object(storwize_svc_common.StorwizeHelpers,
@@ -8630,6 +8698,8 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         model_update = self.driver.create_group(self.ctxt, group)
         self.assertEqual(fields.GroupStatus.ERROR,
                          model_update['status'])
+        create_rccg.assert_not_called()
+        get_rccg_name.assert_not_called()
 
         # create hyperswap group with hyper volume type.
         spec = {'drivers:volume_topology': 'hyperswap',
@@ -8643,9 +8713,15 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         model_update = self.driver.create_group(self.ctxt, hyper_group)
         self.assertEqual(fields.GroupStatus.AVAILABLE,
                          model_update['status'])
+        create_rccg.assert_not_called()
+        get_rccg_name.assert_not_called()
 
+    @mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
+                       '_get_rccg_name')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers, 'delete_rccg')
     @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
-    def test_storwize_hyperswap_group_delete(self, is_grp_a_cg_snapshot_type):
+    def test_storwize_hyperswap_group_delete(self, is_grp_a_cg_snapshot_type,
+                                             delete_rccg, get_rccg_name):
         """Test group create."""
         is_grp_a_cg_snapshot_type.side_effect = [False, False, False]
 
@@ -8689,8 +8765,20 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         for volume in model_update[1]:
             self.assertEqual('deleted', volume['status'])
 
+        delete_rccg.assert_not_called()
+        get_rccg_name.assert_not_called()
+
+    @mock.patch.object(storwize_svc_common.StorwizeSVCCommonDriver,
+                       '_get_rccg_name')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_relationship_info')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'chrcrelationship')
     @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
-    def test_storwize_hyperswap_group_update(self, is_grp_a_cg_snapshot_type):
+    def test_storwize_hyperswap_group_update(self, is_grp_a_cg_snapshot_type,
+                                             chrcrelationship,
+                                             get_relationship_info,
+                                             get_rccg_name):
         """Test group create."""
         is_grp_a_cg_snapshot_type.side_effect = [False, False, False,
                                                  False, False]
@@ -8727,6 +8815,9 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         add_volumes = [vol1, vol2]
         del_volumes = []
 
+        get_relationship_info.assert_called()
+        self.assertEqual(2, get_relationship_info.call_count)
+
         # add hyperswap volume
         (model_update, add_volumes_update,
          remove_volumes_update) = self.driver.update_group(self.ctxt,
@@ -8739,6 +8830,10 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
                           {'id': vol2.id, 'group_id': hyper_group.id}],
                          add_volumes_update, )
         self.assertEqual([], remove_volumes_update)
+        chrcrelationship.assert_not_called()
+        get_relationship_info.assert_called()
+        self.assertEqual(2, get_relationship_info.call_count)
+        get_rccg_name.assert_not_called()
 
         # del hyperswap volume from volume group
         add_volumes = []
@@ -8754,6 +8849,10 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self.assertEqual([{'id': vol1.id, 'group_id': None},
                           {'id': vol2.id, 'group_id': None}],
                          remove_volumes_update)
+        chrcrelationship.assert_not_called()
+        get_relationship_info.assert_called()
+        self.assertEqual(2, get_relationship_info.call_count)
+        get_rccg_name.assert_not_called()
 
         # add non-hyper volume
         non_type_ref = volume_types.create(self.ctxt, 'nonhypertype', None)
@@ -8766,6 +8865,266 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
         self.assertEqual([{'id': vol1.id, 'group_id': hyper_group.id}],
                          add_volumes_update)
         self.assertEqual([], remove_volumes_update)
+
+        # del non-hyper volume
+        vol4 = self._create_volume(volume_type_id=non_type_ref['id'])
+        (model_update, add_volumes_update,
+         remove_volumes_update) = self.driver.update_group(
+            self.ctxt, hyper_group, [], [vol4, vol1])
+        self.assertEqual(fields.GroupStatus.ERROR,
+                         model_update['status'])
+        self.assertEqual([{'id': vol1.id, 'group_id': None}],
+                         remove_volumes_update)
+        self.assertEqual([], add_volumes_update)
+
+    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
+                new=testutils.ZeroIntervalLoopingCall)
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
+    def test_hyperswap_create_group_from_grp(self, is_group_a_cg_snap_type):
+        # Valid case for create hyperswap group from src
+        is_group_a_cg_snap_type.return_value = False
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 7, 0, 0),
+                                'topology': 'hyperswap',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            self.driver.do_setup(None)
+
+        group_specs = {'hyperswap_group_enabled': '<is> True'}
+        group_type_ref = group_types.create(self.ctxt, 'testgroup',
+                                            group_specs)
+
+        # create hyperswap group with hyper volume type.
+        volume_type_ref = self._create_hyperswap_type(
+            'hyper_type')
+        source_hyper_group = testutils.create_group(
+            self.ctxt, name='src_hypergroup',
+            group_type_id=group_type_ref['id'],
+            volume_type_ids=[volume_type_ref['id']])
+
+        model_update = self.driver.create_group(self.ctxt, source_hyper_group)
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'])
+
+        src_vol1 = self._create_hyperswap_volume(volume_type_ref)
+        src_vol2 = self._create_hyperswap_volume(volume_type_ref)
+        ctxt = context.get_admin_context()
+        self.db.volume_update(ctxt, src_vol1['id'],
+                              {'group_id': source_hyper_group.id})
+        self.db.volume_update(ctxt, src_vol2['id'],
+                              {'group_id': source_hyper_group.id})
+        add_volumes = [src_vol1, src_vol2]
+        del_volumes = []
+
+        # add hyperswap volume
+        (model_update, add_volumes_update,
+         remove_volumes_update) = self.driver.update_group(self.ctxt,
+                                                           source_hyper_group,
+                                                           add_volumes,
+                                                           del_volumes)
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'])
+        self.assertEqual([{'id': src_vol1.id,
+                           'group_id': source_hyper_group.id},
+                          {'id': src_vol2.id,
+                           'group_id': source_hyper_group.id}],
+                         add_volumes_update, )
+        source_vols = self.db.volume_get_all_by_generic_group(
+            self.ctxt.elevated(), source_hyper_group['id'])
+
+        # clone hyper group
+        Clone_hyper_group = testutils.create_group(
+            self.ctxt, name='clon_hypergroup',
+            group_type_id=group_type_ref['id'],
+            volume_type_ids=[volume_type_ref['id']])
+
+        clone_vol1 = testutils.create_volume(
+            self.ctxt, host='openstack@svc#hyperswap1',
+            volume_type_id=volume_type_ref.id, group_id=Clone_hyper_group.id)
+        clone_vol2 = testutils.create_volume(
+            self.ctxt, host='openstack@svc#hyperswap1',
+            volume_type_id=volume_type_ref.id, group_id=Clone_hyper_group.id)
+
+        clone_volumes = self.db.volume_get_all_by_generic_group(
+            self.ctxt.elevated(), Clone_hyper_group['id'])
+
+        # Create hyperswap group from source hyperswap group
+        model_update, volumes_model_update = (
+            self.driver.create_group_from_src(self.ctxt, Clone_hyper_group,
+                                              clone_volumes, None, None,
+                                              source_hyper_group,
+                                              source_vols))
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'],
+                         "CG create from src created failed")
+        for each_vol in volumes_model_update:
+            self.assertEqual('available', each_vol['status'])
+
+        for vol in clone_volumes:
+            self._assert_vol_exists(vol.name, True)
+            self._assert_vol_exists('site2' + vol.name, True)
+            self._assert_vol_exists('fcsite1' + vol.name, True)
+            self._assert_vol_exists('fcsite2' + vol.name, True)
+
+        self.driver.delete_group(self.ctxt, Clone_hyper_group,
+                                 [clone_vol1, clone_vol2])
+
+        with (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'convert_volume_to_hyperswap')) as convert_volume_to_hyperswap,\
+             (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'ensure_vdisk_no_fc_mappings')) as ensure_vdisk_no_fc_mappings:
+
+            # Create cg from source cg
+            model_update, volumes_model_update = (
+                self.driver.create_group_from_src(self.ctxt,
+                                                  Clone_hyper_group,
+                                                  clone_volumes, None,
+                                                  None, source_hyper_group,
+                                                  source_vols))
+            ensure_vdisk_no_fc_mappings.assert_called()
+            self.assertEqual(2, ensure_vdisk_no_fc_mappings.call_count)
+            convert_volume_to_hyperswap.assert_called()
+            self.assertEqual(2, convert_volume_to_hyperswap.call_count)
+
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'],
+                         "CG create from src created failed")
+        for each_vol in volumes_model_update:
+            self.assertEqual('available', each_vol['status'])
+
+        for vol in clone_volumes:
+            self._assert_vol_exists(vol.name, True)
+            self._assert_vol_exists('site2' + vol.name, False)
+            self._assert_vol_exists('fcsite1' + vol.name, False)
+            self._assert_vol_exists('fcsite2' + vol.name, False)
+
+    @mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
+                new=testutils.ZeroIntervalLoopingCall)
+    @mock.patch('cinder.volume.volume_utils.is_group_a_cg_snapshot_type')
+    def test_hyperswap_create_group_from_snapshot(self,
+                                                  is_group_a_cg_snap_type):
+        # Valid case for create hyperswap group from src
+        is_group_a_cg_snap_type.return_value = False
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'get_system_info') as get_system_info:
+            fake_system_info = {'code_level': (7, 7, 0, 0),
+                                'topology': 'hyperswap',
+                                'system_name': 'storwize-svc-sim',
+                                'system_id': '0123456789ABCDEF'}
+            get_system_info.return_value = fake_system_info
+            self.driver.do_setup(None)
+
+        group_specs = {'hyperswap_group_enabled': '<is> True'}
+        group_type_ref = group_types.create(self.ctxt, 'testgroup',
+                                            group_specs)
+
+        # create hyperswap group with hyper volume type.
+        volume_type_ref = self._create_hyperswap_type(
+            'hyper_type')
+        source_hyper_group = testutils.create_group(
+            self.ctxt, name='src_hypergroup',
+            group_type_id=group_type_ref['id'],
+            volume_type_ids=[volume_type_ref['id']])
+
+        model_update = self.driver.create_group(self.ctxt,
+                                                source_hyper_group)
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'])
+
+        src_vol1 = self._create_hyperswap_volume(volume_type_ref)
+        src_vol2 = self._create_hyperswap_volume(volume_type_ref)
+        ctxt = context.get_admin_context()
+        self.db.volume_update(ctxt, src_vol1['id'],
+                              {'group_id': source_hyper_group.id})
+        self.db.volume_update(ctxt, src_vol2['id'],
+                              {'group_id': source_hyper_group.id})
+        add_volumes = [src_vol1, src_vol2]
+        del_volumes = []
+
+        # add hyperswap volume
+        (model_update, add_volumes_update,
+         remove_volumes_update) = self.driver.update_group(self.ctxt,
+                                                           source_hyper_group,
+                                                           add_volumes,
+                                                           del_volumes)
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'])
+        self.assertEqual([{'id': src_vol1.id,
+                           'group_id': source_hyper_group.id},
+                          {'id': src_vol2.id,
+                           'group_id': source_hyper_group.id}],
+                         add_volumes_update, )
+
+        # clone hyper group
+        Clone_hyper_group = testutils.create_group(
+            self.ctxt, name='clon_hypergroup',
+            group_type_id=group_type_ref['id'],
+            volume_type_ids=[volume_type_ref['id']])
+
+        clone_vol1 = testutils.create_volume(
+            self.ctxt, host='openstack@svc#hyperswap1',
+            volume_type_id=volume_type_ref.id, group_id=Clone_hyper_group.id)
+        clone_vol2 = testutils.create_volume(
+            self.ctxt, host='openstack@svc#hyperswap1',
+            volume_type_id=volume_type_ref.id, group_id=Clone_hyper_group.id)
+
+        clone_volumes = self.db.volume_get_all_by_generic_group(
+            self.ctxt.elevated(), Clone_hyper_group['id'])
+
+        # Create hyperswap group snapshot
+        group_snapshot, snapshots = self._create_group_snapshot(
+            source_hyper_group['id'], group_type_id=group_type_ref.id)
+
+        # Create hyperswap group from hyperswap group snapshot
+        model_update, volumes_model_update = (
+            self.driver.create_group_from_src(self.ctxt, Clone_hyper_group,
+                                              clone_volumes, group_snapshot,
+                                              snapshots, None, None))
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'],
+                         "CG create from src created failed")
+        for each_vol in volumes_model_update:
+            self.assertEqual('available', each_vol['status'])
+
+        for vol in clone_volumes:
+            self._assert_vol_exists(vol.name, True)
+            self._assert_vol_exists('site2' + vol.name, True)
+            self._assert_vol_exists('fcsite1' + vol.name, True)
+            self._assert_vol_exists('fcsite2' + vol.name, True)
+
+        self.driver.delete_group(self.ctxt, Clone_hyper_group,
+                                 [clone_vol1, clone_vol2])
+
+        with (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'convert_volume_to_hyperswap')) as convert_volume_to_hyperswap,\
+             (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'ensure_vdisk_no_fc_mappings')) as ensure_vdisk_no_fc_mappings:
+
+            # Create cg from source cg
+            model_update, volumes_model_update = (
+                self.driver.create_group_from_src(self.ctxt,
+                                                  Clone_hyper_group,
+                                                  clone_volumes,
+                                                  group_snapshot,
+                                                  snapshots, None, None))
+            ensure_vdisk_no_fc_mappings.assert_called()
+            self.assertEqual(2, ensure_vdisk_no_fc_mappings.call_count)
+            convert_volume_to_hyperswap.assert_called()
+            self.assertEqual(2, convert_volume_to_hyperswap.call_count)
+
+        self.assertEqual(fields.GroupStatus.AVAILABLE,
+                         model_update['status'],
+                         "CG create from src created failed")
+        for each_vol in volumes_model_update:
+            self.assertEqual('available', each_vol['status'])
+
+        for vol in clone_volumes:
+            self._assert_vol_exists(vol.name, True)
+            self._assert_vol_exists('site2' + vol.name, False)
+            self._assert_vol_exists('fcsite1' + vol.name, False)
+            self._assert_vol_exists('fcsite2' + vol.name, False)
 
     @ddt.data({'spec': {'rsize': -1}},
               {'spec': {'mirror_pool': 'dr_pool2'}},
@@ -9833,6 +10192,32 @@ class StorwizeHelpersTestCase(test.TestCase):
                                                        access=access)
             startrcrelationship.assert_called_once_with(opts['RC_name'], None)
 
+    @ddt.data(({'RC_name': None,
+                'name': 'volume-12d-7'}, 'multi'),
+              ({'RC_name': 'fake_rcrel',
+                'name': 'rep_volume-12d-8'}, 'multi'),
+              ({'RC_name': 'fake_rcrel-2',
+                'name': 'rep_volume-12d-9'}, 'none'),
+              ({'RC_name': 'fake_rcrel-3',
+                'name': 'rep_volume-12d-10'}, None))
+    @mock.patch.object(storwize_svc_common.StorwizeSSH,
+                       'ch_rcrelationship_cyclingmode')
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_vdisk_attributes')
+    @ddt.unpack
+    def test_change_relationship_cyclingmode(self, opts, cycling_mode,
+                                             get_vdisk_attributes,
+                                             ch_rcrelationship_cyclingmode):
+        get_vdisk_attributes.side_effect = [{'RC_name': opts['RC_name']}]
+        self.storwize_svc_common.change_relationship_cyclingmode(
+            opts['name'], cycling_mode)
+        get_vdisk_attributes.assert_called_with(opts['name'])
+        if not opts['RC_name'] or not cycling_mode:
+            ch_rcrelationship_cyclingmode.assert_not_called()
+        else:
+            ch_rcrelationship_cyclingmode.assert_called_once_with(
+                opts['RC_name'], cycling_mode)
+
     @mock.patch.object(storwize_svc_common.StorwizeHelpers,
                        'get_host_from_host_info')
     @mock.patch.object(storwize_svc_common.StorwizeSSH, 'lshost')
@@ -9897,6 +10282,18 @@ class StorwizeSSHTestCase(test.TestCase):
         self.fake_driver.set_fake_storage(sim)
         self.storwize_ssh = storwize_svc_common.StorwizeSSH(
             self.fake_driver._run_ssh)
+
+    def test_ch_rcrelationship_cyclingmode(self):
+        with mock.patch.object(
+                storwize_svc_common.StorwizeSSH,
+                'run_ssh_assert_no_output') as run_ssh_assert_no_output:
+            run_ssh_assert_no_output.return_value = None
+            ret = self.storwize_ssh.ch_rcrelationship_cyclingmode('rcrel0',
+                                                                  'multi')
+            self.assertIsNone(ret)
+            ret = self.storwize_ssh.ch_rcrelationship_cyclingmode('rcrel1',
+                                                                  'none')
+            self.assertIsNone(ret)
 
     def test_mkvdiskhostmap(self):
         # mkvdiskhostmap should not be returning anything
@@ -9992,10 +10389,8 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
 
         self._reset_flags()
         self.ctxt = context.get_admin_context()
-        db_driver = self.driver.configuration.db_driver
-        self.db = importutils.import_module(db_driver)
+        self.db = cinder.db
         self.driver.db = self.db
-
         self.driver.do_setup(None)
         self.driver.check_for_setup_error()
         self._create_test_volume_types()
@@ -11166,6 +11561,127 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
 
         self.driver.delete_volume(volume)
         self._validate_replic_vol_deletion(volume)
+
+    def test_storwize_extend_gmcv_volume_invalid(self):
+        # Set replication target.
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+
+        # Extend gmcv volume with thick_provisioning_support.
+        spec = {'replication_enabled': '<is> True',
+                'replication_type': '<in> gmcv',
+                'drivers:rsize': -1}
+
+        gmcv_thick_type = self._create_replica_volume_type(
+            False, opts=spec, vol_type_name='test_gmcv_thik_type')
+        gmcv_volume, model_update = self._create_test_volume(gmcv_thick_type)
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+
+        if self.USESIM:
+            # tell expandvdisksize to fail while called extend_volume
+            # because volume is fast formatting
+            self.sim.error_injection('expandvdisksize', 'fast_formatting')
+            self.assertRaises(exception.VolumeDriverException,
+                              self.driver.extend_volume, gmcv_volume, 15)
+            attrs = (
+                self.driver._helpers.get_vdisk_attributes(gmcv_volume['name']))
+            vol_size = int(attrs['capacity']) / units.Gi
+            self.assertAlmostEqual(vol_size, 1)
+
+        self.driver.delete_volume(gmcv_volume)
+        self._validate_replic_vol_deletion(gmcv_volume)
+
+        # Extend gmcv volume that added to group with replication.
+        with mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                               'extend_vdisk') as extend_vdisk:
+            # Create group with replication.
+            group = self._create_test_rccg(self.rccg_type,
+                                           [self.gmcv_default_type.id])
+            rccg_name = self.driver._get_rccg_name(group)
+            # Create gloabl mirror replication with change volumes.
+            volume, model_update = self._create_test_volume(
+                self.gmcv_default_type)
+            self._validate_replic_vol_creation(volume, True)
+            rcrel = self.driver._helpers.get_relationship_info(volume.name)
+            self.sim._rc_state_transition('wait', rcrel)
+            # Add gmcv volume to group.
+            add_vols = [volume]
+            (model_update, add_volumes_update,
+             remove_volumes_update) = self.driver.update_group(
+                self.ctxt, group, add_vols, [])
+            self.assertEqual(
+                rccg_name,
+                self.driver._helpers.get_rccg_info(volume.name)['name'])
+            self.assertEqual(fields.GroupStatus.AVAILABLE,
+                             model_update['status'])
+            self.assertEqual([{'id': volume.id, 'group_id': group.id}],
+                             add_volumes_update)
+            self.assertEqual([], remove_volumes_update)
+
+            self.assertRaises(exception.VolumeDriverException,
+                              self.driver.extend_volume, volume, 15)
+
+            self.assertFalse(extend_vdisk.called)
+            attrs = self.driver._helpers.get_vdisk_attributes(volume['name'])
+            vol_size = int(attrs['capacity']) / units.Gi
+            self.assertAlmostEqual(vol_size, 1)
+
+            self.driver.delete_volume(volume)
+            self._validate_replic_vol_deletion(volume)
+
+    def test_convert_global_mirror_volume_to_gmcv(self):
+        """Test volume conversion from global to gmcv."""
+        self.driver.configuration.set_override('replication_device',
+                                               [self.rep_target])
+        self.driver.do_setup(self.ctxt)
+        # Create global mirror replication.
+        gm_vol, model_update = self._create_test_volume(self.gm_type)
+        self.assertEqual(fields.ReplicationStatus.ENABLED,
+                         model_update['replication_status'])
+        self._validate_replic_vol_creation(gm_vol)
+        rcrel = self.driver._helpers.get_relationship_info(gm_vol.name)
+        self.assertEqual(rcrel['cycling_mode'], '')
+        self.assertEqual(rcrel['master_change_vdisk_name'], '')
+        self.assertEqual(rcrel['aux_change_vdisk_name'], '')
+
+        # Validating volume conversion from global to gmcv by checking a few
+        # property values of RC relationship
+        target_vol = storwize_const.REPLICA_AUX_VOL_PREFIX + gm_vol.name
+        master_change_vol_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + gm_vol.name)
+        aux_change_vol_name = (
+            storwize_const.REPLICA_CHG_VOL_PREFIX + target_vol)
+        size = 1
+        self.driver._convert_global_mirror_volume_to_gmcv(gm_vol, target_vol,
+                                                          size)
+        rcrel = self.driver._helpers.get_relationship_info(gm_vol.name)
+        self.assertEqual(rcrel['cycling_mode'], 'multi')
+        self.assertEqual(rcrel['master_change_vdisk_name'],
+                         master_change_vol_name)
+        self.assertEqual(rcrel['aux_change_vdisk_name'],
+                         aux_change_vol_name)
+        self.driver.delete_volume(gm_vol)
+        self._validate_replic_vol_deletion(gm_vol)
+
+        gm_vol, model_update = self._create_test_volume(self.gm_type)
+        self._validate_replic_vol_creation(gm_vol)
+        with (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+              'create_vdisk')) as create_vdisk:
+            with (mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                  'change_relationship_cyclingmode')
+                  ) as ch_relationship_cyclingmode:
+                target_vol = (
+                    storwize_const.REPLICA_AUX_VOL_PREFIX + gm_vol.name)
+                size = 1
+                self.driver._convert_global_mirror_volume_to_gmcv(
+                    gm_vol, target_vol, size)
+                create_vdisk.assert_called()
+                self.assertEqual(2, create_vdisk.call_count)
+                ch_relationship_cyclingmode.assert_called()
+        self.driver.delete_volume(gm_vol)
+        self._validate_replic_vol_deletion(gm_vol)
 
     def test_storwize_manage_existing_mismatch_with_volume_replication(self):
         # Set replication target.
