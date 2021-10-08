@@ -1,3 +1,10 @@
+cinder (2:19.0.0-0ubuntu2) impish; urgency=medium
+
+  * d/py3dist-overrides: Add SQLAlchemy to ensure d/control is not overridden.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 08 Oct 2021 08:14:11 -0400
+
 cinder (2:19.0.0-0ubuntu1) impish; urgency=medium
 
   * d/watch: Scope to 19.x.
