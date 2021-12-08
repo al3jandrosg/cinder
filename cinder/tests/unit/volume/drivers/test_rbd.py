@@ -734,6 +734,7 @@ class RBDTestCase(test.TestCase):
             self.driver.rbd.Image.return_value.unprotect_snap.called)
         self.assertEqual(
             1, self.driver.rbd.RBD.return_value.remove.call_count)
+        self.driver.rbd.RBD.return_value.trash_move.assert_not_called()
 
     @common_mocks
     def test_deferred_deletion(self):
@@ -763,6 +764,7 @@ class RBDTestCase(test.TestCase):
                     drv.rbd.Image.return_value.unprotect_snap.called)
                 self.assertEqual(
                     1, drv.rbd.RBD.return_value.trash_move.call_count)
+                self.driver.rbd.RBD.return_value.remove.assert_not_called()
 
     @common_mocks
     def test_deferred_deletion_periodic_task(self):
@@ -834,10 +836,13 @@ class RBDTestCase(test.TestCase):
                 2, drv.rbd.RBD.return_value.trash_move.call_count)
 
     @common_mocks
-    def delete_volume_not_found(self):
+    def test_delete_volume_not_found_at_open(self):
         self.mock_rbd.Image.side_effect = self.mock_rbd.ImageNotFound
         self.assertIsNone(self.driver.delete_volume(self.volume_a))
-        self.mock_rbd.Image.assert_called_once_with()
+        with mock.patch.object(driver, 'RADOSClient') as client:
+            client = self.mock_client.return_value.__enter__.return_value
+            self.mock_rbd.Image.assert_called_once_with(client.ioctx,
+                                                        self.volume_a.name)
         # Make sure the exception was raised
         self.assertEqual([self.mock_rbd.ImageNotFound], RAISED_EXCEPTIONS)
 
@@ -2849,7 +2854,7 @@ class RBDTestCase(test.TestCase):
                 'secret,id=luks_sec,format=raw,file=/passfile',
                 '-o', 'key-secret=luks_sec', '/imgfile', '12288M')
             mock_exec.assert_any_call(
-                'rbd', 'import', '--pool', 'rbd', '--order', 22,
+                'rbd', 'import', '--dest-pool', 'rbd', '--order', 22,
                 '/imgfile', self.volume_c.name)
 
     @mock.patch('cinder.objects.Volume.get_by_id')

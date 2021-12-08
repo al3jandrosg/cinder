@@ -1,24 +1,57 @@
 CHANGES
 =======
 
-19.0.0
-------
-
+* Improve no\_snapshot\_gb\_quota description
+* replace deprecated pyparsing method
+* Update release cycle tasks
+* Add default types info in admin docs
+* api-ref: Add info regarding default types
+* Add info about \_\_DEFAULT\_\_ in install docs
+* [Pure Storage] Add volume metadata
+* Fix misspelled get\_time\_comparsion\_operators method name
+* RBD: Check for OSError before using errno
+* pylint: Update to 2.11.1
+* [Pure Storage] Remove all REST version checks
+* Clarify conditional\_update return types
+* mypy: filter scheduler
+* RBD: Open RBD images read-only where possible
+* [Pure Storage] Add check for NVMe-FC capable array
+* Remove broken tempest-full-py3-opensuse15 job
+* Fixed copy-on-write mode in GPFS NFS driver
+* Correct type annotations for utils.retry()
+* Fix: Race between attachment and volume deletion
+* Increase min version of oslo.vmware to 3.10.0
+* [ubuntu] Add tgt package for cinder storage
+* Imported Translations from Zanata
+* PowerMax Docs - Xena release notes
+* Fix typo in message policy deprecations
+* NetApp ONTAP: Fix sub-clone zapi call
+* Pure Storage FlashArray - Version increment for Cinder drivers
+* Raise min version of ddt
+* Update rbd warning message
+* [Pure Storage] Add missing DB values when performing create CG from CG snap
 * Use os-brick 5.0.1
-* Add "known issues" to xena release note
-* Add warning about qcow2 version 2 format images
+* Fix a typo
+* NetApp Solidfire: Fix retype and name exception on migration
+* Cinder matrix - Removal of Snapshot Attachment
+* Add reviewing section to release notes doc
+* Tests: Improve RBD trash unit tests
+* Seagate driver: fix get\_volume\_size()
+* Raise min of oslo.db to 11.0.0
 * Fix cinder-manage db version
 * fixtures: Don't persist state in the Database fixture
-* Fix typo in release note file
-* Raise min of oslo.db to 11.0.0
-* RBD: Call trash operation when plain deletion fails
+* Erroneous log message args location causes a misconception
+* Imported Translations from Zanata
+* Dell PowerVault: Fix "cinder manageable-list"
+* Dell PowerVault driver: Fix documentation typos
 * Specify xena os-brick series in requirements
-* Add deprecation notices to deprecated policy rules
 * Update SQLAlchemy related requirements
 * Raise min of oslo.policy to 3.8.1
+* Add deprecation notices to deprecated policy rules
 * Raise minimum oslo.log to 4.5.0
-* Update TOX\_CONSTRAINTS\_FILE for stable/xena
-* Update .gitreview for stable/xena
+* Add Python3 yoga unit tests
+* Update master for stable/xena
+* RBD: Call trash operation when plain deletion fails
 
 19.0.0.0rc1
 -----------
@@ -30,6 +63,13 @@ CHANGES
 * Clean up policy matrix for Xena release
 * Add release note prelude for the Xena release
 * Update policies related to user visible extra specs
+* PowerMax Driver - Get manageable volumes fix
+* PowerMax Driver - Update unsupported retype combinations
+* PowerMax Driver - Fix for GVG snapshot delete
+* Expose volume\_attachments in Volume OVO
+* Delete attachment on remove\_export failure
+* Fix detach notification
+* Remove unused config imports/objects
 * Implement project personas for snapshot metadata
 * Implement Xena project personas for group snapshots
 * Implement project personas for backups API
@@ -40,6 +80,7 @@ CHANGES
 * Implement Xena project personas for group\_actions
 * Add request method to test requests
 * [SVF]:Storwize HyperSwap snapshot clone is failing
+* PowerMax Driver - Port load balancing fix
 * Implement Xena personas for volume groups
 * Implement Xena project personas for volume types
 * Xena project personas for volume type access API
@@ -49,9 +90,11 @@ CHANGES
 * Implement project personas for the limits API
 * Fix: Online migration for volume\_use\_quota\_online\_data\_migration
 * Implement project personas group\_types
+* Remove unused nested\_contexts method
 * Update project personas for default\_types
 * Implement project personas for volume API
 * Implement project personas for quotas and quota\_classes
+* Tests: Fix missing RBD delete\_volume test case
 * Implement project personas for volume transfers
 * Native multibackend-matrix Zuul v3 job
 * [SVF]:HyperSwap volume service status update
@@ -92,16 +135,21 @@ CHANGES
 * Clear OVO history and compatibility
 * Fix notifications of migration temp volume
 * Change 'host' option from HostAddressOpt to StrOpt
+* Tests: Remove brick\_lvm mocks from all unit tests
 * Update snapshot api microversion docs and tests
 * [SVF]:Fix multiple lshost calls during attach
+* Modify erroneous annotation
 * Support Images API v2.11
 * Log connection info returned from driver
 * [SVF]:Fix add volumes to GMCV group
 * [SVF]:Retype in-use hyperswap volume
+* mypy: update retry decorator in utils.py
 * [SVF] Fixed update\_rep\_properties for empty values
 * LVM: Retry lvextend commands on code 139
+* HPE 3PAR: Reuse existing session
 * [SVF]:Fix create volume on drp
 * Add releasenote for schema validation fix
+* mypy: coordination.py
 * Doc: IBM Storages user documentation update
 * [SVF] Fix issue to get volume relationship details
 * mypy: continued manager, scheduler, rpcapi
@@ -117,11 +165,15 @@ CHANGES
 * Add cinder-manage command to remove file locks
 * Remove file locks once we delete a resource
 * [Pure Storage] Resolve missing provider\_id issue (PowerVC)
+* KumoScale Driver replicated volume missing portals attaches without raid
 * RBD: use correct stripe unit in clone operation
+* PowerMax Driver - Fix for legacy PowerMax OS around generations
+* Fix extra\_capabilities
 * [rbd] Fix create encrypted volume from snapshot
 * Allow removing NFS snapshots in error status
 * Replace deprecated tenacity.Retrying.call
 * Add openstacksdk-functional-devstack job in cinder gate
+* PowerMax Driver - Fix for group snapshot deletion
 
 19.0.0.0b1
 ----------
@@ -130,6 +182,7 @@ CHANGES
 * [Pure Storage] Fix CG cloning crash when very long volume names
 * Run cinder-mypy job in the check
 * Add installation of mypy stubs packages
+* Mark QNAP driver as unsupported
 * db: Reorder initial migration
 * db: Use 'import sqlalchemy as sa' pattern
 * Tests: Fix InvalidUUID warnings
@@ -141,12 +194,14 @@ CHANGES
 * [Pure Storage] Fix minimum SDK version required
 * Add backup\_swift\_create\_storage\_policy config opt
 * LVM: Retry lvdisplay and lvcreate calls on segfault
+* PowerMax Driver - Retype fix for replication
 * Use mv.LIMITS\_ADMIN\_FILTER in the code
 * Retry "lvs" call on segfault for \_get\_thin\_pool\_free\_space
 * streamline \_report\_driver\_status method
 * Fix: Schema validation for attachment create API
 * LVM: Use --readonly for lvdisplay in lv\_has\_snapshot
 * Fix typo in Dell EMC Unity driver documentation
+* Address new hacking enforcement
 * Update decode\_cipher doc text about encryption ciphers
 * Add libcgroup related packages in bindep.txt
 * PowerMax Driver - Allow for case mismatch in SGs
@@ -159,6 +214,7 @@ CHANGES
 * [Pure Storage] Ensure multiattach volumes are not disconnected early
 * [SVF]: Fix extend issue for a clone of rep-volume
 * [SVF]:Bulk create Hyperswap volume is failing
+* PowerMax Driver - QoS should not be set on parent storage group
 * Update volume api microversion doc and tests
 * PowerMax Docs - Corrections to QoS section
 * Update IRC info
@@ -267,6 +323,7 @@ CHANGES
 * NetApp ONTAP: Implement FlexGroup pool
 * Add support for RBD fast-diff feature for backups stored in Ceph
 * API validation: Use cinder\_host for services checks
+* Add iSCSI IPv6 support to Dell EMC XtremIO driver
 * Support format info in fs type drivers
 * PowerMax Driver - Release notes for 761643 and 767172
 * Add Consistency Groups support in PowerStore driver

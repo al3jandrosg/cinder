@@ -37,7 +37,7 @@ oslo.service>=2.5.0
 oslo.upgradecheck>=1.1.1
 oslo.utils>=4.8.0
 oslo.versionedobjects>=2.3.0
-oslo.vmware>=3.8.0
+oslo.vmware>=3.10.0
 osprofiler>=3.4.0
 packaging>=20.4
 paramiko>=2.7.2
@@ -121,7 +121,7 @@ PyMySQL>=0.10.0
 SQLAlchemy-Utils>=0.37.8
 bandit==1.6.0
 coverage>=5.5
-ddt>=1.4.1
+ddt>=1.4.4
 doc8>=0.8.1
 fixtures>=3.0.0
 flake8-import-order

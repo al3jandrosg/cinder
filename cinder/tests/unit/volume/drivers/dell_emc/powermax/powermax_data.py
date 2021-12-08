@@ -114,9 +114,9 @@ class PowerMaxData(object):
                  'host': 'HostX'}
 
     fabric_name_prefix = 'fakeFabric'
-    end_point_map = {connector['wwpns'][0]: [wwnn1],
-                     connector['wwpns'][1]: [wwnn1]}
-    target_wwns = [wwnn1]
+    end_point_map = {connector['wwpns'][0]: [wwpn1],
+                     connector['wwpns'][1]: [wwpn1]}
+    target_wwns = [wwpn1]
     target_wwns_multi = [wwnn1, wwnn2]
     zoning_mappings = {
         'array': u'000197800123',
@@ -475,6 +475,11 @@ class PowerMaxData(object):
     extra_specs_tags = deepcopy(extra_specs)
     extra_specs_tags.update({utils.STORAGE_GROUP_TAGS: sg_tags})
 
+    extra_specs_qos = deepcopy(extra_specs)
+    qos_dict = {
+        'total_iops_sec': '4000',
+        'DistributionType': 'Always'}
+    extra_specs_qos['qos'] = qos_dict
     rep_extra_specs_mgmt = deepcopy(rep_extra_specs)
     rep_extra_specs_mgmt['srp'] = srp
     rep_extra_specs_mgmt['mgmt_sg_name'] = rdf_managed_async_grp
@@ -674,7 +679,7 @@ class PowerMaxData(object):
     port_list = [
         {'symmetrixPort': {'num_of_masking_views': 1,
                            'maskingview': [masking_view_name_f],
-                           'identifier': wwnn1,
+                           'identifier': wwpn1,
                            'symmetrixPortKey': {
                                'directorId': 'FA-1D',
                                'portId': '4'},
@@ -1268,6 +1273,12 @@ class PowerMaxData(object):
                 'concurrentRDF': False,
                 'getDynamicRDFCapability': 'RDF1_Capable', 'RDFA': False},
             'timeFinderInfo': {'snapVXTgt': False, 'snapVXSrc': False}}]
+
+    priv_vol_func_response_multi_sg = deepcopy(priv_vol_func_response_single)
+    priv_vol_func_response_multi_sg[0].get('volumeHeader').update(
+        {'numStorageGroups': 2})
+    priv_vol_func_response_multi_sg[0].get('volumeHeader').update(
+        {'storageGroup': ['SG1', 'SG2']})
 
     volume_create_info_dict = {utils.ARRAY: array, utils.DEVICE_ID: device_id}
 

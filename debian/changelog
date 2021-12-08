@@ -1,3 +1,10 @@
+cinder (2:19.0.0+git2021120811.e5ef39604-0ubuntu1) jammy; urgency=medium
+
+  * New upstream snapshot for OpenStack Yoga.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 08 Dec 2021 11:39:46 -0500
+
 cinder (2:19.0.0-0ubuntu2) impish; urgency=medium
 
   * d/py3dist-overrides: Add SQLAlchemy to ensure d/control is not overridden.

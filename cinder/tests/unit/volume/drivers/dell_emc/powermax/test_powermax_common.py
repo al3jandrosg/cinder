@@ -1708,7 +1708,7 @@ class PowerMaxCommonTest(test.TestCase):
     @mock.patch.object(common.PowerMaxCommon, '_get_replication_extra_specs',
                        return_value=tpd.PowerMaxData.rep_extra_specs)
     def test_get_target_wwns_from_masking_view(self, mock_rep_specs, mock_fo):
-        ref_wwns = [self.data.wwnn1]
+        ref_wwns = [self.data.wwpn1]
         for x in range(0, 2):
             target_wwns = self.common._get_target_wwns_from_masking_view(
                 self.data.device_id, self.data.connector['host'],
@@ -2632,6 +2632,23 @@ class PowerMaxCommonTest(test.TestCase):
         self.common.promotion = False
         self.assertEqual(ref_return, return_val)
 
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_storage_groups_from_volume',
+        return_value=tpd.PowerMaxData.default_sg_re_managed_list)
+    def test_is_valid_for_storage_assisted_migration_rep_with_mgmt_group(
+            self, mock_sg_list):
+        device_id = self.data.device_id
+        host = {'host': self.data.fake_host}
+        volume_name = self.data.test_volume.name
+        ref_return = (True, 'Diamond', 'NONE')
+        with mock.patch.object(self.rest, 'is_next_gen_array',
+                               return_value=True):
+            return_val = self.common._is_valid_for_storage_assisted_migration(
+                device_id, host, self.data.array,
+                self.data.srp, volume_name, False, False, self.data.slo,
+                self.data.workload, False)
+            self.assertEqual(ref_return, return_val)
+
     def test_find_volume_group(self):
         group = self.data.test_group_1
         array = self.data.array
@@ -2774,11 +2791,13 @@ class PowerMaxCommonTest(test.TestCase):
                                                    snapshots))
             self.assertEqual(ref_model_update, model_update)
 
-    def test_delete_group_snapshot_failed(self):
-        group_snapshot = self.data.test_group_snapshot_failed
+    @mock.patch.object(common.PowerMaxCommon, '_find_volume_group',
+                       return_value=None)
+    def test_delete_group_snapshot_not_on_array(self, mock_gvg):
+        group_snapshot = self.data.test_group_snapshot_1
         snapshots = []
         ref_model_update = (
-            {'status': fields.GroupSnapshotStatus.ERROR_DELETING})
+            {'status': fields.GroupSnapshotStatus.DELETED})
         with mock.patch.object(volume_utils, 'is_group_a_cg_snapshot_type',
                                return_value=True):
             model_update, snapshots_model_update = (
@@ -4142,6 +4161,61 @@ class PowerMaxCommonTest(test.TestCase):
         self.assertTrue(success)
 
     @mock.patch.object(
+        utils.PowerMaxUtils, 'get_port_name_label',
+        return_value='my_pg')
+    @mock.patch.object(
+        utils.PowerMaxUtils, 'get_volume_attached_hostname',
+        return_value='HostX')
+    @mock.patch.object(
+        rest.PowerMaxRest, 'is_volume_in_storagegroup', return_value=True)
+    @mock.patch.object(
+        masking.PowerMaxMasking, 'return_volume_to_volume_group')
+    @mock.patch.object(
+        masking.PowerMaxMasking, 'move_volume_between_storage_groups')
+    @mock.patch.object(
+        masking.PowerMaxMasking, 'add_child_sg_to_parent_sg')
+    @mock.patch.object(
+        provision.PowerMaxProvision, 'create_storage_group')
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_storage_group',
+        side_effect=[None, tpd.PowerMaxData.volume_info_dict])
+    @mock.patch.object(
+        rest.PowerMaxRest, 'get_volume',
+        return_value=tpd.PowerMaxData.volume_details[0])
+    @mock.patch.object(
+        utils.PowerMaxUtils, 'get_rdf_management_group_name',
+        return_value=tpd.PowerMaxData.rdf_managed_async_grp)
+    def test_retype_volume_attached_metro(
+            self, mck_get_rdf, mck_get_vol, mck_get_sg, mck_create, mck_add,
+            mck_move_vol, mck_return_vol, mck_is_vol, mck_host, mck_pg):
+
+        array = self.data.array
+        srp = self.data.srp
+        device_id = self.data.device_id
+        volume = self.data.test_attached_volume
+        volume_name = self.data.volume_id
+        extra_specs = self.data.rep_extra_specs_rep_config_metro
+        target_slo = self.data.slo_silver
+        target_workload = self.data.workload
+        target_extra_specs = deepcopy(self.data.rep_extra_specs)
+        target_extra_specs[utils.DISABLECOMPRESSION] = False
+        target_extra_specs[utils.REP_CONFIG] = self.data.rep_config_sync
+
+        success, target_sg_name = self.common._retype_volume(
+            array, srp, device_id, volume, volume_name, extra_specs,
+            target_slo, target_workload, target_extra_specs, remote=True,
+            metro_attach=True)
+        mck_get_rdf.assert_called_once()
+        mck_get_vol.assert_called_once()
+        mck_create.assert_called_once()
+        mck_add.assert_called_once()
+        mck_move_vol.assert_called_once()
+        mck_return_vol.assert_called_once()
+        mck_is_vol.assert_called_once()
+        self.assertEqual(2, mck_get_sg.call_count)
+        self.assertTrue(success)
+
+    @mock.patch.object(
         utils.PowerMaxUtils, 'get_volume_attached_hostname', return_value=None)
     @mock.patch.object(
         rest.PowerMaxRest, 'get_volume',
@@ -4157,7 +4231,8 @@ class PowerMaxCommonTest(test.TestCase):
         device_id = self.data.device_id
         volume = self.data.test_attached_volume
         volume_name = self.data.volume_id
-        extra_specs = self.data.rep_extra_specs_rep_config
+        extra_specs = deepcopy(self.data.rep_extra_specs_rep_config)
+        extra_specs[utils.PORTGROUPNAME] = self.data.port_group_name_f
         target_slo = self.data.slo_silver
         target_workload = self.data.workload
         target_extra_specs = deepcopy(self.data.rep_extra_specs)

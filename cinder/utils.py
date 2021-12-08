@@ -628,10 +628,14 @@ class retry_if_exit_code(tenacity.retry_if_exception):
                 exc.exit_code in self.codes)
 
 
-def retry(retry_param: Optional[Type[Exception]],
-          interval: int = 1,
+def retry(retry_param: Union[None,
+                             Type[Exception],
+                             Tuple[Type[Exception], ...],
+                             int,
+                             Tuple[int, ...]],
+          interval: float = 1,
           retries: int = 3,
-          backoff_rate: int = 2,
+          backoff_rate: float = 2,
           wait_random: bool = False,
           retry=tenacity.retry_if_exception_type) -> Callable:
 
@@ -892,12 +896,6 @@ def create_ordereddict(adict: dict) -> OrderedDict:
     """Given a dict, return a sorted OrderedDict."""
     return OrderedDict(sorted(adict.items(),
                               key=operator.itemgetter(0)))
-
-
-@contextlib.contextmanager
-def nested_contexts(*contexts):
-    with contextlib.ExitStack() as stack:
-        yield [stack.enter_context(c) for c in contexts]
 
 
 class Semaphore(object):

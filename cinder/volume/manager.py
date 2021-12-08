@@ -2709,7 +2709,11 @@ class VolumeManager(manager.CleanableManager,
         volume_stats = get_stats()
 
         if self.extra_capabilities:
-            volume_stats.update(self.extra_capabilities)
+            if "pools" in volume_stats:
+                for pool in volume_stats["pools"]:
+                    pool.update(self.extra_capabilities)
+            else:
+                volume_stats.update(self.extra_capabilities)
         if volume_stats:
 
             # NOTE(xyang): If driver reports replication_status to be
@@ -4948,21 +4952,9 @@ class VolumeManager(manager.CleanableManager,
             if has_shared_connection is not None and not has_shared_connection:
                 self.driver.remove_export(context.elevated(), vref)
         except Exception:
-            # FIXME(jdg): Obviously our volume object is going to need some
-            # changes to deal with multi-attach and figuring out how to
-            # represent a single failed attach out of multiple attachments
-
-            # TODO(jdg): object method here
-            self.db.volume_attachment_update(
-                context, attachment.get('id'),
-                {'attach_status': fields.VolumeAttachStatus.ERROR_DETACHING})
-        else:
-            self.db.volume_detached(context.elevated(), vref.id,
-                                    attachment.get('id'))
-            self.db.volume_admin_metadata_delete(context.elevated(),
-                                                 vref.id,
-                                                 'attached_mode')
-        self._notify_about_volume_usage(context, vref, "detach.end")
+            # Failures on detach_volume and remove_export are not considered
+            # failures in terms of detaching the volume.
+            pass
 
     # Replication group API (Tiramisu)
     def enable_replication(self,

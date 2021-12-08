@@ -997,7 +997,7 @@ class PowerMaxRestTest(test.TestCase):
     def test_get_target_wwns(self):
         array = self.data.array
         pg_name = self.data.port_group_name_f
-        ref_wwns = [self.data.wwnn1]
+        ref_wwns = [self.data.wwpn1]
         target_wwns = self.rest.get_target_wwns(array, pg_name)
         self.assertEqual(ref_wwns, target_wwns)
 
@@ -2447,3 +2447,25 @@ class PowerMaxRestTest(test.TestCase):
             exception.VolumeBackendAPIException,
             self.rest.get_ip_interface_physical_port,
             array_id, virtual_port, ip_address)
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_volume_snaps',
+                       return_value=[{'snap_name': 'snap_name',
+                                      'snap_id': tpd.PowerMaxData.snap_id}])
+    def test_get_snap_id(self, mock_snaps):
+        snap_id = self.rest.get_snap_id(
+            self.data.array, self.data.device_id,
+            self.data.test_snapshot_snap_name)
+        self.assertEqual(self.data.snap_id, snap_id)
+
+    @mock.patch.object(rest.PowerMaxRest, 'get_volume_snaps',
+                       side_effect=[[{'snap_name': 'generation_int',
+                                      'generation': 0}],
+                                    [{'snap_name': 'generation_string',
+                                      'generation': '0'}]])
+    def test_get_snap_id_legacy_generation(self, mock_snaps):
+        self.rest.is_snap_id = False
+        for x in range(0, 2):
+            snap_id = self.rest.get_snap_id(
+                self.data.array, self.data.device_id,
+                self.data.test_snapshot_snap_name)
+            self.assertEqual('0', snap_id)
