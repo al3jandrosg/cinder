@@ -4,4 +4,4 @@ Depends:
  cinder-scheduler,
  lvm2,
  mysql-server,
-Restrictions: needs-root
+Restrictions: needs-root, allow-stderr

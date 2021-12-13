@@ -1,3 +1,10 @@
+cinder (2:19.0.0+git2021120811.e5ef39604-0ubuntu2) jammy; urgency=medium
+
+  * d/t/control: Add allow-stderr restriction to prevent autopkgtest failure
+    when SQLAlchemy issues a warning.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 13 Dec 2021 14:01:20 -0500
+
 cinder (2:19.0.0+git2021120811.e5ef39604-0ubuntu1) jammy; urgency=medium
 
   * New upstream snapshot for OpenStack Yoga.
