@@ -5142,7 +5142,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
 
     def _verify_retype_params(self, volume, new_opts, old_opts, need_copy,
                               change_mirror, new_rep_type, old_rep_type,
-                              vdisk_changes, old_pool, new_pool):
+                              vdisk_changes, old_pool, new_pool, old_io_grp):
         # Some volume parameters can not be changed or changed at the same
         # time during volume retype operation. This function checks the
         # retype parameters.
@@ -5190,12 +5190,11 @@ class StorwizeSVCCommonDriver(san.SanDriver,
                     msg = _('Unable to retype: the thin-provisioned or '
                             'compressed vol can not be migrated from a dr pool'
                             ' or to a dr pool.')
-                raise exception.VolumeDriverException(message=msg)
+                    raise exception.VolumeDriverException(message=msg)
             if not old_opts['mirror_pool'] and new_opts['mirror_pool']:
                 need_check_dr_pool_param = True
 
         if new_rep_type != old_rep_type:
-            old_io_grp = self._helpers.get_volume_io_group(volume.name)
             if (old_io_grp not in
                     StorwizeHelpers._get_valid_requested_io_groups(
                         self._state, new_opts)):
@@ -5401,10 +5400,10 @@ class StorwizeSVCCommonDriver(san.SanDriver,
         old_io_grp = self._helpers.get_volume_io_group(volume['name'])
         new_io_grp = self._helpers.select_io_group(self._state,
                                                    new_opts, new_pool)
-
         self._verify_retype_params(volume, new_opts, old_opts, need_copy,
                                    change_mirror, new_rep_type, old_rep_type,
-                                   vdisk_changes, old_pool, new_pool)
+                                   vdisk_changes, old_pool, new_pool,
+                                   old_io_grp)
 
         if old_opts['volume_topology'] or new_opts['volume_topology']:
             self._check_hyperswap_retype_params(volume, new_opts, old_opts,
@@ -5891,7 +5890,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             try:
                 tgt_sys = self._aux_backend_helpers.get_system_info()
                 self._helpers.create_rccg(
-                    rccg_name, tgt_sys.get('system_name'))
+                    rccg_name, tgt_sys.get('system_id'))
                 model_update.update({'replication_status':
                                     fields.ReplicationStatus.ENABLED})
             except exception.VolumeBackendAPIException as err:
@@ -6070,7 +6069,7 @@ class StorwizeSVCCommonDriver(san.SanDriver,
             try:
                 tgt_sys = self._aux_backend_helpers.get_system_info()
                 self._helpers.create_rccg(rccg_name,
-                                          tgt_sys.get('system_name'))
+                                          tgt_sys.get('system_id'))
                 model_update.update({'replication_status':
                                     fields.ReplicationStatus.ENABLED})
             except exception.VolumeBackendAPIException as err:

@@ -10,7 +10,7 @@ export PBR_VERSION=$(VERSION)
 include /usr/share/openstack-pkg-tools/pkgos.make
 
 %:
-	dh $@  --with python3,systemd,apache2 --buildsystem=pybuild
+	dh $@  --with python3,apache2 --buildsystem=pybuild
 
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 override_dh_auto_test:
@@ -22,7 +22,8 @@ override_dh_auto_install:
 	rm -rf $(CURDIR)/debian/python*-cinder/usr/etc
 
 override_dh_install:
-	dh_install --fail-missing -Xbin/cinder-all -Xusr/bin/cinder-api
+	dh_install -Xbin/cinder-all -Xusr/bin/cinder-api
+	dh_missing --fail-missing -Xbin/cinder-all -Xusr/bin/cinder-api
 
 override_dh_fixperms:
 	dh_fixperms -Xcinder_tgt.conf

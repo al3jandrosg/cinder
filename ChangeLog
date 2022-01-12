@@ -1,9 +1,22 @@
 CHANGES
 =======
 
+* Volume transfers: Remove duplicate policy check
+* Fix Typos from Review 819790
+* Fix spacing in CapacityFilter debug log message
+* Support Cinder FC driver for TOYOU NetStor
+* Imported Translations from Zanata
+* mypy: backup
+* Updating python testing as per Yoga testing runtime
+* Fix log message error in capacity filter
+* mypy: annotate volume/api.py
+* [SVF]:Fix multiple lsiogrp,lsvdisk calls in Retype
+* fix 'huawei dorado v6' create new volume from snapshot error
 * Improve no\_snapshot\_gb\_quota description
+* Fix a typo error in explanatory notes
 * replace deprecated pyparsing method
 * Update release cycle tasks
+* [SVF] Fix Retype issue of mirror volume
 * Add default types info in admin docs
 * api-ref: Add info regarding default types
 * Add info about \_\_DEFAULT\_\_ in install docs
@@ -23,6 +36,7 @@ CHANGES
 * Increase min version of oslo.vmware to 3.10.0
 * [ubuntu] Add tgt package for cinder storage
 * Imported Translations from Zanata
+* Signature of base method in class 'AccelBase'
 * PowerMax Docs - Xena release notes
 * Fix typo in message policy deprecations
 * NetApp ONTAP: Fix sub-clone zapi call
@@ -34,6 +48,8 @@ CHANGES
 * Fix a typo
 * NetApp Solidfire: Fix retype and name exception on migration
 * Cinder matrix - Removal of Snapshot Attachment
+* Fix: nfs format info limitation
+* [SVF] Fix rccg and relationship creation issues
 * Add reviewing section to release notes doc
 * Tests: Improve RBD trash unit tests
 * Seagate driver: fix get\_volume\_size()
@@ -56,6 +72,7 @@ CHANGES
 19.0.0.0rc1
 -----------
 
+* Turn off inline comments for mypy zuul job
 * Correct "Add release note about xena policy changes"
 * Correct "Clean up policy matrix for Xena release"
 * mypy: Fix unused type: ignore in manager.py
@@ -110,6 +127,7 @@ CHANGES
 * JovianDSS: fix iscsi target recovery function
 * HPE 3PAR: Add HPE Alletra 9k related information
 * Remove extraneous space from error message
+* PowerMax Driver - refactoring feedback
 * Docs: Discourage using naked rechecks
 * NetApp ONTAP: Add storage assisted migration support
 * Implement project personas for attachments
@@ -186,6 +204,7 @@ CHANGES
 * db: Reorder initial migration
 * db: Use 'import sqlalchemy as sa' pattern
 * Tests: Fix InvalidUUID warnings
+* Reject bad img formats for uploaded encrypted vols
 * Drop lower-constraints jobs
 * NFS: Update connection info on online snap create
 * mypy: image\_utils
@@ -194,6 +213,7 @@ CHANGES
 * [Pure Storage] Fix minimum SDK version required
 * Add backup\_swift\_create\_storage\_policy config opt
 * LVM: Retry lvdisplay and lvcreate calls on segfault
+* PowerMax Driver - Allow for volume uuid in manage volume
 * PowerMax Driver - Retype fix for replication
 * Use mv.LIMITS\_ADMIN\_FILTER in the code
 * Retry "lvs" call on segfault for \_get\_thin\_pool\_free\_space
@@ -222,6 +242,7 @@ CHANGES
 * Doc: Remove incorrect note about encryption flag
 * Tests: Don't assert notifier not called
 * PowerMax Driver - Fix for create group from source
+* Fix best\_match() deprecation warning
 * Replace getargspec with getfullargspec
 * SQLA 1.4: Fix calculate\_resource\_count
 * SQLA 1.4: Fix conditional update Case
@@ -680,6 +701,7 @@ CHANGES
 * 3PAR: Workaround SSH logging issue
 * Improve tenacity retry sleep mocking
 * PowerMax Driver - Array capabilities extend fix
+* Use 'visibility' instead of 'is\_public' when only use Glance API v2
 * Correct formatting in release note
 * Creating image-volume cache on NFS backend fails
 * Imported Translations from Zanata

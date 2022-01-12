@@ -2096,7 +2096,7 @@ port_speed!N/A
         if 'cluster' not in kwargs:
             return self._errors['CMMVC5707E']
         aux_cluster = kwargs['cluster'].strip('\'\"')
-        if aux_cluster != aux_sys['name']:
+        if aux_cluster != aux_sys['id']:
             return self._errors['CMMVC5754E']
 
         if (self._volumes_list[master_vol]['capacity'] !=
@@ -2438,8 +2438,8 @@ port_speed!N/A
         if 'cluster' not in kwargs:
             return self._errors['CMMVC5707E']
         aux_cluster = kwargs['cluster'].strip('\'\"')
-        if (aux_cluster != aux_sys['name'] and
-                aux_cluster != master_sys['name']):
+        if (aux_cluster != aux_sys['id'] and
+                aux_cluster != master_sys['id']):
             return self._errors['CMMVC5754E']
 
         rccg_info = {}
@@ -7306,6 +7306,38 @@ class StorwizeSVCCommonDriverTestCase(test.TestCase):
 
         self.driver.delete_volume(vol1)
 
+    @ddt.data(({'mirror_pool': 'openstack1'}, {'mirror_pool': 'openstack2'}))
+    @ddt.unpack
+    def test_storwize_retype_from_mirror_to_different_mirror(self,
+                                                             old_opts,
+                                                             new_opts):
+        self.driver.do_setup(self.ctxt)
+        host = {'host': 'openstack@svc#openstack'}
+        ctxt = context.get_admin_context()
+
+        vol_type1 = self._create_volume_type(old_opts, 'old')
+        vol_type2 = self._create_volume_type(new_opts, 'new')
+        diff, _equal = volume_types.volume_types_diff(ctxt, vol_type1.id,
+                                                      vol_type2.id)
+        vol1 = self._generate_vol_info(vol_type1)
+        self.driver.create_volume(vol1)
+
+        self._assert_vol_exists(vol1.name, True)
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(len(copies), 2)
+        copies = self.driver._helpers.get_vdisk_copies(vol1.name)
+        self.assertEqual(copies['primary']['mdisk_grp_name'], 'openstack')
+        self.assertEqual(copies['secondary']['mdisk_grp_name'], 'openstack1')
+
+        self.driver.retype(self.ctxt, vol1, vol_type2, diff, host)
+        copies = self.driver._helpers.lsvdiskcopy(vol1.name)
+        self.assertEqual(len(copies), 2)
+        copies = self.driver._helpers.get_vdisk_copies(vol1.name)
+        self.assertEqual(copies['primary']['mdisk_grp_name'], 'openstack')
+        self.assertEqual(copies['secondary']['mdisk_grp_name'], 'openstack2')
+
+        self.driver.delete_volume(vol1)
+
     @ddt.data(({}, {'mirror_pool': 'openstack1'}),
               ({'mirror_pool': ''}, {'mirror_pool': 'openstack1'}),
               ({'mirror_pool': 'openstack1'}, {}),
@@ -11160,7 +11192,10 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         self.driver.retype(self.ctxt, volume,
                            new_type, diff, host)
 
-    def test_storwize_svc_retype_global_mirror_volume_to_thin(self):
+    @mock.patch.object(storwize_svc_common.StorwizeHelpers,
+                       'get_volume_io_group')
+    def test_storwize_svc_retype_global_mirror_volume_to_thin(self,
+                                                              get_vol_io_grp):
         self.driver.do_setup(self.ctxt)
         loc = ('StorwizeSVCDriver:' + self.driver._state['system_id'] +
                ':openstack')
@@ -11169,6 +11204,8 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         host = {'host': 'openstack@svc#openstack',
                 'capabilities': cap}
         ctxt = context.get_admin_context()
+
+        get_vol_io_grp.return_value = 0
 
         type_name = 'rep_global_none'
         spec = {'replication_enabled': '<is> True',
@@ -11201,6 +11238,7 @@ class StorwizeSVCReplicationTestCase(test.TestCase):
         self.driver.retype(self.ctxt, vol1, vol_type2, diff, host)
         copies = self.driver._helpers.lsvdiskcopy(vol1.name)
         self.assertEqual(2, len(copies))
+        get_vol_io_grp.assert_called_once_with(vol1.name)
         self.driver.delete_volume(vol1)
 
     def test_storwize_svc_retype_global_mirror_volume_to_none(self):

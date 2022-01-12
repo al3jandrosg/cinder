@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: cinder
-Version: 19.1.0.dev121
+Version: 19.1.0.dev158
 Summary: OpenStack Block Storage
 Home-page: https://docs.openstack.org/cinder/latest/
 Author: OpenStack
@@ -21,6 +21,7 @@ Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
 Requires-Python: >=3.6
 Provides-Extra: all
 Provides-Extra: datacore
