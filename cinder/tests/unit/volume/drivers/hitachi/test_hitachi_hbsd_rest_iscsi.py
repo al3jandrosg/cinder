@@ -1,4 +1,4 @@
-# Copyright (C) 2020, Hitachi, Ltd.
+# Copyright (C) 2020, 2021, Hitachi, Ltd.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -21,6 +21,7 @@ import requests
 
 from cinder import context as cinder_context
 from cinder.db.sqlalchemy import api as sqlalchemy_api
+from cinder import exception
 from cinder.objects import group_snapshot as obj_group_snap
 from cinder.objects import snapshot as obj_snap
 from cinder.tests.unit import fake_group
@@ -33,7 +34,7 @@ from cinder.volume import driver
 from cinder.volume.drivers.hitachi import hbsd_common
 from cinder.volume.drivers.hitachi import hbsd_iscsi
 from cinder.volume.drivers.hitachi import hbsd_rest
-from cinder.volume.drivers.hitachi import hbsd_utils
+from cinder.volume.drivers.hitachi import hbsd_rest_api
 from cinder.volume import volume_types
 from cinder.volume import volume_utils
 
@@ -327,6 +328,9 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
             CONFIG_MAP['port_id']]
         self.configuration.hitachi_group_create = True
         self.configuration.hitachi_group_delete = True
+        self.configuration.hitachi_copy_speed = 3
+        self.configuration.hitachi_copy_check_interval = 3
+        self.configuration.hitachi_async_copy_check_interval = 10
 
         self.configuration.san_login = CONFIG_MAP['user_id']
         self.configuration.san_password = CONFIG_MAP['user_pass']
@@ -334,9 +338,41 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
             'rest_server_ip_addr']
         self.configuration.san_api_port = CONFIG_MAP[
             'rest_server_ip_port']
+        self.configuration.hitachi_rest_disable_io_wait = True
         self.configuration.hitachi_rest_tcp_keepalive = True
         self.configuration.hitachi_discard_zero_page = True
         self.configuration.hitachi_rest_number = "0"
+        self.configuration.hitachi_lun_timeout = hbsd_rest._LUN_TIMEOUT
+        self.configuration.hitachi_lun_retry_interval = (
+            hbsd_rest._LUN_RETRY_INTERVAL)
+        self.configuration.hitachi_restore_timeout = hbsd_rest._RESTORE_TIMEOUT
+        self.configuration.hitachi_state_transition_timeout = (
+            hbsd_rest._STATE_TRANSITION_TIMEOUT)
+        self.configuration.hitachi_lock_timeout = hbsd_rest_api._LOCK_TIMEOUT
+        self.configuration.hitachi_rest_timeout = hbsd_rest_api._REST_TIMEOUT
+        self.configuration.hitachi_extend_timeout = (
+            hbsd_rest_api._EXTEND_TIMEOUT)
+        self.configuration.hitachi_exec_retry_interval = (
+            hbsd_rest_api._EXEC_RETRY_INTERVAL)
+        self.configuration.hitachi_rest_connect_timeout = (
+            hbsd_rest_api._DEFAULT_CONNECT_TIMEOUT)
+        self.configuration.hitachi_rest_job_api_response_timeout = (
+            hbsd_rest_api._JOB_API_RESPONSE_TIMEOUT)
+        self.configuration.hitachi_rest_get_api_response_timeout = (
+            hbsd_rest_api._GET_API_RESPONSE_TIMEOUT)
+        self.configuration.hitachi_rest_server_busy_timeout = (
+            hbsd_rest_api._REST_SERVER_BUSY_TIMEOUT)
+        self.configuration.hitachi_rest_keep_session_loop_interval = (
+            hbsd_rest_api._KEEP_SESSION_LOOP_INTERVAL)
+        self.configuration.hitachi_rest_another_ldev_mapped_retry_timeout = (
+            hbsd_rest_api._ANOTHER_LDEV_MAPPED_RETRY_TIMEOUT)
+        self.configuration.hitachi_rest_tcp_keepidle = (
+            hbsd_rest_api._TCP_KEEPIDLE)
+        self.configuration.hitachi_rest_tcp_keepintvl = (
+            hbsd_rest_api._TCP_KEEPINTVL)
+        self.configuration.hitachi_rest_tcp_keepcnt = (
+            hbsd_rest_api._TCP_KEEPCNT)
+        self.configuration.hitachi_host_mode_options = []
 
         self.configuration.use_chap_auth = True
         self.configuration.chap_username = CONFIG_MAP['auth_user']
@@ -461,14 +497,14 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
     @mock.patch.object(driver.ISCSIDriver, "get_goodness_function")
     @mock.patch.object(driver.ISCSIDriver, "get_filter_function")
     @mock.patch.object(requests.Session, "request")
-    def test_get_volume_stats(
+    def test__update_volume_stats(
             self, request, get_filter_function, get_goodness_function):
         request.return_value = FakeResponse(200, GET_POOL_RESULT)
         get_filter_function.return_value = None
         get_goodness_function.return_value = None
-        stats = self.driver.get_volume_stats(True)
-        self.assertEqual('Hitachi', stats['vendor_name'])
-        self.assertTrue(stats["pools"][0]['multiattach'])
+        self.driver._update_volume_stats()
+        self.assertEqual('Hitachi', self.driver._stats['vendor_name'])
+        self.assertTrue(self.driver._stats["pools"][0]['multiattach'])
         self.assertEqual(1, request.call_count)
         self.assertEqual(1, get_filter_function.call_count)
         self.assertEqual(1, get_goodness_function.call_count)
@@ -790,7 +826,7 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
 
     def test_create_group_from_src_volume_error(self):
         self.assertRaises(
-            hbsd_utils.HBSDError, self.driver.create_group_from_src,
+            exception.VolumeDriverException, self.driver.create_group_from_src,
             self.ctxt, TEST_GROUP[1], [TEST_VOLUME[1]],
             source_group=TEST_GROUP[0], source_vols=[TEST_VOLUME[3]]
         )
@@ -806,7 +842,7 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
     def test_update_group_error(self, is_group_a_cg_snapshot_type):
         is_group_a_cg_snapshot_type.return_value = True
         self.assertRaises(
-            hbsd_utils.HBSDError, self.driver.update_group,
+            exception.VolumeDriverException, self.driver.update_group,
             self.ctxt, TEST_GROUP[0], add_volumes=[TEST_VOLUME[3]],
             remove_volumes=[TEST_VOLUME[0]]
         )

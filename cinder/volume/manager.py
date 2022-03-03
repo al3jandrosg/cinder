@@ -57,6 +57,7 @@ profiler = importutils.try_import('osprofiler.profiler')
 import requests
 from taskflow import exceptions as tfe
 
+from cinder.backup import rpcapi as backup_rpcapi
 from cinder.common import constants
 from cinder import compute
 from cinder import context
@@ -185,6 +186,10 @@ MAPPING = {
         'cinder.volume.drivers.dell_emc.powerflex.driver.PowerFlexDriver',
     'cinder.volume.drivers.zadara.ZadaraVPSAISCSIDriver':
         'cinder.volume.drivers.zadara.zadara.ZadaraVPSAISCSIDriver',
+    'cinder.volume.drivers.nimble.NimbleISCSIDriver':
+        'cinder.volume.drivers.hpe.nimble.NimbleISCSIDriver',
+    'cinder.volume.drivers.nimble.NimbleFCDriver':
+        'cinder.volume.drivers.hpe.nimble.NimbleFCDriver',
 }
 
 
@@ -296,10 +301,9 @@ class VolumeManager(manager.CleanableManager,
 
         if self.configuration.suppress_requests_ssl_warnings:
             LOG.warning("Suppressing requests library SSL Warnings")
-            requests.packages.urllib3.disable_warnings(
-                requests.packages.urllib3.exceptions.InsecureRequestWarning)
-            requests.packages.urllib3.disable_warnings(
-                requests.packages.urllib3.exceptions.InsecurePlatformWarning)
+            rpu = requests.packages.urllib3  # type: ignore
+            rpu.disable_warnings(rpu.exceptions.InsecureRequestWarning)
+            rpu.disable_warnings(rpu.exceptions.InsecurePlatformWarning)
 
         self.key_manager = key_manager.API(CONF)
         self.driver = importutils.import_object(
@@ -1425,11 +1429,6 @@ class VolumeManager(manager.CleanableManager,
                      {'volume_id': volume_id, 'instance': instance_uuid,
                       'mount': mountpoint, 'host': host_name_sanitized},
                      resource=volume)
-            self.driver.attach_volume(context,
-                                      volume,
-                                      instance_uuid,
-                                      host_name_sanitized,
-                                      mountpoint)
         except Exception as excep:
             with excutils.save_and_reraise_exception():
                 self.message_api.create(
@@ -1508,7 +1507,6 @@ class VolumeManager(manager.CleanableManager,
                      {'volume_id': volume_id,
                       'instance': attachment.get('instance_uuid')},
                      resource=volume)
-            self.driver.detach_volume(context, volume, attachment)
         except Exception:
             with excutils.save_and_reraise_exception():
                 self.db.volume_attachment_update(
@@ -4736,7 +4734,8 @@ class VolumeManager(manager.CleanableManager,
     def get_backup_device(self,
                           ctxt: context.RequestContext,
                           backup: objects.Backup,
-                          want_objects: bool = False):
+                          want_objects: bool = False,
+                          async_call: bool = False):
         (backup_device, is_snapshot) = (
             self.driver.get_backup_device(ctxt, backup))
         secure_enabled = self.driver.secure_file_operations_enabled()
@@ -4745,9 +4744,20 @@ class VolumeManager(manager.CleanableManager,
                               'is_snapshot': is_snapshot, }
         # TODO(sborkows): from_primitive method will be removed in O, so there
         # is a need to clean here then.
-        return (objects.BackupDeviceInfo.from_primitive(backup_device_dict,
-                                                        ctxt)
-                if want_objects else backup_device_dict)
+        backup_device = (objects.BackupDeviceInfo.from_primitive(
+            backup_device_dict, ctxt)
+            if want_objects else backup_device_dict)
+
+        if async_call:
+            # we have to use an rpc call back to the backup manager to
+            # continue the backup
+            LOG.info("Calling backup continue_backup for: %s", backup)
+            rpcapi = backup_rpcapi.BackupAPI()
+            rpcapi.continue_backup(ctxt, backup, backup_device)
+        else:
+            # The rpc api version doesn't support the async callback
+            # so we fallback to returning the value itself.
+            return backup_device
 
     def secure_file_operations_enabled(
             self,
@@ -4852,11 +4862,6 @@ class VolumeManager(manager.CleanableManager,
 
         try:
             volume_utils.require_driver_initialized(self.driver)
-            self.driver.attach_volume(context,
-                                      vref,
-                                      attachment_ref.instance_uuid,
-                                      connector.get('host', ''),
-                                      connector.get('mountpoint', 'na'))
         except Exception as err:
             self.message_api.create(
                 context, message_field.Action.UPDATE_ATTACHMENT,
@@ -4948,7 +4953,6 @@ class VolumeManager(manager.CleanableManager,
             LOG.debug('Deleting attachment %(attachment_id)s.',
                       {'attachment_id': attachment.id},
                       resource=vref)
-            self.driver.detach_volume(context, vref, attachment)
             if has_shared_connection is not None and not has_shared_connection:
                 self.driver.remove_export(context.elevated(), vref)
         except Exception:
@@ -5293,3 +5297,51 @@ class VolumeManager(manager.CleanableManager,
             raise exception.VolumeBackendAPIException(data=err_msg)
 
         return {'replication_targets': replication_targets}
+
+    def _refresh_volume_glance_meta(self, context, volume, image_meta):
+        volume_utils.enable_bootable_flag(volume)
+        volume_meta = volume_utils.get_volume_image_metadata(
+            image_meta['id'], image_meta)
+        LOG.debug("Creating volume glance metadata for volume %(volume_id)s"
+                  " backed by image %(image_id)s with: %(vol_metadata)s.",
+                  {'volume_id': volume.id, 'image_id': image_meta['id'],
+                   'vol_metadata': volume_meta})
+        self.db.volume_glance_metadata_delete_by_volume(context, volume.id)
+        self.db.volume_glance_metadata_bulk_create(context, volume.id,
+                                                   volume_meta)
+
+    def reimage(self, context, volume, image_meta):
+        """Reimage a volume with specific image."""
+        image_id = None
+        try:
+            image_id = image_meta['id']
+            image_service, _ = glance.get_remote_image_service(
+                context, image_meta['id'])
+            image_location = image_service.get_location(context, image_id)
+
+            volume_utils.copy_image_to_volume(self.driver, context, volume,
+                                              image_meta, image_location,
+                                              image_service)
+
+            self._refresh_volume_glance_meta(context, volume, image_meta)
+            volume.status = volume.previous_status
+            volume.save()
+
+            if volume.status in ['reserved']:
+                nova_api = compute.API()
+                attachments = volume.volume_attachment
+                instance_uuids = [attachment.instance_uuid
+                                  for attachment in attachments]
+                nova_api.reimage_volume(context, instance_uuids, volume.id)
+
+            LOG.debug("Re-imaged %(image_id)s"
+                      " to volume %(volume_id)s successfully.",
+                      {'image_id': image_id, 'volume_id': volume.id})
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.error('Failed to re-image volume %(volume_id)s with '
+                          'image %(image_id)s.',
+                          {'image_id': image_id, 'volume_id': volume.id})
+                volume.previous_status = volume.status
+                volume.status = 'error'
+                volume.save()

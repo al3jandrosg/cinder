@@ -1,4 +1,4 @@
-# Copyright (C) 2020, Hitachi, Ltd.
+# Copyright (C) 2020, 2021, Hitachi, Ltd.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -91,14 +91,14 @@ class HBSDRESTISCSI(rest.HBSDREST):
     def create_target_to_storage(self, port, connector, hba_ids):
         """Create an iSCSI target on the specified port."""
         target_name = '%(prefix)s-%(ip)s' % {
-            'prefix': utils.DRIVER_PREFIX,
+            'prefix': self.driver_info['driver_prefix'],
             'ip': connector['ip'],
         }
         body = {'portId': port, 'hostGroupName': target_name}
         if hba_ids:
             body['iscsiName'] = '%(id)s%(suffix)s' % {
                 'id': hba_ids,
-                'suffix': utils.TARGET_IQN_SUFFIX,
+                'suffix': self.driver_info['target_iqn_suffix'],
             }
         try:
             gid = self.client.add_host_grp(body, no_log=True)
@@ -119,8 +119,13 @@ class HBSDRESTISCSI(rest.HBSDREST):
     def set_target_mode(self, port, gid):
         """Configure the iSCSI target to meet the environment."""
         body = {'hostMode': 'LINUX/IRIX',
-                'hostModeOptions': [_ISCSI_HMO_REPORT_FULL_PORTAL,
-                                    _ISCSI_HMO_DISABLE_IO]}
+                'hostModeOptions': [_ISCSI_HMO_REPORT_FULL_PORTAL]}
+        if self.conf.hitachi_rest_disable_io_wait:
+            body['hostModeOptions'].append(_ISCSI_HMO_DISABLE_IO)
+        if self.conf.hitachi_host_mode_options:
+            for opt in self.conf.hitachi_host_mode_options:
+                if int(opt) not in body['hostModeOptions']:
+                    body['hostModeOptions'].append(int(opt))
         self.client.modify_host_grp(port, gid, body)
 
     def _is_host_iqn_registered_in_target(self, port, gid, host_iqn):
@@ -179,7 +184,7 @@ class HBSDRESTISCSI(rest.HBSDREST):
             targets['info'][port] = False
             if 'ip' in connector:
                 target_name = '%(prefix)s-%(ip)s' % {
-                    'prefix': utils.DRIVER_PREFIX,
+                    'prefix': self.driver_info['driver_prefix'],
                     'ip': connector['ip'],
                 }
                 if self._set_target_info_by_name(
@@ -210,7 +215,7 @@ class HBSDRESTISCSI(rest.HBSDREST):
                 if not iqn:
                     msg = utils.output_log(MSG.RESOURCE_NOT_FOUND,
                                            resource='Target IQN')
-                    raise utils.HBSDError(msg)
+                    self.raise_error(msg)
                 targets['iqns'][target] = iqn
                 LOG.debug(
                     'Found target iqn of host group. (port: %(port)s, '

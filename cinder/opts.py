@@ -29,6 +29,7 @@ from cinder import objects  # noqa
 objects.register_all()
 from cinder.api import common as cinder_api_common
 from cinder.api.middleware import auth as cinder_api_middleware_auth
+import cinder.api.openstack
 from cinder.api.views import versions as cinder_api_views_versions
 from cinder.backup import api as cinder_backup_api
 from cinder.backup import chunkeddriver as cinder_backup_chunkeddriver
@@ -95,12 +96,14 @@ from cinder.volume.drivers.fusionstorage import dsware as \
     cinder_volume_drivers_fusionstorage_dsware
 from cinder.volume.drivers.hitachi import hbsd_common as \
     cinder_volume_drivers_hitachi_hbsdcommon
-from cinder.volume.drivers.hitachi import hbsd_fc as \
-    cinder_volume_drivers_hitachi_hbsdfc
 from cinder.volume.drivers.hitachi import hbsd_rest as \
     cinder_volume_drivers_hitachi_hbsdrest
+from cinder.volume.drivers.hitachi import hbsd_rest_fc as \
+    cinder_volume_drivers_hitachi_hbsdrestfc
 from cinder.volume.drivers.hpe import hpe_3par_common as \
     cinder_volume_drivers_hpe_hpe3parcommon
+from cinder.volume.drivers.hpe import nimble as \
+    cinder_volume_drivers_hpe_nimble
 from cinder.volume.drivers.huawei import common as \
     cinder_volume_drivers_huawei_common
 from cinder.volume.drivers.ibm import flashsystem_common as \
@@ -133,17 +136,19 @@ from cinder.volume.drivers.kioxia import kumoscale as \
     cinder_volume_drivers_kioxia_kumoscale
 from cinder.volume.drivers.lenovo import lenovo_common as \
     cinder_volume_drivers_lenovo_lenovocommon
+from cinder.volume.drivers import lightos as cinder_volume_drivers_lightos
 from cinder.volume.drivers import linstordrv as \
     cinder_volume_drivers_linstordrv
 from cinder.volume.drivers import lvm as cinder_volume_drivers_lvm
 from cinder.volume.drivers.macrosan import driver as \
     cinder_volume_drivers_macrosan_driver
+from cinder.volume.drivers.nec.v import nec_v_rest as \
+    cinder_volume_drivers_nec_v_necvrest
 from cinder.volume.drivers.netapp import options as \
     cinder_volume_drivers_netapp_options
 from cinder.volume.drivers.nexenta import options as \
     cinder_volume_drivers_nexenta_options
 from cinder.volume.drivers import nfs as cinder_volume_drivers_nfs
-from cinder.volume.drivers import nimble as cinder_volume_drivers_nimble
 from cinder.volume.drivers.open_e import options as \
     cinder_volume_drivers_open_e_options
 from cinder.volume.drivers.prophetstor import options as \
@@ -216,6 +221,7 @@ def list_opts():
             itertools.chain(
                 cinder_api_common.api_common_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
+                cinder.api.openstack.openstack_api_opts,
                 cinder_api_views_versions.versions_opts,
                 cinder_backup_api.backup_opts,
                 cinder_backup_chunkeddriver.backup_opts,
@@ -328,9 +334,10 @@ def list_opts():
                 cinder_volume_drivers_fujitsu_eternus_dx_eternusdxcommon.
                 FJ_ETERNUS_DX_OPT_opts,
                 cinder_volume_drivers_hitachi_hbsdcommon.COMMON_VOLUME_OPTS,
-                cinder_volume_drivers_hitachi_hbsdfc.FC_VOLUME_OPTS,
                 cinder_volume_drivers_hitachi_hbsdrest.REST_VOLUME_OPTS,
+                cinder_volume_drivers_hitachi_hbsdrestfc.FC_VOLUME_OPTS,
                 cinder_volume_drivers_hpe_hpe3parcommon.hpe3par_opts,
+                cinder_volume_drivers_hpe_nimble.nimble_opts,
                 cinder_volume_drivers_huawei_common.huawei_opts,
                 cinder_volume_drivers_ibm_flashsystemcommon.flashsystem_opts,
                 cinder_volume_drivers_ibm_flashsystemiscsi.
@@ -350,9 +357,13 @@ def list_opts():
                 kaminario_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.common_opts,
                 cinder_volume_drivers_lenovo_lenovocommon.iscsi_opts,
+                cinder_volume_drivers_lightos.lightos_opts,
                 cinder_volume_drivers_linstordrv.linstor_opts,
                 cinder_volume_drivers_lvm.volume_opts,
                 cinder_volume_drivers_macrosan_driver.config.macrosan_opts,
+                cinder_volume_drivers_nec_v_necvrest.COMMON_VOLUME_OPTS,
+                cinder_volume_drivers_nec_v_necvrest.REST_VOLUME_OPTS,
+                cinder_volume_drivers_nec_v_necvrest.FC_VOLUME_OPTS,
                 cinder_volume_drivers_netapp_options.netapp_proxy_opts,
                 cinder_volume_drivers_netapp_options.netapp_connection_opts,
                 cinder_volume_drivers_netapp_options.netapp_transport_opts,
@@ -372,7 +383,6 @@ def list_opts():
                 cinder_volume_drivers_nexenta_options.NEXENTA_RRMGR_OPTS,
                 cinder_volume_drivers_nexenta_options.NEXENTA_EDGE_OPTS,
                 cinder_volume_drivers_nfs.nfs_opts,
-                cinder_volume_drivers_nimble.nimble_opts,
                 cinder_volume_drivers_prophetstor_options.DPL_OPTS,
                 cinder_volume_drivers_pure.PURE_OPTS,
                 cinder_volume_drivers_qnap.qnap_opts,

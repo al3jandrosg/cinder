@@ -1,4 +1,4 @@
-# Copyright (C) 2020, Hitachi, Ltd.
+# Copyright (C) 2020, 2021, Hitachi, Ltd.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -17,30 +17,39 @@ REST API client class for Hitachi HBSD Driver.
 """
 
 from http import client as httpclient
+import socket
 import threading
 
 from eventlet import greenthread
-from keystoneauth1.session import TCPKeepAliveAdapter
 from oslo_log import log as logging
 from oslo_service import loopingcall
 from oslo_utils import timeutils
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.connection import HTTPConnection
+from requests.packages.urllib3.poolmanager import PoolManager
 
+from cinder import exception
+from cinder.i18n import _
 from cinder.volume.drivers.hitachi import hbsd_utils as utils
 from cinder.volume import volume_utils
 
-_LOCK_WAITTIME = 2 * 60 * 60
-_EXEC_MAX_WAITTIME = 30
-_EXTEND_WAITTIME = 10 * 60
+_LOCK_TIMEOUT = 2 * 60 * 60
+_REST_TIMEOUT = 30
+_EXTEND_TIMEOUT = 10 * 60
 _EXEC_RETRY_INTERVAL = 5
 _DEFAULT_CONNECT_TIMEOUT = 30
-_RESPONSE_TIMEOUT_TOLERANCE = 30
 _JOB_API_RESPONSE_TIMEOUT = 30 * 60
 _GET_API_RESPONSE_TIMEOUT = 30 * 60
 _REST_SERVER_BUSY_TIMEOUT = 2 * 60 * 60
 _REST_SERVER_RESTART_TIMEOUT = 10 * 60
 _REST_SERVER_ERROR_TIMEOUT = 10 * 60
 _KEEP_SESSION_LOOP_INTERVAL = 3 * 60
+_ANOTHER_LDEV_MAPPED_RETRY_TIMEOUT = 10 * 60
+
+_TCP_KEEPIDLE = 60
+_TCP_KEEPINTVL = 15
+_TCP_KEEPCNT = 4
 
 _HTTPS = 'https://'
 
@@ -87,6 +96,22 @@ def _build_base_url(ip_addr, ip_port):
         'ip': ip_addr,
         'port': ip_port,
     }
+
+
+class KeepAliveAdapter(HTTPAdapter):
+
+    options = HTTPConnection.default_socket_options + [
+        (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
+        (socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, _TCP_KEEPIDLE),
+        (socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, _TCP_KEEPINTVL),
+        (socket.IPPROTO_TCP, socket.TCP_KEEPCNT, _TCP_KEEPCNT),
+    ]
+
+    def init_poolmanager(self, connections, maxsize, block=False):
+        self.poolmanager = PoolManager(num_pools=connections,
+                                       maxsize=maxsize,
+                                       block=block,
+                                       socket_options=self.options)
 
 
 class ResponseData(dict):
@@ -194,7 +219,7 @@ class ResponseData(dict):
 class RestApiClient():
 
     def __init__(self, ip_addr, ip_port, storage_device_id,
-                 user_id, user_pass, tcp_keepalive=False,
+                 user_id, user_pass, driver_prefix, tcp_keepalive=False,
                  verify=False, connect_timeout=_DEFAULT_CONNECT_TIMEOUT):
         """Initialize instance variables."""
         self.ip_addr = ip_addr
@@ -221,6 +246,7 @@ class RestApiClient():
         }
         self.headers = {"content-type": "application/json",
                         "accept": "application/json"}
+        self.driver_prefix = driver_prefix
 
     class Session(requests.auth.AuthBase):
 
@@ -250,12 +276,11 @@ class RestApiClient():
         kwargs.setdefault('ignore_all_errors', False)
         kwargs.setdefault('timeout_message', None)
         kwargs.setdefault('no_log', False)
-        kwargs.setdefault('timeout', _EXEC_MAX_WAITTIME)
+        kwargs.setdefault('timeout', _REST_TIMEOUT)
 
         headers = dict(self.headers)
         if async_:
-            read_timeout = (_JOB_API_RESPONSE_TIMEOUT +
-                            _RESPONSE_TIMEOUT_TOLERANCE)
+            read_timeout = _JOB_API_RESPONSE_TIMEOUT
             headers.update({
                 "Response-Max-Wait": str(_JOB_API_RESPONSE_TIMEOUT),
                 "Response-Job-Status": "Completed;"})
@@ -276,7 +301,7 @@ class RestApiClient():
             try:
                 with requests.Session() as session:
                     if self.tcp_keepalive:
-                        session.mount(_HTTPS, TCPKeepAliveAdapter())
+                        session.mount(_HTTPS, KeepAliveAdapter())
                     rsp = session.request(method, url,
                                           params=params,
                                           json=body,
@@ -290,7 +315,13 @@ class RestApiClient():
                     MSG.REST_SERVER_CONNECT_FAILED,
                     exception=type(e), message=e,
                     method=method, url=url, params=params, body=body)
-                raise utils.HBSDError(msg)
+                message = _(
+                    '%(prefix)s error occurred. %(msg)s' % {
+                        'prefix': self.driver_prefix,
+                        'msg': msg,
+                    }
+                )
+                raise exception.VolumeDriverException(message)
 
             response = ResponseData(rsp)
             if (response['status_code'] == httpclient.INTERNAL_SERVER_ERROR and
@@ -319,14 +350,21 @@ class RestApiClient():
         errobj = response['errobj']
         if response.is_locked():
             if (kwargs['no_retry'] or
-                    utils.timed_out(start_time, _LOCK_WAITTIME)):
+                    utils.timed_out(start_time, _LOCK_TIMEOUT)):
                 msg = utils.output_log(MSG.REST_API_FAILED,
                                        no_log=kwargs['no_log'],
                                        method=method, url=url,
                                        params=params, body=body,
                                        **response.get_errobj())
                 if kwargs['do_raise']:
-                    raise utils.HBSDError(msg, errobj=errobj)
+                    message = _(
+                        '%(prefix)s error occurred. %(msg)s' % {
+                            'prefix': self.driver_prefix,
+                            'msg': msg,
+                        }
+                    )
+                    raise exception.VolumeDriverException(
+                        message, errobj=errobj)
                 return False, rsp_body, errobj
             else:
                 LOG.debug("The resource group to which the operation object ",
@@ -350,6 +388,11 @@ class RestApiClient():
 
         if retry and response.is_rest_server_busy():
             if utils.timed_out(start_time, _REST_SERVER_BUSY_TIMEOUT):
+                retry = False
+        elif retry and response.get_err_code() in (ANOTHER_LDEV_MAPPED, ):
+            if utils.timed_out(start_time, _ANOTHER_LDEV_MAPPED_RETRY_TIMEOUT):
+                LOG.debug(
+                    "Another LDEV is already mapped to the specified LUN.")
                 retry = False
         elif retry and utils.timed_out(start_time, kwargs['timeout']):
             if kwargs['timeout_message']:
@@ -375,7 +418,14 @@ class RestApiClient():
                                        method=method, url=url,
                                        params=params, body=body)
             if kwargs['do_raise']:
-                raise utils.HBSDError(msg, errobj=errobj)
+                message = _(
+                    '%(prefix)s error occurred. %(msg)s' % {
+                        'prefix': self.driver_prefix,
+                        'msg': msg,
+                    }
+                )
+                raise exception.VolumeDriverException(
+                    message, errobj=errobj)
             return False, rsp_body, errobj
 
         if errobj:
@@ -398,7 +448,14 @@ class RestApiClient():
                                        method=method, url=url,
                                        params=params, body=body)
             if kwargs['do_raise']:
-                raise utils.HBSDError(msg, errobj=errobj)
+                message = _(
+                    '%(prefix)s error occurred. %(msg)s' % {
+                        'prefix': self.driver_prefix,
+                        'msg': msg,
+                    }
+                )
+                raise exception.VolumeDriverException(
+                    message, errobj=errobj)
         return retry, rsp_body, errobj
 
     def set_my_session(self, session):
@@ -414,7 +471,7 @@ class RestApiClient():
         }
         auth = (self.user_id, self.user_pass)
         rsp, err = self._request("POST", url, auth=auth, no_relogin=True,
-                                 do_raise=do_raise, timeout=_LOCK_WAITTIME)
+                                 do_raise=do_raise, timeout=_LOCK_TIMEOUT)
         if not err:
             self.set_my_session(self.Session(rsp["sessionId"], rsp["token"]))
             return True
@@ -442,7 +499,7 @@ class RestApiClient():
             if session is not None:
                 self.get_session(session.id, no_retry=True, no_log=True)
                 has_session = True
-        except utils.HBSDError as ex:
+        except exception.VolumeDriverException as ex:
             LOG.debug('Failed to get session info: %s', ex)
         return has_session
 
@@ -566,7 +623,7 @@ class RestApiClient():
             'id': ldev_id,
             'action': 'expand',
         }
-        self._invoke(url, body=body, timeout=_EXTEND_WAITTIME)
+        self._invoke(url, body=body, timeout=_EXTEND_TIMEOUT)
 
     def get_ports(self, params=None):
         """Get a list of port information."""

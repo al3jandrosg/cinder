@@ -137,13 +137,13 @@ volume_opts = [
                     'as is to the underlying tool.'),
     cfg.StrOpt('target_protocol',
                default='iscsi',
-               choices=['iscsi', 'iser', 'nvmet_rdma'],
+               choices=['iscsi', 'iser', 'nvmet_rdma', 'nvmet_tcp'],
                help='Determines the target protocol for new volumes, '
                     'created with tgtadm, lioadm and nvmet target helpers. '
                     'In order to enable RDMA, this parameter should be set '
                     'with the value "iser". The supported iSCSI protocol '
                     'values are "iscsi" and "iser", in case of nvmet target '
-                    'set to "nvmet_rdma".'),
+                    'set to "nvmet_rdma" or "nvmet_tcp".'),
     cfg.StrOpt('driver_client_cert_key',
                help='The path to the client certificate key for verification, '
                     'if the driver supports it.'),
@@ -645,15 +645,6 @@ class BaseVD(object, metaclass=abc.ABCMeta):
             self._update_volume_stats()
 
         return self._stats
-
-    def get_prefixed_property(self, property):
-        """Return prefixed property name
-
-        :returns: a prefixed property name string or None
-        """
-
-        if property and self.capabilities.get('vendor_prefix'):
-            return self.capabilities.get('vendor_prefix') + ':' + property
 
     def _set_property(self, properties, entry, title, description,
                       type, **kwargs):
@@ -1187,11 +1178,6 @@ class BaseVD(object, metaclass=abc.ABCMeta):
         # this method.
         return True
 
-    def snapshot_remote_attachable(self):
-        # TODO(lixiaoy1): the method will be deleted later when remote
-        # attach snapshot is implemented.
-        return False
-
     def get_backup_device(self, context, backup):
         """Get a backup device from an existing volume.
 
@@ -1381,15 +1367,6 @@ class BaseVD(object, metaclass=abc.ABCMeta):
 
     def clear_download(self, context, volume):
         """Clean up after an interrupted image copy."""
-        pass
-
-    def attach_volume(self, context, volume, instance_uuid, host_name,
-                      mountpoint):
-        """Callback for volume attached to instance or host."""
-        pass
-
-    def detach_volume(self, context, volume, attachment=None):
-        """Callback for volume detached."""
         pass
 
     def do_setup(self, context):
@@ -1721,10 +1698,6 @@ class BaseVD(object, metaclass=abc.ABCMeta):
         # Check if method is being implemented/overwritten by the driver
         method_name = cls.REPLICATION_FEATURE_CHECKERS[feature]
         return not cls._is_base_method(method_name)
-
-    def get_replication_updates(self, context):
-        """Old replication update method, deprecate."""
-        raise NotImplementedError()
 
     def create_group(self, context, group):
         """Creates a group.
@@ -2762,22 +2735,6 @@ class ISCSIDriver(VolumeDriver):
         LOG.debug("iscsiadm %(command)s: stdout=%(out)s stderr=%(err)s",
                   {'command': iscsi_command, 'out': out, 'err': err})
         return (out, err)
-
-    def _run_iscsiadm_bare(self, iscsi_command, **kwargs):
-        check_exit_code = kwargs.pop('check_exit_code', 0)
-        (out, err) = self._execute('iscsiadm',
-                                   *iscsi_command,
-                                   run_as_root=True,
-                                   check_exit_code=check_exit_code)
-        LOG.debug("iscsiadm %(command)s: stdout=%(out)s stderr=%(err)s",
-                  {'command': iscsi_command, 'out': out, 'err': err})
-        return (out, err)
-
-    def _iscsiadm_update(self, iscsi_properties, property_key, property_value,
-                         **kwargs):
-        iscsi_command = ('--op', 'update', '-n', property_key,
-                         '-v', property_value)
-        return self._run_iscsiadm(iscsi_properties, iscsi_command, **kwargs)
 
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.

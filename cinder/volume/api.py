@@ -29,6 +29,7 @@ from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
 from oslo_utils import versionutils
+import webob
 
 from cinder.api import common
 from cinder.common import constants
@@ -1315,15 +1316,6 @@ class API(base.Base):
                  resource=volume)
         return db_meta
 
-    def get_volume_admin_metadata(self,
-                                  context: context.RequestContext,
-                                  volume: objects.Volume) -> dict:
-        """Get all administration metadata associated with a volume."""
-        rv = self.db.volume_admin_metadata_get(context, volume['id'])
-        LOG.info("Get volume admin metadata completed successfully.",
-                 resource=volume)
-        return dict(rv)
-
     def update_volume_admin_metadata(self,
                                      context: context.RequestContext,
                                      volume: objects.Volume,
@@ -2538,24 +2530,42 @@ class API(base.Base):
         volume_utils.notify_about_volume_usage(ctxt, volume, "detach.end")
         return volume.volume_attachment
 
+    def reimage(self, context, volume, image_id, reimage_reserved=False):
+        if volume.status in ['reserved']:
+            context.authorize(vol_action_policy.REIMAGE_RESERVED_POLICY,
+                              target_obj=volume)
+        else:
+            context.authorize(vol_action_policy.REIMAGE_POLICY,
+                              target_obj=volume)
+        if len(volume.volume_attachment) > 1:
+            msg = _("Cannot re-image a volume which is attached to more than "
+                    "one server.")
+            raise webob.exc.HTTPConflict(explanation=msg)
+        # Build required conditions for conditional update
+        expected = {'status': ('available', 'error', 'reserved'
+                               ) if reimage_reserved else ('available',
+                                                           'error')}
+        values = {'status': 'downloading',
+                  'previous_status': volume.model.status}
+
+        result = volume.conditional_update(values, expected)
+        if not result:
+            msg = (_('Volume %(vol_id)s status must be %(statuses)s, but '
+                     'current status is %(status)s.') %
+                   {'vol_id': volume.id,
+                    'statuses': utils.build_or_str(expected['status']),
+                    'status': volume.status})
+            raise exception.InvalidVolume(reason=msg)
+        image_meta = self.image_service.show(context, image_id)
+        volume_utils.check_image_metadata(image_meta, volume['size'])
+        self.volume_rpcapi.reimage(context,
+                                   volume,
+                                   image_meta)
+
 
 class HostAPI(base.Base):
     """Sub-set of the Volume Manager API for managing host operations."""
 
     def set_host_enabled(self, context, host, enabled):
         """Sets the specified host's ability to accept new volumes."""
-        raise NotImplementedError()
-
-    def get_host_uptime(self, context, host):
-        """Returns the result of calling "uptime" on the target host."""
-        raise NotImplementedError()
-
-    def host_power_action(self, context, host, action):
-        raise NotImplementedError()
-
-    def set_host_maintenance(self, context, host, mode):
-        """Start/Stop host maintenance window.
-
-        On start, it triggers volume evacuation.
-        """
         raise NotImplementedError()

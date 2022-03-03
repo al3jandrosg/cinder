@@ -1,19 +1,59 @@
 CHANGES
 =======
 
+* Tests: Fix missing novaclient context arg in test\_host\_filters
+* [SVf] Manage host attachment using portsets
+* Reset state robustification for volume os-reset\_status
+* Followup: Address review comments on re-image patch
+* Support volume re-image
+* Add missing microversion entry for 3.67
+* Fix request id mess on Cinder-API
+* db: Add missing foreign keys, indexes to models
+* Fix typo in release note
+* PureStorage FlashArray: Add active/active replication
+* Update 'cinder-specs-core' description
+* [SVf] update rccg name property to metadata
+* [Lightos] standardize connector usage
+* Use LOG.warning instead of deprecated LOG.warn
+* Remove the need for project\_id from API endpoints
+* [SVf] RevertToSnapshot for rep-volumes in group
+* [SVf] Fixed Detach for multi-attach volumes
+* docs: Update "Getting your patch merged"
+* Imported Translations from Zanata
+* docs: Add docs for 'RateLimitingMiddleware'
+* Remove attach and detach volume driver methods
+* [SVf] Add cleanrate in volume-type extra specs
+* Lightbits LightOS driver
+* Doc: IBM flashsystem driver update
+* db: Remove unnecessary timezone configuration
+* Remove various unused code
+* Add cinder volume drivers for NEC V series Storage
+* Remove unused variable
+* PowerMax docs -  Include a note in cinder backup section
+* Rework backup process to make it async
+* mypy: Allow mypy to pass with requests-packaged urllib3
+* Hitachi: Make the parameters name variable for supporting OEM storages
+* Hitachi: Add maintenance parameters
+* Remove block-box files
 * Volume transfers: Remove duplicate policy check
 * Fix Typos from Review 819790
 * Fix spacing in CapacityFilter debug log message
 * Support Cinder FC driver for TOYOU NetStor
+* Doc: Typos in Spectrum Virtulize family user guide
 * Imported Translations from Zanata
 * mypy: backup
+* db: Correct 'nullable' mismatches on models
+* db: Fix formatting of database models
 * Updating python testing as per Yoga testing runtime
 * Fix log message error in capacity filter
 * mypy: annotate volume/api.py
 * [SVF]:Fix multiple lsiogrp,lsvdisk calls in Retype
+* Move nimble driver code to hpe folder
 * fix 'huawei dorado v6' create new volume from snapshot error
 * Improve no\_snapshot\_gb\_quota description
+* Run database migration tests
 * Fix a typo error in explanatory notes
+* PowerMax Driver - Re-use existing initiator group/host
 * replace deprecated pyparsing method
 * Update release cycle tasks
 * [SVF] Fix Retype issue of mirror volume
@@ -21,6 +61,7 @@ CHANGES
 * api-ref: Add info regarding default types
 * Add info about \_\_DEFAULT\_\_ in install docs
 * [Pure Storage] Add volume metadata
+* DOC: Add cinder modules on initial configuration
 * Fix misspelled get\_time\_comparsion\_operators method name
 * RBD: Check for OSError before using errno
 * pylint: Update to 2.11.1
@@ -236,11 +277,13 @@ CHANGES
 * [SVF]:Bulk create Hyperswap volume is failing
 * PowerMax Driver - QoS should not be set on parent storage group
 * Update volume api microversion doc and tests
+* zuul: configure irrelevant-files for the rally job
 * PowerMax Docs - Corrections to QoS section
 * Update IRC info
 * Fix functional jobs
 * Doc: Remove incorrect note about encryption flag
 * Tests: Don't assert notifier not called
+* LVM: Added NVMe TCP support for the nvmet target
 * PowerMax Driver - Fix for create group from source
 * Fix best\_match() deprecation warning
 * Replace getargspec with getfullargspec
@@ -426,6 +469,7 @@ CHANGES
 * created s3 cinder backup driver
 * Tests: Add another mock psutil in quobyte tests
 * Add ceph iscsi volume driver
+* PowerFlex documentation contains invalid paths
 * Add Cinder driver for TOYOU ACS5000
 * Tests: Solidfire - Use UUIDs in object UUID fields
 * Remove NestedQuotaDriver

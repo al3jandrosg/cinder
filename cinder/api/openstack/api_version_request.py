@@ -152,14 +152,16 @@ REST_API_VERSION_HISTORY = """
            - Accept 'consumes_quota' filter in volume and snapshot list
              operation.
     * 3.66 - Allow snapshotting in-use volumes without force flag.
+    * 3.67 - API URLs no longer need to include a project_id parameter.
+    * 3.68 - Support re-image volume
 """
 
 # The minimum and maximum versions of the API supported
 # The default api version request is defined to be the
 # minimum version of the API supported.
 _MIN_API_VERSION = "3.0"
-_MAX_API_VERSION = "3.66"
-UPDATED = "2021-09-16T00:00:00Z"
+_MAX_API_VERSION = "3.68"
+UPDATED = "2021-11-02T00:00:00Z"
 
 
 # NOTE(cyeoh): min and max versions declared as functions so we can
