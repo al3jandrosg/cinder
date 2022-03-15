@@ -1,3 +1,10 @@
+cinder (2:19.0.0+git2022030310.b49fb59a6-0ubuntu2) jammy; urgency=medium
+
+  * d/p/fix-qos-computation.patch: Cherry-pick from upstream review to
+    fix TypeError exception when generating QOS feature name (LP: #1948507).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Tue, 15 Mar 2022 11:08:32 -0400
+
 cinder (2:19.0.0+git2022030310.b49fb59a6-0ubuntu1) jammy; urgency=medium
 
   * New upstream snapshot for OpenStack Yoga.
