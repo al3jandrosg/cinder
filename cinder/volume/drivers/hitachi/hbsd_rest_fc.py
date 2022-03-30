@@ -144,9 +144,12 @@ class HBSDRESTFC(rest.HBSDREST):
                                    gid=gid)
             self.raise_error(msg)
 
-    def set_target_mode(self, port, gid):
+    def set_target_mode(self, port, gid, connector):
         """Configure the host group to meet the environment."""
-        body = {'hostMode': 'LINUX/IRIX'}
+        if connector.get('os_type', None) == 'aix':
+            body = {'hostMode': 'AIX'}
+        else:
+            body = {'hostMode': 'LINUX/IRIX'}
         if self.conf.hitachi_rest_disable_io_wait:
             body['hostModeOptions'] = [_FC_HMO_DISABLE_IO]
         if self.conf.hitachi_host_mode_options:
@@ -239,10 +242,10 @@ class HBSDRESTFC(rest.HBSDREST):
                 not_found_count += 1
         return not_found_count
 
-    def initialize_connection(self, volume, connector):
+    def initialize_connection(self, volume, connector, is_snapshot=False):
         """Initialize connection between the server and the volume."""
         conn_info = super(HBSDRESTFC, self).initialize_connection(
-            volume, connector)
+            volume, connector, is_snapshot)
         if self.conf.hitachi_zoning_request:
             init_targ_map = utils.build_initiator_target_map(
                 connector, conn_info['data']['target_wwn'],

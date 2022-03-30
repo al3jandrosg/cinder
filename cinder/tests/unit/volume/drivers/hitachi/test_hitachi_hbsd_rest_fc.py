@@ -37,6 +37,7 @@ from cinder.volume.drivers.hitachi import hbsd_common
 from cinder.volume.drivers.hitachi import hbsd_fc
 from cinder.volume.drivers.hitachi import hbsd_rest
 from cinder.volume.drivers.hitachi import hbsd_rest_api
+from cinder.volume.drivers.hitachi import hbsd_rest_fc
 from cinder.volume import volume_types
 from cinder.volume import volume_utils
 from cinder.zonemanager import utils as fczm_utils
@@ -72,6 +73,14 @@ DEFAULT_CONNECTOR = {
     'multipath': False,
 }
 
+DEFAULT_CONNECTOR_AIX = {
+    'os_type': 'aix',
+    'host': 'host',
+    'ip': CONFIG_MAP['my_ip'],
+    'wwpns': [CONFIG_MAP['host_wwn']],
+    'multipath': False,
+}
+
 CTXT = cinder_context.get_admin_context()
 
 TEST_VOLUME = []
@@ -79,6 +88,7 @@ for i in range(4):
     volume = {}
     volume['id'] = '00000000-0000-0000-0000-{0:012d}'.format(i)
     volume['name'] = 'test-volume{0:d}'.format(i)
+    volume['volume_type_id'] = '00000000-0000-0000-0000-{0:012d}'.format(i)
     if i == 3:
         volume['provider_location'] = None
     else:
@@ -89,6 +99,7 @@ for i in range(4):
     else:
         volume['status'] = 'available'
     volume = fake_volume.fake_volume_obj(CTXT, **volume)
+    volume.volume_type = fake_volume.fake_volume_type_obj(CTXT)
     TEST_VOLUME.append(volume)
 
 
@@ -315,6 +326,12 @@ ERROR_RESULT = {
 def _brick_get_connector_properties(multipath=False, enforce_multipath=False):
     """Return a predefined connector object."""
     return DEFAULT_CONNECTOR
+
+
+def _brick_get_connector_properties_aix(
+        multipath=False, enforce_multipath=False):
+    """Return a predefined connector object."""
+    return DEFAULT_CONNECTOR_AIX
 
 
 def reduce_retrying_time(func):
@@ -581,6 +598,36 @@ class HBSDRESTFCDriverTest(test.TestCase):
     @mock.patch.object(requests.Session, "request")
     @mock.patch.object(
         volume_utils, 'brick_get_connector_properties',
+        side_effect=_brick_get_connector_properties_aix)
+    def test_do_setup_create_hg_aix(
+            self, brick_get_connector_properties, request):
+        """Normal case: The host group not exists in AIX."""
+        drv = hbsd_fc.HBSDFCDriver(
+            configuration=self.configuration)
+        self._setup_config()
+        request.side_effect = [FakeResponse(200, POST_SESSIONS_RESULT),
+                               FakeResponse(200, GET_PORTS_RESULT),
+                               FakeResponse(200, NOTFOUND_RESULT),
+                               FakeResponse(200, NOTFOUND_RESULT),
+                               FakeResponse(200, NOTFOUND_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT)]
+        drv.do_setup(None)
+        self.assertEqual(
+            {CONFIG_MAP['port_id']: CONFIG_MAP['target_wwn']},
+            drv.common.storage_info['wwns'])
+        self.assertEqual(1, brick_get_connector_properties.call_count)
+        self.assertEqual(8, request.call_count)
+        kargs1 = request.call_args_list[6][1]
+        self.assertEqual('AIX', kargs1['json']['hostMode'])
+        # stop the Loopingcall within the do_setup treatment
+        self.driver.common.client.keep_session_loop.stop()
+        self.driver.common.client.keep_session_loop.wait()
+
+    @mock.patch.object(requests.Session, "request")
+    @mock.patch.object(
+        volume_utils, 'brick_get_connector_properties',
         side_effect=_brick_get_connector_properties)
     def test_do_setup_pool_name(self, brick_get_connector_properties, request):
         """Normal case: Specify a pool name instead of pool id"""
@@ -740,9 +787,13 @@ class HBSDRESTFCDriverTest(test.TestCase):
 
     @mock.patch.object(fczm_utils, "add_fc_zone")
     @mock.patch.object(requests.Session, "request")
-    def test_initialize_connection(self, request, add_fc_zone):
+    @mock.patch.object(volume_types, 'get_volume_type_extra_specs')
+    def test_initialize_connection(
+            self, get_volume_type_extra_specs, request, add_fc_zone):
         self.driver.common.conf.hitachi_zoning_request = True
         self.driver.common._lookup_service = FakeLookupService()
+        extra_specs = {"hbsd:target_ports": "CL1-A"}
+        get_volume_type_extra_specs.return_value = extra_specs
         request.side_effect = [FakeResponse(200, GET_HOST_WWNS_RESULT),
                                FakeResponse(202, COMPLETED_SUCCEEDED_RESULT)]
         ret = self.driver.initialize_connection(
@@ -750,15 +801,20 @@ class HBSDRESTFCDriverTest(test.TestCase):
         self.assertEqual('fibre_channel', ret['driver_volume_type'])
         self.assertEqual([CONFIG_MAP['target_wwn']], ret['data']['target_wwn'])
         self.assertEqual(1, ret['data']['target_lun'])
+        self.assertEqual(1, get_volume_type_extra_specs.call_count)
         self.assertEqual(2, request.call_count)
         self.assertEqual(1, add_fc_zone.call_count)
 
     @mock.patch.object(fczm_utils, "add_fc_zone")
     @mock.patch.object(requests.Session, "request")
-    def test_initialize_connection_already_mapped(self, request, add_fc_zone):
+    @mock.patch.object(volume_types, 'get_volume_type_extra_specs')
+    def test_initialize_connection_already_mapped(
+            self, get_volume_type_extra_specs, request, add_fc_zone):
         """Normal case: ldev have already mapped."""
         self.driver.common.conf.hitachi_zoning_request = True
         self.driver.common._lookup_service = FakeLookupService()
+        extra_specs = {"hbsd:target_ports": "CL1-A"}
+        get_volume_type_extra_specs.return_value = extra_specs
         request.side_effect = [
             FakeResponse(200, GET_HOST_WWNS_RESULT),
             FakeResponse(202, COMPLETED_FAILED_RESULT_LU_DEFINED),
@@ -769,15 +825,20 @@ class HBSDRESTFCDriverTest(test.TestCase):
         self.assertEqual('fibre_channel', ret['driver_volume_type'])
         self.assertEqual([CONFIG_MAP['target_wwn']], ret['data']['target_wwn'])
         self.assertEqual(1, ret['data']['target_lun'])
+        self.assertEqual(1, get_volume_type_extra_specs.call_count)
         self.assertEqual(3, request.call_count)
         self.assertEqual(1, add_fc_zone.call_count)
 
     @mock.patch.object(fczm_utils, "add_fc_zone")
     @mock.patch.object(requests.Session, "request")
-    def test_initialize_connection_shared_target(self, request, add_fc_zone):
+    @mock.patch.object(volume_types, 'get_volume_type_extra_specs')
+    def test_initialize_connection_shared_target(
+            self, get_volume_type_extra_specs, request, add_fc_zone):
         """Normal case: A target shared with other systems."""
         self.driver.common.conf.hitachi_zoning_request = True
         self.driver.common._lookup_service = FakeLookupService()
+        extra_specs = {"hbsd:target_ports": "CL1-A"}
+        get_volume_type_extra_specs.return_value = extra_specs
         request.side_effect = [FakeResponse(200, NOTFOUND_RESULT),
                                FakeResponse(200, NOTFOUND_RESULT),
                                FakeResponse(200, GET_HOST_GROUPS_RESULT),
@@ -788,6 +849,7 @@ class HBSDRESTFCDriverTest(test.TestCase):
         self.assertEqual('fibre_channel', ret['driver_volume_type'])
         self.assertEqual([CONFIG_MAP['target_wwn']], ret['data']['target_wwn'])
         self.assertEqual(1, ret['data']['target_lun'])
+        self.assertEqual(1, get_volume_type_extra_specs.call_count)
         self.assertEqual(5, request.call_count)
         self.assertEqual(1, add_fc_zone.call_count)
 
@@ -1106,3 +1168,12 @@ class HBSDRESTFCDriverTest(test.TestCase):
             [{'id': TEST_SNAPSHOT[0]['id'], 'status': 'deleted'}]
         )
         self.assertTupleEqual(actual, ret)
+
+    @mock.patch.object(hbsd_fc.HBSDFCDriver, "_get_oslo_driver_opts")
+    def test_get_driver_options(self, _get_oslo_driver_opts):
+        _get_oslo_driver_opts.return_value = []
+        ret = self.driver.get_driver_options()
+        actual = (hbsd_common.COMMON_VOLUME_OPTS +
+                  hbsd_rest.REST_VOLUME_OPTS +
+                  hbsd_rest_fc.FC_VOLUME_OPTS)
+        self.assertEqual(actual, ret)

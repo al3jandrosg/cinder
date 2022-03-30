@@ -21,6 +21,7 @@ from oslo_utils import excutils
 from cinder import interface
 from cinder.volume import driver
 from cinder.volume.drivers.hitachi import hbsd_common as common
+from cinder.volume.drivers.hitachi import hbsd_rest as rest
 from cinder.volume.drivers.hitachi import hbsd_rest_fc as rest_fc
 from cinder.volume.drivers.hitachi import hbsd_utils as utils
 from cinder.volume import volume_utils
@@ -41,6 +42,7 @@ _DRIVER_INFO = {
     'volume_type': 'fibre_channel',
     'param_prefix': utils.PARAM_PREFIX,
     'vendor_name': utils.VENDOR_NAME,
+    'driver_dir_name': utils.DRIVER_DIR_NAME,
     'driver_prefix': utils.DRIVER_PREFIX,
     'driver_file_prefix': utils.DRIVER_FILE_PREFIX,
     'target_prefix': utils.TARGET_PREFIX,
@@ -67,6 +69,7 @@ class HBSDFCDriver(driver.FibreChannelDriver):
         2.1.0 - Add Cinder generic volume groups.
         2.2.0 - Add maintenance parameters.
         2.2.1 - Make the parameters name variable for supporting OEM storages.
+        2.2.2 - Add Target Port Assignment.
 
     """
 
@@ -89,6 +92,18 @@ class HBSDFCDriver(driver.FibreChannelDriver):
 
     def _init_common(self, conf, db):
         return rest_fc.HBSDRESTFC(conf, _DRIVER_INFO, db)
+
+    @staticmethod
+    def get_driver_options():
+        additional_opts = HBSDFCDriver._get_oslo_driver_opts(
+            *(common._INHERITED_VOLUME_OPTS +
+              rest._REQUIRED_REST_OPTS +
+              ['driver_ssl_cert_verify', 'driver_ssl_cert_path',
+               'san_api_port', ]))
+        return (common.COMMON_VOLUME_OPTS +
+                rest.REST_VOLUME_OPTS +
+                rest_fc.FC_VOLUME_OPTS +
+                additional_opts)
 
     def check_for_setup_error(self):
         pass
@@ -210,7 +225,8 @@ class HBSDFCDriver(driver.FibreChannelDriver):
     @volume_utils.trace
     def initialize_connection_snapshot(self, snapshot, connector, **kwargs):
         """Initialize connection between the server and the snapshot."""
-        return self.common.initialize_connection(snapshot, connector)
+        return self.common.initialize_connection(
+            snapshot, connector, is_snapshot=True)
 
     @volume_utils.trace
     def terminate_connection_snapshot(self, snapshot, connector, **kwargs):

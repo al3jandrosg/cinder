@@ -1,6 +1,28 @@
 CHANGES
 =======
 
+20.0.0
+------
+
+* Update policy matrix for Yoga
+* Add nvme known issues to yoga release notes
+* Add general known issues to yoga release notes
+* Prohibit volume manage to an encrypted volume type
+* Update TOX\_CONSTRAINTS\_FILE for stable/yoga
+* Update .gitreview for stable/yoga
+
+20.0.0.0rc1
+-----------
+
+* Add yoga release note prelude
+* lightos - bugfix compression stats should be True
+* db: Increase timeout for migration tests
+* Doc: IBM FlashSystem family update in IBM Spectrum Virtualize user guide
+* Hitachi: Add Target Port Assignment for VSP Driver
+* Specify yoga os-brick in requirements
+* Hitachi: Support AIX as host OS type
+* Hitachi: bugfix and refactoring for add maintenance parameters
+* fix 'huawei dorado v6' FC initiator can be added to host
 * Tests: Fix missing novaclient context arg in test\_host\_filters
 * [SVf] Manage host attachment using portsets
 * Reset state robustification for volume os-reset\_status
@@ -8,6 +30,14 @@ CHANGES
 * Support volume re-image
 * Add missing microversion entry for 3.67
 * Fix request id mess on Cinder-API
+* db: Preserve API signatures
+* db: Move utility methods to top of file
+* docs: Remove unnecessary 'blockstorage-' prefix
+* db: Enable auto-generation of database migrations
+* docs: Rework and move upgrades guide
+* docs: Add whereto for testing redirect rules
+* db: Add tests to ensure we keep migrations in sync
+* db: Resolve additional migration-model mismatches
 * db: Add missing foreign keys, indexes to models
 * Fix typo in release note
 * PureStorage FlashArray: Add active/active replication
@@ -23,6 +53,8 @@ CHANGES
 * docs: Add docs for 'RateLimitingMiddleware'
 * Remove attach and detach volume driver methods
 * [SVf] Add cleanrate in volume-type extra specs
+* mypy: RBD driver
+* RBD driver: clean up \_trash\_purge exception handling
 * Lightbits LightOS driver
 * Doc: IBM flashsystem driver update
 * db: Remove unnecessary timezone configuration

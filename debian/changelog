@@ -1,3 +1,11 @@
+cinder (2:20.0.0-0ubuntu1) jammy; urgency=medium
+
+  * d/watch: Scope to 20.x.
+  * New upstream release for OpenStack Yoga.
+  * d/control: Align (Build-)Depends with upstream.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Wed, 30 Mar 2022 15:49:31 -0400
+
 cinder (2:19.0.0+git2022030310.b49fb59a6-0ubuntu2) jammy; urgency=medium
 
   * d/p/fix-qos-computation.patch: Cherry-pick from upstream review to

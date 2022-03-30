@@ -64,6 +64,14 @@ DEFAULT_CONNECTOR = {
     'multipath': False,
 }
 
+DEFAULT_CONNECTOR_AIX = {
+    'os_type': 'aix',
+    'host': 'host',
+    'ip': CONFIG_MAP['my_ip'],
+    'initiator': CONFIG_MAP['host_iscsi_name'],
+    'multipath': False,
+}
+
 CTXT = cinder_context.get_admin_context()
 
 TEST_VOLUME = []
@@ -71,6 +79,7 @@ for i in range(4):
     volume = {}
     volume['id'] = '00000000-0000-0000-0000-{0:012d}'.format(i)
     volume['name'] = 'test-volume{0:d}'.format(i)
+    volume['volume_type_id'] = '00000000-0000-0000-0000-{0:012d}'.format(i)
     if i == 3:
         volume['provider_location'] = None
     else:
@@ -81,6 +90,7 @@ for i in range(4):
     else:
         volume['status'] = 'available'
     volume = fake_volume.fake_volume_obj(CTXT, **volume)
+    volume.volume_type = fake_volume.fake_volume_type_obj(CTXT)
     TEST_VOLUME.append(volume)
 
 
@@ -262,6 +272,12 @@ NOTFOUND_RESULT = {
 def _brick_get_connector_properties(multipath=False, enforce_multipath=False):
     """Return a predefined connector object."""
     return DEFAULT_CONNECTOR
+
+
+def _brick_get_connector_properties_aix(
+        multipath=False, enforce_multipath=False):
+    """Return a predefined connector object."""
+    return DEFAULT_CONNECTOR_AIX
 
 
 class FakeResponse():
@@ -487,6 +503,39 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
         self.driver.common.client.keep_session_loop.wait()
 
     @mock.patch.object(requests.Session, "request")
+    @mock.patch.object(
+        volume_utils, 'brick_get_connector_properties',
+        side_effect=_brick_get_connector_properties_aix)
+    def test_do_setup_create_hg_aix(
+            self, brick_get_connector_properties, request):
+        """Normal case: The host group not exists in AIX."""
+        drv = hbsd_iscsi.HBSDISCSIDriver(
+            configuration=self.configuration)
+        self._setup_config()
+        request.side_effect = [FakeResponse(200, POST_SESSIONS_RESULT),
+                               FakeResponse(200, GET_PORTS_RESULT),
+                               FakeResponse(200, GET_PORT_RESULT),
+                               FakeResponse(200, NOTFOUND_RESULT),
+                               FakeResponse(200, NOTFOUND_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT),
+                               FakeResponse(202, COMPLETED_SUCCEEDED_RESULT)]
+        drv.do_setup(None)
+        self.assertEqual(
+            {CONFIG_MAP['port_id']:
+                '%(ip)s:%(port)s' % {
+                    'ip': CONFIG_MAP['ipv4Address'],
+                    'port': CONFIG_MAP['tcpPort']}},
+            drv.common.storage_info['portals'])
+        self.assertEqual(1, brick_get_connector_properties.call_count)
+        self.assertEqual(8, request.call_count)
+        kargs1 = request.call_args_list[6][1]
+        self.assertEqual('AIX', kargs1['json']['hostMode'])
+        # stop the Loopingcall within the do_setup treatment
+        self.driver.common.client.keep_session_loop.stop()
+        self.driver.common.client.keep_session_loop.wait()
+
+    @mock.patch.object(requests.Session, "request")
     def test_extend_volume(self, request):
         request.side_effect = [FakeResponse(200, GET_LDEV_RESULT),
                                FakeResponse(200, GET_LDEV_RESULT),
@@ -569,7 +618,11 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
         self.assertEqual(5, request.call_count)
 
     @mock.patch.object(requests.Session, "request")
-    def test_initialize_connection(self, request):
+    @mock.patch.object(volume_types, 'get_volume_type_extra_specs')
+    def test_initialize_connection(
+            self, get_volume_type_extra_specs, request):
+        extra_specs = {"hbsd:target_ports": "CL1-A"}
+        get_volume_type_extra_specs.return_value = extra_specs
         request.side_effect = [FakeResponse(200, GET_HOST_ISCSIS_RESULT),
                                FakeResponse(200, GET_HOST_GROUP_RESULT),
                                FakeResponse(202, COMPLETED_SUCCEEDED_RESULT)]
@@ -589,11 +642,16 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
         self.assertEqual(
             CONFIG_MAP['auth_password'], ret['data']['auth_password'])
         self.assertEqual(1, ret['data']['target_lun'])
+        self.assertEqual(1, get_volume_type_extra_specs.call_count)
         self.assertEqual(3, request.call_count)
 
     @mock.patch.object(requests.Session, "request")
-    def test_initialize_connection_shared_target(self, request):
+    @mock.patch.object(volume_types, 'get_volume_type_extra_specs')
+    def test_initialize_connection_shared_target(
+            self, get_volume_type_extra_specs, request):
         """Normal case: A target shared with other systems."""
+        extra_specs = {"hbsd:target_ports": "CL1-A"}
+        get_volume_type_extra_specs.return_value = extra_specs
         request.side_effect = [FakeResponse(200, NOTFOUND_RESULT),
                                FakeResponse(200, GET_HOST_GROUPS_RESULT),
                                FakeResponse(200, GET_HOST_ISCSIS_RESULT),
@@ -614,6 +672,7 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
         self.assertEqual(
             CONFIG_MAP['auth_password'], ret['data']['auth_password'])
         self.assertEqual(1, ret['data']['target_lun'])
+        self.assertEqual(1, get_volume_type_extra_specs.call_count)
         self.assertEqual(4, request.call_count)
 
     @mock.patch.object(requests.Session, "request")
@@ -912,3 +971,11 @@ class HBSDRESTISCSIDriverTest(test.TestCase):
             [{'id': TEST_SNAPSHOT[0]['id'], 'status': 'deleted'}]
         )
         self.assertTupleEqual(actual, ret)
+
+    @mock.patch.object(hbsd_iscsi.HBSDISCSIDriver, "_get_oslo_driver_opts")
+    def test_get_driver_options(self, _get_oslo_driver_opts):
+        _get_oslo_driver_opts.return_value = []
+        ret = self.driver.get_driver_options()
+        actual = (hbsd_common.COMMON_VOLUME_OPTS +
+                  hbsd_rest.REST_VOLUME_OPTS)
+        self.assertEqual(actual, ret)
