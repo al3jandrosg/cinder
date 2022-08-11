@@ -2335,6 +2335,7 @@ releasenotes/notes/bug-1924568-ibm-svf-fix_drp_vol_create_issue-d1b75c4befb0e993
 releasenotes/notes/bug-1924602-ibm-svf_Storwize_HyperSwap_snapshot_clone_is_failing-c144e6b99d56de64.yaml
 releasenotes/notes/bug-1926286-ibm-svf-fix-volume-relationship-properties-fetch-issue-6b443f8521cbb15c.yaml
 releasenotes/notes/bug-1926491-ibm-svf-update-rccg-info-for-mirror-volumes-67fbec05d803745d.yaml
+releasenotes/notes/bug-1929223-powerflex-connector-certificate-validation-707b4f9f2077d4bc.yaml
 releasenotes/notes/bug-1931968-ibm-svf-HyperSwap_volume_service_status_update-293dea5d0f750824.yaml
 releasenotes/notes/bug-1934168-a61c71869742867d.yaml
 releasenotes/notes/bug-1935670-svc_update_rep_properties_for_empty_values_fix-a2faabbf2139195e.yaml
@@ -2351,6 +2352,9 @@ releasenotes/notes/bug-1949061-ibm-svf-fix_retype_issue_of_mirror_volume-5f37c26
 releasenotes/notes/bug-1951250-storwize-fix-multiple-ssh-calls-for-retype-d3b56379b7d8b049.yaml
 releasenotes/notes/bug-1953168-fix-capacity-filter-message-456dea41fa8a4a1b.yaml
 releasenotes/notes/bug-1953185-ibm-svf-RevertToSnapshot_for_rep_volumes_in_group-e3ff6c87edd4de39.yaml
+releasenotes/notes/bug-1965847-fix-backup-import-3b3ccdf740a13cff.yaml
+releasenotes/notes/bug-1968159-ibm-svf-Retype_failure_for_replication_volume-type-4e0671b299315f4b.yaml
+releasenotes/notes/bug-1970768-temp-vol-delete-6586a13f08d7a5c1.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-gpfs-fix-nfs-cow.yaml
@@ -2550,6 +2554,7 @@ releasenotes/notes/hnas-manage-unmanage-snapshot-support-40c8888cc594a7be.yaml
 releasenotes/notes/hnas-remove-iscsi-driver-419e9c08133f9f0a.yaml
 releasenotes/notes/hnas_deprecate_xml-16840b5a8c25d15e.yaml
 releasenotes/notes/hpe-3par-add-alletra-9k-info-5e1d09e083d3faa9.yaml
+releasenotes/notes/hpe-3par-fix-multi-detach-in-multi-host-env-3f2211f29a336b6e.yaml
 releasenotes/notes/hpe-3par-peer-persistence.yaml-91cc84bf89dbb462.yaml
 releasenotes/notes/hpe-3par-pp-primera-a3442d004545b3a9.yaml
 releasenotes/notes/hpe-3par-pp-rcg-policy-options-53271f38c315779f.yaml
@@ -2690,6 +2695,7 @@ releasenotes/notes/netapp-non-discovery-19af4e10f7b190ea.yaml
 releasenotes/notes/netapp-ontap-add-revert-to-snapshot-ce20810bcf094fce.yaml
 releasenotes/notes/netapp-ontap-fix-detach-multiattach-d99d33dff2fefb4c.yaml
 releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml
+releasenotes/notes/netapp-ontap-fix-qos-min-support-svm-scoped-account-a8458445d459023c.yaml
 releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml
 releasenotes/notes/netapp-solidfire-add-replication-mode-eb26535d0ec78cb4.yaml
 releasenotes/notes/netapp-solidfire-stats-improving-57207f313d7faf42.yaml

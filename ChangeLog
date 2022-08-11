@@ -1,6 +1,17 @@
 CHANGES
 =======
 
+20.0.1
+------
+
+* HPE 3PAR: In multi host env, fix multi-detach operation
+* Don't destroy existing backup by mistake on import
+* NetApp ONTAP: Fix check QoS min support for SVM account
+* Prevent temporary volume from being deleted accidentally
+* Handle the case when tempest fails
+* [SVf]:Fix retype failure for replication volume-type
+* Fix PowerFlex connector HTTPS certificate validation
+
 20.0.0
 ------
 
