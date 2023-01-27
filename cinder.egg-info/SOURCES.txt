@@ -998,6 +998,7 @@ cinder/tests/unit/fake_service.py
 cinder/tests/unit/fake_snapshot.py
 cinder/tests/unit/fake_utils.py
 cinder/tests/unit/fake_volume.py
+cinder/tests/unit/known_issues.py
 cinder/tests/unit/policy.yaml
 cinder/tests/unit/test.py
 cinder/tests/unit/test_api.py
@@ -2352,9 +2353,14 @@ releasenotes/notes/bug-1949061-ibm-svf-fix_retype_issue_of_mirror_volume-5f37c26
 releasenotes/notes/bug-1951250-storwize-fix-multiple-ssh-calls-for-retype-d3b56379b7d8b049.yaml
 releasenotes/notes/bug-1953168-fix-capacity-filter-message-456dea41fa8a4a1b.yaml
 releasenotes/notes/bug-1953185-ibm-svf-RevertToSnapshot_for_rep_volumes_in_group-e3ff6c87edd4de39.yaml
+releasenotes/notes/bug-1957073-0d1307a8637a62b7.yaml
 releasenotes/notes/bug-1965847-fix-backup-import-3b3ccdf740a13cff.yaml
 releasenotes/notes/bug-1968159-ibm-svf-Retype_failure_for_replication_volume-type-4e0671b299315f4b.yaml
 releasenotes/notes/bug-1970768-temp-vol-delete-6586a13f08d7a5c1.yaml
+releasenotes/notes/bug-1976499-storwize-lsfcportsetmember_is_being_called_in_the_wrong_SVC_code_level-db06c4eca902f389.yaml
+releasenotes/notes/bug-1978729-cinder-backup-4cd87c4d71b7713e.yaml
+releasenotes/notes/bug-1981354-infinidat-iscsi-fix-multipath-3f8a0be5f541c66e.yaml
+releasenotes/notes/bug-1996188-vmdk-subformat-allow-list-93e6943d9a486d11.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-gpfs-fix-nfs-cow.yaml
@@ -2370,6 +2376,7 @@ releasenotes/notes/capacity-based-qos-9f5d174658a40bd5.yaml
 releasenotes/notes/capacity-based-qos-minimum-values-b24a5f49c986f11d.yaml
 releasenotes/notes/capacity-headroom-4b07701f1df9e5c4.yaml
 releasenotes/notes/castellan-backend-0c49591a54821c45.yaml
+releasenotes/notes/ceph-backup-no-flatten-36557727e9d73b2b.yaml
 releasenotes/notes/ceph-iscsi-driver-b515bd7fb73ce13b.yaml
 releasenotes/notes/cg-scheduler-change-180a36b77e8cc26b.yaml
 releasenotes/notes/cg_api_volume_type-7db1856776e707c7.yaml
@@ -2496,6 +2503,7 @@ releasenotes/notes/fix-manage-no-action-46b023476e8cd938.yaml
 releasenotes/notes/fix-multiattach-deletion-b3990acf1f5fd378.yaml
 releasenotes/notes/fix-netapp-cg-da4fd6c396e5bedb.yaml
 releasenotes/notes/fix-netapp-force_detach-36bdf75dd2c9a030.yaml
+releasenotes/notes/fix-nfs-revert-to-snap-adc04204b3661d66.yaml
 releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
 releasenotes/notes/fix-remotefs-clone-volume-locking-385e740d4a5a813b.yaml
 releasenotes/notes/fix-request_id-6f6972b2c12d1a18.yaml
@@ -2541,6 +2549,7 @@ releasenotes/notes/hitachi-storage-driver-d38dbd990730388d.yaml
 releasenotes/notes/hitachi-unsupported-drivers-37601e5bfabcdb8f.yaml
 releasenotes/notes/hitachi-vsp-aix-os-type-23bf7cc3b98dff3a.yaml
 releasenotes/notes/hitachi-vsp-driver-87659bb496bb459b.yaml
+releasenotes/notes/hitachi-vsp-fix-resource-lock-msg-5a119426e6c65998.yaml
 releasenotes/notes/hitachi-vsp-iscsi-driver-cac31d7c54d7718d.yaml
 releasenotes/notes/hitachi-vsp-ports-option-7147289e6529d7fe.yaml
 releasenotes/notes/hitachi-vsp-tgt-port-asgn-7536da008990824a.yaml
@@ -2698,6 +2707,7 @@ releasenotes/notes/netapp-ontap-fix-force-detach-55be3f4ac962b493.yaml
 releasenotes/notes/netapp-ontap-fix-qos-min-support-svm-scoped-account-a8458445d459023c.yaml
 releasenotes/notes/netapp-ontap-use_exact_size-d03c90efbb8a30ac.yaml
 releasenotes/notes/netapp-solidfire-add-replication-mode-eb26535d0ec78cb4.yaml
+releasenotes/notes/netapp-solidfire-fix-exceptions-while-eos-upgrade-1e3df89b5fb79165.yaml
 releasenotes/notes/netapp-solidfire-stats-improving-57207f313d7faf42.yaml
 releasenotes/notes/netapp_cdot_report_shared_blocks_exhaustion-073a73e05daf09d4.yaml
 releasenotes/notes/netapp_fix_svm_scoped_permissions.yaml
@@ -2757,6 +2767,7 @@ releasenotes/notes/powermax-expand-replicated-volume-124c62ea78b1c347.yaml
 releasenotes/notes/powermax-failover-abilities-1fa0a23128f1c00b.yaml
 releasenotes/notes/powermax-inuse-retype-support-64bd35adab17420d.yaml
 releasenotes/notes/powermax-load-balance-9cd152e53ecb34fd.yaml
+releasenotes/notes/powermax-manageable-volumes-3fb4e5dcf5cc18e3.yaml
 releasenotes/notes/powermax-multiple-replication-devices-0cc532ae621ea9a5.yaml
 releasenotes/notes/powermax-ode-metro-support-ed50bb20f932548b.yaml
 releasenotes/notes/powermax-snapvx-link-mode-0050ac6b4a16c739.yaml
@@ -2769,6 +2780,7 @@ releasenotes/notes/powermax-vol-metadata-acd2555818d25b72.yaml
 releasenotes/notes/powermax_initiator_check-249279d30e3f8322.yaml
 releasenotes/notes/powermax_legacy_generation_fix-09e437f955cd9d70.yaml
 releasenotes/notes/powermax_port-check_enhancement-c95dd94328f31524.yaml
+releasenotes/notes/powerstore-request-data-validation-6268f2ed07b7bf40.yaml
 releasenotes/notes/privsep-rocky-35bdfe70ed62a826.yaml
 releasenotes/notes/project-default-types-3a14ad0d653e604e.yaml
 releasenotes/notes/project-id-optional-in-urls-db97e2c447167853.yaml
@@ -2947,6 +2959,7 @@ releasenotes/notes/sheepdog-driver-removal-b63d12460e886c33.yaml
 releasenotes/notes/sheepdog-mark-unsupported-648b2458d4a198de.yaml
 releasenotes/notes/show-provider-id-for-admin-ff4fd5a2518a4bfa.yaml
 releasenotes/notes/slow-get-volume-stats-91b84c6e661dc605.yaml
+releasenotes/notes/slug-b6a0fc3db0a2dd45.yaml
 releasenotes/notes/slug-qnap-driver-d4465ea6009c66df.yaml
 releasenotes/notes/smbfs-drop-alloc-data-file-8b94da952a3b1548.yaml
 releasenotes/notes/smbfs-fixed-image-9b642b63fcb79c18.yaml

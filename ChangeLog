@@ -1,6 +1,30 @@
 CHANGES
 =======
 
+20.1.0
+------
+
+* Use the json format output of qemu-img info
+* Fix and unify capacity calculations
+* Check VMDK subformat against an allowed list
+* Serialize message\_\* properties of RequestContext
+* PowerStore driver - Request data validation fix
+* Hitachi: fix to output resource lock message correctly
+* NFS: Fix generic revert to snapshot flow
+* Increase swap size to 4GB
+* rbd: Fix snapshot delete when the source volume doesn't exist
+* Tests: Fix test runner never finishing
+* Tests: Monkey patch before logs are loaded
+* Tests: Fix service stopping on cleanup
+* Fix Infinidat driver to return all iSCSI portals
+* [SVf] : Fix the SVC code level for lsfcportsetmember call
+* Doc: To update the portset feature details in IBM Spectrum Virtualize user guide
+* NetApp SolidFire: Fix request errors while Element OS upgrade
+* Log when waiting to acquire coordinator lock
+* PowerMax Driver - Add a release note for 784603
+* SF: Remove compat clone image code
+* RBD: Don't flatten temporary resources
+
 20.0.1
 ------
 

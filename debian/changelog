@@ -1,3 +1,9 @@
+cinder (2:20.1.0-0ubuntu1) jammy-security; urgency=medium
+
+  * New stable point release for OpenStack Yoga (LP: #2004030).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Fri, 27 Jan 2023 10:57:40 -0500
+
 cinder (2:20.0.1-0ubuntu1) jammy; urgency=medium
 
   * d/gbp.conf: Create stable/yoga branch.
