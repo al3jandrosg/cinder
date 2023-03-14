@@ -1,4 +1,10 @@
-cinder (2:20.1.0-0ubuntu1) jammy-security; urgency=medium
+cinder (2:20.1.0-0ubuntu2) jammy; urgency=medium
+
+  * d/p/lp1945500.patch: Filter reserved image properties (LP: #1945500).
+
+ -- Rodrigo Barbieri <rodrigo.barbieri@canonical.com>  Tue, 14 Mar 2023 13:21:44 -0300
+
+cinder (2:20.1.0-0ubuntu1) jammy; urgency=medium
 
   * New stable point release for OpenStack Yoga (LP: #2004030).
 

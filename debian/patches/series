@@ -2,3 +2,4 @@ patch-botocore-exceptions.patch
 skip-moto-tests.patch
 skip-victoria-failures.patch
 fix-qos-computation.patch
+lp1945500.patch

@@ -1,0 +1,244 @@
+From f2faf7d70f5cd3ace461d9de9fdfe448d78a0107 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Rafael=20Weing=C3=A4rtner?= <rafael@apache.org>
+Date: Wed, 6 Oct 2021 10:57:00 -0300
+Subject: [PATCH] Filter reserved image properties
+
+Cinder is currently not able to upload a volume that is based on an
+image back to glance. This bug is triggered if glance multistore is
+enabled (devstack in this example).
+
+When enabling multistore, the following properties will be stored in Cinder:
+* os_glance_failed_import=''
+* os_glance_importing_to_stores=''
+
+Those properties will cause problems when Cinder tries to perform some
+actions with Glance. Error msg:
+```
+cinderclient.exceptions.BadRequest: HTTP 403 Forbidden: Access was denied to this resource.: Attribute &#x27;os_glance_failed_import&#x27; is reserved. (HTTP 400)
+```
+
+Nova had the same issue and solved it with:
+https://github.com/openstack/nova/blob/50fdbc752a9ca9c31488140ef2997ed59d861a41/releasenotes/notes/absolutely-non-inheritable-image-properties-85f7f304fdc20b61.yaml
+
+and
+
+https://github.com/openstack/nova/commit/dda179d3f901e4f23091f3095f1af58bc26e222e
+
+Therefore, this patch is intended to apply a similar solution in Cinder.
+
+Change-Id: I79d70543856c01a45e2d8c083ab8df6b9c047ebc
+Closes-Bug: #1945500
+(cherry picked from commit c43fb490b204aadf41a32bcb5eb075b1656e2af4)
+(cherry picked from commit 826b40281123d700b3aeba5dcf076544982973a3)
+Conflicts: cinder/image/image_utils.py
+   - Changed syntax from "dict[str, str]" to "Dict[str, str]" for
+     Python <3.8 compatibility
+---
+ cinder/image/image_utils.py                   | 46 +++++++++++++
+ cinder/tests/unit/test_image_utils.py         | 66 +++++++++++++++++++
+ cinder/volume/api.py                          |  4 ++
+ ...ved-image-properties-9519ddc080e7ed1a.yaml | 28 ++++++++
+ 4 files changed, 144 insertions(+)
+ create mode 100644 releasenotes/notes/fix-reserved-image-properties-9519ddc080e7ed1a.yaml
+
+diff --git a/cinder/image/image_utils.py b/cinder/image/image_utils.py
+index 8460ad281..73a95f8f5 100644
+--- a/cinder/image/image_utils.py
++++ b/cinder/image/image_utils.py
+@@ -82,6 +82,24 @@ image_opts = [
+                 'when an image is converted to raw format as it is written '
+                 'to a volume.  If this list is empty, no VMDK images are '
+                 'allowed.'),
++    cfg.ListOpt('reserved_image_namespaces',
++                help='List of reserved image namespaces that should be '
++                     'filtered out when uploading a volume as an image back '
++                     'to Glance. When a volume is created from an image, '
++                     'Cinder stores the image properties as volume '
++                     'image metadata, and if the volume is later uploaded as '
++                     'an image, Cinder will add these properties when it '
++                     'creates the image in Glance. This can cause problems '
++                     'for image metadata that are in namespaces that glance '
++                     'reserves for itself, or when properties (such as an '
++                     'image signature) cannot apply to the new image, or when '
++                     'an operator has configured glance property protections '
++                     'to make some image properties read-only. Cinder will '
++                     '*always* filter out image metadata in the namespaces '
++                     '`os_glance` and `img_signature`; this configuration '
++                     'option allows operators to specify *additional* '
++                     'namespaces to be excluded.',
++                default=[]),
+ ]
+ 
+ CONF = cfg.CONF
+@@ -106,6 +124,8 @@ QEMU_IMG_MIN_CONVERT_LUKS_VERSION = '2.10'
+ 
+ COMPRESSIBLE_IMAGE_FORMATS = ('qcow2',)
+ 
++GLANCE_RESERVED_NAMESPACES = ["os_glance", "img_signature"]
++
+ 
+ def validate_stores_id(context: context.RequestContext,
+                        image_service_store_id: str) -> None:
+@@ -1248,3 +1268,29 @@ class TemporaryImages(object):
+         if not self.temporary_images.get(user):
+             return None
+         return self.temporary_images[user].get(image_id)
++
++
++def filter_out_reserved_namespaces_metadata(
++        metadata: Optional[Dict[str, str]]) -> Dict[str, str]:
++
++    reserved_name_spaces = GLANCE_RESERVED_NAMESPACES.copy()
++    if CONF.reserved_image_namespaces:
++        for image_namespace in CONF.reserved_image_namespaces:
++            if image_namespace not in reserved_name_spaces:
++                reserved_name_spaces.append(image_namespace)
++
++    if not metadata:
++        LOG.debug("No metadata to be filtered.")
++        return {}
++
++    new_metadata = {}
++    for k, v in metadata.items():
++        if any(k.startswith(reserved_name_space)
++               for reserved_name_space in reserved_name_spaces):
++            continue
++        new_metadata[k] = v
++
++    LOG.debug("The metadata set [%s] was filtered using the reserved name "
++              "spaces [%s], and the result is [%s].", metadata,
++              reserved_name_spaces, new_metadata)
++    return new_metadata
+diff --git a/cinder/tests/unit/test_image_utils.py b/cinder/tests/unit/test_image_utils.py
+index 37fda1c53..508d8bdeb 100644
+--- a/cinder/tests/unit/test_image_utils.py
++++ b/cinder/tests/unit/test_image_utils.py
+@@ -2504,3 +2504,69 @@ class TestImageFormatCheck(test.TestCase):
+ 
+         image_utils.convert_image(src, dest, out_fmt)
+         mock_check.assert_called_once_with(src, None, None, None, True)
++
++
++@ddt.ddt
++class TestFilterReservedNamespaces(test.TestCase):
++
++    def setUp(self):
++        super(TestFilterReservedNamespaces, self).setUp()
++        self.mock_object(image_utils, 'LOG', side_effect=image_utils.LOG)
++
++    def test_filter_out_reserved_namespaces_metadata_with_empty_metadata(self):
++        metadata_for_test = None
++        method_return = image_utils.filter_out_reserved_namespaces_metadata(
++            metadata_for_test)
++
++        self.assertEqual({}, method_return)
++
++        image_utils.LOG.debug.assert_has_calls(
++            [mock.call("No metadata to be filtered.")]
++        )
++
++    @ddt.data(  # remove default keys
++        ({"some_key": 13, "other_key": "test",
++          "os_glance_key": "this should be removed",
++          "os_glance_key2": "this should also be removed"},
++         None,
++         []),
++        # remove nothing
++        ({"some_key": 13, "other_key": "test"},
++         None,
++         []),
++        # custom config empty
++        ({"some_key": 13, "other_key": "test",
++          "os_glance_key": "this should be removed",
++          "os_glance_key2": "this should also be removed"},
++         [],
++         []),
++        # custom config
++        ({"some_key": 13, "other_key": "test",
++          "os_glance_key": "this should be removed",
++          "os_glance_key2": "this should also be removed",
++          "custom_key": "this should be removed",
++          "another_custom_key": "this should also be removed"},
++         ['custom_key', 'another_custom_key'],
++         ['custom_key', 'another_custom_key']))
++    @ddt.unpack
++    def test_filter_out_reserved_namespaces_metadata(
++            self, metadata_for_test, config, keys_to_pop):
++        hardcoded_keys = ['os_glance', "img_signature"]
++
++        keys_to_pop = hardcoded_keys + keys_to_pop
++
++        if config:
++            self.override_config('reserved_image_namespaces', config)
++
++        expected_result = {"some_key": 13, "other_key": "test"}
++
++        method_return = image_utils.filter_out_reserved_namespaces_metadata(
++            metadata_for_test)
++
++        self.assertEqual(expected_result, method_return)
++
++        image_utils.LOG.debug.assert_has_calls([
++            mock.call("The metadata set [%s] was filtered using the reserved "
++                      "name spaces [%s], and the result is [%s].",
++                      metadata_for_test, keys_to_pop, expected_result)
++        ])
+diff --git a/cinder/volume/api.py b/cinder/volume/api.py
+index 3a9c6377a..394511d6e 100644
+--- a/cinder/volume/api.py
++++ b/cinder/volume/api.py
+@@ -42,6 +42,7 @@ from cinder import flow_utils
+ from cinder.i18n import _
+ from cinder.image import cache as image_cache
+ from cinder.image import glance
++from cinder.image import image_utils
+ from cinder.message import api as message_api
+ from cinder.message import message_field
+ from cinder import objects
+@@ -1481,6 +1482,9 @@ class API(base.Base):
+ 
+         try:
+             self._merge_volume_image_meta(context, volume, metadata)
++            metadata = image_utils.filter_out_reserved_namespaces_metadata(
++                metadata)
++
+             recv_metadata = self.image_service.create(context, metadata)
+ 
+             # NOTE(ZhengMa): Check if allow image compression before image
+diff --git a/releasenotes/notes/fix-reserved-image-properties-9519ddc080e7ed1a.yaml b/releasenotes/notes/fix-reserved-image-properties-9519ddc080e7ed1a.yaml
+new file mode 100644
+index 000000000..8f3f92eee
+--- /dev/null
++++ b/releasenotes/notes/fix-reserved-image-properties-9519ddc080e7ed1a.yaml
+@@ -0,0 +1,28 @@
++---
++upgrade:
++  - |
++    We introduced a new config parameter, ``reserved_image_namespaces``,
++    that allows operators to set the image properties to filter out from
++    volume image metadata by namespace when uploading a volume to Glance.
++    These properties, if not filtered out, cause failures when uploading
++    images back to Glance. The error will happen on Glance side when the
++    reserved namespaces are used. This option is also useful when an operator
++    wants to use the Glance property protections feature to make some image
++    properties read-only.
++fixes:
++  - |
++    `Bug #1945500 <https://bugs.launchpad.net/cinder/+bug/1945500>`_: Fixed
++    an error when uploading to Glance a previously downloaded glance image
++    when glance multistore is enabled. Glance reserves image properties
++    in the namespace 'os_glance' for its own use and will not allow
++    images to be created with these properties. Additionally, there are image
++    properties, such as those associated with image signature verification,
++    that are stored in a volume's image metadata, which should not be added
++    to a new image when a volume is being uploaded as an image. Thus Cinder
++    will no longer include any volume image metadata in the namespaces
++    ``os_glance`` and ``img_signature`` when it creates an image in Glance.
++    Furthermore, because the Glance property protections feature allows an
++    operator to configure specific image properties as read-only, this fix
++    adds a configuration option, ``reserved_image_namespaces``, that allows an
++    operator to exclude additional image properties by namespace (the
++    ``os_glance`` and ``img_signature`` namespaces are *always* excluded).
+-- 
+2.34.1
+
