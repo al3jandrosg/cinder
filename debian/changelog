@@ -1,3 +1,12 @@
+cinder (2:20.1.0-0ubuntu2.1) jammy-security; urgency=medium
+
+  * SECURITY UPDATE: Unauthorized File Access
+    - debian/patches/CVE-2023-2088.patch: Reject unsafe delete
+      attachment calls.
+    - CVE-2023-2088
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 04 May 2023 15:55:29 +0200
+
 cinder (2:20.1.0-0ubuntu2) jammy; urgency=medium
 
   * d/p/lp1945500.patch: Filter reserved image properties (LP: #1945500).
