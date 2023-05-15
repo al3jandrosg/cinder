@@ -1,3 +1,19 @@
+cinder (2:20.2.0-0ubuntu1) jammy; urgency=medium
+
+  * New stable point release for OpenStack Yoga (LP: #2019759).
+  * d/p/lp1945500.patch: Dropped. Fixed in stable point release.
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 15 May 2023 16:05:54 -0400
+
+cinder (2:20.1.0-0ubuntu2.2) jammy-security; urgency=medium
+
+  * SECURITY REGRESSION: Regressions in other projects (LP: #2020111)
+    - debian/patches/series: Do not apply CVE-2023-2088.patch until
+      patches are ready for all upstream OpenStack projects.
+    - CVE-2023-2088
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Thu, 18 May 2023 11:40:16 -0400
+
 cinder (2:20.1.0-0ubuntu2.1) jammy-security; urgency=medium
 
   * SECURITY UPDATE: Unauthorized File Access

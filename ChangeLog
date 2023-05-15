@@ -1,6 +1,13 @@
 CHANGES
 =======
 
+20.2.0
+------
+
+* Remove multiatttach request parameter
+* Filter reserved image properties
+* [stable-only] Pin tox <4
+
 20.1.0
 ------
 
@@ -10,6 +17,7 @@ CHANGES
 * Serialize message\_\* properties of RequestContext
 * PowerStore driver - Request data validation fix
 * Hitachi: fix to output resource lock message correctly
+* Bugfix: Account for consumed space better
 * NFS: Fix generic revert to snapshot flow
 * Increase swap size to 4GB
 * rbd: Fix snapshot delete when the source volume doesn't exist
@@ -20,6 +28,7 @@ CHANGES
 * [SVf] : Fix the SVC code level for lsfcportsetmember call
 * Doc: To update the portset feature details in IBM Spectrum Virtualize user guide
 * NetApp SolidFire: Fix request errors while Element OS upgrade
+* DEMC: Add support for trim/discard
 * Log when waiting to acquire coordinator lock
 * PowerMax Driver - Add a release note for 784603
 * SF: Remove compat clone image code

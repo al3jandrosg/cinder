@@ -2316,6 +2316,7 @@ releasenotes/notes/bug-1905988-ibm-svf-fix-volume-iops-throttling-issue-b2b89e31
 releasenotes/notes/bug-1906528-ibm-svf-fix-host-failback-switch-relationship-b5b7320811688cda.yaml
 releasenotes/notes/bug-1907964-9277e5ddec2abeda.yaml
 releasenotes/notes/bug-1908315-020fea3e244d49bb.yaml
+releasenotes/notes/bug-1910767-00f20702f5fc96db.yaml
 releasenotes/notes/bug-1912451-ibm-svf-update-replication-properties-68c4f9ea56df212d.yaml
 releasenotes/notes/bug-1912564-strowize-hyperswap-volume-is-not-deleting-a94291248f8f59cd.yaml
 releasenotes/notes/bug-1913363-ibm-svf_Fix_multiple_lshost_calls_during_attach-528f92b44a0ff6b8.yaml
@@ -2433,6 +2434,7 @@ releasenotes/notes/dell-emc-sc-bugfix-1756914-ffca3133273040f6.yaml
 releasenotes/notes/dell-emc-sc-mult-attach-d09cfd06ee8db8da.yaml
 releasenotes/notes/dell-emc-sc-support-generic-groups-98c7452d705b36f9.yaml
 releasenotes/notes/dell-emc-unity-driver-72cb901467b23b22.yaml
+releasenotes/notes/demc-trim-bb2165f74a5703a6.yaml
 releasenotes/notes/deprecate-api-v2-9f4543ab2e14b018.yaml
 releasenotes/notes/deprecate-backends-in-default-b9784a2333fe22f2.yaml
 releasenotes/notes/deprecate-backup-service-to-driver-mapping-a3afabd4f55eca01.yaml
@@ -2508,6 +2510,7 @@ releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
 releasenotes/notes/fix-remotefs-clone-volume-locking-385e740d4a5a813b.yaml
 releasenotes/notes/fix-request_id-6f6972b2c12d1a18.yaml
 releasenotes/notes/fix-reserve-volume-policy-31790a8d865ee0a1.yaml
+releasenotes/notes/fix-reserved-image-properties-9519ddc080e7ed1a.yaml
 releasenotes/notes/fix-retype-with-az-e048123d982f213d.yaml
 releasenotes/notes/fix-schema-validation-attachment-create-3488914cb52d44d2.yaml
 releasenotes/notes/fix-show-transfer-for-non-admins-be001d79975b325d.yaml
@@ -2878,6 +2881,7 @@ releasenotes/notes/remove-ibm-nas-driver-0ed204ed0a2dcf55.yaml
 releasenotes/notes/remove-iscsi-target-config-options-d23e424eb8f82042.yaml
 releasenotes/notes/remove-lvm-over-sub-3c8addbf47827045.yaml
 releasenotes/notes/remove-mirrorpolicy-parameter-from-huawei-driver-d32257a60d32fd90.yaml
+releasenotes/notes/remove-multiattach-request-param-4444e02533f919da.yaml
 releasenotes/notes/remove-nas-ip-config-option-8d56c14f1f4614fc.yaml
 releasenotes/notes/remove-nested-quota-driver-8b56f03694e3a694.yaml
 releasenotes/notes/remove-netapp-teseries-thost-type-config-option-908941dc7d2a1d59.yaml

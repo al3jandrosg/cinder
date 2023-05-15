@@ -42,6 +42,7 @@ from cinder import flow_utils
 from cinder.i18n import _
 from cinder.image import cache as image_cache
 from cinder.image import glance
+from cinder.image import image_utils
 from cinder.message import api as message_api
 from cinder.message import message_field
 from cinder import objects
@@ -228,7 +229,6 @@ class API(base.Base):
                source_replica=None,
                consistencygroup: Optional[objects.ConsistencyGroup] = None,
                cgsnapshot: Optional[objects.CGSnapshot] = None,
-               multiattach: Optional[bool] = False,
                source_cg=None,
                group: Optional[objects.Group] = None,
                group_snapshot=None,
@@ -337,7 +337,6 @@ class API(base.Base):
             'optional_args': {'is_quota_committed': False},
             'consistencygroup': consistencygroup,
             'cgsnapshot': cgsnapshot,
-            'raw_multiattach': multiattach,
             'group': group,
             'group_snapshot': group_snapshot,
             'source_group': source_group,
@@ -1481,6 +1480,9 @@ class API(base.Base):
 
         try:
             self._merge_volume_image_meta(context, volume, metadata)
+            metadata = image_utils.filter_out_reserved_namespaces_metadata(
+                metadata)
+
             recv_metadata = self.image_service.create(context, metadata)
 
             # NOTE(ZhengMa): Check if allow image compression before image
