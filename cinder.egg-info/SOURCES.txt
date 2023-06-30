@@ -2855,6 +2855,7 @@ releasenotes/notes/readd-infortrend-driver-d9b399b53a4355f8.yaml
 releasenotes/notes/readd-qnap-driver-e1dc6b0c3fabe30e.yaml
 releasenotes/notes/rebranded-hpe-drivers-caf1dcef1afe37ba.yaml
 releasenotes/notes/rebranded-vnx-driver-2fb7424ddc9c41df.yaml
+releasenotes/notes/redirect-detach-nova-4b7b7902d7d182e0.yaml
 releasenotes/notes/redundancy-in-volume-url-4282087232e6e6f1.yaml
 releasenotes/notes/reduxio-iscsci-driver-5827c32a0c498949.yaml
 releasenotes/notes/refactor-disco-volume-driver-3ff0145707ec0f3e.yaml
