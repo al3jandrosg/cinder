@@ -2177,6 +2177,7 @@ releasenotes/notes/add_ceph_custom_keyring_path-43a3b8c21a1ab3c4.yaml
 releasenotes/notes/add_manage_unmanage_itri_disco_driver-1c9ee31cc86b6eda.yaml
 releasenotes/notes/add_multiattach_policies-8e0b22505ed6cbd8.yaml
 releasenotes/notes/add_replication_failback_to_solidfire-82668c071f4fa91d.yaml
+releasenotes/notes/added-virtual-size-check-42a84f6b24366e5d.yaml
 releasenotes/notes/allow-admin-quota-operations-c1c2236711224023.yaml
 releasenotes/notes/allow-deleting-__DEFAULT__-type-d35dfb5d89760b9b.yaml
 releasenotes/notes/allow-encrypted-rbd-volumes-35d3536505e6309b.yaml
@@ -2361,13 +2362,16 @@ releasenotes/notes/bug-1970768-temp-vol-delete-6586a13f08d7a5c1.yaml
 releasenotes/notes/bug-1976499-storwize-lsfcportsetmember_is_being_called_in_the_wrong_SVC_code_level-db06c4eca902f389.yaml
 releasenotes/notes/bug-1978729-cinder-backup-4cd87c4d71b7713e.yaml
 releasenotes/notes/bug-1981354-infinidat-iscsi-fix-multipath-3f8a0be5f541c66e.yaml
+releasenotes/notes/bug-1981982-infinidat-fix-ssl-options-6ddd852c24b16760.yaml
 releasenotes/notes/bug-1996188-vmdk-subformat-allow-list-93e6943d9a486d11.yaml
+releasenotes/notes/bug-2008017-netapp-fix-native-threads-04d8f58f4c29b03d.yaml
 releasenotes/notes/bug-fix-1866871-f9d61defc00f4007.yaml
 releasenotes/notes/bug-fix-1867163-27afa39ac77b9e15.yaml
 releasenotes/notes/bug-gpfs-fix-nfs-cow.yaml
 releasenotes/notes/bug-invalid-content-type-1715094-8yu8i9w425ua08f3.yaml
 releasenotes/notes/bug-reno-69539ecb9b0b5464.yaml
 releasenotes/notes/bug1929429-e749f5e5a242a599.yaml
+releasenotes/notes/bug1945500-e4df056b8be2e0ef.yaml
 releasenotes/notes/bug_1828993-8e78d7bbee16ca08.yaml
 releasenotes/notes/bug_1870367-49b74d10a9bfcf07.yaml
 releasenotes/notes/bug_1945824-7f8f238e274ddebd.yaml
@@ -2506,6 +2510,7 @@ releasenotes/notes/fix-multiattach-deletion-b3990acf1f5fd378.yaml
 releasenotes/notes/fix-netapp-cg-da4fd6c396e5bedb.yaml
 releasenotes/notes/fix-netapp-force_detach-36bdf75dd2c9a030.yaml
 releasenotes/notes/fix-nfs-revert-to-snap-adc04204b3661d66.yaml
+releasenotes/notes/fix-powerflex-volume-cache-da3fa1769ef78ae8.yaml
 releasenotes/notes/fix-quota-deleting-temporary-volume-274e371b425e92cc.yaml
 releasenotes/notes/fix-remotefs-clone-volume-locking-385e740d4a5a813b.yaml
 releasenotes/notes/fix-request_id-6f6972b2c12d1a18.yaml
@@ -2848,6 +2853,7 @@ releasenotes/notes/rbd-support-managing-existing-snapshot-fb871a3ea98dc572.yaml
 releasenotes/notes/rbd-support-report-backend-state-4e124eb9efd36724.yaml
 releasenotes/notes/rbd-support-revert-to-snapshot-c9ca62c9efbabf5f.yaml
 releasenotes/notes/rbd-thin-provisioning-c98522d6fe7b71ff.yaml
+releasenotes/notes/rbd-total_capacity-60f10b45e3a8c8ea.yaml
 releasenotes/notes/rbd-v2.1-replication-64a9d0bec5987faf.yaml
 releasenotes/notes/rbd_replication_add_secret_uuid_config-c74d65e6d3d610c6.yaml
 releasenotes/notes/re-add-nexenta-driver-d3af97e33551a485.yaml

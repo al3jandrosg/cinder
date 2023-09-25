@@ -1,15 +1,25 @@
 CHANGES
 =======
 
+20.3.1
+------
+
+* Fix Infinidat driver to use TLS/SSL communication
+* Fix NetApp NFS driver to never spawn a native thread again
+* Fix glance metadata properties filtering
+
 20.3.0
 ------
 
 * Reject unsafe delete attachment calls
+* RBD: Fix total\_capacity
 
 20.2.0
 ------
 
 * Remove multiatttach request parameter
+* Update url of "Unity Replication White Paper"
+* Add a check for virtual\_size at API layer
 * Filter reserved image properties
 * [stable-only] Pin tox <4
 
@@ -22,6 +32,7 @@ CHANGES
 * Serialize message\_\* properties of RequestContext
 * PowerStore driver - Request data validation fix
 * Hitachi: fix to output resource lock message correctly
+* Fix volume caching in PowerFlex driver
 * Bugfix: Account for consumed space better
 * NFS: Fix generic revert to snapshot flow
 * Increase swap size to 4GB

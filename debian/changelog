@@ -1,3 +1,9 @@
+cinder (2:20.3.1-0ubuntu1) jammy; urgency=medium
+
+  * New stable point release for OpenStack Yoga (LP: #2037332).
+
+ -- Corey Bryant <corey.bryant@canonical.com>  Mon, 25 Sep 2023 16:49:25 -0400
+
 cinder (2:20.3.0-0ubuntu1) jammy; urgency=medium
 
   * New stable point release for OpenStack Yoga (LP: #2025503).
