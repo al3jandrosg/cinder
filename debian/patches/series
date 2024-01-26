@@ -2,3 +2,4 @@ patch-botocore-exceptions.patch
 skip-moto-tests.patch
 skip-victoria-failures.patch
 fix-qos-computation.patch
+0001-Revert-Driver-assisted-migration-on-retype-when-it-s.patch

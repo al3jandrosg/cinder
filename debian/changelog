@@ -1,3 +1,10 @@
+cinder (2:20.3.1-0ubuntu1.1) jammy; urgency=medium
+
+  * Revert driver assisted volume retype (LP: #2019190):
+    - d/p/0001-Revert-Driver-assisted-migration-on-retype-when-it-s.patch
+
+ -- Edward Hope-Morley <edward.hope-morley@canonical.com>  Fri, 26 Jan 2024 12:26:48 +0000
+
 cinder (2:20.3.1-0ubuntu1) jammy; urgency=medium
 
   * New stable point release for OpenStack Yoga (LP: #2037332).
