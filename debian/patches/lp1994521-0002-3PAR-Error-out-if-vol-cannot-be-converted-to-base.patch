@@ -1,0 +1,258 @@
+Bug-Ubuntu: http://bugs.launchpad.net/bugs/1994521
+Origin: https://review.opendev.org/c/openstack/cinder/+/907258
+
+From 97d5541b8982923ffa994ef308fe608f2e373f7b Mon Sep 17 00:00:00 2001
+From: Rajat Dhasmana <rajatdhasmana@gmail.com>
+Date: Wed, 26 Oct 2022 09:55:43 +0000
+Subject: [PATCH 2/2] 3PAR: Error out if vol cannot be converted to base
+
+Consider volume and snapshots as below:
+
+v1
+|
+`-- s1
+    |
+    `-- v2
+        |
+        `-- s2
+
+User initiated deletion of snapshot s1.
+It failed with some vague message.
+
+Initially, it was suspected that ...
+While copying volume v2 (sometimes an intermediate step to break
+volume dependency), we send a request to clone the volume v2 to new
+base volume; and the exception [1] isn't handled properly.
+
+[1] Conflict (HTTP 409) 32 - volume has a child
+
+However, on further investigation it was found that ...
+after a new volume v2 (omv-<id>) is created and
+when we try to delete old volume v2 (osv-<id>),
+at this point the exception [1] is thrown as error.
+
+This is now handled gracefully. Appropriate error is thrown
+if the volume (v2) has snapshot (s2).
+
+Co-Authored-By: raghavendrat <raghavendra-uddhav.tilay@hpe.com>
+Closes-Bug: #1994521
+Change-Id: I5e7fb425c92cdf8c16d5a86a58ca1a52421543d7
+(cherry picked from commit dfd8f99743a29220ca3face5fdf00a1a6071cf48)
+---
+ .../unit/volume/drivers/hpe/test_hpe3par.py   | 29 ++++++++++++++++---
+ cinder/volume/drivers/hpe/hpe_3par_common.py  | 29 +++++++++++++++----
+ ...base-vol-delete-snap-a460a4b1c419804a.yaml | 11 +++++++
+ 3 files changed, 60 insertions(+), 9 deletions(-)
+ create mode 100644 releasenotes/notes/hpe-3par-convert-to-base-vol-delete-snap-a460a4b1c419804a.yaml
+
+Index: cinder/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
+===================================================================
+--- cinder.orig/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
++++ cinder/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
+@@ -749,10 +749,7 @@ class HPE3PARBaseDriver(test.TestCase):
+         configuration.unique_fqdn_network = True
+         return configuration
+ 
+-    @mock.patch(
+-        'hpe3parclient.client.HPE3ParClient',
+-        spec=True,
+-    )
++    @mock.patch('hpe3parclient.client.HPE3ParClient')
+     def setup_mock_client(self, _m_client, driver, conf=None, m_conf=None,
+                           is_primera=False,
+                           wsapi_version=wsapi_version_latest):
+@@ -3401,6 +3398,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+         }
+ 
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         with mock.patch.object(hpecommon.HPE3PARCommon,
+                                '_create_client') as mock_create_client:
+             mock_create_client.return_value = mock_client
+@@ -3429,6 +3427,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                     {
+                         'comment': comment,
+                         'readOnly': False}),
++                mock.call.getVolumeSnapshots(self.VOLUME_3PAR_NAME),
+                 mock.call.copyVolume(
+                     osv_matcher, omv_matcher, HPE3PAR_CPG, mock.ANY),
+                 mock.call.getTask(mock.ANY),
+@@ -3452,6 +3451,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+         }
+ 
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         _mock_volume_types.return_value = {
+             'name': 'gold',
+             'extra_specs': {
+@@ -3493,6 +3493,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                         'comment': comment,
+                         'readOnly': False}),
+                 mock.call.getCPG(HPE3PAR_CPG),
++                mock.call.getVolumeSnapshots(self.VOLUME_3PAR_NAME),
+                 mock.call.copyVolume(
+                     osv_matcher, omv_matcher, HPE3PAR_CPG, mock.ANY),
+                 mock.call.getTask(mock.ANY),
+@@ -3609,6 +3610,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+             'getVolume.return_value': {}
+         }
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         volume_type_hos = copy.deepcopy(self.volume_type_hos)
+         volume_type_hos['extra_specs']['convert_to_base'] = True
+         _mock_volume_types.return_value = volume_type_hos
+@@ -3638,6 +3640,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                     {
+                         'comment': comment,
+                         'readOnly': False}),
++                mock.call.getVolumeSnapshots(self.VOLUME_3PAR_NAME),
+                 mock.call.copyVolume(
+                     osv_matcher, omv_matcher, HPE3PAR_CPG, mock.ANY),
+                 mock.call.getTask(mock.ANY),
+@@ -3659,6 +3662,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+             'getVolume.return_value': {}
+         }
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         _mock_volume_types.return_value = self.volume_type_hos
+         with mock.patch.object(hpecommon.HPE3PARCommon,
+                                '_create_client') as mock_create_client:
+@@ -3687,6 +3691,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                     {
+                         'comment': comment,
+                         'readOnly': False}),
++                mock.call.getVolumeSnapshots(self.VOLUME_3PAR_NAME),
+                 mock.call.copyVolume(
+                     osv_matcher, omv_matcher, HPE3PAR_CPG, mock.ANY),
+                 mock.call.getTask(mock.ANY),
+@@ -3709,6 +3714,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+             'getVolume.return_value': {}
+         }
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         volume_type_hos = copy.deepcopy(self.volume_type_hos)
+         volume_type_hos['extra_specs']['convert_to_base'] = True
+         _mock_volume_types.return_value = volume_type_hos
+@@ -3739,6 +3745,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                     {
+                         'comment': comment,
+                         'readOnly': False}),
++                mock.call.getVolumeSnapshots(self.VOLUME_3PAR_NAME),
+                 mock.call.copyVolume(
+                     osv_matcher, omv_matcher, HPE3PAR_CPG, mock.ANY),
+                 mock.call.getTask(mock.ANY),
+@@ -3837,6 +3844,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+         }
+ 
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         with mock.patch.object(hpecommon.HPE3PARCommon,
+                                '_create_client') as mock_create_client:
+             mock_create_client.return_value = mock_client
+@@ -3860,6 +3868,7 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+         }
+ 
+         mock_client = self.setup_driver(mock_conf=conf)
++        mock_client.getVolumeSnapshots.return_value = []
+         with mock.patch.object(hpecommon.HPE3PARCommon,
+                                '_create_client') as mock_create_client:
+             mock_create_client.return_value = mock_client
+@@ -3871,6 +3880,18 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                               self.volume,
+                               str(new_size))
+ 
++    def test__convert_to_base_volume_failure(self):
++        mock_client = self.setup_driver()
++        mock_client.getVolumeSnapshots.return_value = (
++            ['oss-nwJVbXaEQMi0w.xPutFRQw'])
++        with mock.patch.object(hpecommon.HPE3PARCommon,
++                               '_create_client') as mock_create_client:
++            mock_create_client.return_value = mock_client
++            common = self.driver._login()
++            self.assertRaises(exception.VolumeIsBusy,
++                              common._convert_to_base_volume,
++                              self.volume)
++
+     @mock.patch.object(volume_types, 'get_volume_type')
+     def test_extend_volume_replicated(self, _mock_volume_types):
+         # Managed vs. unmanaged and periodic vs. sync are not relevant when
+Index: cinder/cinder/volume/drivers/hpe/hpe_3par_common.py
+===================================================================
+--- cinder.orig/cinder/volume/drivers/hpe/hpe_3par_common.py
++++ cinder/cinder/volume/drivers/hpe/hpe_3par_common.py
+@@ -300,11 +300,13 @@ class HPE3PARCommon(object):
+         4.0.16 - In multi host env, fix multi-detach operation. Bug #1958122
+         4.0.17 - Added get_manageable_volumes and get_manageable_snapshots.
+                  Bug #1819903
++        4.0.18 - During conversion of volume to base volume,
++                 error out if it has child snapshot(s). Bug #1994521
+ 
+ 
+     """
+ 
+-    VERSION = "4.0.17"
++    VERSION = "4.0.18"
+ 
+     stats = {}
+ 
+@@ -3139,6 +3141,21 @@ class HPE3PARCommon(object):
+ 
+             compression = self.get_compression_policy(
+                 type_info['hpe3par_keys'])
++
++            # If volume (osv-) has snapshot, while converting the volume
++            # to base volume (omv-), snapshot cannot be transferred to
++            # new base volume (omv-) i.e it remain with volume (osv-).
++            # So error out for such volume.
++            snap_list = self.client.getVolumeSnapshots(volume_name)
++            if snap_list:
++                snap_str = ",".join(snap_list)
++                msg = (_("Volume %(name)s has dependent snapshots: %(snap)s."
++                         " Either flatten or remove the dependent snapshots:"
++                         " %(snap)s for the conversion of volume %(name)s to"
++                         " succeed." % {'name': volume_name,
++                                        'snap': snap_str}))
++                raise exception.VolumeIsBusy(message=msg)
++
+             # Create a physical copy of the volume
+             task_id = self._copy_volume(volume_name, temp_vol_name,
+                                         cpg, cpg, type_info['tpvv'],
+@@ -3162,16 +3179,18 @@ class HPE3PARCommon(object):
+             comment = self._get_3par_vol_comment(volume_name)
+             if comment:
+                 self.client.modifyVolume(temp_vol_name, {'comment': comment})
+-            LOG.debug('Volume rename completed: convert_to_base_volume: '
+-                      'id=%s.', volume['id'])
++                LOG.debug('Assigned the comment: convert_to_base_volume: '
++                          'id=%s.', volume['id'])
+ 
+-            # Delete source volume after the copy is complete
++            # Delete source volume (osv-) after the copy is complete
+             self.client.deleteVolume(volume_name)
+             LOG.debug('Delete src volume completed: convert_to_base_volume: '
+                       'id=%s.', volume['id'])
+ 
+-            # Rename the new volume to the original name
++            # Rename the new volume (omv-) to the original name (osv-)
+             self.client.modifyVolume(temp_vol_name, {'newName': volume_name})
++            LOG.debug('Volume rename completed: convert_to_base_volume: '
++                      'id=%s.', volume['id'])
+ 
+             LOG.info('Completed: convert_to_base_volume: '
+                      'id=%s.', volume['id'])
+Index: cinder/releasenotes/notes/hpe-3par-convert-to-base-vol-delete-snap-a460a4b1c419804a.yaml
+===================================================================
+--- /dev/null
++++ cinder/releasenotes/notes/hpe-3par-convert-to-base-vol-delete-snap-a460a4b1c419804a.yaml
+@@ -0,0 +1,11 @@
++---
++fixes:
++  - |
++    HPE 3PAR driver `Bug #1994521 <https://bugs.launchpad.net/cinder/+bug/1994521>`_:
++    Fixed: While performing a delete snapshot (s1) operation, the volumes (v2)
++    dependent on the snapshot (s1) are converted to base volumes. This
++    operation fails if these dependent volumes (v2) have their own dependent
++    snapshots (s2). The errors during the failure were vague and not helpful.
++    With this release, we added conditions to fail this operation early and
++    also added useful error message.
++

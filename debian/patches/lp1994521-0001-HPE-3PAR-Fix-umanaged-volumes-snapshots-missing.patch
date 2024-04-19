@@ -1,0 +1,329 @@
+Bug-Ubuntu: http://bugs.launchpad.net/bugs/1994521
+Origin: https://review.opendev.org/c/openstack/cinder/+/907257
+
+From 063609c84fb65975daf1809eac1ace075c0ffc09 Mon Sep 17 00:00:00 2001
+From: raghavendrat <raghavendra.tilay@hpe.com>
+Date: Mon, 25 Jul 2022 06:59:55 +0000
+Subject: [PATCH 1/2] HPE 3PAR: Fix umanaged volumes & snapshots missing
+
+The umanaged volumes & snapshots are missing when below commands
+are executed:
+cinder manageable-list
+cinder snapshot-manageable-list
+
+To address this, added two functions:
+get_manageable_volumes()
+get_manageable_snapshots()
+
+Closes-Bug: #1819903
+Change-Id: Ie178e48958a69ef2b6c329e132de2c772d5c1a40
+(cherry picked from commit c112542cf5471641a47a94c89b9b80dfa14d701d)
+---
+ .../unit/volume/drivers/hpe/test_hpe3par.py   | 116 ++++++++++++++++++
+ cinder/volume/drivers/hpe/hpe_3par_base.py    |  14 +++
+ cinder/volume/drivers/hpe/hpe_3par_common.py  | 103 +++++++++++++++-
+ ...r-add-get-manageable-2926f21116c98599.yaml |   5 +
+ 4 files changed, 237 insertions(+), 1 deletion(-)
+ create mode 100644 releasenotes/notes/hpe-3par-add-get-manageable-2926f21116c98599.yaml
+
+Index: cinder/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
+===================================================================
+--- cinder.orig/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
++++ cinder/cinder/tests/unit/volume/drivers/hpe/test_hpe3par.py
+@@ -26,6 +26,7 @@ from oslo_utils import uuidutils
+ from cinder import context
+ from cinder import exception
+ from cinder.objects import fields
++from cinder.tests.unit import fake_snapshot
+ from cinder.tests.unit import fake_volume
+ from cinder.tests.unit import test
+ from cinder.tests.unit.volume.drivers.hpe \
+@@ -320,6 +321,14 @@ class HPE3PARBaseDriver(test.TestCase):
+                         'display_description': 'description',
+                         'volume_name': 'name'}
+ 
++    snapshot_obj = fake_snapshot.fake_snapshot_obj(
++        context.get_admin_context(),
++        name=SNAPSHOT_NAME,
++        id=SNAPSHOT_ID,
++        display_name='Foo Snapshot',
++        volume_size=2,
++        volume_id=VOLUME_ID_SNAP)
++
+     wwn = ["123456789012345", "123456789054321"]
+ 
+     connector = {'ip': '10.0.0.2',
+@@ -4844,6 +4853,113 @@ class TestHPE3PARDriverBase(HPE3PARBaseD
+                               self.driver.unmanage_snapshot,
+                               snapshot=snapshot)
+ 
++    def _test_get_manageable(self, cinder_list, expected_output, vol_name,
++                             attached=False, snap_name=None):
++        # common test function for:
++        # [a] get_manageable_volumes
++        # [b] get_manageable_snapshots
++
++        mock_client = self.setup_driver()
++
++        mock_client.getVolumes.return_value = {
++            'members': [
++                {'name': vol_name,
++                 'sizeMiB': 2048,
++                 'userCPG': 'OpenStackCPG'}]}
++
++        if attached:
++            mock_client.getVLUN.return_value = {
++                'hostname': 'cssosbe02-b04',
++            }
++        else:
++            mock_client.getVLUN.side_effect = hpeexceptions.HTTPNotFound
++
++        if snap_name:
++            mock_client.getSnapshotsOfVolume.return_value = [snap_name]
++
++        with mock.patch.object(hpecommon.HPE3PARCommon,
++                               '_create_client') as mock_create_client:
++            mock_create_client.return_value = mock_client
++
++            common = self.driver._login()
++            if snap_name:
++                actual_output = common.get_manageable_snapshots(
++                    cinder_list, None, 1000, 0, ['size'], ['asc'])
++            else:
++                actual_output = self.driver.get_manageable_volumes(
++                    cinder_list, None, 1000, 0, ['size'], ['asc'])
++
++            expected_calls = []
++            expected_calls.append(mock.call.getVolumes())
++            if attached:
++                expected_calls.append(mock.call.getVLUN(vol_name))
++            if snap_name:
++                expected_calls.append(
++                    mock.call.getSnapshotsOfVolume('OpenStackCPG', vol_name))
++
++            mock_client.assert_has_calls(expected_calls)
++            self.assertEqual(expected_output, actual_output)
++
++    # (i) volume already managed
++    # (ii) volume currently not managed; but attached to some other host
++    # (iii) volume currently not managed
++    @ddt.data({'cinder_vol': [HPE3PARBaseDriver.volume],
++               'vol_name': 'osv-0DM4qZEVSKON-DXN-NwVpw',
++               'safe': False,
++               'reason': 'Volume already managed',
++               'cinder_id': 'd03338a9-9115-48a3-8dfc-35cdfcdc15a7'},
++              {'cinder_vol': [],
++               'vol_name': 'volume_2',
++               'safe': False,
++               'reason': 'Volume attached to host cssosbe02-b04',
++               'cinder_id': None,
++               'attached': True},
++              {'cinder_vol': [],
++               'vol_name': 'volume_2',
++               'safe': True,
++               'reason': None,
++               'cinder_id': None})
++    @ddt.unpack
++    def test_get_manageable_volumes(self, cinder_vol, vol_name, safe, reason,
++                                    cinder_id, attached=False):
++        expected_output = [
++            {'reference': {'name': vol_name},
++             'size': 2,
++             'safe_to_manage': safe,
++             'reason_not_safe': reason,
++             'cinder_id': cinder_id}
++        ]
++        self._test_get_manageable(cinder_vol, expected_output, vol_name,
++                                  attached)
++
++    # (i) snapshot already managed
++    # (ii) snapshot currently not managed
++    @ddt.data({'cinder_snapshot': [HPE3PARBaseDriver.snapshot_obj],
++               'snap_name': 'oss-L4I73ONuTci9Fd4ceij-MQ',
++               'vol_name': 'osv-CX7Ilh.dQ2.XdNpmqW408A',
++               'safe': False,
++               'reason': 'Snapshot already managed',
++               'cinder_id': '2f823bdc-e36e-4dc8-bd15-de1c7a28ff31'},
++              {'cinder_snapshot': [],
++               'snap_name': 'snap_2',
++               'vol_name': 'volume_2',
++               'safe': True,
++               'reason': None,
++               'cinder_id': None})
++    @ddt.unpack
++    def test_get_manageable_snapshots(self, cinder_snapshot, snap_name,
++                                      vol_name, safe, reason, cinder_id):
++        expected_output = [
++            {'reference': {'name': snap_name},
++             'size': 2,
++             'safe_to_manage': safe,
++             'reason_not_safe': reason,
++             'cinder_id': cinder_id,
++             'source_reference': {'name': vol_name}}
++        ]
++        self._test_get_manageable(cinder_snapshot, expected_output, vol_name,
++                                  False, snap_name)
++
+     @ddt.data(True, False)
+     def test__safe_hostname(self, in_shared):
+         config = self._set_unique_fqdn_override(True, in_shared)
+Index: cinder/cinder/volume/drivers/hpe/hpe_3par_base.py
+===================================================================
+--- cinder.orig/cinder/volume/drivers/hpe/hpe_3par_base.py
++++ cinder/cinder/volume/drivers/hpe/hpe_3par_base.py
+@@ -237,6 +237,20 @@ class HPE3PARDriverBase(driver.Manageabl
+         return self.common.unmanage_snapshot(snapshot)
+ 
+     @volume_utils.trace
++    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
++                               sort_keys, sort_dirs):
++        return self.common.get_manageable_volumes(cinder_volumes, marker,
++                                                  limit, offset, sort_keys,
++                                                  sort_dirs)
++
++    @volume_utils.trace
++    def get_manageable_snapshots(self, cinder_snapshots, marker, limit, offset,
++                                 sort_keys, sort_dirs):
++        return self.common.get_manageable_snapshots(cinder_snapshots, marker,
++                                                    limit, offset, sort_keys,
++                                                    sort_dirs)
++
++    @volume_utils.trace
+     def retype(self, context, volume, new_type, diff, host):
+         """Convert the volume to be of the new type."""
+         common = self._login()
+Index: cinder/cinder/volume/drivers/hpe/hpe_3par_common.py
+===================================================================
+--- cinder.orig/cinder/volume/drivers/hpe/hpe_3par_common.py
++++ cinder/cinder/volume/drivers/hpe/hpe_3par_common.py
+@@ -298,11 +298,13 @@ class HPE3PARCommon(object):
+         4.0.14 - Added Peer Persistence feature
+         4.0.15 - Support duplicated FQDN in network. Bug #1834695
+         4.0.16 - In multi host env, fix multi-detach operation. Bug #1958122
++        4.0.17 - Added get_manageable_volumes and get_manageable_snapshots.
++                 Bug #1819903
+ 
+ 
+     """
+ 
+-    VERSION = "4.0.16"
++    VERSION = "4.0.17"
+ 
+     stats = {}
+ 
+@@ -1223,6 +1225,105 @@ class HPE3PARCommon(object):
+                   'vol': snap_name,
+                   'new': new_snap_name})
+ 
++    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
++                               sort_keys, sort_dirs):
++        already_managed = {}
++        for vol_obj in cinder_volumes:
++            cinder_id = vol_obj.id
++            volume_name = self._get_3par_vol_name(cinder_id)
++            already_managed[volume_name] = cinder_id
++
++        cinder_cpg = self._client_conf['hpe3par_cpg'][0]
++
++        manageable_vols = []
++
++        body = self.client.getVolumes()
++        all_volumes = body['members']
++        for vol in all_volumes:
++            cpg = vol.get('userCPG')
++            if cpg == cinder_cpg:
++                size_gb = int(vol['sizeMiB'] / 1024)
++                vol_name = vol['name']
++                if vol_name in already_managed:
++                    is_safe = False
++                    reason_not_safe = _('Volume already managed')
++                    cinder_id = already_managed[vol_name]
++                else:
++                    is_safe = False
++                    hostname = None
++                    cinder_id = None
++                    # Check if the unmanaged volume is attached to any host
++                    try:
++                        vlun = self.client.getVLUN(vol_name)
++                        hostname = vlun['hostname']
++                    except hpe3parclient.exceptions.HTTPNotFound:
++                        # not attached to any host
++                        is_safe = True
++
++                    if is_safe:
++                        reason_not_safe = None
++                    else:
++                        reason_not_safe = _('Volume attached to host ' +
++                                            hostname)
++
++                manageable_vols.append({
++                    'reference': {'name': vol_name},
++                    'size': size_gb,
++                    'safe_to_manage': is_safe,
++                    'reason_not_safe': reason_not_safe,
++                    'cinder_id': cinder_id,
++                })
++
++        return volume_utils.paginate_entries_list(
++            manageable_vols, marker, limit, offset, sort_keys, sort_dirs)
++
++    def get_manageable_snapshots(self, cinder_snapshots, marker, limit, offset,
++                                 sort_keys, sort_dirs):
++        already_managed = {}
++        for snap_obj in cinder_snapshots:
++            cinder_snap_id = snap_obj.id
++            snap_name = self._get_3par_snap_name(cinder_snap_id)
++            already_managed[snap_name] = cinder_snap_id
++
++        cinder_cpg = self._client_conf['hpe3par_cpg'][0]
++
++        cpg_volumes = []
++
++        body = self.client.getVolumes()
++        all_volumes = body['members']
++        for vol in all_volumes:
++            cpg = vol.get('userCPG')
++            if cpg == cinder_cpg:
++                cpg_volumes.append(vol)
++
++        manageable_snaps = []
++
++        for vol in cpg_volumes:
++            size_gb = int(vol['sizeMiB'] / 1024)
++            snapshots = self.client.getSnapshotsOfVolume(cinder_cpg,
++                                                         vol['name'])
++            for snap_name in snapshots:
++                if snap_name in already_managed:
++                    is_safe = False
++                    reason_not_safe = _('Snapshot already managed')
++                    cinder_snap_id = already_managed[snap_name]
++                else:
++                    is_safe = True
++                    reason_not_safe = None
++                    cinder_snap_id = None
++
++                manageable_snaps.append({
++                    'reference': {'name': snap_name},
++                    'size': size_gb,
++                    'safe_to_manage': is_safe,
++                    'reason_not_safe': reason_not_safe,
++                    'cinder_id': cinder_snap_id,
++                    'source_reference': {'name': vol['name']},
++                })
++
++        return volume_utils.paginate_entries_list(
++            manageable_snaps, marker, limit, offset, sort_keys, sort_dirs)
++
+     def _get_existing_volume_ref_name(self, existing_ref, is_snapshot=False):
+         """Returns the volume name of an existing reference.
+ 
+Index: cinder/releasenotes/notes/hpe-3par-add-get-manageable-2926f21116c98599.yaml
+===================================================================
+--- /dev/null
++++ cinder/releasenotes/notes/hpe-3par-add-get-manageable-2926f21116c98599.yaml
+@@ -0,0 +1,5 @@
++---
++fixes:
++  - |
++    HPE 3PAR driver `Bug #1819903 <https://bugs.launchpad.net/cinder/+bug/1819903>`_:
++    Fixed: umanaged volumes & snapshots missing from cinder manageable-list.

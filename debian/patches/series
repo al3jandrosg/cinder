@@ -3,3 +3,6 @@ skip-moto-tests.patch
 skip-victoria-failures.patch
 fix-qos-computation.patch
 0001-Revert-Driver-assisted-migration-on-retype-when-it-s.patch
+lp1988942-increase-metadata-size.patch
+lp1994521-0001-HPE-3PAR-Fix-umanaged-volumes-snapshots-missing.patch
+lp1994521-0002-3PAR-Error-out-if-vol-cannot-be-converted-to-base.patch
