@@ -6,3 +6,4 @@ fix-qos-computation.patch
 lp1988942-increase-metadata-size.patch
 lp1994521-0001-HPE-3PAR-Fix-umanaged-volumes-snapshots-missing.patch
 lp1994521-0002-3PAR-Error-out-if-vol-cannot-be-converted-to-base.patch
+CVE-2024-32498.patch
