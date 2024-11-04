@@ -1,3 +1,12 @@
+cinder (2:20.3.1-0ubuntu1.5) jammy-security; urgency=medium
+
+  * SECURITY REGRESSION: regression due to missing privset handling
+  (LP: #2085851)
+    - debian/patches/CVE-2024-32498.patch: switch to final upstream patch
+      which differs from the patch provided during embargo.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Mon, 04 Nov 2024 07:35:21 -0500
+
 cinder (2:20.3.1-0ubuntu1.4) jammy-security; urgency=medium
 
   * SECURITY UPDATE: Arbitrary file access via custom QCOW2 external data
