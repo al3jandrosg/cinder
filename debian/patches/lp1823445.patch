@@ -1,0 +1,96 @@
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1823445
+Origin: upstream, https://opendev.org/openstack/cinder/commit/a770f720860d1603e4501b02960e3d7f13c72f95
+
+From 4a3aa7d0046e16cabd8987f9c972bc5f9c55ed88 Mon Sep 17 00:00:00 2001
+From: Rodrigo Barbieri <rodrigo.barbieri2010@gmail.com>
+Date: Wed, 23 Oct 2024 12:51:19 -0300
+Subject: [PATCH] Fix "signature_verified" metadata propagation to images
+
+The property "signature_verified" is added by cinder
+to volumes created from images. That property is
+propagated to glance when images are created from such
+volumes. Later, when creating volumes from such images
+again, the image property conflicts with cinder trying to
+add the property again. The solution is to never
+propagate such cinder property in the first place.
+
+Closes-bug: #1823445
+Change-Id: Id46877e490b17c00ba1cf8cf312dd2f456760a23
+(cherry picked from commit c65f43cb989f7e1ad5a8b999e6f3e266cddb36ee)
+(cherry picked from commit 9dbf2967bee1060ae7419897942dfe554432a742)
+(cherry picked from commit 9d1b6b8a9f07d742fee094539199c4c14ea294e0)
+---
+ cinder/image/image_utils.py                          |  9 +++++----
+ cinder/tests/unit/test_image_utils.py                |  4 ++--
+ releasenotes/notes/bug-1823445-c47c25870a98335a.yaml | 10 ++++++++++
+ 3 files changed, 17 insertions(+), 6 deletions(-)
+ create mode 100644 releasenotes/notes/bug-1823445-c47c25870a98335a.yaml
+
+diff --git a/cinder/image/image_utils.py b/cinder/image/image_utils.py
+index 09232c6d6..6f3288ed5 100644
+--- a/cinder/image/image_utils.py
++++ b/cinder/image/image_utils.py
+@@ -97,9 +97,9 @@ image_opts = [
+                      'an operator has configured glance property protections '
+                      'to make some image properties read-only. Cinder will '
+                      '*always* filter out image metadata in the namespaces '
+-                     '`os_glance` and `img_signature`; this configuration '
+-                     'option allows operators to specify *additional* '
+-                     'namespaces to be excluded.',
++                     '`os_glance`, `img_signature` and `signature_verified`; '
++                     'this configuration option allows operators to specify '
++                     '*additional* namespaces to be excluded.',
+                 default=[]),
+ ]
+ 
+@@ -125,7 +125,8 @@ QEMU_IMG_MIN_CONVERT_LUKS_VERSION = '2.10'
+ 
+ COMPRESSIBLE_IMAGE_FORMATS = ('qcow2',)
+ 
+-GLANCE_RESERVED_NAMESPACES = ["os_glance", "img_signature"]
++GLANCE_RESERVED_NAMESPACES = ["os_glance", "img_signature",
++                              "signature_verified"]
+ 
+ 
+ def validate_stores_id(context: context.RequestContext,
+diff --git a/cinder/tests/unit/test_image_utils.py b/cinder/tests/unit/test_image_utils.py
+index e4f18ec77..64dcdca54 100644
+--- a/cinder/tests/unit/test_image_utils.py
++++ b/cinder/tests/unit/test_image_utils.py
+@@ -2753,7 +2753,7 @@ class TestFilterReservedNamespaces(test.TestCase):
+     @ddt.unpack
+     def test_filter_out_reserved_namespaces_metadata(
+             self, metadata_for_test, config, keys_to_pop):
+-        hardcoded_keys = ['os_glance', "img_signature"]
++        hardcoded_keys = image_utils.GLANCE_RESERVED_NAMESPACES
+ 
+         keys_to_pop = hardcoded_keys + keys_to_pop
+ 
+@@ -2813,7 +2813,7 @@ class TestFilterReservedNamespaces(test.TestCase):
+     @ddt.unpack
+     def test_filter_out_reserved_namespaces_metadata_properties(
+             self, metadata_for_test, config, keys_to_pop):
+-        hardcoded_keys = ['os_glance', "img_signature"]
++        hardcoded_keys = image_utils.GLANCE_RESERVED_NAMESPACES
+ 
+         keys_to_pop = hardcoded_keys + keys_to_pop
+ 
+diff --git a/releasenotes/notes/bug-1823445-c47c25870a98335a.yaml b/releasenotes/notes/bug-1823445-c47c25870a98335a.yaml
+new file mode 100644
+index 000000000..80215f9ea
+--- /dev/null
++++ b/releasenotes/notes/bug-1823445-c47c25870a98335a.yaml
+@@ -0,0 +1,10 @@
++---
++fixes:
++  - |
++    Fixed the volume property `signature_verified` propagating to images created
++    from volumes. That property could later conflict with the same property being
++    added again when creating a new volume from such image, preventing the volume
++    from being created successfully. This volume property is created whenever a
++    volume is created from an image for the purpose of indicating that the image
++    signature was verified on creation, and was not intended to be propagated
++    further if a new image is created from such volume. 
+-- 
+2.45.2
+

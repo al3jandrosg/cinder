@@ -1,3 +1,13 @@
+cinder (2:20.3.1-0ubuntu1.6) jammy; urgency=medium
+
+  * d/p/lp1823445.patch: Fix "signature_verified" volume metadata
+    from propagating to images and causing errors later when
+    creating volumes from such images (LP: #1823445).
+  * d/p/lp2083061.patch: Fix race condition when deleting cloned
+    volumes and their parents at the same time. (LP: #2083061)
+
+ -- Rodrigo Barbieri <rodrigo.barbieri@canonical.com>  Mon, 09 Dec 2024 15:37:22 +0000
+
 cinder (2:20.3.1-0ubuntu1.5) jammy-security; urgency=medium
 
   * SECURITY REGRESSION: regression due to missing privset handling

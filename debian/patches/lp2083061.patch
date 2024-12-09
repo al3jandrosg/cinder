@@ -1,0 +1,116 @@
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/2083061
+Origin: vendor
+
+From 8f78596d29f0af01091068288606090b7c1ed8da Mon Sep 17 00:00:00 2001
+From: Rodrigo Barbieri <rodrigo.barbieri@canonical.com>
+Date: Thu, 21 Nov 2024 19:54:13 +0000
+Subject: [PATCH] [Stable-only][RBD] Retry delete concurrent parent and child
+ volumes
+
+When deleting parent and child volumes concurrently, there is a
+race condition that causes it to fail deleting the child because
+the parent gets renamed in the backend upon deletion. By retrying
+we avoid the error because the parent's name change gets picked
+up on the retry.
+
+This patch is implemented specially for unmaintained/yoga because
+the alternative fix [1] is less preferable (according to
+analysis [2]) to be backported as far back as Yoga than a simpler
+retry fix.
+
+[1] https://github.com/openstack/cinder/commit/1a675c9aa178c6d9c6ed10fd98f086c46d350d3f
+[2] https://bugs.launchpad.net/cloud-archive/+bug/2083061/comments/2
+
+Closes-bug: #2083061
+Change-Id: If75288f7a0d1cc5bf03bea8c5af942b87a8a1678
+---
+ cinder/tests/unit/volume/drivers/test_rbd.py | 51 ++++++++++++++++++++
+ cinder/volume/drivers/rbd.py                 | 10 ++++
+ 2 files changed, 61 insertions(+)
+
+diff --git a/cinder/tests/unit/volume/drivers/test_rbd.py b/cinder/tests/unit/volume/drivers/test_rbd.py
+index ba57e16e6..2e4935588 100644
+--- a/cinder/tests/unit/volume/drivers/test_rbd.py
++++ b/cinder/tests/unit/volume/drivers/test_rbd.py
+@@ -850,6 +850,57 @@ class RBDTestCase(test.TestCase):
+             self.assertEqual(
+                 2, drv.rbd.RBD.return_value.trash_move.call_count)
+ 
++    @common_mocks
++    def test_delete_volume_with_parent_not_found_retried(self):
++        client = self.mock_client.return_value
++
++        self.driver.rbd.Image.return_value.list_snaps.return_value = []
++        pool = 'volumes'
++        parent = True
++        parent_snap = self.snapshot_b
++
++        mock_get_clone_info = self.mock_object(self.driver, '_get_clone_info',
++                                               return_value=(pool,
++                                                             parent,
++                                                             parent_snap))
++
++        m_del_clone_parent_refs = self.mock_object(
++            self.driver, '_delete_clone_parent_refs',
++            side_effect=[self.mock_rbd.ImageNotFound, mock.Mock()])
++        m_del_back_snaps = self.mock_object(self.driver,
++                                            '_delete_backup_snaps')
++
++        self.driver.delete_volume(self.volume_a)
++
++        mock_get_clone_info.assert_has_calls([
++            mock.call(
++                self.mock_rbd.Image.return_value,
++                self.volume_a.name,
++                None),
++            mock.call(
++                self.mock_rbd.Image.return_value,
++                self.volume_a.name,
++                None)
++        ])
++        m_del_clone_parent_refs.assert_has_calls([
++            mock.call(mock.ANY, parent, parent_snap),
++            mock.call(mock.ANY, parent, parent_snap)
++        ])
++        self.driver.rbd.Image.return_value.list_snaps.assert_has_calls([
++            mock.call(), mock.call()])
++        client.__enter__.assert_has_calls([mock.call(), mock.call()])
++        client.__exit__.assert_has_calls([
++            mock.call(self.mock_rbd.ImageNotFound, mock.ANY, mock.ANY),
++            mock.call(None, None, None)])
++        m_del_back_snaps.assert_has_calls([
++            mock.call(self.mock_rbd.Image.return_value),
++            mock.call(self.mock_rbd.Image.return_value)])
++        self.assertFalse(
++            self.driver.rbd.Image.return_value.unprotect_snap.called)
++        self.assertEqual(
++            2, self.driver.rbd.RBD.return_value.remove.call_count)
++        self.driver.rbd.RBD.return_value.trash_move.assert_not_called()
++
+     @common_mocks
+     def test_delete_volume_not_found_at_open(self):
+         self.mock_rbd.Image.side_effect = self.mock_rbd.ImageNotFound
+diff --git a/cinder/volume/drivers/rbd.py b/cinder/volume/drivers/rbd.py
+index 9facef212..f1c5aca72 100644
+--- a/cinder/volume/drivers/rbd.py
++++ b/cinder/volume/drivers/rbd.py
+@@ -1264,6 +1264,16 @@ class RBDDriver(driver.CloneableImageVD, driver.MigrateVD,
+ 
+     def delete_volume(self, volume: Volume) -> None:
+         """Deletes a logical volume."""
++
++        # NOTE(ganso): This is necessary for unit tests to work
++        # due to "self.rbd" dynamic import in the decorator.
++        @utils.retry(self.rbd.ImageNotFound, 2)
++        def _delete_volume_with_retry(self, volume: Volume) -> None:
++            self._delete_volume_orig(volume)
++
++        _delete_volume_with_retry(self, volume)
++
++    def _delete_volume_orig(self, volume: Volume) -> None:
+         # NOTE(dosaboy): this was broken by commit cbe1d5f. Ensure names are
+         #                utf-8 otherwise librbd will barf.
+         volume_name = utils.convert_str(volume.name)
+-- 
+2.45.2
+
