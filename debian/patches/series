@@ -9,3 +9,4 @@ lp1994521-0002-3PAR-Error-out-if-vol-cannot-be-converted-to-base.patch
 CVE-2024-32498.patch
 lp1823445.patch
 lp2083061.patch
+lp2144550-Fix-properties-being-sent-to-Glance.patch

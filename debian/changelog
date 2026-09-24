@@ -1,3 +1,11 @@
+
+cinder (2:20.3.1-0ubuntu1.7) jammy; urgency=medium
+
+  * d/p/lp2144550-Fix-properties-being-sent-to-Glance.patch: Fix 
+    properties={} being sent to Glance (LP: #2144550)
+
+ -- Alejandro Santoyo Gonzalez <alejandro.santoyo@canonical.com> Tue, 22 Sep 2026 11:24:45 +0000 
+
 cinder (2:20.3.1-0ubuntu1.6) jammy; urgency=medium
 
   * d/p/lp1823445.patch: Fix "signature_verified" volume metadata

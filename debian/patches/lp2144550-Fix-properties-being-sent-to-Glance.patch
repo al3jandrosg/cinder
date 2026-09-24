@@ -1,0 +1,158 @@
+From 2096a784695d5b7304822693b595d9238b66209d Mon Sep 17 00:00:00 2001
+From: Alejandro Santoyo <alejandro.santoyo@canonical.com>
+Date: Mon, 16 Mar 2026 12:55:23 +0100
+Subject: [PATCH] Fix properties={} being sent to Glance
+
+The changes to fix LP#1527324 and LP#1823445 have as side effect that
+'properties': {} may be sent to Glance when creating an image from a
+volume which fails. This change ensures that the code in
+_translate_to_glance() effectively removes the 'properties' key from
+the metadata dict if it is empty.
+
+Closes-Bug: #2144550
+Change-Id: Ifd632433ce5759494172b74ce311816e10728d21
+Signed-off-by: Alejandro Santoyo <alejandro.santoyo@canonical.com>
+Origin: backport, https://review.opendev.org/c/openstack/cinder/+/980692
+Bug-Ubuntu: https://bugs.launchpad.net/cinder/+bug/2144550
+---
+ cinder/image/glance.py                        | 11 +++++---
+ cinder/tests/unit/image/test_glance.py        | 12 ++++-----
+ cinder/tests/unit/volume/test_image.py        | 26 +++++++++++++++++++
+ .../notes/bug_2144550-aa8e6e085f6507aa.yaml   |  6 +++++
+ 4 files changed, 45 insertions(+), 10 deletions(-)
+ create mode 100644 releasenotes/notes/bug_2144550-aa8e6e085f6507aa.yaml
+
+diff --git a/cinder/image/glance.py b/cinder/image/glance.py
+index 6ccfcbe05d..aaebdadaae 100644
+--- a/cinder/image/glance.py
++++ b/cinder/image/glance.py
+@@ -643,9 +643,12 @@ class GlanceImageService(object):
+ 
+         # NOTE(tsekiyama): From the Image API v2, custom properties must
+         # be stored in image_meta directly, instead of the 'properties' key.
+-        properties = image_meta.get('properties')
+-        if properties:
+-            image_meta.update(properties)
++        # NOTE(al3jandro) ensure key deletion even when properties={}
++        # (LP#2144550)
++        if 'properties' in image_meta:
++            properties = image_meta['properties']
++            if properties:
++                image_meta.update(properties)
+             del image_meta['properties']
+ 
+         return image_meta
+@@ -670,7 +673,7 @@ class GlanceImageService(object):
+                 getattr(image, 'visibility', 'private') == 'public'):
+             return True
+ 
+-        properties = image.properties
++        properties = getattr(image, 'properties', {})
+ 
+         if context.project_id and ('owner_id' in properties):
+             return str(properties['owner_id']) == str(context.project_id)
+diff --git a/cinder/tests/unit/image/test_glance.py b/cinder/tests/unit/image/test_glance.py
+index 2f4385476c..b61261ecc6 100644
+--- a/cinder/tests/unit/image/test_glance.py
++++ b/cinder/tests/unit/image/test_glance.py
+@@ -479,7 +479,7 @@ class TestGlanceImageService(test.TestCase):
+                 'status': None,
+                 'protected': None,
+                 'name': 'TestImage %d' % (i),
+-                'properties': {'properties': {}},
++                'properties': {},
+                 'size': None,
+                 'min_disk': None,
+                 'min_ram': None,
+@@ -671,7 +671,7 @@ class TestGlanceImageService(test.TestCase):
+             'updated_at': self.NOW_DATETIME,
+             'deleted': None,
+             'status': None,
+-            'properties': {'is_public': True, 'properties': {}},
++            'properties': {'is_public': True},
+             'owner': None,
+             'visibility': None
+         }
+@@ -698,7 +698,7 @@ class TestGlanceImageService(test.TestCase):
+             'updated_at': self.NOW_DATETIME,
+             'deleted': None,
+             'status': None,
+-            'properties': {'properties': {}},
++            'properties': {},
+             'owner': None,
+             'visibility': None
+         }
+@@ -726,7 +726,7 @@ class TestGlanceImageService(test.TestCase):
+             'updated_at': self.NOW_DATETIME,
+             'deleted': None,
+             'status': None,
+-            'properties': {'properties': {}},
++            'properties': {},
+             'owner': None,
+             'visibility': 'public'
+         }
+@@ -786,7 +786,7 @@ class TestGlanceImageService(test.TestCase):
+                 'updated_at': self.NOW_DATETIME,
+                 'deleted': None,
+                 'status': None,
+-                'properties': {'is_public': True, 'properties': {}},
++                'properties': {'is_public': True},
+                 'owner': None,
+                 'visibility': None
+             },
+diff --git a/cinder/tests/unit/volume/test_image.py b/cinder/tests/unit/volume/test_image.py
+index 72c16799a9..4a81cf3b33 100644
+--- a/cinder/tests/unit/volume/test_image.py
++++ b/cinder/tests/unit/volume/test_image.py
+@@ -25,6 +25,7 @@ from oslo_utils import units
+ 
+ from cinder import db
+ from cinder import exception
++from cinder.image import image_utils
+ from cinder.message import message_field
+ from cinder import objects
+ from cinder.objects import fields
+@@ -852,3 +853,28 @@ class CopyVolumeToImagePrivateFunctionsTestCase(
+         # correct key_id
+         self.assertEqual(image_meta['cinder_encryption_key_id'],
+                          sent_to_glance['cinder_encryption_key_id'])
++
++    @mock.patch('cinder.volume.api.API.get_volume_image_metadata',
++                return_value={'image_id': 'base-image-id',
++                              'signature_verified': 'False'})
++    def test_filter_reserved_namespaces_metadata(self, mock_get_img_meta):
++        # testing the fix for LP#2144550
++        image_meta = {
++            'container_format': 'bare',
++            'disk_format': 'raw',
++        }
++
++        volume_api = cinder.volume.api.API()
++        volume_api._merge_volume_image_meta(None, None, image_meta)
++
++        self.assertIn('properties', image_meta)
++        self.assertIn('signature_verified', image_meta.get('properties'))
++
++        filtered = image_utils.filter_out_reserved_namespaces_metadata(
++            image_meta)
++        self.assertEqual({}, filtered.get('properties'))
++
++        translate = cinder.image.glance.GlanceImageService._translate_to_glance
++        sent_to_glance = translate(filtered)
++
++        self.assertNotIn('properties', sent_to_glance)
+diff --git a/releasenotes/notes/bug_2144550-aa8e6e085f6507aa.yaml b/releasenotes/notes/bug_2144550-aa8e6e085f6507aa.yaml
+new file mode 100644
+index 0000000000..a3fa6b48a7
+--- /dev/null
++++ b/releasenotes/notes/bug_2144550-aa8e6e085f6507aa.yaml
+@@ -0,0 +1,6 @@
++---
++fixes:
++  - |
++    `Bug #2144550 <https://bugs.launchpad.net/cinder/+bug/2144550>`_: Fixed
++    a bug that could cause image creation from volumes to fail due to
++    incorrect handling of the volume metadata passed to Glance.
+-- 
+2.53.0
+
